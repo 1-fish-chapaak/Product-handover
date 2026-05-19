@@ -159,16 +159,17 @@ export const REPORT_TEMPLATES = [
 
 // ─── Generated Reports ───
 export const GENERATED_REPORTS = [
-  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 SOX Compliance Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Mar 20, 2026", status: "final", pages: 24 },
-  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "Tushar Goel", generatedAt: "Mar 18, 2026", status: "draft", pages: 12 },
-  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance — Feb 2026", tag: "Internal Audit", generatedBy: "AI Copilot", generatedAt: "Mar 1, 2026", status: "final", pages: 8 },
+  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 SOX Compliance Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
+  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "Tushar Goel", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4 },
+  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance — Feb 2026", tag: "Internal Audit", generatedBy: "AI Copilot", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
+  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
 ];
 
 export const SHARED_REPORTS = [
-  { id: "sr-001", name: "FY26 Internal Audit Summary", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team" },
-  { id: "sr-002", name: "O2C Controls Review — Q1 2026", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance" },
-  { id: "sr-003", name: "Vendor Risk Exposure Report", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee" },
-  { id: "sr-004", name: "GL Reconciliation — Feb 2026", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office" },
+  { id: "sr-001", name: "FY26 Internal Audit Summary", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
+  { id: "sr-002", name: "O2C Controls Review — Q1 2026", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
+  { id: "sr-003", name: "Vendor Risk Exposure Report", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
+  { id: "sr-004", name: "GL Reconciliation — Feb 2026", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
 ];
 
 // ─── Data Sources ───
