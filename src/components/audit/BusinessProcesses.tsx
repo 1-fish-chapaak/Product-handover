@@ -22,6 +22,8 @@ interface Props {
   onOpenEngagement?: (engagementId: string) => void;
   /** Opens the full-page RACM editor for any RACM in the list. */
   onOpenRacmEditor?: (racm: import('./RacmListTable').RacmEntry) => void;
+  /** Opens the canonical workflow detail page (shared with Workflow Library). */
+  onOpenWorkflowDetail?: (workflowId: string) => void;
 }
 
 type HubTabId = 'engagements' | 'business-processes';
@@ -1796,7 +1798,7 @@ const SEED_BP_WF: BPWorkflow[] = [
   { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [] },
 ];
 
-function WorkflowGovernanceTab({ bpAbbr }: { bpAbbr: string }) {
+function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: string; onOpenWorkflowDetail?: (workflowId: string) => void }) {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(SEED_BP_WF);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -1945,7 +1947,12 @@ function WorkflowGovernanceTab({ bpAbbr }: { bpAbbr: string }) {
                   <td className="px-4 py-4 align-top w-[280px]">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-start gap-2">
-                        <span className="text-[13px] text-text font-medium leading-snug">{wf.name}</span>
+                        {onOpenWorkflowDetail ? (
+                          <button onClick={(e) => { e.stopPropagation(); onOpenWorkflowDetail(wf.id); }}
+                            className="text-[13px] text-text font-medium leading-snug hover:text-primary hover:underline cursor-pointer transition-colors text-left bg-transparent border-none p-0">{wf.name}</button>
+                        ) : (
+                          <span className="text-[13px] text-text font-medium leading-snug">{wf.name}</span>
+                        )}
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 mt-0.5 ${
                           wf.status === 'Active' ? '' : wf.status === 'Ready' ? 'bg-blue-50 text-blue-700' : wf.status === 'Archived' ? 'bg-gray-50 text-gray-400' : 'bg-gray-100 text-gray-500'
                         }`} style={wf.status === 'Active' ? { backgroundColor: '#ECFEF3', color: '#047A48' } : undefined}>
@@ -2676,9 +2683,10 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 }
 
 /* ─── BP Detail View ─── */
-function BPDetailView({ bp, onBack, onOpenRacmEditor }: {
+function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   bp: typeof BUSINESS_PROCESSES[0]; onBack: () => void;
   onOpenRacmEditor?: (racm: import('./RacmListTable').RacmEntry) => void;
+  onOpenWorkflowDetail?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
   const [tab, setTab] = useState<'sop' | 'racm' | 'risks' | 'controls' | 'workflows'>('sop');
@@ -2913,7 +2921,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor }: {
 
         {/* Workflows Tab — governance view */}
         {tab === 'workflows' && (
-          <WorkflowGovernanceTab bpAbbr={bp.abbr} />
+          <WorkflowGovernanceTab bpAbbr={bp.abbr} onOpenWorkflowDetail={onOpenWorkflowDetail} />
         )}
 
       </div>
@@ -2922,14 +2930,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor }: {
 }
 
 /* ─── Business Processes List ─── */
-export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEngagement, onOpenRacmEditor }: Props) {
+export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEngagement, onOpenRacmEditor, onOpenWorkflowDetail }: Props) {
   const [tab, setTab] = useState<HubTabId>('engagements');
   const [search, setSearch] = useState('');
   const { addToast } = useToast();
 
   if (selectedBPId) {
     const bp = BUSINESS_PROCESSES.find(b => b.id === selectedBPId);
-    if (bp) return <BPDetailView bp={bp} onBack={() => onSelectBP(null)} onOpenRacmEditor={onOpenRacmEditor} />;
+    if (bp) return <BPDetailView bp={bp} onBack={() => onSelectBP(null)} onOpenRacmEditor={onOpenRacmEditor} onOpenWorkflowDetail={onOpenWorkflowDetail} />;
   }
 
   const activeTabLabel = HUB_TABS.find(t => t.id === tab)!.label;

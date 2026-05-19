@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, Search, Shield, AlertTriangle, CheckCircle2,
   Plus, X, Star, Link2, Trash2, Workflow, ChevronRight, ChevronDown,
-  Clock, User, FileText, Eye, Paperclip, FileCheck, XCircle,
+  Clock, User, FileText, Eye, Paperclip, FileCheck, XCircle, SlidersHorizontal,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
@@ -102,6 +102,8 @@ interface Props {
   isEmpty?: boolean;
   /** When true, renders as a compact inline panel (no back button, no page header, reduced spacing) */
   inline?: boolean;
+  /** When true, hides workflow attributes throughout (used in IA where attributes are not needed) */
+  hideAttributes?: boolean;
 }
 
 // ─── Seed Data ──────────────────────────────────────────────────────────────
@@ -208,7 +210,7 @@ const BP_DOTS: Record<string, string> = { P2P: '#6a12cd', O2C: '#0284c7', R2R: '
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, racmName, racmProcess, isEmpty: isEmptyRacm, inline }: Props) {
+export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, racmName, racmProcess, isEmpty: isEmptyRacm, inline, hideAttributes }: Props) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [risks, setRisks] = useState<RiskItem[]>([]);
@@ -247,9 +249,9 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
 
   const selectedRisk = risks.find(r => r.id === selectedRiskId) || risks[0];
 
-  // Resolve the control being linked/created for a workflow
+  // Resolve the control being linked/created for a workflow (search all risks, not just selected)
   const linkWorkflowControl = linkWorkflowControlId
-    ? selectedRisk.controls.find(c => c.id === linkWorkflowControlId) || null
+    ? risks.flatMap(r => r.controls).find(c => c.id === linkWorkflowControlId) || null
     : null;
   const createWorkflowControl = createWorkflowControlId
     ? risks.flatMap(r => r.controls).find(c => c.id === createWorkflowControlId) || null
@@ -570,6 +572,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
           onCreateWorkflow={(ctrlId) => { setCreateWorkflowControlId(ctrlId); }}
           onAddRisk={() => setShowNewRiskDrawer(true)}
           inline={inline}
+          hideAttributes={hideAttributes}
         />
       )}
 
@@ -796,7 +799,7 @@ function getRowWorkflowStatus(r: RiskItem): string {
   return 'Ready';
 }
 
-function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCreateControl, onLinkWorkflow, onCreateWorkflow, onAddRisk, inline }: {
+function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCreateControl, onLinkWorkflow, onCreateWorkflow, onAddRisk, inline, hideAttributes }: {
   risks: RiskItem[];
   onSelectRisk: (id: string) => void;
   onUpdateRisks: (updater: (prev: RiskItem[]) => RiskItem[]) => void;
@@ -806,6 +809,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
   onCreateWorkflow?: (controlId: string) => void;
   onAddRisk?: () => void;
   inline?: boolean;
+  hideAttributes?: boolean;
 }) {
   const { addToast } = useToast();
   const [gridSearch, setGridSearch] = useState('');
@@ -882,6 +886,9 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
     addToast({ message: `"${ctrl.name}" mapped`, type: 'success' });
   };
 
+  // Confirm-remove state: { riskId, controlId } when user clicks X on a control
+  const [confirmRemoveCtrl, setConfirmRemoveCtrl] = useState<{ riskId: string; ctrl: MappedControl } | null>(null);
+
   // Inline control picker — available controls not yet linked to this risk
   const pickerRisk = controlPickerRiskId ? risks.find(r => r.id === controlPickerRiskId) : null;
   const pickerLinkedIds = new Set(pickerRisk?.controls.map(c => c.id) || []);
@@ -949,9 +956,11 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
           {someSelected && (
             <div className="flex items-center gap-1.5 border-l border-border pl-3">
               <span className="text-[10px] text-text-muted">{selectedIds.size} selected</span>
-              <button onClick={handleBulkMarkKey} className="px-2 py-1 rounded text-[10px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-50/80 cursor-pointer transition-colors">
-                <Star size={9} className="inline mr-0.5 -mt-0.5" />Mark Key
-              </button>
+              {!hideAttributes && (
+                <button onClick={handleBulkMarkKey} className="px-2 py-1 rounded text-[10px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-50/80 cursor-pointer transition-colors">
+                  <Star size={9} className="inline mr-0.5 -mt-0.5" />Mark Key
+                </button>
+              )}
               <button onClick={handleBulkRemoveMapping} className="px-2 py-1 rounded text-[10px] font-semibold text-risk-700 bg-risk-50 hover:bg-risk-50/80 cursor-pointer transition-colors">
                 <Trash2 size={9} className="inline mr-0.5 -mt-0.5" />Remove
               </button>
@@ -984,7 +993,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                   { label: 'Process', w: 'w-[100px]' },
                   { label: 'Risk Rating', w: 'w-[90px]' },
                   { label: 'Control(s)', w: 'w-[240px]' },
-                  { label: 'Key Control', w: 'w-[80px]' },
+                  ...(!hideAttributes ? [{ label: 'Key Control', w: 'w-[80px]' }] : []),
                   { label: 'Workflow Status', w: 'w-[110px]' },
                   { label: 'Mapping', w: 'w-[80px]' },
                   { label: '', w: 'w-[50px]' },
@@ -1052,9 +1061,11 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                       <div className="flex flex-wrap gap-1 max-h-[44px] overflow-hidden">
                         {risk.controls.slice(0, 3).map(c => (
                           <span key={c.id} className="inline-flex items-center gap-0.5 px-1.5 h-5 rounded bg-gray-50 text-[9px] font-medium text-gray-700 border border-gray-200/70 group/pill cursor-default" title={c.name}>
-                            <button onClick={() => toggleKeyInGrid(risk.id, c.id)} className="cursor-pointer shrink-0" title={c.isKey ? 'Unmark key' : 'Mark as key'}>
-                              <Star size={8} className={c.isKey ? 'fill-amber-400 text-amber-400' : 'text-gray-300 hover:text-amber-400 transition-colors'} />
-                            </button>
+                            {!hideAttributes && (
+                              <button onClick={() => toggleKeyInGrid(risk.id, c.id)} className="cursor-pointer shrink-0" title={c.isKey ? 'Unmark key' : 'Mark as key'}>
+                                <Star size={8} className={c.isKey ? 'fill-amber-400 text-amber-400' : 'text-gray-300 hover:text-amber-400 transition-colors'} />
+                              </button>
+                            )}
                             <span className="truncate max-w-[80px]">{c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name}</span>
                             <button onClick={() => removeControlInGrid(risk.id, c.id)} className="cursor-pointer shrink-0 opacity-0 group-hover/pill:opacity-100 transition-opacity" title="Remove">
                               <X size={8} className="text-gray-400 hover:text-red-600" />
@@ -1091,7 +1102,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                   className="w-full text-left px-3 py-2 hover:bg-brand-50/30 transition-colors cursor-pointer border-b border-border/20 last:border-0">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] font-medium text-text truncate">{ctrl.name}</span>
-                                    {ctrl.isKey && <Star size={7} className="fill-amber-400 text-amber-400 shrink-0" />}
+                                    {!hideAttributes && ctrl.isKey && <Star size={7} className="fill-amber-400 text-amber-400 shrink-0" />}
                                   </div>
                                   <div className="text-[9px] text-ink-400 mt-0.5">{ctrl.automation} · {ctrl.nature}</div>
                                 </button>
@@ -1109,11 +1120,13 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                     </td>
 
                     {/* Key Control Count */}
-                    <td className="px-3 py-2.5 align-middle text-center">
-                      {keyCount > 0
-                        ? <span className="inline-flex items-center justify-center gap-0.5 text-[10px] font-medium text-gray-600"><Star size={9} className="fill-amber-400 text-amber-400" />{keyCount}</span>
-                        : <span className="text-gray-300 text-[10px]">—</span>}
-                    </td>
+                    {!hideAttributes && (
+                      <td className="px-3 py-2.5 align-middle text-center">
+                        {keyCount > 0
+                          ? <span className="inline-flex items-center justify-center gap-0.5 text-[10px] font-medium text-gray-600"><Star size={9} className="fill-amber-400 text-amber-400" />{keyCount}</span>
+                          : <span className="text-gray-300 text-[10px]">—</span>}
+                      </td>
+                    )}
 
                     {/* Workflow Status — clickable */}
                     <td className="px-3 py-2.5 align-middle" onClick={e => { e.stopPropagation(); if (risk.controls.length > 0) setWfDrawerRiskId(risk.id); }}>
@@ -1155,70 +1168,141 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                 <div><span className="text-[9px] text-ink-400 uppercase block">Risk Rating</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${RATING_CLS[risk.riskRating]}`}>{risk.riskRating}</span></div>
                               </div>
 
-                              {/* SOP Traceability */}
+                              {/* SOP Source — compact inline */}
                               {risk.sourceSopName && (
-                                <div className="rounded-lg border border-border/40 bg-white px-4 py-3">
-                                  <div className="flex items-center gap-1.5 mb-2">
-                                    <FileText size={10} className="text-gray-400" />
-                                    <span className="text-[9px] font-bold text-ink-400 uppercase tracking-wider">SOP Source</span>
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                      <span className="text-[9px] text-gray-400 block">SOP</span>
-                                      <span className="text-[11px] text-text font-medium">{risk.sourceSopName}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-[9px] text-gray-400 block">Section</span>
-                                      <span className="text-[10px] font-mono text-gray-500">{risk.sourceSection}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-[9px] text-gray-400 block">Original Text</span>
-                                      <span className="text-[10px] text-gray-500 italic line-clamp-2">"{risk.sourceText}"</span>
-                                    </div>
-                                  </div>
+                                <div className="flex items-center gap-2 text-[10px] text-ink-400">
+                                  <FileText size={10} className="text-gray-400 shrink-0" />
+                                  <span className="font-medium text-text">{risk.sourceSopName}</span>
+                                  <span className="text-gray-300">·</span>
+                                  <span className="font-mono">{risk.sourceSection}</span>
+                                  {risk.sourceText && <><span className="text-gray-300">·</span><span className="italic text-gray-400 truncate max-w-[300px]" title={risk.sourceText}>"{risk.sourceText}"</span></>}
                                 </div>
                               )}
 
                               {/* Controls detail */}
                               <div>
                                 <div className="flex items-center justify-between mb-2">
-                                  <h4 className="text-[10px] font-bold text-ink-500 uppercase tracking-wider">Mapped Controls ({risk.controls.length})</h4>
+                                  <div className="flex items-center gap-3">
+                                    <h4 className="text-[10px] font-bold text-ink-500 uppercase tracking-wider">Mapped Controls ({risk.controls.length})</h4>
+                                    {risk.controls.length > 0 && (() => {
+                                      const readyCt = risk.controls.filter(c => getControlReadiness(c) === 'Ready').length;
+                                      const missingWf = risk.controls.filter(c => getControlReadiness(c) === 'Workflow Missing').length;
+                                      const configPending = risk.controls.filter(c => getControlReadiness(c) === 'Configuration Pending').length;
+                                      return (
+                                        <span className="text-[9px] text-ink-400">
+                                          {readyCt > 0 && <span className="text-emerald-600">{readyCt} ready</span>}
+                                          {readyCt > 0 && (missingWf > 0 || configPending > 0) && ' · '}
+                                          {missingWf > 0 && <span className="text-red-500">{missingWf} missing workflows</span>}
+                                          {missingWf > 0 && configPending > 0 && ' · '}
+                                          {configPending > 0 && <span className="text-amber-600">{configPending} needs setup</span>}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
                                   <div className="flex items-center gap-2">
                                     <button onClick={e => { e.stopPropagation(); onLinkControl(risk.id); }}
-                                      className="text-[10px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"><Link2 size={9} />Link Control</button>
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-primary/30 text-[10px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors"><Link2 size={10} />Link Existing Control</button>
                                     <button onClick={e => { e.stopPropagation(); onCreateControl(risk.id); }}
-                                      className="text-[10px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"><Plus size={9} />Create Control</button>
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 text-[10px] font-semibold text-primary hover:bg-primary/15 cursor-pointer transition-colors"><Plus size={10} />Create New Control</button>
                                   </div>
                                 </div>
                                 {risk.controls.length === 0 ? (
                                   <p className="text-[11px] text-ink-400">No controls mapped. Use the actions above to start.</p>
                                 ) : (
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-2">
                                     {risk.controls.map(ctrl => {
                                       const rd = getControlReadiness(ctrl);
                                       const wfs = ctrl.workflows || [];
+                                      const totalAttrs = wfs.reduce((s, w) => s + w.attributes.length, 0);
                                       return (
-                                        <div key={ctrl.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border/50 bg-white">
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-[11px] font-medium text-text">{ctrl.name}</span>
-                                              {ctrl.isKey && <Star size={8} className="fill-amber-400 text-amber-400 shrink-0" />}
-                                              <span className={`px-1.5 h-3.5 rounded text-[8px] font-bold inline-flex items-center ${AUTO_CLS[ctrl.automation]}`}>{ctrl.automation}</span>
+                                        <div key={ctrl.id} className="rounded-lg border border-border/50 bg-white overflow-hidden">
+                                          {/* Control header row */}
+                                          <div className="flex items-center gap-3 px-3 py-2">
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-[11px] font-medium text-text">{ctrl.name}</span>
+                                                {!hideAttributes && ctrl.isKey && <Star size={8} className="fill-amber-400 text-amber-400 shrink-0" />}
+                                                <span className={`px-1.5 h-3.5 rounded text-[8px] font-bold inline-flex items-center ${AUTO_CLS[ctrl.automation]}`}>{ctrl.automation}</span>
+                                                <span className={`px-1.5 h-3.5 rounded text-[8px] font-bold inline-flex items-center ${NATURE_CLS[ctrl.nature]}`}>{ctrl.nature}</span>
+                                              </div>
+                                              <div className="flex items-center gap-3 mt-0.5 text-[9px] text-ink-400">
+                                                <span>{wfs.length} workflow{wfs.length !== 1 ? 's' : ''}</span>
+                                                {!hideAttributes && <span>{totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''}</span>}
+                                                {ctrl.owner && <span>{ctrl.owner}</span>}
+                                              </div>
                                             </div>
-                                            <div className="flex items-center gap-3 mt-0.5 text-[9px] text-ink-400">
-                                              <span>{wfs.length} workflow{wfs.length !== 1 ? 's' : ''}</span>
-                                              <span>{wfs.reduce((s, w) => s + w.attributes.length, 0)} attrs</span>
-                                              {ctrl.owner && <span>{ctrl.owner}</span>}
-                                            </div>
+                                            <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center shrink-0 ${READINESS_CLS[rd]}`}>{rd}</span>
+                                            {wfs.length === 0 && onLinkWorkflow && (
+                                              <button onClick={e => { e.stopPropagation(); onLinkWorkflow(ctrl.id); }}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors shrink-0"><Link2 size={10} />Link Workflow</button>
+                                            )}
+                                            {wfs.length > 0 && (
+                                              <button onClick={e => { e.stopPropagation(); setWfDrawerRiskId(risk.id); }}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors shrink-0"><SlidersHorizontal size={10} />Manage Control</button>
+                                            )}
+                                            <button onClick={e => { e.stopPropagation(); setConfirmRemoveCtrl({ riskId: risk.id, ctrl }); }}
+                                              className="p-1 rounded text-ink-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors shrink-0" title="Remove control">
+                                              <X size={11} />
+                                            </button>
                                           </div>
-                                          <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center shrink-0 ${READINESS_CLS[rd]}`}>{rd}</span>
-                                          {wfs.length === 0 && onLinkWorkflow && (
-                                            <button onClick={e => { e.stopPropagation(); onLinkWorkflow(ctrl.id); }}
-                                              className="text-[9px] font-semibold text-brand-600 hover:underline cursor-pointer shrink-0">Link Workflow</button>
+                                          {/* Confirm remove control */}
+                                          {confirmRemoveCtrl && confirmRemoveCtrl.riskId === risk.id && confirmRemoveCtrl.ctrl.id === ctrl.id && (
+                                            <div className="border-t border-red-100 bg-red-50/40 px-3 py-2">
+                                              <p className="text-[10px] font-semibold text-red-700 mb-0.5">Remove "{ctrl.name}" from this risk?</p>
+                                              <p className="text-[9px] text-red-600/70 mb-2">
+                                                This will unlink {wfs.length} workflow{wfs.length !== 1 ? 's' : ''} and {totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''} from this risk mapping. The control remains in the Control Library.
+                                              </p>
+                                              <div className="flex items-center gap-2">
+                                                <button onClick={e => { e.stopPropagation(); removeControlInGrid(risk.id, ctrl.id); setConfirmRemoveCtrl(null); }}
+                                                  className="px-2.5 py-1 rounded text-[9px] font-semibold bg-red-600 text-white hover:bg-red-700 cursor-pointer transition-colors">Remove</button>
+                                                <button onClick={e => { e.stopPropagation(); setConfirmRemoveCtrl(null); }}
+                                                  className="px-2.5 py-1 rounded text-[9px] font-medium text-ink-600 hover:bg-white cursor-pointer transition-colors">Cancel</button>
+                                              </div>
+                                            </div>
                                           )}
+                                          {/* Workflows & attributes detail */}
                                           {wfs.length > 0 && (
-                                            <button onClick={e => { e.stopPropagation(); setWfDrawerRiskId(risk.id); }}
-                                              className="text-[9px] font-semibold text-brand-600 hover:underline cursor-pointer shrink-0">Manage</button>
+                                            <div className="border-t border-border/30 bg-surface-2/20 px-3 py-2.5 space-y-2">
+                                              {wfs.map(wf => (
+                                                <div key={wf.id} className="group/wfrow flex items-start gap-2.5 px-2 py-1.5 rounded-md hover:bg-white/60 transition-colors">
+                                                  <Workflow size={12} className="text-brand-600 mt-[2px] shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-[11px] font-medium text-text">{wf.name}</span>
+                                                      <span className="text-[9px] font-mono text-ink-400">{wf.version}</span>
+                                                      <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${WF_STATUS_CLS[wf.status]}`}>{wf.status}</span>
+                                                      <button onClick={e => {
+                                                          e.stopPropagation();
+                                                          onUpdateRisks(prev => prev.map(r => r.id !== risk.id ? r : {
+                                                            ...r, controls: r.controls.map(c => {
+                                                              if (c.id !== ctrl.id) return c;
+                                                              const updated = (c.workflows || []).filter(w => w.id !== wf.id);
+                                                              return { ...c, workflows: updated, workflowLinked: updated.length > 0, workflowName: updated.length > 0 ? updated[0].name + ' ' + updated[0].version : '', attributeCount: updated.reduce((s, w) => s + w.attributes.length, 0) };
+                                                            }),
+                                                          }));
+                                                          addToast({ message: `Workflow "${wf.name}" removed`, type: 'info' });
+                                                        }}
+                                                        className="opacity-0 group-hover/wfrow:opacity-100 p-0.5 rounded text-ink-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all shrink-0" title="Remove workflow">
+                                                        <Trash2 size={9} />
+                                                      </button>
+                                                    </div>
+                                                    {!hideAttributes && wf.attributes.length > 0 && (
+                                                      <div className="flex flex-wrap gap-1 mt-1">
+                                                        {wf.attributes.map(a => (
+                                                          <span key={a.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white border border-border/40 text-[8px] text-ink-500">
+                                                            <CheckCircle2 size={7} className="text-emerald-500 shrink-0" />
+                                                            {a.name}
+                                                          </span>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                    {!hideAttributes && wf.attributes.length === 0 && (
+                                                      <span className="text-[8px] text-amber-600 mt-0.5 inline-block">No attributes configured</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
                                           )}
                                         </div>
                                       );
@@ -1343,11 +1427,13 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                   {/* Control header */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <Shield size={13} className="text-brand-600 shrink-0" />
-                      <span className="text-[12px] font-semibold text-text">{ctrl.name}</span>
-                      {ctrl.isKey && <Star size={9} className="fill-mitigated text-mitigated" />}
+                      <Shield size={14} className="text-brand-600 shrink-0" />
+                      <div>
+                        <span className="text-[13px] font-semibold text-text block">{ctrl.name}</span>
+                        <span className="text-[10px] text-ink-400">{wfs.length} workflow{wfs.length !== 1 ? 's' : ''} · {totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''}{ctrl.isKey ? ' · Key Control' : ''}</span>
+                      </div>
                     </div>
-                    <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${READINESS_CLS[readiness]}`}>{readiness}</span>
+                    <span className={`px-2.5 h-6 rounded-full text-[10px] font-semibold inline-flex items-center ${READINESS_CLS[readiness]}`}>{readiness}</span>
                   </div>
 
                   {/* Workflows under this control */}
@@ -1362,14 +1448,14 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                         const isAdding = addingAttrFor === formKey;
                         return (
                           <div key={wf.id} className="rounded-lg border border-border overflow-hidden">
-                            <div className="px-3 py-2">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Workflow size={11} className="text-brand-600 shrink-0" />
-                                <span className="text-[11px] font-medium text-text">{wf.name}</span>
+                            <div className="px-3 py-2.5">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <Workflow size={13} className="text-brand-600 shrink-0" />
+                                <span className="text-[12px] font-medium text-text">{wf.name}</span>
                                 <span className="text-[9px] font-mono text-ink-400">{wf.version}</span>
                                 <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${WF_STATUS_CLS[wf.status]}`}>{wf.status}</span>
                               </div>
-                              <div className="text-[9px] text-ink-400 mb-1.5">{wf.attributes.length} attribute{wf.attributes.length !== 1 ? 's' : ''}</div>
+                              <div className="text-[10px] text-ink-400 mb-2">{wf.attributes.length} attribute{wf.attributes.length !== 1 ? 's' : ''} configured</div>
                               {/* Existing attributes list */}
                               {wf.attributes.length > 0 && (
                                 <div className="space-y-1 mb-2">
@@ -1385,8 +1471,8 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                               {/* Add Attribute button */}
                               {!isAdding && (
                                 <button onClick={() => { resetAttrForm(); setAddingAttrFor(formKey); }}
-                                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
-                                  <Plus size={9} />Add Attribute
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 cursor-pointer transition-colors">
+                                  <Plus size={10} />Add Attribute
                                 </button>
                               )}
                             </div>
@@ -1418,22 +1504,24 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                     </div>
                   )}
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { onLinkWorkflow(ctrl.id); addToast({ message: 'Opening workflow linker in Split View', type: 'info' }); }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/15 cursor-pointer transition-colors">
-                      <Link2 size={10} />Link Workflow
-                    </button>
-                    <button onClick={() => { onCreateWorkflow(ctrl.id); addToast({ message: 'Opening workflow builder in Split View', type: 'info' }); }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-50/80 cursor-pointer transition-colors">
-                      <Plus size={10} />Create Workflow
-                    </button>
-                  </div>
-
-                  {/* Summary line */}
-                  <div className="mt-2 pt-2 border-t border-border/30 flex items-center gap-3 text-[9px] text-ink-400">
-                    <span>{wfs.length} workflow{wfs.length !== 1 ? 's' : ''}</span>
-                    <span>{totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''}</span>
+                  {/* Workflow-level actions */}
+                  <div className="pt-2 border-t border-border/30 space-y-2">
+                    <div className="text-[9px] font-semibold text-ink-400 uppercase tracking-wider">Workflow Actions</div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { onLinkWorkflow(ctrl.id); addToast({ message: 'Opening workflow linker in Split View', type: 'info' }); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[11px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
+                        <Link2 size={11} />Link Workflow
+                      </button>
+                      <button onClick={() => { onCreateWorkflow(ctrl.id); addToast({ message: 'Opening workflow builder in Split View', type: 'info' }); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
+                        <Plus size={11} />Create Workflow
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-ink-400">
+                      <span>{wfs.length} workflow{wfs.length !== 1 ? 's' : ''}</span>
+                      <span className="text-ink-200">·</span>
+                      <span>{totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''}</span>
+                    </div>
                   </div>
                 </div>
               );
