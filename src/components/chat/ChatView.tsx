@@ -1,19 +1,25 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Send, Paperclip, Sparkles, History, X, FileText,
   Workflow, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
   Save, CheckCircle, Maximize2, Lock, Calendar,
   ExternalLink, Download, MoreHorizontal, Pencil, CornerDownLeft, ArrowUpRight,
+  Square, ArrowDown, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
+  Bookmark, BookmarkCheck,
+  Search, GitCompare, ShieldCheck, type LucideIcon,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
+import {
+  readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
+} from '../../utils/bookmarkedMessages';
 import { useToast } from '../shared/Toast';
+import { Button } from '../shared/Button';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
 import { AuditifyHelloEffect } from '../shared/HelloEffect';
-import BorderGlow from '../shared/BorderGlow';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import ClarificationCard from './ClarificationCard';
@@ -21,6 +27,7 @@ import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { useDialogA11y } from './useModalA11y';
 
 interface ChatMessage {
   id: string;
@@ -32,13 +39,16 @@ interface ChatMessage {
   followUps?: string[];
   timestamp: Date;
   // Rich inline components
-  richType?: 'summary-kpi' | 'audit-result' | 'audit-loading' | 'clarification' | 'save-workflow-prompt' | 'workflow-checkpoint' | 'qna-plan';
+  richType?: 'summary-kpi' | 'audit-result' | 'audit-loading' | 'clarification' | 'save-workflow-prompt' | 'workflow-checkpoint' | 'qna-plan' | 'error';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
   addedTo?: {
     dashboards?: { id: string; name: string }[];
     reports?: { id: string; name: string }[];
   };
+  // Marks an assistant message whose generation was halted before completion.
+  // Renders a "Stopped" badge under the message body.
+  stopped?: boolean;
 }
 
 // Clarification interaction shape (one per IRA message of richType 'clarification')
@@ -53,34 +63,41 @@ interface ClarificationData {
 }
 
 // ─── Audit-query result fixture ──────────────────────────────────────────────
+// KPIs render in the dashboard's widget pattern: 4 across on lg, 2 on mobile,
+// with a hard cap of 8 (two full rows on lg). Values stay neutral ink-900 —
+// magnitude + label carries the story, the chart + table fill in the rest.
 const AUDIT_RESULT = {
   kpis: [
-    { label: 'Records scanned', value: '1.2M', color: 'text-ink-800' },
-    { label: 'Duplicates found', value: '8', color: 'text-risk-700' },
-    { label: 'Total amount', value: '₹6.16L', color: 'text-mitigated-700' },
-    { label: 'Highest match', value: '96%', color: 'text-evidence-700' },
+    { label: 'Records scanned',  value: '1.2M',   color: 'text-ink-900' },
+    { label: 'Duplicates found', value: '8',      color: 'text-ink-900' },
+    { label: 'Total amount',     value: '₹6.16L', color: 'text-ink-900' },
+    { label: 'Highest match',    value: '96%',    color: 'text-ink-900' },
+    { label: 'Vendors flagged',  value: '4',      color: 'text-ink-900' },
+    { label: 'Days covered',     value: '90',     color: 'text-ink-900' },
+    { label: 'Avg confidence',   value: '91%',    color: 'text-ink-900' },
+    { label: 'Cross-checks',     value: '24',     color: 'text-ink-900' },
   ],
   charts: [
     {
       id: 'confidence',
       label: 'By confidence',
-      // Match-score histogram — 4 vertical bars
+      // Single-hue (brand) ramp — opacity falls with the bucket. The eye
+      // reads rank without learning a 4-color legend.
       data: [
-        { bucket: '90–100%', count: 5, tone: 'bg-risk' },
-        { bucket: '80–89%', count: 2, tone: 'bg-high' },
-        { bucket: '70–79%', count: 1, tone: 'bg-mitigated' },
-        { bucket: '60–69%', count: 0, tone: 'bg-compliant' },
+        { bucket: '90–100%', count: 5, tone: 'bg-ink-800' },
+        { bucket: '80–89%', count: 2, tone: 'bg-ink-800/70' },
+        { bucket: '70–79%', count: 1, tone: 'bg-ink-800/50' },
+        { bucket: '60–69%', count: 0, tone: 'bg-ink-800/30' },
       ],
     },
     {
       id: 'vendor',
       label: 'By vendor',
-      // Top vendors — horizontal bars
       data: [
-        { bucket: 'Acme Corp', count: 4, tone: 'bg-risk' },
-        { bucket: 'Global Supplies', count: 2, tone: 'bg-high' },
-        { bucket: 'TechParts Ltd', count: 1, tone: 'bg-mitigated' },
-        { bucket: 'FastShip Logistics', count: 1, tone: 'bg-mitigated' },
+        { bucket: 'Acme Corp', count: 4, tone: 'bg-ink-800' },
+        { bucket: 'Global Supplies', count: 2, tone: 'bg-ink-800/70' },
+        { bucket: 'TechParts Ltd', count: 1, tone: 'bg-ink-800/50' },
+        { bucket: 'FastShip Logistics', count: 1, tone: 'bg-ink-800/50' },
       ],
     },
   ],
@@ -101,12 +118,16 @@ const AUDIT_FOLLOWUPS = [
   'Show match-method breakdown for the top 3 flags',
   'Drill into Acme Corp’s flagged invoices',
   'Build a recurring duplicate-invoice monitoring workflow',
+  'Compare these flags against last quarter’s run',
+  'Generate a report draft for the audit committee',
+  'Cross-check against vendor master changes in the same window',
 ];
 
 interface ChatViewProps {
   showChatHistory: boolean;
   toggleChatHistory: () => void;
   setShowArtifacts: (v: boolean) => void;
+  showArtifacts?: boolean;
   setActiveArtifactTab: (t: ArtifactTab) => void;
   setArtifactMode: (m: 'query' | 'workflow') => void;
   setWorkflowCanvasStage?: (stage: number) => void;
@@ -186,16 +207,56 @@ const detectWorkflowType = (msg: string): WorkflowTypeId => {
   return 'detection';
 };
 
+// Compact chat timestamp: "3:08 PM" today, "Fri 3:08 PM" within this week,
+// "May 18, 3:08 PM" older. Used as the meta line under the assistant's
+// follow-up block and under each user bubble — matches the reference where
+// both speakers carry a small day+time muted footer.
+const formatChatTime = (date: Date) => {
+  const now = new Date();
+  const sameDay = now.toDateString() === date.toDateString();
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return time;
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86_400_000);
+  if (diffDays < 7) {
+    const wd = date.toLocaleDateString(undefined, { weekday: 'short' });
+    return `${wd} ${time}`;
+  }
+  const md = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${md}, ${time}`;
+};
+
+// Classify a follow-up suggestion by its leading verb so each chip carries
+// a contextual icon + tiny category label. Keeps the chip color family
+// unchanged (DESIGN.md: no RAG-style category tinting); variety comes from
+// the icon, not from chip hue. Falls back to ArrowRight for unmatched text.
+type FollowUpKind = {
+  Icon: LucideIcon;
+  category: string;
+};
+const classifyFollowUp = (text: string): FollowUpKind => {
+  const t = text.toLowerCase();
+  if (/^(show|view|see|reveal|display|breakdown)\b/.test(t)) return { Icon: BarChart3,   category: 'Analyze' };
+  if (/^(drill|filter|narrow|focus on|find|search)\b/.test(t) || t.includes('drill into')) return { Icon: Search,      category: 'Drill-down' };
+  if (/^(build|create|automate|design|set up|configure)\b/.test(t) || t.includes('workflow')) return { Icon: Workflow,    category: 'Workflow' };
+  if (/^(compare|contrast|diff|benchmark|against)\b/.test(t) || t.includes('against')) return { Icon: GitCompare,  category: 'Compare' };
+  if (/^(generate|draft|export|share|send|prepare)\b/.test(t) || t.includes('report')) return { Icon: FileText,    category: 'Report' };
+  if (/^(cross-check|verify|validate|check|confirm|audit)\b/.test(t)) return { Icon: ShieldCheck, category: 'Verify' };
+  if (/^(summari[sz]e|highlight|recap|review)\b/.test(t)) return { Icon: Lightbulb,   category: 'Summarize' };
+  return { Icon: ArrowRight, category: 'Ask' };
+};
+
 // ─── Chart rendering (reuses dashboard ConfigurableChart) ─────────────────────
 
 function renderChart(chart: typeof AUDIT_RESULT.charts[number], variant: 'inline' | 'fullscreen') {
   const isConfidence = chart.id === 'confidence';
+  // Inherit the dashboard ConfigurableChart palette (PURPLE default) so chart
+  // visuals match across surfaces — when an auditor takes a query result and
+  // adds it to a dashboard, the bars don't change color.
   return (
     <div style={variant === 'fullscreen' ? { width: '100%', height: '100%' } : { height: 240 }}>
       <ConfigurableChart
         type={isConfidence ? 'bar' : 'pie'}
         xAxis={isConfidence ? 'Quarter' : 'Department'}
-        color={isConfidence ? '#7C3AED' : '#3d68ee'}
         showTarget={false}
         showLegend={!isConfidence}
       />
@@ -205,25 +266,27 @@ function renderChart(chart: typeof AUDIT_RESULT.charts[number], variant: 'inline
 
 // ─── ChartGroup with chip toggle + fullscreen ────────────────────────────────
 
-function ChartGroup({ charts }: { charts: typeof AUDIT_RESULT.charts }) {
+function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.charts; embedded?: boolean }) {
   const [activeId, setActiveId] = useState(charts[0].id);
   const [fullscreen, setFullscreen] = useState(false);
   const active = charts.find(c => c.id === activeId) ?? charts[0];
 
   return (
     <>
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-canvas-border bg-paper-50/60">
+      <div className={embedded
+        ? 'bg-canvas-elevated overflow-hidden'
+        : 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-sm shadow-ink-900/[0.04]'}>
+        <div className="flex items-center justify-between px-3 py-2 border-b border-canvas-border bg-canvas-elevated">
           {charts.length > 1 ? (
-            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-paper-100">
+            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-brand-50">
               {charts.map(c => {
                 const isActive = c.id === activeId;
                 return (
                   <button
                     key={c.id}
                     onClick={() => setActiveId(c.id)}
-                    className={`px-2.5 h-7 rounded text-[12px] font-medium transition-colors ${
-                      isActive ? 'bg-canvas-elevated text-brand-700 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                    className={`px-2.5 h-7 rounded text-xs font-medium transition-colors ${
+                      isActive ? 'bg-canvas-elevated text-text shadow-sm' : 'text-ink-500 hover:text-ink-700'
                     }`}
                   >
                     {c.label}
@@ -232,11 +295,11 @@ function ChartGroup({ charts }: { charts: typeof AUDIT_RESULT.charts }) {
               })}
             </div>
           ) : (
-            <span className="text-[12px] font-medium text-ink-700">{active.label}</span>
+            <span className="text-xs font-medium text-ink-700">{active.label}</span>
           )}
           <button
             onClick={() => setFullscreen(true)}
-            className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer"
             aria-label="Expand chart"
           >
             <Maximize2 size={14} />
@@ -292,7 +355,7 @@ function FullscreenChartModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-canvas-border shrink-0">
           {charts.length > 1 ? (
-            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-paper-100">
+            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-brand-50">
               {charts.map(c => {
                 const isActive = c.id === activeId;
                 return (
@@ -300,7 +363,7 @@ function FullscreenChartModal({
                     key={c.id}
                     onClick={() => onActiveChange(c.id)}
                     className={`px-3 h-7 rounded text-[12px] font-medium transition-colors cursor-pointer ${
-                      isActive ? 'bg-canvas-elevated text-brand-700 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                      isActive ? 'bg-canvas-elevated text-text shadow-sm' : 'text-ink-500 hover:text-ink-700'
                     }`}
                   >
                     {c.label}
@@ -311,7 +374,7 @@ function FullscreenChartModal({
           ) : (
             <span className="text-[13px] font-semibold text-ink-800">{active.label}</span>
           )}
-          <button onClick={onClose} className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer">
             <X size={16} />
           </button>
         </div>
@@ -337,19 +400,19 @@ function ResultsTable({
   onDownload: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+    <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-sm shadow-ink-900/[0.04]">
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-canvas-border bg-paper-50">
+            <tr className="border-b border-canvas-border bg-canvas-elevated">
               {columns.map(c => (
-                <th key={c} className="text-left px-3 py-2.5 font-semibold text-ink-500">{c}</th>
+                <th key={c} className="text-left px-3 py-2.5 font-semibold text-ink-500 uppercase tracking-wide text-xs">{c}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors">
+              <tr key={i} className="border-b border-canvas-border last:border-b-0 hover:bg-brand-50 transition-colors">
                 {row.map((cell, j) => (
                   <td key={j} className={`px-3 py-2.5 text-ink-700 ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
                 ))}
@@ -358,13 +421,13 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between px-3 py-2 border-t border-canvas-border bg-paper-50/60">
-        <span className="text-[12px] text-ink-500">Preview · <span className="tabular-nums">{rows.length}</span> of <span className="tabular-nums">{totalRows}</span> results</span>
+      <div className="flex items-center justify-between px-3 py-2 border-t border-canvas-border bg-canvas-elevated">
+        <span className="text-xs text-ink-500">Preview · <span className="tabular-nums">{rows.length}</span> of <span className="tabular-nums">{totalRows}</span> results</span>
         <div className="flex items-center gap-1">
-          <button onClick={onOpen} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[12px] text-ink-600 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+          <button onClick={onOpen} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-ink-600 hover:text-text hover:bg-brand-50 transition-colors cursor-pointer">
             <ExternalLink size={12} /> Open in new view
           </button>
-          <button onClick={onDownload} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[12px] text-ink-600 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+          <button onClick={onDownload} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-ink-600 hover:text-text hover:bg-brand-50 transition-colors cursor-pointer">
             <Download size={12} /> Download CSV
           </button>
         </div>
@@ -393,7 +456,7 @@ function ThinkingTrail({ summary, steps, defaultOpen = false }: {
         {open && (
           <span className="mt-1.5 block pl-2 border-l border-canvas-border space-y-0.5">
             {steps.map((s, i) => (
-              <span key={i} className="block text-ink-500">— {s}</span>
+              <span key={i} className="block text-ink-500">· {s}</span>
             ))}
           </span>
         )}
@@ -483,7 +546,7 @@ function ClarificationBlock({
   if (data.status === 'submitted') {
     return (
       <div className="text-[13px] text-ink-700 leading-relaxed">
-        Got it — running with these inputs.
+        Got it. Running with these inputs.
       </div>
     );
   }
@@ -525,32 +588,40 @@ function ClarificationBlock({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-sm">
-        {/* Header — title + Back/Forward + pagination */}
-        <div className="px-4 py-3 border-b border-canvas-border/60 bg-canvas-elevated flex items-center gap-2 min-w-0">
-          <span className="text-[13px] font-semibold text-ink-800 truncate flex-1">{viewQ.question}</span>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={goBack}
-              disabled={!canGoBack}
-              aria-label="Previous question"
-              className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
-            >
-              <ChevronLeft size={13} />
-              Back
-            </button>
-            <span className="text-[11px] text-ink-500 tabular-nums px-1.5 min-w-[44px] text-center">
-              {viewIndex + 1} of {total}
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+        {/* Header — question on its own row so multi-clause questions don't
+            truncate alongside Back/Next. Pagination + nav controls sit
+            beneath in a dedicated control row with their own meta typography. */}
+        <div className="px-4 pt-3.5 pb-2.5 border-b border-canvas-border/60 bg-canvas-elevated">
+          <p className="text-[14px] font-semibold leading-snug text-ink-800">
+            {viewQ.question}
+          </p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] uppercase tracking-[0.06em] text-ink-400 tabular-nums">
+              Question {viewIndex + 1} of {total}
             </span>
-            <button
-              onClick={goForward}
-              disabled={!canGoForward}
-              aria-label="Next question"
-              className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
-            >
-              Next
-              <ChevronRight size={13} />
-            </button>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={!canGoBack}
+                aria-label="Previous question"
+                className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-500 hover:bg-brand-50 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <ChevronLeft size={13} />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={goForward}
+                disabled={!canGoForward}
+                aria-label="Next question"
+                className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-500 hover:bg-brand-50 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Next
+                <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -562,26 +633,27 @@ function ClarificationBlock({
             return (
               <button
                 key={opt}
+                type="button"
                 role="option"
                 aria-selected={isHighlighted}
                 onClick={() => selectOption(opt)}
                 onMouseEnter={() => setHighlighted(idx)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-t border-canvas-border/60 first:border-t-0 transition-colors cursor-pointer ${
-                  isPicked ? 'bg-primary/5' : isHighlighted ? 'bg-primary-xlight' : 'hover:bg-primary-xlight/50'
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-t border-canvas-border/60 first:border-t-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
+                  isPicked ? 'bg-brand-50' : isHighlighted ? 'bg-brand-50/60' : 'hover:bg-brand-50/40'
                 }`}
               >
                 <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[11px] font-mono tabular-nums shrink-0 transition-colors ${
                   isPicked
-                    ? 'bg-primary text-white font-semibold'
+                    ? 'bg-brand-600 text-white font-semibold'
                     : isHighlighted
-                      ? 'bg-primary-xlight text-primary font-semibold'
-                      : 'bg-ink-300/15 text-ink-400'
+                      ? 'bg-brand-100 text-brand-700 font-semibold'
+                      : 'bg-canvas-border/60 text-ink-400'
                 }`}>
                   {idx + 1}
                 </span>
-                <span className="flex-1 text-[13px] text-ink-800">{opt}</span>
+                <span className={`flex-1 text-[13px] leading-snug ${isPicked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>{opt}</span>
                 {isHighlighted && !isPicked && (
-                  <CornerDownLeft size={12} className="text-primary shrink-0" />
+                  <CornerDownLeft size={12} className="text-brand-600 shrink-0" />
                 )}
               </button>
             );
@@ -589,7 +661,7 @@ function ClarificationBlock({
 
           {/* Submit row — surfaces user's progress and lets them commit early */}
           {answeredCount > 0 && (
-            <div className="border-t border-canvas-border/60 flex items-center justify-between gap-3 px-4 py-2.5 bg-paper-50/40">
+            <div className="border-t border-canvas-border/60 flex items-center justify-between gap-3 px-4 py-2.5 bg-brand-50">
               <span className="text-[12px] text-ink-500 tabular-nums">
                 {answeredCount} of {total} answered
               </span>
@@ -621,7 +693,7 @@ function ClarificationBlock({
             />
             <button
               onClick={skipCurrent}
-              className="px-3 h-7 text-[12px] font-medium text-ink-600 hover:text-ink-800 border border-canvas-border bg-canvas-elevated hover:bg-paper-50 rounded-md transition-colors cursor-pointer shrink-0"
+              className="px-3 h-7 text-[12px] font-medium text-ink-600 hover:text-ink-800 border border-canvas-border bg-canvas-elevated hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0"
             >
               Skip
             </button>
@@ -629,16 +701,18 @@ function ClarificationBlock({
         </div>
       </div>
 
-      {/* Footer kbd hints + answered tally */}
-      <div className="flex items-center justify-between gap-4 text-[11px] text-ink-500 px-1">
-        <div className="flex items-center gap-3">
-          <span>↑↓ to navigate</span>
-          <span className="text-ink-300">·</span>
-          <span>Enter to select</span>
-          <span className="text-ink-300">·</span>
-          <span>Esc to skip</span>
+      {/* Footer — kbd hints in mono on the left, progress tally on the right.
+          Mono framing reads as "shortcut atoms" rather than prose, so the eye
+          doesn't try to parse them as a sentence. */}
+      <div className="flex items-center justify-between gap-4 text-[11px] text-ink-400 px-1">
+        <div className="flex items-center gap-2 font-mono">
+          <span><kbd className="text-ink-500">↑↓</kbd> navigate</span>
+          <span aria-hidden="true" className="text-canvas-border">·</span>
+          <span><kbd className="text-ink-500">↵</kbd> select</span>
+          <span aria-hidden="true" className="text-canvas-border">·</span>
+          <span><kbd className="text-ink-500">esc</kbd> skip</span>
         </div>
-        <span className="tabular-nums">{answeredCount} of {total} answered</span>
+        <span className="tabular-nums text-ink-500">{answeredCount} of {total} answered</span>
       </div>
     </div>
   );
@@ -683,7 +757,7 @@ function InlineAuditLoader({
   return (
     <div className="flex items-center gap-2 text-[13px] text-ink-600">
       <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-        <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 animate-ping" />
+        <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
       </span>
       <TextShimmer as="span" duration={2} spread={1.5}>
@@ -697,7 +771,7 @@ function SaveWorkflowButton() {
   const [saved, setSaved] = useState(false);
   if (saved) {
     return (
-      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="flex items-center gap-1.5 px-3 py-2 bg-compliant-50 text-compliant rounded-lg text-[12px] font-semibold">
+      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="flex items-center gap-1.5 px-3 py-2 bg-primary-xlight text-brand-700 rounded-lg text-xs font-semibold">
         <CheckCircle size={12} /> Saved to Library
       </motion.div>
     );
@@ -738,6 +812,9 @@ interface SaveAsWorkflowModalProps {
 }
 
 function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
+  // Wire shared modal a11y: focus trap, Escape, autofocus, restore focus, scroll lock.
+  // Matches AddToDashboard / AddToReport so keyboard users get one consistent contract.
+  const dialogRef = useDialogA11y(open, onCancel);
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState(defaultDescription);
   const [bpId, setBpId] = useState<string>('');
@@ -793,6 +870,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
       />
       {/* Modal */}
       <motion.div
+        ref={dialogRef}
         initial={{ opacity: 0, y: 8, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
@@ -809,7 +887,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               <p className="text-[12px] text-text-muted mt-0.5">Turn this query result into a re-runnable workflow.</p>
             </div>
           </div>
-          <button onClick={onCancel} className="p-1.5 text-text-muted hover:text-text-secondary rounded-md hover:bg-paper-50 transition-colors cursor-pointer" aria-label="Close">
+          <button onClick={onCancel} className="p-1.5 text-text-muted hover:text-text-secondary rounded-md hover:bg-brand-50 transition-colors cursor-pointer" aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -818,7 +896,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-mitigated-50 border border-mitigated/10 flex gap-2 items-start">
           <Lightbulb size={13} className="text-mitigated-700 mt-0.5 shrink-0" />
           <p className="text-[12px] leading-relaxed text-mitigated-700">
-            This chat will switch to <strong>workflow mode</strong>. You won't be able to switch back to query mode in this chat — start a new chat for that.
+            This chat will switch to <strong>workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
           </p>
         </div>
 
@@ -832,7 +910,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all"
-              placeholder="e.g., Duplicate Invoice Detection — Q1 ±3 days"
+              placeholder="e.g., Duplicate Invoice Detection: Q1 ±3 days"
             />
             <p className="text-[11px] text-text-muted mt-1">IRA pre-filled this from your query. Edit if needed.</p>
           </div>
@@ -858,7 +936,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                 value={subProcessId}
                 onChange={e => setSubProcessId(e.target.value)}
                 disabled={!bpId}
-                className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer disabled:bg-paper-50 disabled:text-text-muted disabled:cursor-not-allowed"
+                className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed"
               >
                 <option value="">{bpId ? 'Select…' : 'Pick a business process first'}</option>
                 {subProcessOptions.map(sp => (
@@ -887,7 +965,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               <Calendar size={12} className="text-primary" />
               Audit run frequency
             </label>
-            <div className="rounded-lg border border-border-light bg-paper-50/50 p-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5">
+            <div className="rounded-lg border border-border-light bg-brand-50 p-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5">
               <div>
                 <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Frequency</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -978,7 +1056,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border-light px-6 py-3 flex items-center justify-end gap-2 bg-paper-50/40">
+        <div className="border-t border-border-light px-6 py-3 flex items-center justify-end gap-2 bg-brand-50">
           <button onClick={onCancel} className="px-4 py-2 text-[12px] font-semibold text-text-muted hover:text-text-secondary hover:bg-white rounded-lg transition-colors cursor-pointer">
             Cancel
           </button>
@@ -998,7 +1076,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               },
             })}
             disabled={!canConfirm}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-paper-200 disabled:text-text-muted disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-canvas-border disabled:text-text-muted disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer"
           >
             <Save size={12} /> Save & switch to workflow
           </button>
@@ -1008,8 +1086,83 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
+// ─── Inline-edit user-message bubble ─────────────────────────────────────────
+// Drops in where the user-pill normally renders. Wears the same shape and
+// brand-tint as the pill so the in-place edit reads as "the same message,
+// just opened up", not as a foreign control.
+
+function InlineEditBubble({
+  value, onChange, onSave, onCancel,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // Auto-focus + select-all on mount so the user can immediately retype or
+  // tweak. Resize the textarea to fit its content.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
+  }, []);
+  const onInput = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onCancel();
+    }
+  };
+  const canSave = value.trim().length > 0;
+  return (
+    <div className="w-full max-w-[66ch]">
+      <div className="rounded-2xl bg-canvas-elevated border border-canvas-border px-4 py-2.5 shadow-sm shadow-ink-900/[0.03] focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-300/20 transition-[border-color,box-shadow] duration-200">
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => { onChange(e.target.value); onInput(); }}
+          onKeyDown={onKey}
+          rows={1}
+          aria-label="Edit message"
+          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-ink-800 placeholder:text-ink-400 min-h-[20px] max-h-[240px]"
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-7 px-2.5 rounded-md text-[12px] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="h-7 px-3 rounded-md text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
+        >
+          Save & resend
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
   const { addToast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -1061,6 +1214,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUserScrolledUp = useRef(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const handleScroll = useCallback(() => {
@@ -1068,14 +1222,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     if (!container) return;
     const threshold = 100;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    isUserScrolledUp.current = distanceFromBottom > threshold;
+    const scrolledUp = distanceFromBottom > threshold;
+    isUserScrolledUp.current = scrolledUp;
+    // Mirror to React state so the floating "scroll-to-bottom" pill can render.
+    // Ref drives auto-scroll behavior (no re-render); state drives the pill.
+    setShowScrollToBottom(prev => prev === scrolledUp ? prev : scrolledUp);
   }, []);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+  }, [prefersReducedMotion]);
 
   useEffect(() => {
     if (!isUserScrolledUp.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
-  }, [messages, isTyping, thinkingSteps, showClarificationCard, showProgressiveLoader]);
+  }, [messages, isTyping, thinkingSteps, showClarificationCard, showProgressiveLoader, prefersReducedMotion]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -1105,6 +1267,52 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     const t = setTimeout(fn, ms);
     timersRef.current.push(t);
   };
+
+  // Cancel an in-flight typing simulation. Clears pending timers, hides the
+  // thinking trail, and flips isTyping off so the composer returns to Send.
+  // If an audit run was mid-flight, tag its message so the UI shows "Stopped"
+  // instead of leaving the loader frozen in place.
+  const stopGenerating = useCallback(() => {
+    clearTimers();
+    setIsTyping(false);
+    setThinkingSteps([]);
+    setShowProgressiveLoader(false);
+    const haltedId = auditRunMsgIdRef.current;
+    auditRunMsgIdRef.current = null;
+    activeQueryFlowRef.current = null;
+    if (haltedId) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== haltedId) return m;
+        // Drop the audit-loading richType so the loader unmounts; keep the
+        // thinking trail and mark the message as stopped for the badge.
+        return { ...m, richType: undefined, stopped: true };
+      }));
+    }
+    addToast({ type: 'info', message: 'Stopped generating.' });
+  }, [addToast]);
+
+  // Reset the entire conversation. Wired to: the header's "+ New chat" button
+  // (was the floating chip's button) and the locked-workflow inline link
+  // ("Start a new chat for a query"). Keeping this in one place prevents the
+  // 14-setter chain from drifting between callsites.
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    setInput('');
+    setShowClarificationCard(false);
+    setShowProgressiveLoader(false);
+    setWorkflowBuildPhase(0);
+    setCurrentWorkflowType(null);
+    setLockedAsWorkflow(false);
+    setAttachedSources([]);
+    setFiles([]);
+    clearTimers();
+    setShowArtifacts(false);
+    setArtifactMode('query');
+    setActiveArtifactTab('sources');
+    setBuildWorkflowMode(false);
+    setChatTitleOverride(null);
+    setEditingTitle(false);
+  }, [setShowArtifacts, setArtifactMode, setActiveArtifactTab]);
 
   // ─── Load a saved conversation by id (used by slide-out + Recents) ───
   const loadChatById = useCallback((chatId: string) => {
@@ -1212,7 +1420,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     schedule(() => {
       const userText = consolidated.length
         ? consolidated.map(c => `• ${c.answer}`).join('\n')
-        : (fromSkip ? 'Skip — use sensible defaults.' : 'Run with the inputs above.');
+        : (fromSkip ? 'Skip: use sensible defaults.' : 'Run with the inputs above.');
       setMessages(prev => [...prev, {
         id: `msg-user-clarify-${Date.now()}`,
         role: 'user',
@@ -1247,7 +1455,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           timestamp: new Date(),
           richType: 'qna-plan',
           richData: {
-            planText: 'Plan ready — review the steps in the artifact panel. Approve to run the audit, or revise to adjust your inputs.',
+            planText: 'Plan ready. Review the steps in the Workspace, then approve to run the audit or revise to adjust your inputs.',
           },
         }]);
       } else {
@@ -1268,7 +1476,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       {
         id: `msg-plan-revise-${Date.now()}`,
         role: 'assistant',
-        text: 'Got it — revise your inputs in the message box and re-send.',
+        text: 'Got it. Revise your inputs in the message box and re-send.',
         timestamp: new Date(),
       },
     ]);
@@ -1285,7 +1493,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       setMessages(prev => [...prev, {
         id: `msg-wf-files-summary-${Date.now()}`,
         role: 'assistant',
-        text: `Got it — **${format}** with **${count}**. Now let me understand the matching logic.`,
+        text: `Got it: **${format}** with **${count}**. Now let me understand the matching logic.`,
         timestamp: new Date(),
       }]);
       setWorkflowBuildPhase(2);
@@ -1306,7 +1514,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       setMessages(prev => [...prev, {
         id: `msg-wf-logic-summary-${Date.now()}`,
         role: 'assistant',
-        text: `Perfect — **${logic}** with **${action}** for mismatches.\n\nHere's what I'll build:\n\n• **Data sources:** Mixed format (SQL + file upload)\n• **Matching:** ${logic}\n• **Mismatches:** ${action}\n\nShall I open the workflow canvas and configure the inputs? Type **"go"** or **"looks good"** to proceed.`,
+        text: `Perfect. **${logic}** with **${action}** for mismatches.\n\nHere's what I'll build:\n\n• **Data sources:** Mixed format (SQL + file upload)\n• **Matching:** ${logic}\n• **Mismatches:** ${action}\n\nShall I open the workflow canvas and configure the inputs? Type **"go"** or **"looks good"** to proceed.`,
         timestamp: new Date(),
         followUps: ['Looks good, build it', 'Change the matching logic', 'Add more data sources'],
       }]);
@@ -1337,7 +1545,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
         options: step.options,
       }));
       const data: ClarificationData = {
-        intro: "One quick check before I run — pick what fits, or type your own.",
+        intro: "One quick check before I run. Pick what fits, or type your own.",
         questions,
         answers: {},
         status: 'open',
@@ -1370,12 +1578,46 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       if (m.id !== targetId) return m;
       return {
         ...m,
-        text: "Done. I scanned 1.2M invoice records and surfaced 8 potential duplicates — total exposure ₹6.16L, with the highest-confidence pair at 96% match (Acme Corp). Acme accounts for half of the flags and is the first place I'd look.",
+        text: "Done. I scanned 1.2M invoice records and surfaced 8 potential duplicates. Total exposure ₹6.16L, with the highest-confidence pair at 96% match (Acme Corp). Acme accounts for half of the flags and is the first place I'd look.",
         followUps: AUDIT_FOLLOWUPS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
       };
     }));
+
+    // ─── Two-pass scroll: keep chat-fluency default (auto-scroll-to-bottom
+    //     fires on render via the messages effect), then once the rich result
+    //     has mounted and its motion-reveal has settled, re-position the
+    //     container so the headline body + KPI scoreboard sit ~12px from the
+    //     viewport top. Without this, tall results bury their headline numbers
+    //     above the fold.
+    //
+    //     Implementation notes (the first attempt got the cropped-top bug):
+    //     • Skip when the user has manually scrolled up — never yank them.
+    //     • Use container.scrollTo (NOT element.scrollIntoView) — scrollIntoView
+    //       walks ancestors and can bubble to window scroll in some browsers,
+    //       which pushed the message above the viewport last time.
+    //     • Wait 320 ms (past the 200 ms component-reveal + KPI 50 ms × 4 stagger
+    //       and chart paint) so the node is in its final layout when measured.
+    //     • Compute the node's top relative to the container's scroll origin,
+    //       not via offsetTop (which is relative to nearest positioned ancestor
+    //       and varies with flex/grid containers).
+    if (targetId && !isUserScrolledUp.current) {
+      schedule(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        const node = container.querySelector<HTMLElement>(`[data-msg-id="${targetId}"]`);
+        if (!node) return;
+        const containerRect = container.getBoundingClientRect();
+        const nodeRect = node.getBoundingClientRect();
+        const offsetFromTop = nodeRect.top - containerRect.top + container.scrollTop;
+        const target = Math.max(0, offsetFromTop - 12);
+        container.scrollTo({
+          top: target,
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        });
+      }, 320);
+    }
   };
 
   // ─── Conversational Workflow Flow ───
@@ -1428,7 +1670,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       setMessages(prev => [...prev, {
         id: `msg-wf-canvas-ready-${Date.now()}`,
         role: 'assistant',
-        text: `I've configured the input sources based on your selections. Review and customize the input configuration in the canvas.\n\nTake your time — click **'Confirm Inputs'** when ready.`,
+        text: `I've configured the input sources based on your selections. Review and customize the input configuration in the canvas.\n\nTake your time. Click **'Confirm Inputs'** when ready.`,
         timestamp: new Date(),
       }]);
       setWorkflowBuildPhase(4);
@@ -1669,44 +1911,86 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
         id: `msg-wf-config-update-${Date.now()}`,
         role: 'assistant',
         text: pickedLabels.length
-          ? `Got it — I've marked **${pickedLabels.join(', ')}** as configurable. Review the input + output config in the IRA Workspace, then click **'Save to Library'** when ready.`
-          : `Okay — keeping all parameters fixed for this workflow. Review the input + output config in the IRA Workspace, then click **'Save to Library'** when ready.`,
+          ? `Got it. I've marked **${pickedLabels.join(', ')}** as configurable. Review the input + output config in the Workspace, then click **'Save to Library'** when ready.`
+          : `Okay. Keeping all parameters fixed for this workflow. Review the input + output config in the Workspace, then click **'Save to Library'** when ready.`,
         timestamp: new Date(),
       }]);
     }, 600);
   };
 
+  // Post a terminal error message into the thread and clear all in-flight
+  // flags. Used by simulateResponse's safety net and available for any
+  // future real-backend stream-failure path. retryQuery is the user query
+  // string the error should re-run when the user clicks "Try again".
+  const postErrorMessage = useCallback((errText: string, retryQuery?: string) => {
+    clearTimers();
+    setIsTyping(false);
+    setShowProgressiveLoader(false);
+    setThinkingSteps([]);
+    const haltedId = auditRunMsgIdRef.current;
+    auditRunMsgIdRef.current = null;
+    activeQueryFlowRef.current = null;
+    setMessages(prev => {
+      const filtered = haltedId ? prev.filter(m => m.id !== haltedId) : prev;
+      return [...filtered, {
+        id: `msg-error-${Date.now()}`,
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: 'error',
+        richData: { message: errText, retryQuery },
+      }];
+    });
+  }, []);
+
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
-    // If workflow is awaiting user confirmation (phase 3), any positive reply opens canvas
-    if (workflowBuildPhase === 3) {
-      openCanvasAfterConfirmation();
-      return;
-    }
+    try {
+      // If workflow is awaiting user confirmation (phase 3), any positive reply opens canvas
+      if (workflowBuildPhase === 3) {
+        openCanvasAfterConfirmation();
+        return;
+      }
 
-    if (explicitMode === 'workflow') {
-      startConversationalWorkflowFlow(userMsg);
-      return;
-    }
-    if (explicitMode === 'query') {
+      if (explicitMode === 'workflow') {
+        startConversationalWorkflowFlow(userMsg);
+        return;
+      }
+      if (explicitMode === 'query') {
+        startQueryClarificationFlow();
+        return;
+      }
+
+      const lower = userMsg.toLowerCase();
+      if (lower.includes('workflow') || lower.includes('build a') || lower.includes('build me') || lower.includes('create a') || lower.includes('design a') || lower.includes('reconciliation')) {
+        startConversationalWorkflowFlow(userMsg);
+        return;
+      }
+
+      // Default — audit query flow with clarification → assumptions → loader → inline rich response
       startQueryClarificationFlow();
-      return;
+    } catch (err) {
+      // Safety net: if routing throws synchronously, the user must not see a
+      // stuck spinner. Convert to a friendly error message with retry.
+      console.error('simulateResponse failed', err);
+      postErrorMessage("Something went wrong while preparing that response.", userMsg);
     }
-
-    const lower = userMsg.toLowerCase();
-    if (lower.includes('workflow') || lower.includes('build a') || lower.includes('build me') || lower.includes('create a') || lower.includes('design a') || lower.includes('reconciliation')) {
-      startConversationalWorkflowFlow(userMsg);
-      return;
-    }
-
-    // Default — audit query flow with clarification → assumptions → loader → inline rich response
-    startQueryClarificationFlow();
   };
 
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed && files.length === 0) return;
+    // Block send when the message exceeds the hard cap. The counter already
+    // shows red past MAX_INPUT_CHARS — this catches keyboard-Enter users who
+    // haven't looked at the counter.
+    if (trimmed.length > MAX_INPUT_CHARS) {
+      addToast({
+        type: 'info',
+        message: `Trim your message to ${MAX_INPUT_CHARS.toLocaleString()} characters or fewer to send.`,
+      });
+      return;
+    }
     let text = trimmed;
     const attachmentLabels = [
       ...attachedSources.map(s => s.kind === 'source' ? s.name : ''),
@@ -1749,7 +2033,16 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setInput('');
     setFiles([]);
     setAttachedSources([]);
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      // Keep keyboard users in flow: focus stays on the composer after send so
+      // they can keep typing without reaching for the mouse. Skip if focus has
+      // already moved elsewhere (modal open, follow-up clicked).
+      const active = document.activeElement;
+      if (!active || active === document.body || active === textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
     // Workflow mode: don't force 'workflow' explicit (which routes straight to
     // the canvas builder); fall through to the keyword router so non-workflow
     // queries reach clarification → the qna-plan approve/revise gate.
@@ -1765,8 +2058,266 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    // Skip Enter-to-send while an IME composition is in flight (CJK input).
+    // Without this, Enter commits the composition AND submits the message,
+    // losing the in-progress character.
+    const isComposing = (e.nativeEvent as KeyboardEvent).isComposing
+      || (e as React.KeyboardEvent & { keyCode?: number }).keyCode === 229;
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) { e.preventDefault(); handleSend(); }
+    // Esc while generating stops the stream — mirrors ChatGPT/Claude.
+    // Esc while typing clears the textarea (only when there's content).
+    if (e.key === 'Escape') {
+      if (isTyping) {
+        e.preventDefault();
+        stopGenerating();
+      } else if (input.length > 0) {
+        e.preventDefault();
+        setInput('');
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      }
+    }
   };
+
+  // ── Composer file ingestion ─────────────────────────────────────────────────
+  // Shared by paste (Cmd+V with files in clipboard) and drag-and-drop. Cap at
+  // 8 attached files so we don't choke the chip row or blow past mock limits.
+  // Char counter — soft cap (warn) and hard cap (block send / truncate paste).
+  // Hoisted above ingestFiles/handleComposerPaste so paste can validate length.
+  const MAX_INPUT_CHARS = 4000;
+  const WARN_INPUT_CHARS = 3000;
+  const MAX_FILES = 8;
+  const ingestFiles = (incoming: FileList | File[] | null) => {
+    if (!incoming) return;
+    const list = Array.from(incoming);
+    if (list.length === 0) return;
+    setFiles(prev => {
+      const available = MAX_FILES - prev.length;
+      if (available <= 0) {
+        addToast({ type: 'info', message: `Attachment limit reached (${MAX_FILES} files).` });
+        return prev;
+      }
+      const accepted = list.slice(0, available);
+      if (list.length > accepted.length) {
+        addToast({ type: 'info', message: `Attached ${accepted.length} of ${list.length}. Limit is ${MAX_FILES}.` });
+      } else {
+        addToast({ type: 'success', message: `Attached ${accepted.length} ${accepted.length === 1 ? 'file' : 'files'}.` });
+      }
+      return [...prev, ...accepted];
+    });
+  };
+
+  const handleComposerPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const cb = e.clipboardData;
+    if (cb?.files && cb.files.length > 0) {
+      e.preventDefault();
+      ingestFiles(cb.files);
+      return;
+    }
+    // Truncate text pastes that would push the input past the hard limit, so
+    // a 10k-char paste doesn't silently overrun the counter cap. The textarea
+    // has maxLength=MAX_INPUT_CHARS+200 (slack), but a single paste can still
+    // exceed that; intercept and clip.
+    const pasted = cb?.getData('text');
+    if (!pasted) return;
+    const room = MAX_INPUT_CHARS - input.length;
+    if (pasted.length > room) {
+      e.preventDefault();
+      const accepted = room > 0 ? pasted.slice(0, room) : '';
+      const next = input + accepted;
+      setInput(next);
+      // Restore caret to the end after React commits.
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.selectionStart = ta.selectionEnd = next.length;
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+      });
+      addToast({
+        type: 'info',
+        message: room > 0
+          ? `Trimmed paste to the ${MAX_INPUT_CHARS.toLocaleString()}-character limit.`
+          : `Message is already at the ${MAX_INPUT_CHARS.toLocaleString()}-character limit.`,
+      });
+    }
+  };
+
+  // Drag-and-drop state lives at the wrapper level. Use a counter for enter /
+  // leave so child elements bubbling up don't toggle the highlight on/off
+  // (the classic "drag over a child fires dragleave on parent" gotcha).
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepth = useRef(0);
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer?.types?.includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    ingestFiles(e.dataTransfer.files);
+  };
+
+  // Char counter — MAX_INPUT_CHARS / WARN_INPUT_CHARS hoisted above for paste use.
+  const inputCount = input.length;
+  const overLimit = inputCount > MAX_INPUT_CHARS;
+
+  // ── Message-level actions (Copy / Retry / Feedback) ────────────────────────
+  // Bound to the hover-revealed action bar under each assistant text message.
+
+  // Tracks which assistant message just got "Copied" so the icon flashes a
+  // check briefly. Keyed by message id so multiple copies stay independent.
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  // Tracks 👍 / 👎 selection per message. Mock-only — no backend persistence.
+  const [feedbackByMsgId, setFeedbackByMsgId] = useState<Record<string, 'up' | 'down'>>({});
+
+  // Which "What next?" card the user picked for each assistant message — so the
+  // selected card stays highlighted in the conversation history after the click
+  // (instead of vanishing because the message is no longer the latest).
+  const [selectedFollowUpByMsgId, setSelectedFollowUpByMsgId] = useState<Record<string, string>>({});
+
+  // User-message bookmarks — persisted to localStorage and surfaced in
+  // Recents · Favourites. Hydrate the in-memory Set from storage on mount so
+  // the bookmark icon state is correct when a previously-bookmarked thread
+  // is reopened.
+  const [bookmarkedMsgIds, setBookmarkedMsgIds] = useState<Set<string>>(() => {
+    return new Set(readBookmarkedMessages().map(b => b.msgId));
+  });
+  // Cross-component sync: another surface (Recents) may remove a bookmark.
+  // Listen for our custom event + the native storage event (other tabs).
+  useEffect(() => {
+    const rehydrate = () => {
+      setBookmarkedMsgIds(new Set(readBookmarkedMessages().map(b => b.msgId)));
+    };
+    window.addEventListener('chat-bookmarks-updated', rehydrate);
+    window.addEventListener('storage', rehydrate);
+    return () => {
+      window.removeEventListener('chat-bookmarks-updated', rehydrate);
+      window.removeEventListener('storage', rehydrate);
+    };
+  }, []);
+
+  // Inline edit of a user message: the bubble itself becomes editable; on
+  // save, the message is updated in place, everything after it is dropped,
+  // and a fresh assistant response is regenerated. Cancel restores the
+  // original. (ChatGPT / Claude pattern.)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
+  const startEditingMessage = useCallback((msgId: string, text: string) => {
+    setEditingMsgId(msgId);
+    setEditingDraft(text);
+  }, []);
+  const cancelEditingMessage = useCallback(() => {
+    setEditingMsgId(null);
+    setEditingDraft('');
+  }, []);
+  const saveEditingMessage = useCallback(() => {
+    if (!editingMsgId) return;
+    const trimmed = editingDraft.trim();
+    if (!trimmed) return;
+    const idx = messages.findIndex(m => m.id === editingMsgId);
+    if (idx === -1) return;
+    const original = messages[idx];
+    if (original.role !== 'user') return;
+    const wasUnchanged = original.text === trimmed;
+
+    // Exit edit mode first so the regular bubble renders the new text
+    // immediately when React commits the next batch.
+    setEditingMsgId(null);
+    setEditingDraft('');
+
+    // Update the user message text + trim everything after it. The previous
+    // assistant reply is stale once the question changed, so we drop it.
+    setMessages(prev => {
+      const next = prev.slice(0, idx + 1);
+      next[idx] = { ...next[idx], text: trimmed, timestamp: new Date() };
+      return next;
+    });
+
+    if (wasUnchanged) return;
+
+    // Reset any flow flags left over from the previous response so
+    // simulateResponse can't be short-circuited by stale state
+    // (e.g. workflowBuildPhase=3 → openCanvasAfterConfirmation).
+    clearTimers();
+    setIsTyping(false);
+    setThinkingSteps([]);
+    setShowClarificationCard(false);
+    setShowProgressiveLoader(false);
+    setWorkflowBuildPhase(0);
+    activeQueryFlowRef.current = null;
+    auditRunMsgIdRef.current = null;
+
+    processingRef.current = true;
+    simulateResponse(trimmed, buildWorkflowMode ? undefined : 'query');
+    setTimeout(() => { processingRef.current = false; }, 2000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingMsgId, editingDraft, messages, buildWorkflowMode]);
+
+  // Inline-editable chat title — double-click toggles edit mode (matches the
+  // Claude UX). `chatTitleOverride` persists the renamed value for this session
+  // (mock-only — no backend). Reset via resetChat() so a new chat goes back to
+  // the derived title from the first user message.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [chatTitleOverride, setChatTitleOverride] = useState<string | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const copyMessage = useCallback(async (msg: ChatMessage) => {
+    // For plain text, copy the body. For audit-result, copy a KPI summary so
+    // pasting into Slack/email gives a useful one-liner.
+    let payload = msg.text || '';
+    if (!payload && msg.richType === 'audit-result') {
+      payload = AUDIT_RESULT.kpis.map(k => `${k.label}: ${k.value}`).join(' · ');
+    }
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopiedMsgId(msg.id);
+      setTimeout(() => setCopiedMsgId(prev => (prev === msg.id ? null : prev)), 1500);
+    } catch {
+      addToast({ message: 'Could not copy to clipboard', type: 'error' });
+    }
+  }, [addToast]);
+
+  const retryFromMessage = useCallback((msgIdx: number) => {
+    if (processingRef.current) return;
+    // Walk back to find the user query that produced this assistant message.
+    let userIdx = -1;
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { userIdx = i; break; }
+    }
+    if (userIdx === -1) return;
+    const userText = messages[userIdx].text;
+    processingRef.current = true;
+    // Drop the previous assistant turn(s) and re-simulate from the same query.
+    setMessages(prev => prev.slice(0, userIdx + 1));
+    simulateResponse(userText, buildWorkflowMode ? undefined : 'query');
+    setTimeout(() => { processingRef.current = false; }, 2000);
+  }, [messages, buildWorkflowMode]);
+
+  const setFeedback = useCallback((msgId: string, kind: 'up' | 'down') => {
+    setFeedbackByMsgId(prev => {
+      const current = prev[msgId];
+      if (current === kind) {
+        const { [msgId]: _omit, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [msgId]: kind };
+    });
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
@@ -1800,11 +2351,49 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const handleTextareaInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+      // Cap matches the textarea's max-h-[240px] visual cap. Past this the
+      // textarea internally scrolls instead of pushing the chat composer
+      // off-screen.
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 240) + 'px';
     }
   };
 
   const isEmpty = messages.length === 0;
+
+  // Derive a chat title from the first user message — truncated for the top bar.
+  // User can override via double-click-to-edit (mock-only — no backend persist).
+  const firstUserMessage = messages.find(m => m.role === 'user')?.text?.trim() ?? '';
+  const derivedChatTitle = firstUserMessage.length > 60
+    ? firstUserMessage.slice(0, 57).trimEnd() + '…'
+    : firstUserMessage || 'New chat';
+  const currentChatTitle = chatTitleOverride ?? derivedChatTitle;
+
+  // Bookmark toggle — writes through to localStorage so the message lands in
+  // Recents · Favourites (or removes it). Defined after currentChatTitle so
+  // it can stash a fresh title with each new bookmark.
+  const toggleBookmark = useCallback((msgId: string, text: string) => {
+    const existing = readBookmarkedMessages();
+    const isBookmarked = existing.some(b => b.msgId === msgId);
+    let next: BookmarkedMessage[];
+    if (isBookmarked) {
+      next = existing.filter(b => b.msgId !== msgId);
+      addToast({ type: 'info', message: 'Removed from bookmarks.' });
+    } else {
+      next = [
+        ...existing,
+        {
+          msgId,
+          chatId: selectedChatId ?? null,
+          chatTitle: currentChatTitle,
+          text,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+      addToast({ type: 'success', message: 'Bookmarked. Find it in Recents · Favourites.' });
+    }
+    writeBookmarkedMessages(next);
+    setBookmarkedMsgIds(new Set(next.map(b => b.msgId)));
+  }, [addToast, selectedChatId, currentChatTitle]);
 
   // Most-recent open clarification — drives the docked picker at the bottom of the chat.
   const openClarification = [...messages].reverse().find(
@@ -1824,12 +2413,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
         >
           <div className="p-4 border-b border-border-light flex items-center justify-between">
             <h3 className="text-sm font-semibold text-text">Chat History</h3>
-            <button onClick={toggleChatHistory} className="text-text-muted hover:text-text-secondary p-1 rounded-md hover:bg-gray-50 cursor-pointer">
+            <button onClick={toggleChatHistory} className="text-text-muted hover:text-text-secondary p-1 rounded-md hover:bg-brand-50 cursor-pointer">
               <X size={16} />
             </button>
           </div>
           <div className="p-3">
-            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-[12.5px] text-primary font-medium hover:bg-primary-xlight transition-colors cursor-pointer">
+            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-xs text-text-secondary font-medium hover:bg-brand-50 hover:text-text transition-colors cursor-pointer">
               <Plus size={14} />
               New Chat
             </button>
@@ -1838,15 +2427,15 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             {CHAT_HISTORY.map(chat => (
               <button
                 key={chat.id}
-                className="w-full text-left px-4 py-3 border-b border-border-light hover:bg-primary-xlight/50 transition-colors group cursor-pointer"
+                className="w-full text-left px-4 py-3 border-b border-border-light hover:bg-brand-50 transition-colors group cursor-pointer"
                 onClick={() => loadChatById(chat.id)}
               >
                 <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-md bg-primary/5 flex items-center justify-center shrink-0 mt-0.5">
-                    <MessageSquare size={12} className="text-primary/60" />
+                  <div className="w-6 h-6 rounded-md bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <MessageSquare size={12} className="text-text-muted" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-text truncate group-hover:text-primary transition-colors">{chat.title}</div>
+                    <div className="text-sm font-medium text-text truncate transition-colors">{chat.title}</div>
                     <div className="text-[12px] text-text-muted truncate mt-0.5">{chat.preview}</div>
                     <div className="text-[12px] text-text-muted/60 mt-1">{chat.timestamp}</div>
                   </div>
@@ -1859,7 +2448,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             <div className="border-t border-border-light p-3">
               <button
                 onClick={() => { toggleChatHistory(); setView('recents'); }}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-text hover:bg-brand-50 transition-colors cursor-pointer"
               >
                 Browse all in Recents
                 <ArrowRight size={12} />
@@ -1875,19 +2464,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   if (isEmpty) {
     return (
       <>
-      <div style={{ display: 'flex', height: '100%', width: '100%' }}>
+      <div className="flex h-full w-full">
         {chatHistoryPanel}
 
-        <div style={{
-          flex: '1 1 0%',
-          minWidth: 0,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#f8f9fc',
-        }}
-          className="bg-hero-pattern bg-grid-subtle relative"
-        >
+        <div className="flex-1 min-w-0 h-full flex flex-col bg-hero-pattern bg-grid-subtle relative" style={{ background: 'var(--color-canvas)' }}>
           <FloatingLines
             enabledWaves={['top', 'middle', 'bottom']}
             lineCount={5}
@@ -1900,11 +2480,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             opacity={0.06}
           />
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px' }} className="relative z-10">
-            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-gray-100 rounded-lg transition-colors cursor-pointer" aria-label="Chat History">
+          <div className="relative z-10 flex justify-between px-5 py-3">
+            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer" aria-label="Chat History">
               <History size={18} />
             </button>
-            <button className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-gray-100 rounded-lg transition-colors cursor-pointer" aria-label="New Chat">
+            <button className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer" aria-label="New Chat">
               <Plus size={18} />
             </button>
           </div>
@@ -1941,19 +2521,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             </div>
           )}
 
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            overflow: 'auto',
-            padding: '0 24px 60px',
-          }}>
+          <div className="flex-1 flex justify-center items-center overflow-auto px-6 pb-[60px]">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              style={{ width: 720, maxWidth: '100%', textAlign: 'center' }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
+              className="w-[720px] max-w-full text-center"
             >
               <div className="mb-4">
                 <AuditifyHelloEffect
@@ -1962,7 +2535,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                 />
               </div>
 
-              <h1 style={{ fontSize: 34, fontWeight: 500, letterSpacing: '-0.02em', marginBottom: 8, color: 'rgba(14,11,30,0.85)' }}>
+              <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
                 Audit smarter.{' '}
                 <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
                   Not harder.
@@ -1977,83 +2550,131 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                 Your AI copilot already knows what to look for. Just ask.
               </motion.p>
 
-              <div className="ai-border" style={{ marginBottom: 24 }}>
-                <div style={{ position: 'relative', background: 'white', borderRadius: 18 }}>
-                  {/* Attachment chips — picked sources / fresh uploads, inside the composer */}
-                  {(files.length > 0 || attachedSources.length > 0) && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto px-5 pt-3 pb-1">
-                      {attachedSources.map((s, i) => (
-                        s.kind === 'source' && (
-                          <div key={`src-${i}`} title={s.name} className="flex items-center gap-1 bg-evidence-50 text-evidence-700 text-[12px] px-2 py-1 rounded-md font-medium border border-evidence-200 shrink-0">
-                            <span className="text-[10px] uppercase font-bold tracking-wide opacity-60">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
-                            <span className="truncate max-w-[160px]">{s.name}</span>
-                            <button
-                              onClick={() => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
-                              className="hover:text-evidence-700 ml-0.5 cursor-pointer"
-                              aria-label={`Remove ${s.name}`}
-                            ><X size={10} /></button>
-                          </div>
-                        )
-                      ))}
-                      {files.map((f, i) => (
-                        <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-primary-light text-primary text-[12px] px-2 py-1 rounded-md font-medium shrink-0">
-                          <FileText size={11} />
-                          <span className="truncate max-w-[100px]">{f.name}</span>
-                          <button onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="hover:text-primary-hover ml-0.5 cursor-pointer" aria-label={`Remove ${f.name}`}><X size={10} /></button>
-                        </div>
-                      ))}
+              <div
+                className="ai-border relative mb-6"
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {/* Drop overlay — only renders during an active file drag. */}
+                {isDragging && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.5rem] bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
+                  >
+                    <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <Paperclip size={14} />
+                      <span>Drop to attach</span>
                     </div>
-                  )}
-                  <textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
-                    onKeyDown={handleKeyDown}
-                    placeholder={buildWorkflowMode ? 'Describe a workflow and let Auditify do the rest' : 'Ask a question or run an audit query'}
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      resize: 'none', padding: '20px 20px 56px', fontSize: 15, minHeight: 100,
-                      maxHeight: 200, borderRadius: 18, fontFamily: 'inherit', color: '#0e0b1e',
-                      boxSizing: 'border-box',
-                    }}
-                    rows={2}
-                  />
-                  <div style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      type="button"
+                  </div>
+                )}
+
+                {/* Attachment chips — picked sources + fresh uploads. */}
+                {(files.length > 0 || attachedSources.length > 0) && (
+                  <div className="composer-chips-row flex items-center gap-1.5 overflow-x-auto px-4 pt-3 pb-1 text-left">
+                    {attachedSources.map((s, i) => (
+                      s.kind === 'source' && (
+                        <div key={`src-${i}`} title={s.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
+                          <span className="text-[10px] uppercase font-bold tracking-[0.06em] text-ink-400">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                          <span className="truncate max-w-[10rem]">{s.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
+                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            aria-label={`Remove ${s.name}`}
+                          ><X size={12} /></button>
+                        </div>
+                      )
+                    ))}
+                    {files.map((f, i) => (
+                      <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
+                        <FileText size={12} className="text-ink-400" />
+                        <span className="truncate max-w-[6.25rem]">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
+                          className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                          aria-label={`Remove ${f.name}`}
+                        ><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Textarea — empty-state slightly taller than the in-chat
+                    composer (60px vs 44px) because this is the hero entry
+                    point and the surface should feel inviting. 15px body
+                    line-height 1.5 for cozy single-line, grows to 240px. */}
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handleComposerPaste}
+                  placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Ask a question or run a query…'}
+                  aria-label="Message IRA"
+                  maxLength={MAX_INPUT_CHARS + 200}
+                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-5 pb-1 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[60px] max-h-[240px] text-left"
+                  rows={1}
+                />
+
+                {/* Action row — attach + mode toggle on the left, char counter
+                    + primary CTA on the right. The primary CTA carries a
+                    text label here (vs icon-only in the in-chat composer)
+                    because this is the first-time-user surface and the verb
+                    should be explicit. */}
+                <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="md"
+                      iconOnly
                       onClick={() => setShowDataPicker(true)}
-                      className="p-2 text-text-muted/40 hover:text-primary hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
                       aria-label="Attach data sources or files"
+                      title="Attach data or files"
                     >
-                      <Plus size={18} />
-                    </button>
+                      <Plus size={16} />
+                    </Button>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={buildWorkflowMode}
                       aria-label="Build a workflow"
+                      title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
                       onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-[12.5px] font-medium transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         buildWorkflowMode
-                          ? 'border-primary/40 bg-primary-xlight text-primary'
-                          : 'border-border-light bg-white text-text-secondary hover:text-text hover:border-border'
+                          ? 'bg-brand-50 text-brand-700'
+                          : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
                       }`}
                     >
-                      <span className={`w-4 h-4 rounded-full flex items-center justify-center ${buildWorkflowMode ? 'bg-gradient-to-br from-purple-500 to-violet-600' : 'bg-paper-100'}`}>
-                        <Workflow size={9} className={buildWorkflowMode ? 'text-white' : 'text-text-muted'} />
-                      </span>
+                      <Workflow size={12} className={buildWorkflowMode ? 'text-brand-600' : 'text-ink-400'} />
                       Build a workflow
                     </button>
                   </div>
-                  <div style={{ position: 'absolute', right: 12, bottom: 12 }}>
-                    <button
+
+                  <div className="flex items-center gap-2.5">
+                    {inputCount >= WARN_INPUT_CHARS && (
+                      <span
+                        aria-live="polite"
+                        className={`text-[11px] tabular-nums font-medium ${overLimit ? 'text-risk' : 'text-mitigated-700'}`}
+                      >
+                        {inputCount.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
+                      </span>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="md"
+                      shape="lg"
+                      leftIcon={buildWorkflowMode ? <Workflow size={14} /> : <Send size={14} />}
                       onClick={handleSend}
-                      disabled={!input.trim() && files.length === 0 && attachedSources.length === 0}
-                      className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-[13px] font-semibold transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                      disabled={(!input.trim() && files.length === 0 && attachedSources.length === 0) || overLimit}
+                      aria-label={overLimit ? `Message too long (${inputCount.toLocaleString()} / ${MAX_INPUT_CHARS.toLocaleString()} max)` : (buildWorkflowMode ? 'Build workflow' : 'Run a query')}
+                      title={overLimit ? 'Message too long' : 'Enter to send · Shift+Enter for new line'}
                     >
-                      <Sparkles size={14} />
-                      Submit
-                    </button>
+                      {buildWorkflowMode ? 'Build workflow' : 'Run a query'}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -2077,93 +2698,161 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   return (
     <div className="flex h-full w-full" style={{ flex: '1 1 0%', minWidth: 0 }}>
       {chatHistoryPanel}
-      <div className="flex flex-col h-full bg-white" style={{ flex: '1 1 0%', minWidth: 0 }}>
-        {/* Top bar */}
-        <div className="h-12 border-b border-canvas-border bg-canvas-elevated flex items-center justify-between px-4 shrink-0 z-10">
-          <div className="flex items-center gap-2">
-            <button onClick={toggleChatHistory} className={`p-1.5 rounded-md transition-colors cursor-pointer ${showChatHistory ? 'bg-primary/10 text-primary' : 'text-text-muted hover:text-text-secondary hover:bg-gray-50'}`}>
-              <History size={16} />
-            </button>
-            <span className="text-sm font-medium text-text">Chat</span>
-          </div>
-          <div className="flex items-center gap-3">
+      <div
+        className="flex flex-col h-full bg-hero-pattern bg-grid-subtle"
+        style={{ flex: '1 1 0%', minWidth: 0, background: 'var(--color-canvas)' }}
+      >
+        {/* Claude-style header — title + chevron on left (opens chat history),
+            separate icon buttons on the right (no merged chip background). */}
+        <header className="h-10 shrink-0 flex items-center justify-between px-4 sm:px-6">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              autoFocus
+              defaultValue={currentChatTitle === 'New chat' ? '' : currentChatTitle}
+              placeholder="Rename chat"
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                setChatTitleOverride(v ? v : null);
+                setEditingTitle(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditingTitle(false);
+                }
+              }}
+              className="max-w-[60%] text-[16px] font-semibold tracking-tight text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          ) : (
             <button
-              onClick={() => { setMessages([]); setInput(''); setShowClarificationCard(false); setShowProgressiveLoader(false); setWorkflowBuildPhase(0); setCurrentWorkflowType(null); setLockedAsWorkflow(false); setAttachedSources([]); setFiles([]); clearTimers(); setShowArtifacts(false); setArtifactMode('query'); setActiveArtifactTab('sources'); setBuildWorkflowMode(false); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/20 transition-all cursor-pointer"
+              onClick={toggleChatHistory}
+              onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
+              title="Click for history · Double-click to rename"
+              aria-label="Chat history"
+              className="flex items-center gap-1.5 max-w-[60%] text-[16px] font-semibold tracking-tight text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
             >
-              <Plus size={12} />
-              New Chat
+              <span className="truncate">{currentChatTitle || 'New chat'}</span>
+              <History size={14} className="text-ink-500 shrink-0" />
             </button>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-primary/10 to-primary-medium/10 text-primary text-[12px] font-semibold">
-              <Sparkles size={11} />
-              AI Copilot
-            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              shape="md"
+              pressed={showArtifacts}
+              onClick={() => setShowArtifacts(!showArtifacts)}
+              title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
+              aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
+            >
+              <FileText size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              shape="md"
+              onClick={resetChat}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus size={14} />
+            </Button>
           </div>
-        </div>
+        </header>
 
         {/* Pending Dashboard Banner */}
         {pendingDashboard && (
-          <div className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-brand-50 to-brand-100/50 border-b border-brand-200 flex items-center justify-between gap-3">
+          <div className="shrink-0 px-4 py-2.5 bg-brand-50 border-b border-border-light flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-lg bg-brand-600 flex items-center justify-center">
+              <div className="size-8 rounded-lg bg-ink-900 flex items-center justify-center">
                 <BarChart3 size={14} className="text-white" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-brand-900">Creating: {pendingDashboard.name}</p>
-                <p className="text-[11px] text-brand-600">Run a query, then add results to your dashboard</p>
+                <p className="text-sm font-semibold text-text">Creating: {pendingDashboard.name}</p>
+                <p className="text-xs text-text-muted">Run a query, then add results to your dashboard</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<BarChart3 size={12} />}
                 onClick={() => {
                   const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
                   onAddToDashboard?.(mockFields);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
               >
-                <BarChart3 size={12} />
                 Add to Dashboard
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
                 onClick={onDismissPendingDashboard}
-                className="p-1 rounded-md text-brand-400 hover:text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
+                aria-label="Dismiss"
               >
                 <X size={14} />
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Messages */}
+        {/* Messages — relative wrapper so scroll-to-bottom pill anchors to
+            the viewport edge rather than the scrolling content. */}
+        <div className="flex-1 min-h-0 relative">
         <div
           ref={messagesContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto"
+          // role=log + aria-live=polite so screen readers announce new
+          // assistant messages as the conversation grows. aria-atomic=false
+          // means each new node is read on its own, not the whole transcript.
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-relevant="additions"
+          aria-label="Chat conversation"
+          className="h-full overflow-y-auto [scrollbar-gutter:stable]"
         >
-          <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+          <div className={`max-w-[45rem] mx-auto w-full px-4 sm:px-6 pb-8 space-y-6 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
             <AnimatePresence initial={false}>
               {messages.map((msg, msgIdx) => (
-                <motion.div key={msg.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[85%]">
+                <motion.div
+                  key={msg.id}
+                  data-msg-id={msg.id}
+                  data-rich-type={msg.richType ?? undefined}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  className={`group flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={msg.role === 'user' ? 'flex flex-col items-end w-fit max-w-[85%] ml-auto' : 'w-full'}>
                     {/* Single thinking trail per IRA message */}
                     {msg.role === 'assistant' && msg.thinking && msg.thinking.length > 0 && (
                       <ThinkingTrail
                         summary={
                           msg.richType === 'clarification'
                             ? ((msg.richData as unknown as ClarificationData)?.purpose === 'save-workflow'
-                                ? 'Confirming tolerances + threshold before saving'
-                                : 'Identified ambiguity, asking for inputs')
-                            : msg.richType === 'audit-loading' ? 'Running query through plan → SQL → sources → results' :
-                          msg.richType === 'audit-result' ? 'Completed query — running through plan → SQL → sources → results' :
-                          `Thought for ${msg.thinking.length} steps`
+                                ? 'Confirming tolerances and threshold before saving'
+                                : 'Asking a few clarifying questions')
+                            : msg.richType === 'audit-loading' ? 'Running through plan → SQL → sources → results' :
+                          msg.richType === 'audit-result' ? 'Ran through plan → SQL → sources → results' :
+                          `Reasoned in ${msg.thinking.length} steps`
                         }
                         steps={msg.thinking}
                       />
                     )}
 
-                    {/* IRA byline — appears above each assistant response so the source is unambiguous */}
+                    {/* IRA mark — single brand dot replaces the old uppercase
+                        ALL-CAPS byline. Identity stays, chrome dies. */}
                     {msg.role === 'assistant' && (msg.text || msg.richType) && (
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-400 mb-2">IRA</div>
+                      <div className="size-1.5 rounded-full bg-primary mb-2" aria-label="IRA" />
                     )}
 
                     {/* Rich inline components */}
@@ -2172,8 +2861,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         {(msg.richData as unknown as ClarificationData).status === 'submitted' ? (
                           <div className="text-[13px] text-ink-700 leading-relaxed">
                             {(msg.richData as unknown as ClarificationData).purpose === 'save-workflow'
-                              ? 'Got it — saving as workflow with these settings.'
-                              : 'Got it — running with these inputs.'}
+                              ? 'Got it. Saving as workflow with these settings.'
+                              : 'Got it. Running with these inputs.'}
                           </div>
                         ) : (
                           <div className="text-[15px] leading-[1.65] text-ink-800">
@@ -2184,7 +2873,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                     ) : msg.richType === 'qna-plan' ? (
                       // Workflow-mode plan-approve gate — Approve runs the audit,
                       // Revise drops the plan and returns control to the composer.
-                      <div className="space-y-3 max-w-[680px]">
+                      <div className="space-y-3 w-full">
                         {(msg.richData as { planText?: string })?.planText && (
                           <div className="text-[14px] leading-[1.6] text-ink-700">
                             {(msg.richData as { planText?: string }).planText}
@@ -2206,7 +2895,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         </div>
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
-                      <div className="max-w-[680px]">
+                      <div className="w-full">
                         {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
                           <InlineAuditLoader
                             steps={LOADING_STEPS}
@@ -2216,39 +2905,83 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         )}
                       </div>
                     ) : msg.richType === 'audit-result' ? (
-                      <div className="space-y-4 max-w-[680px]">
+                      <div className="space-y-4 w-full">
                         {/* Body text */}
                         {msg.text && (
                           <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{msg.text}</div>
                         )}
 
-                        {/* Affordance: link inline result to the auto-opened panel */}
-                        <button
-                          onClick={() => setShowArtifacts(true)}
-                          className="inline-flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
-                        >
-                          <span>Plan, query, and sources are in the artifact panel</span>
-                          <ArrowUpRight size={12} />
-                        </button>
+                        {/* Affordance: link inline result to the auto-opened panel.
+                            Hidden when the panel is already open (the link would
+                            no-op against itself and duplicates what's already
+                            on screen). */}
+                        {!showArtifacts && (
+                          <button
+                            onClick={() => setShowArtifacts(true)}
+                            className="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                          >
+                            <span>Plan, query, and sources are in the Workspace</span>
+                            <ArrowUpRight size={12} />
+                          </button>
+                        )}
 
-                        {/* KPI cards */}
-                        <div className="grid grid-cols-4 gap-2">
-                          {AUDIT_RESULT.kpis.map((kpi, ki) => (
+                        {/* KPI scoreboard — mirrors the dashboard widget grid:
+                            4 separate glass-cards (rounded-xl, hairline border,
+                            brand-200 hover) in a 2/4-col grid. Typography matches
+                            DashboardView's KPI block exactly: 26px bold ink-900
+                            value over an 11px uppercase tracking-wide label.
+                            Same widget, same color, both surfaces. */}
+                        {/* Evidence ledger — inline metrics, no cards.
+                            Source Serif numerals + Inter labels, separated
+                            by hairline vertical rules. Reads as the auditor's
+                            scoreboard sitting in the prose, not as a hero-
+                            metric template. Layout: 4 cells per row, wraps
+                            to 2 rows on narrow widths. */}
+                        <div
+                          role="list"
+                          aria-label="Key results"
+                          className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 divide-x divide-canvas-border border-y border-canvas-border py-4"
+                        >
+                          {AUDIT_RESULT.kpis.slice(0, 8).map((kpi, ki) => (
                             <motion.div
                               key={kpi.label}
-                              initial={{ opacity: 0, y: 6 }}
+                              role="listitem"
+                              aria-label={`${kpi.label}: ${kpi.value}`}
+                              initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
                               animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: ki * 0.05 }}
-                              className="rounded-xl border border-canvas-border bg-canvas-elevated p-3"
+                              transition={{
+                                delay: prefersReducedMotion ? 0 : 0.1 + ki * 0.04,
+                                duration: prefersReducedMotion ? 0 : 0.42,
+                                ease: [0.16, 1, 0.3, 1],
+                              }}
+                              className="px-4 first:pl-0 [&:nth-child(4n+1)]:sm:pl-0 [&:nth-child(odd)]:pl-0 sm:[&:nth-child(odd)]:pl-4"
                             >
-                              <div className={`text-[18px] font-semibold tabular-nums ${kpi.color}`}>{kpi.value}</div>
-                              <div className="text-[12px] text-ink-500 mt-0.5">{kpi.label}</div>
+                              <div
+                                className="font-display text-[28px] leading-none tracking-tight text-ink-900 tabular-nums"
+                                aria-hidden="true"
+                              >
+                                {kpi.value}
+                              </div>
+                              <div
+                                className="mt-1.5 text-[12px] text-ink-500 leading-snug"
+                                aria-hidden="true"
+                              >
+                                {kpi.label}
+                              </div>
                             </motion.div>
                           ))}
                         </div>
 
-                        {/* Charts */}
-                        <ChartGroup charts={AUDIT_RESULT.charts} />
+                        {/* Chart — clean white card sitting on the paper
+                            canvas. Subtle hairline border, no shadow. The
+                            ledger above carries the data, the chart adds
+                            shape. */}
+                        <section
+                          aria-label="Audit result chart"
+                          className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden"
+                        >
+                          <ChartGroup charts={AUDIT_RESULT.charts} embedded />
+                        </section>
 
                         {/* Table preview */}
                         <ResultsTable
@@ -2260,15 +2993,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         />
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
-                            Save as workflow opens the metadata modal; the others stub via toast. */}
+                            All buttons share the same outline-default / pressed-linked
+                            visual; Save-as-workflow is the only primary CTA. The
+                            previous mix of brand-50 + violet-50 + red-600 hover
+                            spread across this row read as 3+ palettes; this row
+                            now sits firmly in the chat's send/receive two-tone. */}
                         <div className="flex items-center gap-2 pt-3 border-t border-canvas-border">
-                          <button
+                          <Button
+                            variant="outline"
+                            size="md"
+                            leftIcon={<Download size={14} />}
                             onClick={() => addToast({ type: 'success', message: 'CSV download started.' })}
-                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[12px] font-semibold text-ink-700 hover:border-brand-200 hover:text-ink-800 transition-colors cursor-pointer"
                           >
-                            <Download size={13} /> Export
-                          </button>
-                          {/* Dashboard button — shows added state with dropdown if linked */}
+                            Export
+                          </Button>
+                          {/* Dashboard button — pressed when one or more dashboards linked. */}
                           {(() => {
                             const dashLinks = msg.addedTo?.dashboards || [];
                             const hasDash = dashLinks.length > 0;
@@ -2276,34 +3015,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
-                                <button
+                                <Button
+                                  variant="outline"
+                                  size="md"
+                                  pressed={hasDash}
+                                  leftIcon={hasDash ? <CheckCircle size={14} /> : <BarChart3 size={14} />}
+                                  rightIcon={hasDash ? <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} /> : undefined}
                                   onClick={() => hasDash ? setOpenDropdown(isOpen ? null : dropKey) : handleAuditAction('dashboard', msg.id)}
-                                  className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${
-                                    hasDash
-                                      ? 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'
-                                      : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200 hover:text-ink-800'
-                                  }`}
                                 >
-                                  {hasDash ? <CheckCircle size={13} /> : <BarChart3 size={13} />}
                                   {hasDash
                                     ? dashLinks.length === 1
                                       ? `In "${dashLinks[0].name}"`
                                       : `In ${dashLinks.length} dashboards`
-                                    : 'Dashboard'}
-                                  {hasDash && <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
-                                </button>
+                                    : 'Add to dashboard'}
+                                </Button>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
-                                    <div className="absolute left-0 top-full mt-1 z-50 w-56 bg-white rounded-lg shadow-lg border border-canvas-border py-1">
+                                    <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-1 z-50 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-canvas-border py-1">
                                       {dashLinks.map(d => (
-                                        <div key={d.id} className="px-3 py-1.5 flex items-center gap-2 text-[12px] text-ink-700">
-                                          <BarChart3 size={12} className="text-brand-600 shrink-0" />
+                                        <div key={d.id} className="px-3 py-1.5 flex items-center gap-2 text-xs text-text">
+                                          <BarChart3 size={12} className="text-text-muted shrink-0" />
                                           <span className="flex-1 truncate font-medium">{d.name}</span>
-                                          <button onClick={() => { onViewDashboard?.(d.id); setOpenDropdown(null); }} className="text-brand-600 hover:text-brand-700 cursor-pointer" title="View">
+                                          <button onClick={() => { onViewDashboard?.(d.id); setOpenDropdown(null); }} className="text-text-muted hover:text-text cursor-pointer" title="View">
                                             <ExternalLink size={12} />
                                           </button>
-                                          <button onClick={() => { removeFromDashboard(msg.id, d.id); setOpenDropdown(null); }} className="text-ink-400 hover:text-red-600 cursor-pointer" title="Remove">
+                                          <button onClick={() => { removeFromDashboard(msg.id, d.id); setOpenDropdown(null); }} className="text-text-muted hover:text-text cursor-pointer" title="Remove">
                                             <X size={12} />
                                           </button>
                                         </div>
@@ -2311,7 +3048,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                                       <div className="border-t border-canvas-border mt-1 pt-1">
                                         <button
                                           onClick={() => { setOpenDropdown(null); handleAuditAction('dashboard', msg.id); }}
-                                          className="w-full px-3 py-1.5 flex items-center gap-2 text-[12px] font-medium text-brand-600 hover:bg-brand-50 cursor-pointer"
+                                          className="w-full px-3 py-1.5 flex items-center gap-2 text-xs font-medium text-text hover:bg-brand-50 cursor-pointer"
                                         >
                                           <Plus size={12} /> Add to another
                                         </button>
@@ -2322,7 +3059,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                               </div>
                             );
                           })()}
-                          {/* Report button — shows added state with dropdown if linked */}
+                          {/* Report button — same outline/pressed pattern as Dashboard. */}
                           {(() => {
                             const rptLinks = msg.addedTo?.reports || [];
                             const hasRpt = rptLinks.length > 0;
@@ -2330,34 +3067,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
-                                <button
+                                <Button
+                                  variant="outline"
+                                  size="md"
+                                  pressed={hasRpt}
+                                  leftIcon={hasRpt ? <CheckCircle size={14} /> : <FileText size={14} />}
+                                  rightIcon={hasRpt ? <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} /> : undefined}
                                   onClick={() => hasRpt ? setOpenDropdown(isOpen ? null : dropKey) : handleAuditAction('report', msg.id)}
-                                  className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${
-                                    hasRpt
-                                      ? 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100'
-                                      : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200 hover:text-ink-800'
-                                  }`}
                                 >
-                                  {hasRpt ? <CheckCircle size={13} /> : <FileText size={13} />}
                                   {hasRpt
                                     ? rptLinks.length === 1
                                       ? `In "${rptLinks[0].name}"`
                                       : `In ${rptLinks.length} reports`
-                                    : 'Reports'}
-                                  {hasRpt && <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
-                                </button>
+                                    : 'Add to report'}
+                                </Button>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
-                                    <div className="absolute left-0 top-full mt-1 z-50 w-56 bg-white rounded-lg shadow-lg border border-canvas-border py-1">
+                                    <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-1 z-50 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-canvas-border py-1">
                                       {rptLinks.map(r => (
-                                        <div key={r.id} className="px-3 py-1.5 flex items-center gap-2 text-[12px] text-ink-700">
-                                          <FileText size={12} className="text-violet-600 shrink-0" />
+                                        <div key={r.id} className="px-3 py-1.5 flex items-center gap-2 text-xs text-text">
+                                          <FileText size={12} className="text-text-muted shrink-0" />
                                           <span className="flex-1 truncate font-medium">{r.name}</span>
-                                          <button onClick={() => { onViewReport?.(r.id); setOpenDropdown(null); }} className="text-violet-600 hover:text-violet-700 cursor-pointer" title="View">
+                                          <button onClick={() => { onViewReport?.(r.id); setOpenDropdown(null); }} className="text-text-muted hover:text-text cursor-pointer" title="View">
                                             <ExternalLink size={12} />
                                           </button>
-                                          <button onClick={() => { removeFromReport(msg.id, r.id); setOpenDropdown(null); }} className="text-ink-400 hover:text-red-600 cursor-pointer" title="Remove">
+                                          <button onClick={() => { removeFromReport(msg.id, r.id); setOpenDropdown(null); }} className="text-text-muted hover:text-text cursor-pointer" title="Remove">
                                             <X size={12} />
                                           </button>
                                         </div>
@@ -2365,7 +3100,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                                       <div className="border-t border-canvas-border mt-1 pt-1">
                                         <button
                                           onClick={() => { setOpenDropdown(null); handleAuditAction('report', msg.id); }}
-                                          className="w-full px-3 py-1.5 flex items-center gap-2 text-[12px] font-medium text-violet-600 hover:bg-violet-50 cursor-pointer"
+                                          className="w-full px-3 py-1.5 flex items-center gap-2 text-xs font-medium text-text hover:bg-brand-50 cursor-pointer"
                                         >
                                           <Plus size={12} /> Add to another
                                         </button>
@@ -2377,17 +3112,19 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             );
                           })()}
                           <div className="ml-auto">
-                            <button
+                            <Button
+                              variant="primary"
+                              size="md"
+                              leftIcon={<Workflow size={14} />}
                               onClick={openSaveAsWorkflowModal}
-                              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
                             >
-                              <Workflow size={13} /> Save as workflow
-                            </button>
+                              Save as workflow
+                            </Button>
                           </div>
                         </div>
                       </div>
                     ) : msg.richType === 'summary-kpi' ? (
-                      <div className="ml-7 grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-4 gap-2">
                         {((msg.richData?.kpis as { label: string; value: string; color: string }[] | undefined) || []).map((kpi, ki) => (
                           <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: ki * 0.1 }}
                             className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-center"
@@ -2409,13 +3146,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           status: 'open' | 'submitted';
                         };
                         return (
-                          <div className="ml-7">
+                          <div>
                             <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
                               {data.intro.split('**').map((part, i) =>
                                 i % 2 === 1 ? <strong key={i} className="font-semibold text-text">{part}</strong> : part
                               )}
                             </div>
-                            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-[66ch]">
+                            {/* Cap the param grid so long lists scroll rather than
+                                push Confirm off-screen. Only enables the cap when
+                                there's actually enough content to overflow — short
+                                lists keep their natural height. */}
+                            <div
+                              className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-[66ch]${
+                                data.options.length > 8 ? ' max-h-[26rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]' : ''
+                              }`}
+                            >
                               {data.options.map(opt => {
                                 const isSelected = data.selected.includes(opt.id);
                                 const disabled = data.status === 'submitted';
@@ -2427,7 +3172,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                                     className={`text-left rounded-xl border px-3 py-2.5 transition-all ${
                                       isSelected
                                         ? 'bg-primary-xlight border-primary text-primary'
-                                        : 'bg-white border-border-light text-text hover:border-primary/40 hover:bg-paper-50'
+                                        : 'bg-white border-border-light text-text hover:border-primary/40 hover:bg-brand-50'
                                     } ${disabled ? 'opacity-70 cursor-default' : 'cursor-pointer'}`}
                                   >
                                     <div className="flex items-center gap-2">
@@ -2455,19 +3200,19 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                                   onClick={() => submitCheckpoint(msg.id)}
                                   className="text-[12px] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                                 >
-                                  Skip — keep all fixed
+                                  Skip: keep all fixed
                                 </button>
                               </div>
                             ) : (
                               <div className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-text-muted">
-                                <CheckCircle size={11} className="text-compliant" /> Parameters confirmed
+                                <CheckCircle size={12} className="text-primary" /> Parameters confirmed
                               </div>
                             )}
                           </div>
                         );
                       })()
                     ) : msg.richType === 'save-workflow-prompt' ? (
-                      <div className="ml-12 mt-1">
+                      <div className="mt-1">
                         <div className="glass-card rounded-xl p-4 border border-primary/10 max-w-md">
                           <div className="flex items-center gap-2 mb-2">
                             <Save size={13} className="text-primary" />
@@ -2482,61 +3227,248 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           </div>
                         </div>
                       </div>
+                    ) : msg.richType === 'error' ? (
+                      // Terminal error state. Single icon + label (no side-stripe) per
+                      // DESIGN.md alert-card scoping; the risk token names the kind,
+                      // not the chrome. Retry pulls the original query from richData
+                      // and re-runs the simulate path.
+                      (() => {
+                        const data = (msg.richData as { message?: string; retryQuery?: string }) || {};
+                        return (
+                          <div className="max-w-[66ch] rounded-lg border border-canvas-border bg-canvas-elevated p-4">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 size-6 rounded-md bg-risk/10 flex items-center justify-center shrink-0">
+                                <X size={14} className="text-risk" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[13px] font-semibold text-ink-800">Couldn't finish that one</div>
+                                <p className="mt-1 text-[13px] text-ink-600 leading-relaxed">
+                                  {data.message || "Something went wrong on our end."}
+                                </p>
+                                {data.retryQuery && (
+                                  <div className="mt-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      leftIcon={<RotateCcw size={12} />}
+                                      onClick={() => {
+                                        setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                        simulateResponse(data.retryQuery!, buildWorkflowMode ? undefined : 'query');
+                                      }}
+                                    >
+                                      Try again
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : msg.text ? (
                       msg.role === 'user' ? (
-                        <div className="px-4 py-2.5 rounded-2xl bg-primary-xlight text-primary border border-primary/15 text-[13.5px] leading-relaxed">
-                          {msg.text}
-                        </div>
+                        // Purple pill — matches the reference (soft brand-xlight
+                        // fill, brand-700 text, fully-rounded). Single-line
+                        // messages read as a pill; longer ones become elongated
+                        // capsules and still feel cohesive.
+                        // Hover row beneath the bubble carries Edit / Copy /
+                        // Bookmark + the timestamp. When edit is active for
+                        // this message, the bubble becomes an in-place
+                        // textarea with Save/Cancel — no composer trip.
+                        editingMsgId === msg.id ? (
+                          <InlineEditBubble
+                            value={editingDraft}
+                            onChange={setEditingDraft}
+                            onSave={saveEditingMessage}
+                            onCancel={cancelEditingMessage}
+                          />
+                        ) : (
+                          <>
+                            <div className="px-4 py-2.5 rounded-2xl bg-canvas-elevated text-ink-800 text-sm leading-relaxed max-w-[66ch] border border-canvas-border shadow-sm shadow-ink-900/[0.03]">
+                              {msg.text}
+                            </div>
+                            {/* Hover-revealed footer: Edit / Copy / Bookmark
+                                actions + the timestamp. Hidden by default
+                                so the user bubble reads as a clean pill;
+                                hover or keyboard-focus inside the message
+                                wrapper reveals the whole row at once. */}
+                            <div className="mt-1.5 flex items-center justify-end gap-1.5 text-xs text-text-muted opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+                              <div className="flex items-center gap-0.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  iconOnly
+                                  onClick={() => startEditingMessage(msg.id, msg.text)}
+                                  title="Edit message"
+                                  aria-label="Edit message"
+                                >
+                                  <Pencil size={13} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  iconOnly
+                                  onClick={() => copyMessage(msg)}
+                                  title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
+                                  aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
+                                >
+                                  {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  iconOnly
+                                  pressed={bookmarkedMsgIds.has(msg.id)}
+                                  onClick={() => toggleBookmark(msg.id, msg.text)}
+                                  title={bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
+                                  aria-label={bookmarkedMsgIds.has(msg.id) ? 'Remove bookmark' : 'Bookmark message'}
+                                >
+                                  {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+                                </Button>
+                              </div>
+                              <span className="tabular-nums">{formatChatTime(msg.timestamp)}</span>
+                            </div>
+                          </>
+                        )
                       ) : (
                         // Editorial: AI response is prose, not a bubble. No border, no shadow, no avatar gutter.
-                        <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                        // 66ch cap per DESIGN.md "66ch Response Rule" so prose reads as conversation, not document.
+                        <div className="text-base leading-[1.65] text-ink-800 max-w-[66ch]">
                           {msg.text}
                         </div>
                       )
                     ) : null}
 
-                    {/* AI Recommended Follow-up Questions */}
-                    {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && msgIdx === messages.length - 1 && (
+                    {/* Stopped marker — JetBrains Mono meta line, no side-stripe.
+                        Renders only on assistant messages whose generation was
+                        halted by the user via Esc / Stop. */}
+                    {msg.role === 'assistant' && msg.stopped && (
+                      <div className="mt-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-500">
+                        <Square size={10} className="text-ink-500" fill="currentColor" />
+                        <span>Stopped</span>
+                      </div>
+                    )}
+
+                    {/* Hover-revealed message actions — Copy / Retry / 👍 / 👎.
+                        Renders on terminal assistant responses (plain text or
+                        completed audit-result). Skipped for in-flight rich
+                        types (clarification, audit-loading, save-prompt,
+                        checkpoint, qna-plan) — those carry their own controls. */}
+                    {msg.role === 'assistant' && (
+                      (msg.text && !msg.richType) || msg.richType === 'audit-result' || msg.stopped
+                    ) && (
+                      <div className="mt-2 -ml-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          onClick={() => copyMessage(msg)}
+                          title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
+                          aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
+                        >
+                          {copiedMsgId === msg.id ? <Check size={14} /> : <Copy size={14} />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          onClick={() => retryFromMessage(msgIdx)}
+                          disabled={isTyping}
+                          title="Retry"
+                          aria-label="Retry response"
+                        >
+                          <RotateCcw size={14} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          pressed={feedbackByMsgId[msg.id] === 'up'}
+                          onClick={() => setFeedback(msg.id, 'up')}
+                          title="Good response"
+                          aria-label="Mark response as helpful"
+                        >
+                          <ThumbsUp size={14} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          pressed={feedbackByMsgId[msg.id] === 'down'}
+                          onClick={() => setFeedback(msg.id, 'down')}
+                          title="Bad response"
+                          aria-label="Mark response as unhelpful"
+                        >
+                          <ThumbsDown size={14} />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Follow-up suggestions — single-column editorial
+                        list. Each row is a verb-prefixed text link, no
+                        cards, no borders, no shadows. Hover shifts the
+                        ink color and slides the chevron. Reads as prose-
+                        adjacent next steps, not as a UI panel. */}
+                    {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && (
                       <motion.div
-                        initial={{ opacity: 0, y: 6 }}
+                        role="region"
+                        aria-label="Follow-up suggestions"
+                        initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-3 ml-7"
+                        transition={{ delay: prefersReducedMotion ? 0 : 0.3, duration: prefersReducedMotion ? 0 : 0.2 }}
+                        className="mt-1"
                       >
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <Lightbulb size={11} className="text-primary/50" />
-                          <span className="text-[12px] font-semibold text-text-muted">Suggested follow-ups</span>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {msg.followUps.map((q, i) => (
-                            <motion.div
-                              key={i}
-                              initial={{ opacity: 0, x: -6 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: 0.4 + i * 0.1 }}
-                            >
-                              <BorderGlow
-                                borderRadius={12}
-                                glowRadius={25}
-                                glowIntensity={0.9}
-                                coneSpread={25}
-                                edgeSensitivity={30}
-                                backgroundColor="#ffffff"
-                                colors={['#6a12cd', '#9b59d6', '#c084fc']}
+                        <div className="text-[12px] text-ink-500 mb-2">What next?</div>
+                        <ul role="list" className="divide-y divide-canvas-border/70 border-y border-canvas-border/70">
+                          {msg.followUps.map((q, i) => {
+                            const isSelected = selectedFollowUpByMsgId[msg.id] === q;
+                            const { category } = classifyFollowUp(q);
+                            return (
+                              <motion.li
+                                key={i}
+                                initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{
+                                  delay: prefersReducedMotion ? 0 : 0.32 + i * 0.04,
+                                  duration: prefersReducedMotion ? 0 : 0.3,
+                                  ease: [0.16, 1, 0.3, 1],
+                                }}
                               >
-                                <div
-                                  className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer group rounded-xl"
-                                  onClick={() => handleFollowUpClick(q)}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                    handleFollowUpClick(q);
+                                  }}
+                                  aria-pressed={isSelected}
+                                  aria-label={`${category}: ${q}`}
+                                  className={`group/row w-full flex items-baseline gap-3 text-left py-2.5 px-1 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm transition-colors duration-200 ${
+                                    isSelected ? 'text-brand-700' : 'text-ink-800 hover:text-brand-700'
+                                  }`}
                                 >
-                                  <div className="w-5 h-5 rounded-md bg-primary/5 flex items-center justify-center shrink-0">
-                                    <ArrowRight size={11} className="text-primary/50 group-hover:text-primary transition-colors" />
-                                  </div>
-                                  <span className="text-[12px] text-text-secondary group-hover:text-text transition-colors">{q}</span>
-                                </div>
-                              </BorderGlow>
-                            </motion.div>
-                          ))}
-                        </div>
+                                  <span
+                                    className={`shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] w-[88px] transition-colors duration-200 ${
+                                      isSelected ? 'text-brand-500' : 'text-ink-400 group-hover/row:text-brand-500'
+                                    }`}
+                                    aria-hidden="true"
+                                  >
+                                    {category}
+                                  </span>
+                                  <span className="flex-1 text-[14px] leading-snug">{q}</span>
+                                  <ArrowRight
+                                    size={14}
+                                    aria-hidden="true"
+                                    className={`shrink-0 self-center transition-[opacity,transform,color] duration-200 ${
+                                      isSelected
+                                        ? 'opacity-100 text-brand-500 translate-x-0'
+                                        : 'opacity-0 -translate-x-1 text-ink-400 group-hover/row:opacity-100 group-hover/row:translate-x-0 group-hover/row:text-brand-500'
+                                    }`}
+                                  />
+                                </button>
+                              </motion.li>
+                            );
+                          })}
+                        </ul>
                       </motion.div>
                     )}
                   </div>
@@ -2546,26 +3478,25 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
             {/* Thinking animation */}
             {isTyping && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-                <div className="max-w-[85%]">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 mt-0.5">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary-medium flex items-center justify-center shadow-sm-infinite">
-                        <Sparkles size={14} className="text-white" />
-                      </div>
+              <motion.div
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
+                className="flex justify-start"
+              >
+                <div className="w-full">
+                  <div className="flex-1 min-w-0">
+                    <div className="size-1.5 rounded-full bg-primary mb-2" aria-label="IRA" />
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-xs font-semibold text-text">IRA</span>
+                      <span className="text-xs text-text-muted">is thinking…</span>
                     </div>
-
-                    <div className="flex-1 min-w-0 pt-1">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[12px] font-semibold text-primary">Auditify Copilot</span>
-                        <span className="text-[12px] text-text-muted">is thinking...</span>
-                      </div>
 
                       {thinkingSteps.length > 0 && (
                         <div className="mb-2">
                           <div className="pl-3 border-l-2 border-primary/20 space-y-1">
                             {thinkingSteps.map((step, i) => (
-                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[12px] text-text-muted flex items-center gap-1.5">
+                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-xs text-text-muted flex items-center gap-1.5">
                                 <div className={`w-1.5 h-1.5 rounded-full ${i === thinkingSteps.length - 1 ? 'bg-primary' : 'bg-primary/30'}`} />
                                 {step}
                               </motion.div>
@@ -2577,13 +3508,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       {thinkingSteps.length === 0 && (
                         <div className="inline-flex items-center gap-1.5 px-1 py-2">
                           <div className="flex gap-1.5 items-center h-5">
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
+                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
+                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
                           </div>
                         </div>
                       )}
-                    </div>
+
+                      {/* Response-slot skeleton — three shimmer bars showing
+                          where the assistant text will land. Gives the eye a
+                          stable anchor instead of jumping when content arrives.
+                          Pulse gated by motion-safe so reduced-motion users see a static placeholder. */}
+                      <div className="space-y-2 max-w-[66ch] mt-1" aria-hidden="true">
+                        <div className="h-3 w-[92%] rounded-md bg-brand-50 motion-safe:animate-pulse" />
+                        <div className="h-3 w-[76%] rounded-md bg-brand-50 motion-safe:animate-pulse" style={{ animationDelay: '120ms' }} />
+                        <div className="h-3 w-[60%] rounded-md bg-brand-50 motion-safe:animate-pulse" style={{ animationDelay: '240ms' }} />
+                      </div>
                   </div>
                 </div>
               </motion.div>
@@ -2593,9 +3533,37 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
           {/* Inline rich messages render the loader + clarification — no global panel */}
         </div>
+          {/* Soft fade — the last message tucks under a faint gradient before
+              the composer, so content slides under chrome rather than meeting
+              it at a hard seam. Rendered FIRST so the scroll-to-bottom pill
+              stacks above it. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-canvas to-transparent z-[1]" aria-hidden="true" />
+          {/* Scroll-to-bottom pill — appears when the user has scrolled up
+              more than 100px from the bottom. Click jumps back to the latest.
+              z-20 keeps it above any rich result content (action bars,
+              hover-action rows) so it never clips on overlap. */}
+          <AnimatePresence>
+            {showScrollToBottom && (
+              <motion.button
+                key="scroll-to-bottom"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.15 }}
+                onClick={scrollToBottom}
+                aria-label="Scroll to latest message"
+                title="Scroll to latest"
+                className="absolute left-1/2 -translate-x-1/2 bottom-5 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-canvas-elevated border border-canvas-border text-xs font-medium text-ink-600 shadow-md shadow-ink-900/[0.08] hover:bg-brand-50 hover:text-ink-800 hover:border-brand-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <ArrowDown size={14} />
+                Latest
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Input area */}
-        <div className="shrink-0 px-4 sm:px-6 pb-5 max-w-3xl mx-auto w-full">
+        <div className="shrink-0 px-4 sm:px-6 pb-5 max-w-[45rem] mx-auto w-full">
           {/* Workflow clarification (legacy ClarificationCard kept for the workflow flow only) */}
           <AnimatePresence>
             {showClarificationCard && workflowBuildPhase > 0 && (
@@ -2628,89 +3596,166 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   per thread. To do a query again, user starts + New chat. */}
               {lockedAsWorkflow && (
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-xlight text-primary text-[11.5px] font-semibold cursor-default select-none">
-                    <Lock size={10} /> Workflow mode
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-text text-xs font-semibold cursor-default select-none">
+                    <Lock size={12} /> Workflow mode
                   </div>
-                  <span className="text-[11px] text-text-muted">
-                    Switched at save. Start a <button onClick={() => { setMessages([]); setInput(''); setShowClarificationCard(false); setShowProgressiveLoader(false); setWorkflowBuildPhase(0); setCurrentWorkflowType(null); setLockedAsWorkflow(false); setAttachedSources([]); setFiles([]); clearTimers(); setShowArtifacts(false); setArtifactMode('query'); setActiveArtifactTab('sources'); setBuildWorkflowMode(false); }} className="underline hover:text-primary cursor-pointer">new chat</button> for a query.
+                  <span className="text-xs text-text-muted">
+                    Switched at save. Start a <button onClick={resetChat} className="underline hover:text-primary cursor-pointer">new chat</button> for a query.
                   </span>
                 </div>
               )}
-              <div className="ai-border">
-                <div className="bg-white rounded-[18px]">
-                  {/* Attachment chips — picked sources / fresh uploads, inside the composer */}
+              <div
+                className="ai-border relative"
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {/* Drop overlay — only renders during an active file drag.
+                    Covers the entire composer with a brand-tinted veil + a
+                    dashed border so the drop affordance reads at a glance. */}
+                {isDragging && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.5rem] bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
+                  >
+                    <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <Paperclip size={14} />
+                      <span>Drop to attach</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-[1.5rem]">
+                  {/* Attachment chips — picked sources + fresh uploads. Single
+                      horizontally-scrolling row inside the composer surface so
+                      they read as part of the message you're composing, not
+                      as a separate tray. */}
                   {(files.length > 0 || attachedSources.length > 0) && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1">
-                      {/* Source attachments — picked from existing data (DBs / files / APIs / cloud) */}
+                    <div className="composer-chips-row flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1">
                       {attachedSources.map((s, i) => (
-                        <div key={`src-${i}`} title={s.kind === 'source' ? s.name : undefined} className="flex items-center gap-1 bg-evidence-50 text-evidence-700 text-[12px] px-2 py-1 rounded-md font-medium border border-evidence-200 shrink-0">
+                        <div key={`src-${i}`} title={s.kind === 'source' ? s.name : undefined} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
                           {s.kind === 'source' && (
                             <>
-                              <span className="text-[10px] uppercase font-bold tracking-wide opacity-60">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
-                              <span className="truncate max-w-[160px]">{s.name}</span>
+                              <span className="text-[10px] uppercase font-bold tracking-[0.06em] text-ink-400">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                              <span className="truncate max-w-[10rem]">{s.name}</span>
                             </>
                           )}
                           <button
+                            type="button"
                             onClick={() => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
-                            className="hover:text-evidence-700 ml-0.5 cursor-pointer"
-                            aria-label={`Remove ${s.kind === 'source' ? s.name : ''}`}
-                          ><X size={10} /></button>
+                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            aria-label={`Remove ${s.kind === 'source' ? s.name : 'attachment'}`}
+                          ><X size={12} /></button>
                         </div>
                       ))}
-                      {/* Fresh uploads — raw files added via the Upload tab or legacy path */}
                       {files.map((f, i) => (
-                        <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-primary-light text-primary text-[12px] px-2 py-1 rounded-md font-medium shrink-0">
-                          <FileText size={11} />
-                          <span className="truncate max-w-[100px]">{f.name}</span>
-                          <button onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="hover:text-primary-hover ml-0.5 cursor-pointer" aria-label={`Remove ${f.name}`}><X size={10} /></button>
+                        <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
+                          <FileText size={12} className="text-ink-400" />
+                          <span className="truncate max-w-[6.25rem]">{f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
+                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            aria-label={`Remove ${f.name}`}
+                          ><X size={12} /></button>
                         </div>
                       ))}
                     </div>
                   )}
-                  {/* Mid-chat workflow toggle — opens the qna-plan approve/revise gate
-                      after clarification (mirrors the empty-state toggle so workflow
-                      mode is reachable during a conversation, not just on the first send). */}
-                  <div className="flex items-center justify-start px-3 pt-2.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={buildWorkflowMode}
-                      aria-label="Build a workflow"
-                      onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[11.5px] font-medium transition-colors cursor-pointer ${
-                        buildWorkflowMode
-                          ? 'border-primary/40 bg-primary-xlight text-primary'
-                          : 'border-border-light bg-white text-text-secondary hover:text-text hover:border-border'
-                      }`}
-                    >
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${buildWorkflowMode ? 'bg-gradient-to-br from-purple-500 to-violet-600' : 'bg-paper-100'}`}>
-                        <Workflow size={8} className={buildWorkflowMode ? 'text-white' : 'text-text-muted'} />
-                      </span>
-                      Build a workflow
-                    </button>
-                  </div>
-                  <div className="relative">
+
+                  {/* Textarea — 15px body, 1.5 line-height. Empty state stays
+                      compact (44px min) so the composer doesn't read as a
+                      half-empty room; grows to ~12 rows for multi-paragraph
+                      drafts, then scrolls internally. */}
                   <textarea
+                    ref={textareaRef}
                     value={input}
                     onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask anything or describe a workflow to build..."
-                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none py-3 pl-4 pr-28 text-[13.5px] text-text placeholder:text-text-muted min-h-[48px] max-h-[160px] rounded-[18px]"
+                    onPaste={handleComposerPaste}
+                    placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Ask anything or run a query…'}
+                    aria-label="Message IRA"
+                    maxLength={MAX_INPUT_CHARS + 200}
+                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-3 pb-1 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[240px]"
                     rows={1}
                   />
-                  <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowDataPicker(true)}
-                      className="p-2 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
-                      aria-label="Attach data sources or files"
-                    >
-                      <Paperclip size={15} />
-                    </button>
-                    <button onClick={handleSend} disabled={!input.trim() && files.length === 0 && attachedSources.length === 0} className="p-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white rounded-xl transition-all cursor-pointer">
-                      <Send size={15} />
-                    </button>
-                  </div>
+
+                  {/* Action row — attach + mode toggle on the left;
+                      char counter (only near the limit) + send/stop on the
+                      right. The keyboard hint moved to the send button's
+                      tooltip so the row reads quieter at rest. */}
+                  <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                    <div className="flex items-center gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        iconOnly
+                        onClick={() => setShowDataPicker(true)}
+                        aria-label="Attach data sources or files"
+                        title="Attach data or files"
+                      >
+                        <Paperclip size={15} />
+                      </Button>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={buildWorkflowMode}
+                        aria-label="Build a workflow"
+                        title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
+                        onClick={() => setBuildWorkflowMode(v => !v)}
+                        className={`flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          buildWorkflowMode
+                            ? 'bg-brand-50 text-brand-700'
+                            : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
+                        }`}
+                      >
+                        <Workflow size={12} className={buildWorkflowMode ? 'text-brand-600' : 'text-ink-400'} />
+                        Build a workflow
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      {/* Char counter — soft warn at 3000, red at 4000+. Only
+                          surfaces when there's something worth surfacing. */}
+                      {inputCount >= WARN_INPUT_CHARS && (
+                        <span
+                          aria-live="polite"
+                          className={`text-[11px] tabular-nums font-medium ${
+                            overLimit ? 'text-risk' : 'text-mitigated-700'
+                          }`}
+                        >
+                          {inputCount.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
+                        </span>
+                      )}
+
+                      {isTyping ? (
+                        <Button
+                          variant="stop"
+                          size="md"
+                          iconOnly
+                          shape="full"
+                          onClick={stopGenerating}
+                          aria-label="Stop generating"
+                          title="Stop generating (Esc)"
+                        >
+                          <Square size={13} fill="currentColor" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="md"
+                          iconOnly
+                          shape="full"
+                          onClick={handleSend}
+                          disabled={(!input.trim() && files.length === 0 && attachedSources.length === 0) || overLimit}
+                          aria-label={overLimit ? `Message too long (${inputCount.toLocaleString()} / ${MAX_INPUT_CHARS.toLocaleString()} max)` : 'Send message'}
+                          title={overLimit ? 'Message too long' : 'Send · Enter for send, Shift+Enter for new line'}
+                        >
+                          <Send size={14} />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2728,7 +3773,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           const dateShort = (cfg.date || '±3 days').replace(/\s*\(current\)\s*/i, '').trim();
           const amountShort = (cfg.amount || '±₹1,000').replace(/\s*\(current\)\s*/i, '').trim();
           const thresholdShort = (cfg.threshold || '≥90%').replace(/\s*\(current\)\s*/i, '').trim();
-          const defaultName = `Duplicate Invoice Detection — Q1 ${dateShort}`;
+          const defaultName = `Duplicate Invoice Detection: Q1 ${dateShort}`;
           const defaultDescription = `Detects duplicate invoices in Q1 2026 with same vendor, ${amountShort} amount tolerance, and ${dateShort} date tolerance at ${thresholdShort} match threshold.`;
           return (
             <SaveAsWorkflowModal

@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   MessageSquare, Workflow, Database, LayoutDashboard,
-  FileBarChart, ChevronDown, PanelLeft,
+  FileBarChart, ChevronDown, PanelLeft, PanelLeftClose,
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
@@ -105,6 +105,7 @@ const TEAMS = [
 ];
 
 export default function Sidebar({ view, setView, expanded, toggleSidebar, unreadNotifications, notificationDrawerOpen, onOpenNotifications }: SidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
@@ -161,8 +162,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     <motion.div
       animate={{ width: isExpanded ? 256 : 64 }}
       transition={{
-        duration: 0.28,
-        // ease: [0.22, 1, 0.36, 1],
+        duration: prefersReducedMotion ? 0 : 0.28,
       }}
       className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
       onMouseEnter={handleMouseEnter}
@@ -367,6 +367,15 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                 <div className="text-[12px] text-white truncate">Lead Auditor</div>
               </div>
               <button
+                onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
+                title="Collapse sidebar (⌘\)"
+                aria-label="Collapse sidebar"
+                aria-pressed={true}
+                className="p-1 rounded-md hover:bg-white/[0.08] transition-colors text-white hover:text-sidebar-text cursor-pointer"
+              >
+                <PanelLeftClose size={16} />
+              </button>
+              <button
                 onClick={(e) => { e.stopPropagation(); setUserMenuOpen(p => !p); setSignOutConfirm(false); setHelpOpen(false); }}
                 className="p-1 rounded-md hover:bg-white/[0.08] transition-colors text-white hover:text-sidebar-text cursor-pointer"
               >
@@ -460,8 +469,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <button
             onClick={toggleSidebar}
             className="w-full flex items-center justify-center text-white hover:text-sidebar-text transition-colors p-1.5 rounded-lg hover:bg-sidebar-surface-hover cursor-pointer"
-            title="Expand"
-            aria-label="Expand sidebar"
+            title="Pin sidebar open (⌘\)"
+            aria-label="Pin sidebar open"
+            aria-pressed={false}
           >
             <PanelLeft size={15} />
           </button>

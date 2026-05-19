@@ -48,7 +48,7 @@ const tools: Tool[] = [
     id: 'workflow-builder',
     icon: Workflow,
     title: 'Workflow Builder',
-    description: 'Design a custom audit workflow from a prompt — upload data, map columns, run.',
+    description: 'Design a custom audit workflow from a prompt: upload data, map columns, run.',
     tags: [
       { label: 'Workflow', color: 'bg-violet-100 text-violet-700' },
       { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },

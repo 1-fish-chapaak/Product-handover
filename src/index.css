@@ -108,6 +108,7 @@
 
   /* ── Typography ── */
   --font-display: 'Source Serif 4', ui-serif, Georgia, serif;
+  --font-serif:   'Instrument Serif', 'Source Serif 4', ui-serif, Georgia, serif;
   --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
@@ -142,17 +143,30 @@
   color: var(--color-brand-700);
 }
 
-/* ── Body / root ── */
+/* ── Body / root ──
+   Soft brand-tinted gradient mesh behind every surface so cards/pills read
+   as floating material instead of 1px-bordered rectangles on flat white. */
 body {
   margin: 0;
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11", "tnum";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-canvas);
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 0% 0%, rgba(247, 240, 255, 0.6) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(252, 250, 253, 0.9) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(237, 222, 254, 0.18) 0px, transparent 60%);
   color: var(--color-ink-800);
   line-height: 1.5;
   letter-spacing: 0;
+}
+
+/* Editorial serif utility — chat title + section headers. */
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+  font-weight: 400;
 }
 
 #root {
@@ -361,14 +375,25 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
 .ai-border {
   position: relative;
   background: var(--color-canvas-elevated);
-  border: 1px solid var(--color-brand-200);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-canvas-border);
+  border-radius: 1.5rem; /* 24px — hovering surface, not a form field */
   isolation: isolate;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-shadow:
+    0 1px 2px rgba(15, 8, 30, 0.04),
+    0 8px 24px rgba(15, 8, 30, 0.04);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 .ai-border:focus-within {
-  border-color: var(--color-brand-500);
-  box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.16);
+  /* Confident editorial focus: the border tints to brand-400 and a
+   * multi-layer brand-tinted glow lifts the surface like a stage spot.
+   * The thin 1px inner halo anchors the focus signal precisely; the
+   * 24px and 64px diffuse layers carry the atmospheric warmth that
+   * makes the composer feel like the active subject on the canvas. */
+  border-color: var(--color-brand-400);
+  box-shadow:
+    0 0 0 1px rgba(106, 18, 205, 0.18),
+    0 8px 24px -4px rgba(106, 18, 205, 0.16),
+    0 24px 64px -8px rgba(106, 18, 205, 0.14);
 }
 .ai-border::before,
 .ai-border::after,
@@ -499,6 +524,19 @@ select.no-focus-ring:focus-visible {
 .recharts-surface {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* Composer attachment-chip row — horizontal scroll without the scrollbar
+   itself; a right-edge fade mask signals there's more off-screen rather than
+   leaving a hard clipped edge. Applied to both empty-state and in-thread
+   composers so attachment overflow reads as deliberate. */
+.composer-chips-row {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+}
+.composer-chips-row::-webkit-scrollbar {
+  display: none;
 }
 
 /* react-grid-layout — match Editorial GRC styling */

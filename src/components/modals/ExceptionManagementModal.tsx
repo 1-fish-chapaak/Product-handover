@@ -123,7 +123,7 @@ export default function ExceptionManagementModal({ onClose, onGenerateReport, on
               </div>
               <div>
                 <h2 className="text-[16px] font-semibold text-text">Exception Management</h2>
-                <p className="text-[12px] text-text-muted">Duplicate Invoice Detection — Run #12 — Mar 20, 2026 — {exceptions.length} exceptions</p>
+                <p className="text-[12px] text-text-muted">Duplicate Invoice Detection · Run #12 · Mar 20, 2026 · {exceptions.length} exceptions</p>
               </div>
             </div>
           </div>

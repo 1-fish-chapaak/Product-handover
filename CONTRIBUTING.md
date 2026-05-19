@@ -372,6 +372,99 @@ gcloud run services update-traffic hackathon-demo \
 
 ---
 
+## 8. Style rules
+
+### 8.1 Typography scale
+
+Use **only these five sizes**. Floor is 12px — nothing smaller, ever. Prefer `rem` so type scales with the user's root font setting.
+
+| Token | px | rem | Use for |
+| --- | --- | --- | --- |
+| `xs` | 12 | `0.75rem` | Captions, bylines, meta, eyebrow labels, dense table cells |
+| `sm` | 14 | `0.875rem` | UI chrome, buttons, form labels, secondary body |
+| `base` | 16 | `1rem` | Primary body, AI assistant prose, paragraph content |
+| `lg` | 20 | `1.25rem` | Section headings, page subtitles |
+| `xl` | 24 | `1.5rem` | Page titles, hero headings |
+
+**Rules:**
+
+- No arbitrary sizes (`text-[13px]`, `text-[13.5px]`, `text-[15px]`, `text-[11.5px]`, etc.). Pick the nearest token and snap to it.
+- No values below `0.75rem` / 12px — they fail readability and accessibility even when they pass contrast.
+- Tailwind tokens map: `text-xs` (0.75rem), `text-sm` (0.875rem), `text-base` (1rem), `text-xl` (1.25rem), `text-2xl` (1.5rem) — these match the table above. **Do not use `text-[10px]`, `text-[11px]`, `text-[13px]`, `text-[15px]`, `text-[17px]`** etc.
+- For inline styles (rare — prefer Tailwind), use `fontSize: '0.875rem'` not `fontSize: '14px'`.
+- When porting old code, snap up rather than down: `13px → 14px`, `15px → 16px`, `11px → 12px`. Don't snap user content prose below `1rem`.
+
+If you genuinely need a sixth size, add it to this table first. PR description must justify why the existing five don't work.
+
+### 8.2 Radius scale
+
+Use **only these radius tokens**. Map to Tailwind classes directly — never inline `rounded-[..px]`.
+
+| Token | px | Tailwind | Use for |
+| --- | --- | --- | --- |
+| `md` | 6 | `rounded-md` | Inline icon buttons, dense table cells |
+| `lg` | 8 | `rounded-lg` | Standard buttons, form inputs, small cards |
+| `xl` | 12 | `rounded-xl` | Larger buttons, panels, composer wrapper, primary cards |
+| `2xl` | 16 | `rounded-2xl` | Message bubbles, large surfaces, modal corners |
+| `full` | — | `rounded-full` | Pills, chips, avatars |
+
+When nesting: **inner radius ≤ outer radius**. Composer is a known instance — `.ai-border` is `--radius-xl` (12px), so the inner panel is `rounded-xl`, not `rounded-2xl`.
+
+### 8.3 Buttons
+
+Use the shared `Button` from `src/components/shared/Button.tsx`. Don't roll bespoke buttons in chrome surfaces (chat, sidebar, modals, headers, composers). The variants/sizes below cover every case in the active chat and sidebar.
+
+**Variants:**
+
+| Variant | When to use |
+| --- | --- |
+| `primary` | The main action on a surface (Send, Confirm). One per visible surface. |
+| `secondary` | Companion to primary (Cancel, dismiss). Neutral fill. |
+| `outline` | Side actions on white backgrounds (New chat, secondary CTAs). Bordered. |
+| `ghost` | Toolbars, icon strips, hover-revealed actions. Transparent until hover. |
+| `destructive` | Irreversible (Delete, Sign out). Risk red. |
+| `stop` | In-flight cancel (e.g. stop generating). Ink-900 filled. |
+
+**Sizes:** `sm` (28px / `text-xs`) for toolbars and dense rows · `md` (36px / `text-sm`) for primary CTAs and composer.
+
+**Shapes:** default `lg` (8px). Use `xl` for the composer send button, `full` for pills.
+
+**Toggles:** pass `pressed={boolean}`. The Button switches to a pressed visual on ghost/outline variants. Always also set `aria-pressed`.
+
+**Icon-only:** pass `iconOnly` and an `aria-label`. The button becomes a square (28 / 36px) with no horizontal padding.
+
+```tsx
+<Button variant="primary" size="md" leftIcon={<Send size={16} />}>Send</Button>
+<Button variant="ghost" size="sm" iconOnly aria-label="Copy"><Copy size={14} /></Button>
+<Button variant="ghost" size="sm" iconOnly pressed={liked} onClick={...}><ThumbsUp size={14} /></Button>
+```
+
+### 8.4 Gradients
+
+Reserve **`bg-gradient-*` for AI affordances only**:
+
+- The AI avatar in the chat thinking state (the purple→brand sphere with `Sparkles`).
+- The sidebar brand mark / logo block.
+
+Everything else uses solid colors (`bg-primary`, `bg-brand-50`, `bg-paper-100`, …). Gradients elsewhere drain the AI-avatar's signaling value and read as Web-2.0 brand noise. If you need depth, use `shadow-sm`, not a gradient.
+
+### 8.5 Motion
+
+Wrap meaningful animations in a `prefersReducedMotion = useReducedMotion()` guard from `motion/react`:
+
+```tsx
+const prefersReducedMotion = useReducedMotion();
+<motion.div
+  initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: prefersReducedMotion ? 0 : 0.15 }}
+/>
+```
+
+Applies to: message-enter animations, sidebar width transitions, modal opens, scroll-to-bottom pill. Decorative micro-pulses (a 1.5px dot bouncing) can stay — they don't trigger vestibular issues.
+
+---
+
 ## Appendix — paste this into a fresh Claude Code session
 
 > I'm working on the **hackathon-prototype** repo (cloned locally, you're already in it).

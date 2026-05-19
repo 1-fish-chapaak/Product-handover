@@ -27,35 +27,38 @@ const TABS: { id: ArtifactTab; label: string; icon: React.ElementType }[] = [
 function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, actions }: { title: string; icon: React.ElementType; defaultOpen?: boolean; children: React.ReactNode; actions?: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-      <div className="flex items-center px-4 py-3 hover:bg-paper-50 transition-colors">
+    <div className="border border-canvas-border rounded-xl bg-canvas-elevated overflow-hidden transition-colors hover:border-brand-200">
+      <div className="flex items-center px-4 py-3 hover:bg-paper-50/60 transition-colors">
         <button
+          type="button"
           onClick={() => setOpen(p => !p)}
           aria-expanded={open}
-          className="flex-1 flex items-center gap-2 text-sm font-medium text-text cursor-pointer"
+          className="flex-1 flex items-center gap-2 text-[14px] font-serif tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
-          <Icon size={14} className="text-primary" />
+          <Icon size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">{title}</span>
         </button>
         {actions && <div className="flex items-center gap-1 ml-2">{actions}</div>}
         <button
+          type="button"
           onClick={() => setOpen(p => !p)}
-          aria-label={open ? 'Collapse' : 'Expand'}
-          className="ml-1 p-1 text-text-muted hover:text-text-secondary rounded cursor-pointer"
+          aria-label={open ? 'Collapse section' : 'Expand section'}
+          aria-expanded={open}
+          className="ml-1 p-1 text-ink-400 hover:text-ink-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
-          <ChevronDown size={14} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
+          <ChevronDown size={14} className={`transition-transform duration-150 ${open ? '' : '-rotate-90'}`} />
         </button>
       </div>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            transition={{ duration: 0.15 }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 border-t border-border-light">
+            <div className="px-4 pb-4 border-t border-canvas-border">
               {children}
             </div>
           </motion.div>
@@ -186,48 +189,156 @@ ORDER BY
 }
 
 function SourcesTab() {
-  const sources = [
-    { name: 'SAP ERP — AP Module', type: 'SQL Database', records: '1.2M rows', tables: ['risks', 'controls', 'risk_control_map'] },
-    { name: 'Vendor Master Data', type: 'CSV File', records: '892 vendors', tables: ['vendor_master.csv'] },
+  const sources: {
+    name: string;
+    type: string;
+    records: string;
+    tables: string[];
+    syncedAt: string;
+    status: 'synced' | 'stale';
+    color: 'evidence' | 'mitigated';
+  }[] = [
+    {
+      name: 'SAP ERP: AP Module',
+      type: 'SQL Database',
+      records: '1.2M rows',
+      tables: ['risks', 'controls', 'risk_control_map'],
+      syncedAt: '2 min ago',
+      status: 'synced',
+      color: 'evidence',
+    },
+    {
+      name: 'Vendor Master Data',
+      type: 'CSV File',
+      records: '892 vendors',
+      tables: ['vendor_master.csv'],
+      syncedAt: 'Mar 20',
+      status: 'synced',
+      color: 'mitigated',
+    },
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-4">
       {sources.map((src, i) => (
-        <CollapsibleSection
-          key={i}
-          title={src.name}
-          icon={Database}
-          actions={
-            <button
-              aria-label={`Download ${src.name}`}
-              className="p-1 text-text-muted hover:text-text-secondary rounded cursor-pointer"
-            >
-              <Download size={13} />
-            </button>
-          }
-        >
-          <div className="pt-3 space-y-2">
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="text-text-muted">Type</span>
-              <span className="text-text font-medium">{src.type}</span>
-            </div>
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="text-text-muted">Records</span>
-              <span className="text-text font-medium">{src.records}</span>
-            </div>
-            <div className="text-[12px] text-text-muted mt-2">Tables/Files used:</div>
-            <div className="flex flex-wrap gap-1.5">
-              {src.tables.map(t => (
-                <span key={t} className="text-[12px] bg-primary-xlight text-primary px-2 py-0.5 rounded font-mono">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-        </CollapsibleSection>
+        <SourceCard key={i} index={i} {...src} />
       ))}
     </div>
+  );
+}
+
+function SourceCard({
+  name, type, records, tables, syncedAt, status, color, index,
+}: {
+  name: string;
+  type: string;
+  records: string;
+  tables: string[];
+  syncedAt: string;
+  status: 'synced' | 'stale';
+  color: 'evidence' | 'mitigated';
+  index: number;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const accent = color === 'evidence'
+    ? { iconBg: 'bg-evidence/10', icon: 'text-evidence', chip: 'bg-evidence/8 text-evidence-700 border-evidence/15', typeChip: 'bg-evidence/8 text-evidence-700' }
+    : { iconBg: 'bg-mitigated/10', icon: 'text-mitigated', chip: 'bg-mitigated/8 text-mitigated-700 border-mitigated/15', typeChip: 'bg-mitigated/10 text-mitigated-700' };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.05 + index * 0.05, duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+      className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]"
+    >
+      {/* Header */}
+      <div className="flex items-start gap-3 px-4 pt-3.5 pb-3">
+        <div className={`size-8 rounded-lg flex items-center justify-center shrink-0 ${accent.iconBg}`}>
+          <Database size={15} className={accent.icon} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[13.5px] font-semibold text-ink-900 truncate" title={name}>{name}</h3>
+            {/* Live status dot */}
+            <span className="relative inline-flex size-2 shrink-0" aria-label={status === 'synced' ? 'Synced' : 'Stale'}>
+              <span className={`absolute inline-flex h-full w-full rounded-full ${status === 'synced' ? 'bg-compliant/50' : 'bg-mitigated/50'} motion-safe:animate-ping`} />
+              <span className={`relative inline-flex size-2 rounded-full ${status === 'synced' ? 'bg-compliant' : 'bg-mitigated'}`} />
+            </span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <span className={`inline-flex items-center text-[10.5px] font-medium uppercase tracking-[0.06em] px-1.5 py-[2px] rounded ${accent.typeChip}`}>
+              {type}
+            </span>
+            <span className="font-mono text-[10.5px] text-ink-400 tabular-nums">{syncedAt}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+          <button
+            type="button"
+            aria-label={`Download ${name}`}
+            className="size-7 inline-flex items-center justify-center rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <Download size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpanded(p => !p)}
+            aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
+            aria-expanded={expanded}
+            className="size-7 inline-flex items-center justify-center rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <ChevronDown size={13} className={`transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4">
+              {/* Records — featured metric */}
+              <div className="flex items-baseline gap-2 pb-3 border-b border-canvas-border/70">
+                <span className="text-[20px] font-bold text-ink-900 tabular-nums leading-none">
+                  {records.replace(/\s.*$/, '')}
+                </span>
+                <span className="text-[12px] text-ink-500">
+                  {records.replace(/^\S+\s/, '')}
+                </span>
+              </div>
+
+              {/* Tables / files */}
+              <div className="pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-medium text-ink-500 uppercase tracking-[0.06em]">
+                    {type.includes('CSV') ? 'Files' : 'Tables'}
+                  </span>
+                  <span className="font-mono text-[10.5px] text-ink-400 tabular-nums">
+                    {tables.length.toString().padStart(2, '0')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {tables.map(t => (
+                    <span
+                      key={t}
+                      className={`group/chip inline-flex items-center gap-1 text-[11.5px] font-mono px-2 py-1 rounded-md border transition-colors duration-200 cursor-default ${accent.chip}`}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -237,32 +348,53 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose }: Arti
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="h-full w-full bg-surface-2 border-l border-border-light flex flex-col overflow-hidden"
+      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      className="h-full w-full bg-canvas-elevated flex flex-col overflow-hidden"
     >
-      {/* Header */}
-      <div className="h-12 bg-white flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              aria-pressed={activeTab === tab.id}
-              className={`flex items-center gap-1.5 h-8 px-3 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${
-                activeTab === tab.id
-                  ? 'bg-brand-600 text-white border-brand-600 hover:bg-brand-500'
-                  : 'bg-white text-ink-700 border-paper-200 hover:bg-paper-50 hover:text-ink-800'
-              }`}
-            >
-              <tab.icon size={13} />
-              {tab.label}
-            </button>
-          ))}
+      {/* Tab strip — segmented control with an animated sliding indicator.
+          The pill behind the active tab uses Framer's layoutId trick so it
+          glides between tabs instead of jumping. Close X sits on the
+          right with a hover chip. */}
+      <div className="h-12 shrink-0 px-3 sm:px-4 border-b border-canvas-border flex items-center justify-between gap-2 bg-canvas-elevated/80 backdrop-blur-[2px]">
+        <div
+          role="tablist"
+          aria-label="Workspace"
+          className="relative flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-50/60 border border-canvas-border/60"
+        >
+          {TABS.map(tab => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                onClick={() => setActiveTab(tab.id)}
+                aria-selected={isActive}
+                aria-controls={`artifact-panel-${tab.id}`}
+                className={`relative z-10 flex items-center gap-1.5 h-8 px-3 rounded-md text-[13px] font-medium transition-colors duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                  isActive
+                    ? 'text-brand-700'
+                    : 'text-ink-500 hover:text-ink-800'
+                }`}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="workspace-tab-pill"
+                    aria-hidden="true"
+                    className="absolute inset-0 -z-10 rounded-md bg-canvas-elevated border border-brand-200 shadow-[0_1px_2px_rgba(15,8,30,0.04),0_4px_12px_-6px_rgba(106,18,205,0.18)]"
+                    transition={{ type: 'spring', stiffness: 460, damping: 38, mass: 0.6 }}
+                  />
+                )}
+                <tab.icon size={14} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
+                <span className="leading-none">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
         <button
           onClick={onClose}
-          aria-label="Close"
-          className="p-1.5 text-text-muted hover:text-text-secondary rounded-md hover:bg-paper-50 transition-colors cursor-pointer"
+          aria-label="Close panel"
+          title="Close panel"
+          className="size-8 inline-flex items-center justify-center shrink-0 text-ink-400 hover:text-ink-800 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <X size={14} />
         </button>

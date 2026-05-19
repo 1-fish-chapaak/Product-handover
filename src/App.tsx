@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { useAppState } from './hooks/useAppState';
@@ -143,7 +143,45 @@ export default function App() {
   };
 
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const chatSplitContainerRef = useRef<HTMLDivElement>(null);
   const [viewLoading, setViewLoading] = useState(false);
+
+  // Chat ↔ artifact panel split percentage (only meaningful when both panes
+  // are visible). Persisted to localStorage so the user's resize choice
+  // survives reloads. Clamped to 35–75% to keep both sides usable.
+  const CHAT_SPLIT_KEY = 'chat-split-pct';
+  const [chatSplitPct, setChatSplitPct] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(CHAT_SPLIT_KEY);
+      const n = raw ? parseFloat(raw) : 60;
+      return Number.isFinite(n) && n >= 35 && n <= 75 ? n : 60;
+    } catch { return 60; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(CHAT_SPLIT_KEY, String(chatSplitPct)); } catch { /* ignore */ }
+  }, [chatSplitPct]);
+
+  const startSplitDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const containerW = chatSplitContainerRef.current?.offsetWidth ?? 1;
+    const startX = e.clientX;
+    const startPct = chatSplitPct;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const next = startPct + (delta / containerW) * 100;
+      setChatSplitPct(Math.max(35, Math.min(75, next)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [chatSplitPct]);
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
   const [controlDrawerData, setControlDrawerData] = useState<any>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
@@ -193,6 +231,21 @@ export default function App() {
     return () => clearTimeout(t);
   }, [state.view]);
 
+  // ⌘\ (mac) / Ctrl+\ (win/linux) toggles the sidebar pin state. Skips when the
+  // user is typing in an input/textarea/contenteditable so it doesn't fight
+  // with the chat composer.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '\\' || !(e.metaKey || e.ctrlKey)) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      toggleSidebar();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [toggleSidebar]);
+
   // Ask AI removed from all pages per PRD 2026-04-06 decision
   // IRA AI is accessed exclusively via sidebar navigation to /chat
 
@@ -220,7 +273,7 @@ export default function App() {
     // to wrapper for proper 3D feel; transformStyle preserve-3d on the spinning
     // element so the back face renders correctly.
     return (
-      <div style={{ perspective: '1400px' }} className="flex-1 min-w-0 h-full">
+      <div style={{ perspective: '1400px' }} className="h-full w-full min-w-0">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={state.artifactMode}
@@ -272,11 +325,17 @@ export default function App() {
 
       case 'chat':
         return (
-          <div className="flex flex-1 h-full overflow-hidden">
-            <div className="flex-1 min-w-0 h-full"><ChatView
+          <div ref={chatSplitContainerRef} className="flex flex-1 h-full overflow-hidden">
+            <div
+              className="h-full min-w-0"
+              style={state.showArtifacts
+                ? { width: `${chatSplitPct}%`, flex: '0 0 auto' }
+                : { flex: '1 1 0%' }}
+            ><ChatView
               showChatHistory={state.showChatHistory}
               toggleChatHistory={toggleChatHistory}
               setShowArtifacts={setShowArtifacts}
+              showArtifacts={state.showArtifacts}
               setActiveArtifactTab={setActiveArtifactTab}
               setArtifactMode={setArtifactMode}
               setWorkflowCanvasStage={setWorkflowCanvasStage}
@@ -347,9 +406,30 @@ export default function App() {
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={() => setView('reports')}
             /></div>
-            <AnimatePresence>
-              {renderArtifactPanel()}
-            </AnimatePresence>
+            {state.showArtifacts && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize chat / Workspace"
+                onMouseDown={startSplitDrag}
+                className="group relative w-px shrink-0 cursor-col-resize bg-canvas-border z-10"
+              >
+                {/* Wider hit target than the visible 1px line */}
+                <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-10 rounded-full bg-canvas-border group-hover:bg-brand-300 transition-colors"
+                />
+              </div>
+            )}
+            {state.showArtifacts && (
+              <div
+                className="h-full min-w-0"
+                style={{ width: `${100 - chatSplitPct}%`, flex: '0 0 auto' }}
+              >
+                {renderArtifactPanel()}
+              </div>
+            )}
           </div>
         );
 
@@ -394,7 +474,7 @@ export default function App() {
                 category: 'workflow',
                 severity: 'info',
                 title: 'Workflow run completed',
-                message: `Run finished successfully — review the output for any flagged exceptions.`,
+                message: `Run finished successfully. Review the output for any flagged exceptions.`,
                 actor: 'Ira (AI)',
                 link: { view: 'workflow-detail', ref: { kind: 'workflow', id: workflowId } },
               }));
@@ -559,7 +639,7 @@ export default function App() {
             onOpenCaseManagement={openCaseManagement}
             onOpenRacmFullEditor={() => openRacmFullEditor({
               racmId: 'racm-procurement-fy26',
-              racmName: 'Procurement SOP — Budget to Payment RACM',
+              racmName: 'Procurement SOP · Budget to Payment RACM',
               processLabel: 'P2P',
               backView: 'engagement-overview',
             })}
@@ -620,7 +700,7 @@ export default function App() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
-            racmName={racmEditorContext?.racmName ?? 'Procurement SOP — Budget to Payment RACM'}
+            racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
           />

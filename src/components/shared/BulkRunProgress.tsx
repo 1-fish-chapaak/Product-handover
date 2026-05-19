@@ -60,7 +60,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
     const reportName = `${run.name}_${today}_BulkReport.xlsx`;
     addToast({
       type: 'success',
-      message: `Audit "${run.name}" completed successfully — ${reportName} is ready.`,
+      message: `Audit "${run.name}" completed successfully. ${reportName} is ready.`,
     });
   }, [run?.id, run?.progress, addToast]);
 

@@ -195,11 +195,11 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="h-full bg-surface-2 border-l border-border-light flex flex-col overflow-hidden shrink-0 relative"
     >
-      {/* IRA Workspace identifier */}
+      {/* Workspace identifier */}
       <div className="h-7 border-b border-border-light bg-canvas flex items-center px-4 shrink-0">
         <div className="flex items-center gap-1.5">
           <Sparkles size={11} className={colors?.accent || 'text-primary'} />
-          <span className="text-[10.5px] font-semibold tracking-[0.08em] uppercase text-text-muted">IRA Workspace</span>
+          <span className="text-[10.5px] font-semibold tracking-[0.08em] uppercase text-text-muted">Workspace</span>
           <span className="text-[10.5px] text-text-muted/70">· Workflow mode</span>
         </div>
       </div>
@@ -738,7 +738,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 {/* Mini Area Chart */}
                 <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[12px] font-bold text-text-muted">Execution Trend — Last 7 Runs</span>
+                    <span className="text-[12px] font-bold text-text-muted">Execution Trend · Last 7 Runs</span>
                     <span className="text-[12px] font-semibold text-compliant-700">{'\u2191'} 12% improvement</span>
                   </div>
                   <svg width="100%" height="48" viewBox="0 0 400 48" preserveAspectRatio="none">
@@ -765,7 +765,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                   {config.id === 'reconciliation' && (
                     <p className="text-[12px] text-text leading-relaxed">
                       Processed <strong>1,247 records</strong> across PO, GRN, and Invoice data. <strong>87% matched</strong> successfully with zero variance.
-                      <strong className="text-mitigated-700"> 98 records</strong> show amount variances within the 5% tolerance — recommend bulk approval.
+                      <strong className="text-mitigated-700"> 98 records</strong> show amount variances within the 5% tolerance; recommend bulk approval.
                       <strong className="text-risk-700"> 60 unmatched items</strong> require manual investigation:
                       32 missing GRNs (likely goods in transit) and 28 invoices with no corresponding PO.
                       Top vendor by variance: <strong>Global Supplies Ltd</strong> (₹2,450 across 3 invoices).
@@ -783,15 +783,15 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                   {config.id === 'monitoring' && (
                     <p className="text-[12px] text-text leading-relaxed">
                       Detected <strong>24 vendor master changes</strong> in the monitoring window.
-                      <strong className="text-risk-700"> 3 unauthorized changes</strong> flagged — 2 bank account modifications by unrecognized users.
+                      <strong className="text-risk-700"> 3 unauthorized changes</strong> flagged; 2 bank account modifications by unrecognized users.
                       <strong>16 changes auto-approved</strong> based on authorization matrix.
                       Avg response time for flagged items: <strong>2.4 hours</strong>.
-                      Critical alert: <strong>Acme Corp</strong> bank account changed from HDFC to ICICI by <code className="text-[12px] bg-surface-2 px-1 rounded">admin_user</code> — requires immediate verification.
+                      Critical alert: <strong>Acme Corp</strong> bank account changed from HDFC to ICICI by <code className="text-[12px] bg-surface-2 px-1 rounded">admin_user</code>. Requires immediate verification.
                     </p>
                   )}
                   {config.id === 'compliance' && (
                     <p className="text-[12px] text-text leading-relaxed">
-                      Scanned <strong>2,341 users</strong> against 156 SOD rules. Found <strong className="text-risk-700">12 violations</strong> —
+                      Scanned <strong>2,341 users</strong> against 156 SOD rules. Found <strong className="text-risk-700">12 violations</strong>,
                       <strong>4 critical</strong> (Create PO + Approve PO, Edit Master + Pay Vendor).
                       <strong className="text-compliant-700">8 violations have compensating controls</strong> in place.
                       4 users require immediate role remediation.

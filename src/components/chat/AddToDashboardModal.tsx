@@ -264,7 +264,7 @@ export function AddToDashboardModal({
         role="option"
         disabled={disabled}
         title={tooltip}
-        aria-label={tooltip ? `${d.name} — ${tooltip}` : d.name}
+        aria-label={tooltip ? `${d.name}: ${tooltip}` : d.name}
         aria-selected={selectedId === d.id}
         onClick={() => !disabled && setSelectedId(d.id)}
         onMouseEnter={() => {
