@@ -261,9 +261,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <div className="max-w-[1600px] mx-auto px-8 pt-8 pb-0">
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
-                Exceptions · {activeNav === 'action-hub' ? 'Action Hub' : 'Manage'}
-              </div>
               <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>
               <p className="text-[14px] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
             </div>
@@ -313,23 +310,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
             {activeNav === 'action-hub' && (
               <div className="flex items-center gap-4 shrink-0 pb-2">
-                <div className="flex items-center gap-3">
-                  <CircularProgress
-                    pct={ACTION_HUB_SUMMARY.reportHealthPct}
-                    size={42}
-                    stroke={4}
-                    label={
-                      <span className="text-[11px] font-semibold text-brand-700 tabular-nums tracking-tight">
-                        {ACTION_HUB_SUMMARY.reportHealthPct}%
-                      </span>
-                    }
-                  />
-                  <div className="leading-tight">
-                    <div className="text-[10px] uppercase tracking-wider text-ink-500">Report Health</div>
-                    <div className="text-[13px] text-ink-900 font-medium tabular-nums">{ACTION_HUB_SUMMARY.reportHealthLabel}</div>
-                  </div>
+                <div className="flex items-baseline gap-1.5 leading-none">
+                  <span className="text-[11px] uppercase tracking-[0.12em] text-ink-500 font-medium">Report health</span>
+                  <span className="text-[13px] text-ink-900 font-medium">{ACTION_HUB_SUMMARY.reportHealthLabel}</span>
+                  <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
                 </div>
-                <div className="h-7 w-px bg-canvas-border" aria-hidden="true" />
+                <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
                 <button
                   onClick={() => setAtrModalOpen(true)}
                   className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
