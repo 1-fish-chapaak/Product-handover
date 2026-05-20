@@ -94,6 +94,7 @@ type ReviewWorkflow = {
   id: string;
   code: string;
   name: string;
+  businessProcess: string;
   status: ReviewWorkflowStatus;
   prevStatus?: Exclude<ReviewWorkflowStatus, 'dropped'>;
   runtime: number;
@@ -113,6 +114,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-1',
     code: 'P2P-001',
     name: '3-Way Match (PO · GRN · Invoice)',
+    businessProcess: 'P2P',
     status: 'mapped',
     runtime: 4.2,
     mappedFiles: ['po_dump_q3.sql', 'grn_records.json', 'invoice_batch_sep2026.pdf'],
@@ -121,6 +123,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-2',
     code: 'P2P-002',
     name: 'Invoice Duplicate Detection',
+    businessProcess: 'P2P',
     status: 'column',
     runtime: 2.8,
     mappedFiles: ['invoice_batch_sep2026.pdf', 'vendor_master_v3.xlsx'],
@@ -136,6 +139,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-3',
     code: 'VDR-014',
     name: 'Vendor Risk Score',
+    businessProcess: 'P2P',
     status: 'file',
     runtime: 3.5,
     fileError: 'Expected: vendor_risk_signals dataset. Got: GRN_Records.json (schema mismatch)',
@@ -144,6 +148,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-4',
     code: 'GL-009',
     name: 'GL Anomaly Detection',
+    businessProcess: 'Finance',
     status: 'mapped',
     runtime: 5.1,
     mappedFiles: ['gl_q3_2026.csv'],
@@ -152,6 +157,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-5',
     code: 'P2P-007',
     name: 'PO-GRN Quantity Reconciliation',
+    businessProcess: 'P2P',
     status: 'mapped',
     runtime: 3.0,
     mappedFiles: ['po_dump_q3.sql', 'grn_records.json'],
@@ -160,6 +166,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-6',
     code: 'TAX-003',
     name: 'TDS Compliance (194Q · 194C)',
+    businessProcess: 'Finance',
     status: 'notmapped',
     runtime: 2.4,
     missingFiles: ['TDS Deduction Register'],
@@ -168,6 +175,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-7',
     code: 'P2P-012',
     name: 'Payment Block Review',
+    businessProcess: 'P2P',
     status: 'column',
     runtime: 2.2,
     mappedFiles: ['vendor_master_v3.xlsx', 'invoice_batch_sep2026.pdf'],
@@ -181,6 +189,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-8',
     code: 'GL-018',
     name: 'Period-End Accrual Check',
+    businessProcess: 'Finance',
     status: 'notmapped',
     runtime: 1.8,
     missingFiles: ['Accrual Schedule'],
@@ -189,6 +198,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-9',
     code: 'O2C-021',
     name: 'Customer Tier Revenue Concentration',
+    businessProcess: 'O2C',
     status: 'sql',
     runtime: 1.6,
     sqlUseDefaults: true,
@@ -203,6 +213,7 @@ const DEMO_REVIEW_WORKFLOWS: ReviewWorkflow[] = [
     id: 'rw-10',
     code: 'GL-022',
     name: 'Journal Entry Threshold Alert',
+    businessProcess: 'Finance',
     status: 'sql',
     runtime: 1.2,
     sqlUseDefaults: true,
@@ -1073,13 +1084,11 @@ function BulkExecuteModal({
 
   const activeWorkflows = selectedWorkflows.filter(w => !modalDeselected.has(w.id));
   const uniqueBps = Array.from(new Set(activeWorkflows.map(w => w.businessProcess)));
-  const isSingleBp = uniqueBps.length === 1;
-  const isMultipleBps = uniqueBps.length > 1;
   const hasAuditName = auditName.trim().length > 0;
   const hasWorkflows = activeWorkflows.length > 0;
   const needsMonthlyDate = triggerOn === 'Schedule' && frequency === 'Monthly';
   const monthlyDateOk = !needsMonthlyDate || monthlyDate.trim().length > 0;
-  const canContinue = hasWorkflows && hasAuditName && isSingleBp && monthlyDateOk;
+  const canContinue = hasWorkflows && hasAuditName && monthlyDateOk;
 
   const toggleWorkflow = (id: string) => {
     setModalDeselected(prev => {
@@ -1091,13 +1100,6 @@ function BulkExecuteModal({
   };
 
   const handleSubmit = () => {
-    if (isMultipleBps) {
-      addToast({
-        type: 'error',
-        message: 'Bulk run is possible only when all workflows belong to a single business process.',
-      });
-      return;
-    }
     if (!hasWorkflows || !hasAuditName) return;
     setIsFetching(true);
     window.setTimeout(() => {
@@ -1141,7 +1143,7 @@ function BulkExecuteModal({
         rw.status === 'column' ||
         (rw.status === 'sql' && (rw.sqlUseDefaults || rw.sqlCustomValues))
       )
-      .map(rw => ({ id: rw.id, name: rw.name }));
+      .map(rw => ({ id: rw.id, name: rw.name, businessProcess: rw.businessProcess }));
     startBulkRun({
       name: auditName.trim() || 'Bulk Run',
       workflows: activeRunWorkflows,
@@ -1423,20 +1425,23 @@ function BulkExecuteModal({
         <>
         {/* Body — Step 1 */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Business Process */}
+          {/* Business Process(es) included in this bulk run */}
           <div>
-            <label className="block text-[12px] font-semibold text-text mb-1.5">Business Process</label>
-            {isSingleBp && (
-              <div className="px-3 py-2.5 rounded-md border border-border-light bg-surface-2 text-[13px] text-text">
-                {uniqueBps[0]}
+            <label className="block text-[12px] font-semibold text-text mb-1.5">
+              {uniqueBps.length > 1 ? 'Business Processes' : 'Business Process'}
+            </label>
+            {hasWorkflows ? (
+              <div className="px-3 py-2.5 rounded-md border border-border-light bg-surface-2 flex flex-wrap items-center gap-1.5">
+                {uniqueBps.map(bp => (
+                  <span
+                    key={bp}
+                    className="inline-flex items-center h-6 px-2 rounded-md bg-primary-xlight border border-primary/15 text-[12px] font-medium text-primary"
+                  >
+                    {bp}
+                  </span>
+                ))}
               </div>
-            )}
-            {isMultipleBps && (
-              <div className="px-3 py-2.5 rounded-md border border-risk/40 bg-risk/5 text-[12.5px] text-risk-700 leading-relaxed">
-                Multiple business processes in selection ({uniqueBps.join(', ')}). Bulk run requires all workflows to belong to a single business process.
-              </div>
-            )}
-            {!hasWorkflows && (
+            ) : (
               <div className="px-3 py-2.5 rounded-md border border-border-light bg-surface-2 text-[13px] text-text-muted">
                 No workflows selected
               </div>
@@ -1629,7 +1634,7 @@ function BulkExecuteModal({
           </button>
           <button
             onClick={handleSubmit}
-            aria-disabled={!canContinue && !isMultipleBps}
+            aria-disabled={!canContinue}
             className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
               canContinue
                 ? 'bg-primary hover:bg-primary-hover cursor-pointer'

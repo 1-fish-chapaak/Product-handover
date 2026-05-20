@@ -158,9 +158,86 @@ export const REPORT_TEMPLATES = [
 ];
 
 // ─── Generated Reports ───
+// Mock workflow results seeded onto the demo Bulk Audit report (gr-002) so
+// the report opens with workflow cards, severity chips, and an output table
+// even without running a fresh Bulk Run from Workflow Library.
+const SEED_BULK_AUDIT_WORKFLOWS = [
+  {
+    id: 'wfr-seed-1',
+    workflowId: 'WF-001',
+    name: '3-Way Match (PO · GRN · Invoice)',
+    businessProcess: 'P2P',
+    severity: 'High' as const,
+    findings: [
+      'Detected 18 invoices without matching POs in the analysis window.',
+      '6 invoices breached the 5% price-variance threshold and require AP review.',
+    ],
+    observations: [
+      'Coverage was complete across the supplied PO/GRN/Invoice files; no schema gaps.',
+      'Top contributors concentrated in the last fortnight of the period.',
+    ],
+    outputTable: {
+      columns: ['Record ID', 'Vendor', 'Flag', 'Amount', 'Date'],
+      rows: [
+        ['WF-001-001', 'Vendor A-1', 'High',   '₹2,40,000', '04 Mar'],
+        ['WF-001-002', 'Vendor B-2', 'High',   '₹1,15,500', '07 Mar'],
+        ['WF-001-003', 'Vendor C-3', 'Medium', '₹84,200',   '11 Mar'],
+        ['WF-001-004', 'Vendor D-4', 'High',   '₹1,92,750', '15 Mar'],
+        ['WF-001-005', 'Vendor E-5', 'Medium', '₹47,300',   '18 Mar'],
+      ],
+    },
+  },
+  {
+    id: 'wfr-seed-2',
+    workflowId: 'WF-002',
+    name: 'Invoice Duplicate Detection',
+    businessProcess: 'P2P',
+    severity: 'Medium' as const,
+    findings: [
+      '12 candidate duplicate invoices identified across 4 vendors.',
+      '3 of the candidates share GSTIN, invoice number, and amount.',
+    ],
+    observations: [
+      'Vendor master GSTIN coverage at 96% — gaps mostly in non-active vendors.',
+      'Duplicate concentration on the first week of the period.',
+    ],
+    outputTable: {
+      columns: ['Record ID', 'Vendor', 'Flag', 'Amount', 'Date'],
+      rows: [
+        ['WF-002-001', 'Vendor F-1', 'Medium', '₹62,000',  '02 Mar'],
+        ['WF-002-002', 'Vendor G-2', 'High',   '₹1,28,400','04 Mar'],
+        ['WF-002-003', 'Vendor H-3', 'Low',    '₹19,800',  '08 Mar'],
+        ['WF-002-004', 'Vendor I-4', 'Medium', '₹91,500',  '12 Mar'],
+      ],
+    },
+  },
+  {
+    id: 'wfr-seed-3',
+    workflowId: 'WF-003',
+    name: 'Payment Block Review',
+    businessProcess: 'P2P',
+    severity: 'Low' as const,
+    findings: [
+      '4 vendors had payment blocks lifted within 24 hours of invoice posting.',
+      'No bank-account mismatches were detected against vendor master.',
+    ],
+    observations: [
+      'IFSC mapping was clean across the file; vendor bank account confidence high.',
+    ],
+    outputTable: {
+      columns: ['Record ID', 'Vendor', 'Flag', 'Amount', 'Date'],
+      rows: [
+        ['WF-003-001', 'Vendor J-1', 'Low', '₹14,200', '03 Mar'],
+        ['WF-003-002', 'Vendor K-2', 'Low', '₹22,750', '09 Mar'],
+        ['WF-003-003', 'Vendor L-3', 'Low', '₹8,900',  '14 Mar'],
+      ],
+    },
+  },
+];
+
 export const GENERATED_REPORTS = [
   { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 SOX Compliance Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
-  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "Tushar Goel", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4 },
+  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "Tushar Goel", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
   { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance — Feb 2026", tag: "Internal Audit", generatedBy: "AI Copilot", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
   { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
 ];

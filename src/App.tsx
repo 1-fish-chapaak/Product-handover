@@ -186,6 +186,22 @@ export default function App() {
     return () => clearTimeout(t);
   }, [state.focusedNotificationRefId, setFocusedNotificationRefId]);
 
+  // Deep-link target for the post-bulk-run "Open report" toast action. The
+  // BulkRunProgress provider dispatches `irame:open-report`; we react by
+  // switching to the Reports view and passing the id down so ReportsView
+  // can open the report in its full-page view.
+  const [focusReportId, setFocusReportId] = useState<string | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (!id) return;
+      setView('reports');
+      setFocusReportId(id);
+    };
+    window.addEventListener('irame:open-report', handler);
+    return () => window.removeEventListener('irame:open-report', handler);
+  }, [setView]);
+
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
     setViewLoading(true);
@@ -515,6 +531,8 @@ export default function App() {
             }}
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
+            focusReportId={focusReportId}
+            onFocusReportConsumed={() => setFocusReportId(null)}
           />
         );
 
