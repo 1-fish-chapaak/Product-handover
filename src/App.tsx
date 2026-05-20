@@ -265,6 +265,7 @@ export default function App() {
         onManageExceptions={() => setShowExceptionModal(true)}
         onAddToReport={() => openReportBuilder('new')}
         onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
+        onOpenInKnowledgeHub={() => { setShowArtifacts(false); setView('knowledge-hub'); }}
       />
     );
 

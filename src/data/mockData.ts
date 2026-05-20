@@ -614,28 +614,28 @@ export const POWER_BI_DASHBOARDS = [
 export const CLARIFICATION_STEPS = [
   {
     stage: 1,
-    question: "I'll analyze your invoice data for duplicates. First, what date range should I cover?",
+    question: "I'll analyze your invoice data for duplicates across the connected source. First, what date range should I cover for this run?",
     options: ['Last 30 days', 'Last 90 days', 'Full FY26', 'Custom range'],
     fillPercent: 25,
     category: 'Intent',
   },
   {
     stage: 2,
-    question: 'What tolerance threshold for amount matching? Some duplicates may have slight variations.',
+    question: 'What tolerance threshold should I apply to amount matching? Some duplicate invoices may have slight rounding or currency variations.',
     options: ['Exact match only', '± 1% tolerance', '± 5% tolerance'],
     fillPercent: 50,
     category: 'Data',
   },
   {
     stage: 3,
-    question: 'Which vendor scope should I analyze?',
+    question: 'Which vendor scope should I analyze for this duplicate-detection run across the AP module?',
     options: ['All vendors', 'Top 50 by spend', 'Flagged vendors only', 'Specific vendor'],
     fillPercent: 75,
     category: 'Logic',
   },
   {
     stage: 4,
-    question: 'What matching logic should I use to detect duplicates?',
+    question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],
     fillPercent: 100,
     category: 'Ready',

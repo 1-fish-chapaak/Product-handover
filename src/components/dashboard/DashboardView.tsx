@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
+import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
 import { AddDataModal } from './AddDataModal';
 import { WhiteDropdown } from './add-widget/WhiteDropdown';
@@ -4748,52 +4749,48 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   const displayTitle = override?.title || kpi.title;
                   const isEditing = editingKpiIdx === i;
                   return (
-                    <motion.div
+                    <div
                       key={i}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.12 + i * 0.05 }}
-                      className="glass-card rounded-xl px-5 py-4 cursor-pointer hover:border-brand-200 hover:shadow-md transition-all"
-                      onClick={() => { if (!isEditing) setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' }); }}
                       onDoubleClick={(e) => { e.stopPropagation(); setEditingKpiIdx(i); }}
                     >
-                      {isEditing ? (
-                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                          <input
-                            autoFocus
-                            value={override?.title || kpi.title}
-                            onChange={e => setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: e.target.value, field: prev[i]?.field || '' } }))}
-                            onKeyDown={e => { if (e.key === 'Enter') setEditingKpiIdx(null); if (e.key === 'Escape') setEditingKpiIdx(null); }}
-                            className="w-full text-[11px] font-semibold text-ink-900 uppercase tracking-wide bg-transparent border-b border-brand-300 outline-none pb-0.5"
-                            placeholder="KPI Title"
-                          />
-                          <select
-                            value={override?.field || ''}
-                            onChange={e => { setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: prev[i]?.title || kpi.title, field: e.target.value } })); }}
-                            className="w-full text-[11px] text-ink-700 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer"
-                          >
-                            <option value="">Select source column...</option>
-                            {EXCEL_RAW_HEADERS.filter(h => h !== 'Row #').map(h => (
-                              <option key={h} value={h}>{h}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => setEditingKpiIdx(null)}
-                            className="w-full text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md py-1.5 transition-colors cursor-pointer"
-                          >
-                            Done
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate">{displayTitle}</p>
-                          <p className="text-[26px] font-bold text-ink-900 leading-none">{kpi.value}</p>
-                          {override?.field && (
-                            <p className="text-[10px] text-ink-400 mt-2">Source: {override.field}</p>
-                          )}
-                        </>
-                      )}
-                    </motion.div>
+                      <KpiTile
+                        label={displayTitle}
+                        value={kpi.value}
+                        index={i}
+                        onClick={isEditing ? undefined : () => setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' })}
+                        footer={!isEditing && override?.field ? (
+                          <p className="text-[10px] text-ink-400">Source: {override.field}</p>
+                        ) : undefined}
+                        editing={isEditing ? (
+                          <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              autoFocus
+                              value={override?.title || kpi.title}
+                              onChange={e => setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: e.target.value, field: prev[i]?.field || '' } }))}
+                              onKeyDown={e => { if (e.key === 'Enter') setEditingKpiIdx(null); if (e.key === 'Escape') setEditingKpiIdx(null); }}
+                              className="w-full text-[11px] font-semibold text-ink-900 uppercase tracking-wide bg-transparent border-b border-brand-300 outline-none pb-0.5"
+                              placeholder="KPI Title"
+                            />
+                            <select
+                              value={override?.field || ''}
+                              onChange={e => { setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: prev[i]?.title || kpi.title, field: e.target.value } })); }}
+                              className="w-full text-[11px] text-ink-700 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer"
+                            >
+                              <option value="">Select source column...</option>
+                              {EXCEL_RAW_HEADERS.filter(h => h !== 'Row #').map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => setEditingKpiIdx(null)}
+                              className="w-full text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md py-1.5 transition-colors cursor-pointer"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        ) : undefined}
+                      />
+                    </div>
                   );
                 })}
               </motion.div>

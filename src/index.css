@@ -300,6 +300,18 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   background: var(--color-canvas);
 }
 
+/* ── Chat canvas mesh — Claude-aligned: near-flat off-white. The two
+ * whisper radial stops keep the canvas from reading as a sterile pure
+ * sheet, but the net read is calm and flat, the way Claude's chat reads.
+ * Stops were dialled back further so the page does not compete with the
+ * composer's hairline border. */
+.chat-canvas-mesh {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 18% 0%, rgba(247, 240, 255, 0.22) 0px, transparent 55%),
+    radial-gradient(at 82% 100%, rgba(243, 238, 229, 0.14) 0px, transparent 60%);
+}
+
 /* ── Skeleton ── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -371,29 +383,23 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   text-decoration: none;
 }
 
-/* ── Editorial AI border (replaces ai-border decorative spinner) ── */
+/* ── Editorial AI border — Claude-aligned composer.
+ * 20px radius matches Claude's empty-state composer shape. Flat at
+ * rest (no shadow); the canvas-border hairline does all the work. */
 .ai-border {
   position: relative;
   background: var(--color-canvas-elevated);
   border: 1px solid var(--color-canvas-border);
-  border-radius: 1.5rem; /* 24px — hovering surface, not a form field */
+  border-radius: 1.25rem; /* 20px — Claude's actual composer radius */
   isolation: isolate;
-  box-shadow:
-    0 1px 2px rgba(15, 8, 30, 0.04),
-    0 8px 24px rgba(15, 8, 30, 0.04);
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  box-shadow: none;
+  transition: border-color 100ms ease-out;
 }
 .ai-border:focus-within {
-  /* Confident editorial focus: the border tints to brand-400 and a
-   * multi-layer brand-tinted glow lifts the surface like a stage spot.
-   * The thin 1px inner halo anchors the focus signal precisely; the
-   * 24px and 64px diffuse layers carry the atmospheric warmth that
-   * makes the composer feel like the active subject on the canvas. */
-  border-color: var(--color-brand-400);
-  box-shadow:
-    0 0 0 1px rgba(106, 18, 205, 0.18),
-    0 8px 24px -4px rgba(106, 18, 205, 0.16),
-    0 24px 64px -8px rgba(106, 18, 205, 0.14);
+  /* Claude-style focus: border tone only. No ring, no glow, no shadow
+   * change. The border darkens by one step (brand-200 → brand-300) and
+   * that's the entire focus signal — calm, editorial, in-flow. */
+  border-color: var(--color-brand-300);
 }
 .ai-border::before,
 .ai-border::after,

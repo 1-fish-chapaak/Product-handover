@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import {
-  Send, Paperclip, Sparkles, History, X, FileText,
-  Workflow, BarChart3, ChevronDown, ChevronLeft, ChevronRight,
+  Send, Paperclip, Sparkles, History, X, FileText, PanelRightOpen, PanelRightClose,
+  Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
   Save, CheckCircle, Maximize2, Lock, Calendar,
   ExternalLink, Download, MoreHorizontal, Pencil, CornerDownLeft, ArrowUpRight,
-  Square, ArrowDown, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
+  Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
-  Search, GitCompare, ShieldCheck, type LucideIcon,
+  Search, GitCompare, ShieldCheck, Info, type LucideIcon,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../../utils/bookmarkedMessages';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
+import { KpiTile } from '../shared/KpiTile';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -49,6 +51,12 @@ interface ChatMessage {
   // Marks an assistant message whose generation was halted before completion.
   // Renders a "Stopped" badge under the message body.
   stopped?: boolean;
+  // Conversation-branching history (user messages only). Each entry holds
+  // a saved version of the message text PLUS the downstream messages that
+  // followed it (assistant replies, follow-ups, etc.). Switching branches
+  // swaps both the user text and the entire downstream conversation.
+  branches?: { text: string; downstream: ChatMessage[] }[];
+  branchIndex?: number;
 }
 
 // Clarification interaction shape (one per IRA message of richType 'clarification')
@@ -98,6 +106,27 @@ const AUDIT_RESULT = {
         { bucket: 'Global Supplies', count: 2, tone: 'bg-ink-800/70' },
         { bucket: 'TechParts Ltd', count: 1, tone: 'bg-ink-800/50' },
         { bucket: 'FastShip Logistics', count: 1, tone: 'bg-ink-800/50' },
+      ],
+    },
+    // High-data stress test: 12 monthly buckets with thousands-scale values
+    // and long category labels. Confirms y-axis formatting + x-axis label
+    // overflow handling under realistic enterprise data sizes.
+    {
+      id: 'monthly-high',
+      label: 'By month (high vol)',
+      data: [
+        { bucket: 'Jan 2026', count: 11_842, tone: 'bg-ink-800/70' },
+        { bucket: 'Feb 2026', count: 9_405, tone: 'bg-ink-800/60' },
+        { bucket: 'Mar 2026', count: 14_207, tone: 'bg-ink-800/80' },
+        { bucket: 'Apr 2026', count: 12_661, tone: 'bg-ink-800/75' },
+        { bucket: 'May 2026', count: 15_904, tone: 'bg-ink-800/85' },
+        { bucket: 'Jun 2026', count: 17_532, tone: 'bg-ink-800/90' },
+        { bucket: 'Jul 2026', count: 13_088, tone: 'bg-ink-800/75' },
+        { bucket: 'Aug 2026', count: 8_270, tone: 'bg-ink-800/55' },
+        { bucket: 'Sep 2026', count: 10_410, tone: 'bg-ink-800/65' },
+        { bucket: 'Oct 2026', count: 16_741, tone: 'bg-ink-800/85' },
+        { bucket: 'Nov 2026', count: 18_220, tone: 'bg-ink-800' },
+        { bucket: 'Dec 2026', count: 21_350, tone: 'bg-ink-800' },
       ],
     },
   ],
@@ -248,17 +277,22 @@ const classifyFollowUp = (text: string): FollowUpKind => {
 // ─── Chart rendering (reuses dashboard ConfigurableChart) ─────────────────────
 
 function renderChart(chart: typeof AUDIT_RESULT.charts[number], variant: 'inline' | 'fullscreen') {
-  const isConfidence = chart.id === 'confidence';
-  // Inherit the dashboard ConfigurableChart palette (PURPLE default) so chart
-  // visuals match across surfaces — when an auditor takes a query result and
-  // adds it to a dashboard, the bars don't change color.
+  // Map each chart id to a (type, xAxis) tuple the shared
+  // ConfigurableChart understands. Palette inherits the brand purple
+  // ramp so visuals are consistent across surfaces.
+  const config: Record<string, { type: 'bar' | 'pie'; xAxis: string; showLegend: boolean }> = {
+    confidence: { type: 'bar', xAxis: 'Quarter', showLegend: false },
+    vendor: { type: 'pie', xAxis: 'Department', showLegend: true },
+    'monthly-high': { type: 'bar', xAxis: 'Month', showLegend: false },
+  };
+  const cfg = config[chart.id] ?? { type: 'bar' as const, xAxis: 'Quarter', showLegend: false };
   return (
-    <div style={variant === 'fullscreen' ? { width: '100%', height: '100%' } : { height: 240 }}>
+    <div style={variant === 'fullscreen' ? { width: '100%', height: '100%' } : { height: 300 }}>
       <ConfigurableChart
-        type={isConfidence ? 'bar' : 'pie'}
-        xAxis={isConfidence ? 'Quarter' : 'Department'}
+        type={cfg.type}
+        xAxis={cfg.xAxis}
         showTarget={false}
-        showLegend={!isConfidence}
+        showLegend={cfg.showLegend}
       />
     </div>
   );
@@ -274,38 +308,55 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
   return (
     <>
       <div className={embedded
-        ? 'bg-canvas-elevated overflow-hidden'
-        : 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-sm shadow-ink-900/[0.04]'}>
-        <div className="flex items-center justify-between px-3 py-2 border-b border-canvas-border bg-canvas-elevated">
-          {charts.length > 1 ? (
-            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-brand-50">
-              {charts.map(c => {
-                const isActive = c.id === activeId;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => setActiveId(c.id)}
-                    className={`px-2.5 h-7 rounded text-xs font-medium transition-colors ${
-                      isActive ? 'bg-canvas-elevated text-text shadow-sm' : 'text-ink-500 hover:text-ink-700'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <span className="text-xs font-medium text-ink-700">{active.label}</span>
-          )}
-          <button
-            onClick={() => setFullscreen(true)}
-            className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer"
-            aria-label="Expand chart"
-          >
-            <Maximize2 size={14} />
-          </button>
+        ? 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden'
+        : 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden'}>
+        {/* Header — Claude-style layout in our theme:
+              LEFT  → series legend (color dot + active chart name).
+              RIGHT → bordered segmented control switching between
+                      datasets, each tab carrying a chart-type icon so
+                      the user knows what they're picking before
+                      clicking. Expand sits at the far right. */}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-canvas-border/60">
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {charts.length > 1 && (
+              <div className="inline-flex items-center gap-1" role="tablist">
+                {charts.map(c => {
+                  const isActive = c.id === activeId;
+                  const Icon = c.id === 'vendor' ? PieChart : BarChart3;
+                  return (
+                    <button
+                      key={c.id}
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setActiveId(c.id)}
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        isActive
+                          ? 'bg-brand-50 text-brand-700 border-brand-200'
+                          : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+                      }`}
+                    >
+                      <Icon size={13} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
+                      <span>{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              onClick={() => setFullscreen(true)}
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Expand chart"
+              title="Expand chart"
+            >
+              <Maximize2 size={14} />
+            </button>
+          </div>
         </div>
-        <div>{renderChart(active, 'inline')}</div>
+        <div className="p-3">{renderChart(active, 'inline')}</div>
       </div>
       <AnimatePresence>
         {fullscreen && (
@@ -352,31 +403,47 @@ function FullscreenChartModal({
         style={{ width: '96vw', height: '94vh' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-canvas-border shrink-0">
-          {charts.length > 1 ? (
-            <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-brand-50">
-              {charts.map(c => {
-                const isActive = c.id === activeId;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => onActiveChange(c.id)}
-                    className={`px-3 h-7 rounded text-[12px] font-medium transition-colors cursor-pointer ${
-                      isActive ? 'bg-canvas-elevated text-text shadow-sm' : 'text-ink-500 hover:text-ink-700'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <span className="text-[13px] font-semibold text-ink-800">{active.label}</span>
-          )}
-          <button onClick={onClose} className="p-1.5 rounded-md text-ink-500 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer">
-            <X size={16} />
-          </button>
+        {/* Header — same layout as the embedded chart card: legend dot
+            + active chart name on the left, bordered segmented control
+            on the right, close X at the far right. */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {charts.length > 1 && (
+              <div className="inline-flex items-center gap-1" role="tablist">
+                {charts.map(c => {
+                  const isActive = c.id === activeId;
+                  const Icon = c.id === 'vendor' ? PieChart : BarChart3;
+                  return (
+                    <button
+                      key={c.id}
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => onActiveChange(c.id)}
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        isActive
+                          ? 'bg-brand-50 text-brand-700 border-brand-200'
+                          : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+                      }`}
+                    >
+                      <Icon size={13} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
+                      <span>{c.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Close fullscreen"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Chart — fills remaining space, same as dashboard */}
@@ -400,39 +467,195 @@ function ResultsTable({
   onDownload: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-sm shadow-ink-900/[0.04]">
+    <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+      {/* Header — same Claude-style layout as the chart card:
+            LEFT  → legend dot + title.
+            RIGHT → bordered action buttons (Open / Download), then a
+                    plain Expand button at the far right. */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-canvas-border/60">
+        <div className="min-w-0 flex items-center gap-2">
+          <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+          <span className="text-[13px] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex items-center gap-1">
+            <button
+              onClick={onOpen}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <ExternalLink size={13} className="text-ink-400" />
+              <span>Open</span>
+            </button>
+            <button
+              onClick={onDownload}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <Download size={13} className="text-ink-400" />
+              <span>CSV</span>
+            </button>
+          </div>
+          <button
+            onClick={onOpen}
+            className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label="Open in new view"
+            title="Open in new view"
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
+      </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-canvas-border bg-canvas-elevated">
+            <tr className="border-b border-canvas-border/60 bg-canvas/40">
               {columns.map(c => (
-                <th key={c} className="text-left px-3 py-2.5 font-semibold text-ink-500 uppercase tracking-wide text-xs">{c}</th>
+                <th key={c} className="text-left px-4 py-2.5 font-semibold text-ink-500 uppercase tracking-wide text-[11px]">{c}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="border-b border-canvas-border last:border-b-0 hover:bg-brand-50 transition-colors">
+              <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/60 transition-colors">
                 {row.map((cell, j) => (
-                  <td key={j} className={`px-3 py-2.5 text-ink-700 ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+                  <td key={j} className={`px-4 py-2.5 text-ink-700 ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between px-3 py-2 border-t border-canvas-border bg-canvas-elevated">
-        <span className="text-xs text-ink-500">Preview · <span className="tabular-nums">{rows.length}</span> of <span className="tabular-nums">{totalRows}</span> results</span>
-        <div className="flex items-center gap-1">
-          <button onClick={onOpen} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-ink-600 hover:text-text hover:bg-brand-50 transition-colors cursor-pointer">
-            <ExternalLink size={12} /> Open in new view
-          </button>
-          <button onClick={onDownload} className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-ink-600 hover:text-text hover:bg-brand-50 transition-colors cursor-pointer">
-            <Download size={12} /> Download CSV
-          </button>
-        </div>
+      {/* Footer — quiet "Preview · X of N" tally only. Actions live in the
+          header row to match the chart card's pattern. */}
+      <div className="flex items-center justify-end px-4 py-2 border-t border-canvas-border/60">
+        <span className="text-[11px] text-ink-500 tabular-nums">
+          Preview · {rows.length} of {totalRows}
+        </span>
       </div>
     </div>
+  );
+}
+
+// ─── Code block — Claude-style toolbar wrapper ─────────────────────────────
+// Always-visible header strip: language label on the left, Copy button on
+// the right. Copy flips to ✓ + "Copied" for ~2s, no global toast. The block
+// itself uses a dark editorial panel for legibility (Claude pattern even
+// inside a light page).
+
+function CodeBlock({ language, code }: { language: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<number | null>(null);
+  const onCopy = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(code).catch(() => {});
+    }
+    setCopied(true);
+    if (copyTimer.current) window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopied(false), 2000);
+  };
+  useEffect(() => () => { if (copyTimer.current) window.clearTimeout(copyTimer.current); }, []);
+  return (
+    <div className="my-3 rounded-lg overflow-hidden border border-ink-700 bg-ink-900">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-ink-800 border-b border-ink-700">
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-400">
+          {language || 'code'}
+        </span>
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          className="inline-flex items-center gap-1 px-1.5 h-6 rounded text-[11px] font-medium text-ink-400 hover:text-canvas-elevated hover:bg-ink-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      <pre className="px-4 py-3 overflow-x-auto text-[13px] leading-[1.55] text-canvas-elevated font-mono">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+// ─── ReactMarkdown render for assistant prose ───────────────────────────────
+// Renders **bold**, `inline code` as a styled chip, paragraphs with proper
+// spacing, lists with prose indents, and ```fenced``` blocks via CodeBlock.
+// Plain text without any markdown still renders identically — react-markdown
+// just wraps it in a <p>.
+
+function renderAssistantText(text: string): React.ReactNode {
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => (
+          <p className="mb-5 last:mb-0 leading-[1.7] text-[14px] text-ink-800">{children}</p>
+        ),
+        strong: ({ children }) => (
+          <strong className="font-bold text-ink-900">{children}</strong>
+        ),
+        em: ({ children }) => (
+          <em className="italic">{children}</em>
+        ),
+        a: ({ children, href }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-400 transition-colors">
+            {children}
+          </a>
+        ),
+        ul: ({ children }) => (
+          <ul className="my-5 pl-6 space-y-2 list-disc marker:text-ink-400 text-[14px]">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="my-5 pl-6 space-y-2 list-decimal marker:text-ink-400 text-[14px]">{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li className="leading-[1.7] pl-1">{children}</li>
+        ),
+        h1: ({ children }) => (
+          <h1 className="mt-5 mb-2 text-[18px] font-bold leading-tight text-ink-900">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="mt-5 mb-2 text-[16px] font-bold leading-tight text-ink-900">{children}</h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="mt-4 mb-1.5 text-[14px] font-bold leading-tight text-ink-900">{children}</h3>
+        ),
+        h4: ({ children }) => (
+          <h4 className="mt-4 mb-1.5 text-[13px] font-bold leading-tight text-ink-900">{children}</h4>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="my-3 pl-3 border-l-2 border-brand-200 text-ink-700 italic">{children}</blockquote>
+        ),
+        // Inline code: styled chip with mono font, hairline border, light bg.
+        // Block code (triple-backtick) is delegated to <CodeBlock> via `pre`.
+        code: (props) => {
+          const { className, children, ...rest } = props as { className?: string; children?: React.ReactNode };
+          const isBlock = /language-/.test(className || '');
+          if (isBlock) {
+            return <code className={className}>{children}</code>;
+          }
+          return (
+            <code
+              {...rest}
+              className="inline-flex items-center px-1.5 py-px mx-px rounded-md bg-canvas border border-canvas-border font-mono text-[0.85em] text-ink-800 align-baseline"
+            >
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => {
+          // children should be a <code> element with language-* class + text.
+          const child = (children as { props?: { className?: string; children?: React.ReactNode } })?.props;
+          const className = child?.className || '';
+          const langMatch = /language-([\w+-]+)/.exec(className);
+          const lang = langMatch ? langMatch[1] : '';
+          const raw = typeof child?.children === 'string'
+            ? child.children
+            : Array.isArray(child?.children) ? child!.children.join('') : '';
+          return <CodeBlock language={lang} code={String(raw).replace(/\n$/, '')} />;
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
 
@@ -579,57 +802,50 @@ function ClarificationBlock({
     if (viewIndex === activeIndex) setDisplayIndex(null);
   }
 
-  function goBack() {
-    if (canGoBack) setDisplayIndex(viewIndex - 1);
-  }
-  function goForward() {
-    if (canGoForward) setDisplayIndex(viewIndex + 1);
-  }
+  // Back/forward navigation removed — Claude's pattern is one question
+  // at a time, auto-advance on pick. canGoBack / canGoForward / etc.
+  // remain in scope for the keyboard handler effect but no UI calls them.
 
   return (
-    <div className="space-y-2">
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        {/* Header — question on its own row so multi-clause questions don't
-            truncate alongside Back/Next. Pagination + nav controls sit
-            beneath in a dedicated control row with their own meta typography. */}
-        <div className="px-4 pt-3.5 pb-2.5 border-b border-canvas-border/60 bg-canvas-elevated">
-          <p className="text-[14px] font-semibold leading-snug text-ink-800">
+    <div className="space-y-2.5">
+      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+        {/* Header — question on the left, close X on the right. No
+            pagination chip, no Back/Next buttons. Auto-advance handles
+            most navigation; footer carries the chip + nav as quieter
+            chrome. */}
+        <div className="px-5 pt-4 pb-3.5 flex items-start justify-between gap-3">
+          {/* Question — always reserves space for 2 lines so short and
+              long questions sit at the same height. Clamps at 2 lines
+              with an ellipsis for very long content; full text in the
+              native tooltip. */}
+          <p
+            className="text-[15px] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2 min-h-[2.8rem]"
+            title={viewQ.question}
+          >
             {viewQ.question}
           </p>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="text-[11px] uppercase tracking-[0.06em] text-ink-400 tabular-nums">
-              Question {viewIndex + 1} of {total}
-            </span>
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={!canGoBack}
-                aria-label="Previous question"
-                className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-500 hover:bg-brand-50 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <ChevronLeft size={13} />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={goForward}
-                disabled={!canGoForward}
-                aria-label="Next question"
-                className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-500 hover:bg-brand-50 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                Next
-                <ChevronRight size={13} />
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={onSkipAll}
+            aria-label="Close clarification"
+            title="Close — skip the rest"
+            className="inline-flex items-center justify-center size-7 rounded-md text-ink-400 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+          >
+            <X size={14} />
+          </button>
         </div>
 
-        {/* Numbered options */}
-        <div role="listbox" aria-label={viewQ.question}>
+        {/* Numbered options — Claude-style calm rows. Highlighted state
+            is a soft canvas wash, badges sit on a flat paper fill, return
+            arrow stays neutral. Hairline dividers between rows, but the
+            highlighted row's neighbors hide their top borders so the wash
+            extends cleanly. */}
+        <div role="listbox" aria-label={viewQ.question} className="py-1">
           {viewQ.options.map((opt, idx) => {
             const isHighlighted = highlighted === idx;
             const isPicked = data.answers[viewIndex] === opt;
+            const prevIsHighlighted = highlighted === idx - 1;
+            const showDivider = idx > 0 && !isHighlighted && !prevIsHighlighted && !isPicked;
             return (
               <button
                 key={opt}
@@ -638,45 +854,35 @@ function ClarificationBlock({
                 aria-selected={isHighlighted}
                 onClick={() => selectOption(opt)}
                 onMouseEnter={() => setHighlighted(idx)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-t border-canvas-border/60 first:border-t-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
-                  isPicked ? 'bg-brand-50' : isHighlighted ? 'bg-brand-50/60' : 'hover:bg-brand-50/40'
-                }`}
+                className={`relative w-full flex items-center gap-3 px-5 py-3 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
+                  isPicked ? 'bg-brand-50' : isHighlighted ? 'bg-canvas' : 'hover:bg-canvas/60'
+                } ${showDivider ? 'before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/70' : ''}`}
               >
-                <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[11px] font-mono tabular-nums shrink-0 transition-colors ${
+                <span className={`inline-flex items-center justify-center size-7 rounded-md text-[12px] font-semibold tabular-nums shrink-0 transition-colors ${
                   isPicked
-                    ? 'bg-brand-600 text-white font-semibold'
+                    ? 'bg-brand-600 text-white'
                     : isHighlighted
-                      ? 'bg-brand-100 text-brand-700 font-semibold'
-                      : 'bg-canvas-border/60 text-ink-400'
-                }`}>
-                  {idx + 1}
+                      ? 'bg-brand-100 text-brand-700'
+                      : 'bg-brand-50 text-brand-400'
+                }`} aria-hidden="true">
+                  {isPicked ? <Check size={13} /> : idx + 1}
                 </span>
-                <span className={`flex-1 text-[13px] leading-snug ${isPicked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>{opt}</span>
+                <span className={`flex-1 text-[14px] leading-snug ${isPicked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>{opt}</span>
                 {isHighlighted && !isPicked && (
-                  <CornerDownLeft size={12} className="text-brand-600 shrink-0" />
+                  <CornerDownLeft size={13} className="text-ink-500 shrink-0" aria-hidden="true" />
                 )}
               </button>
             );
           })}
 
-          {/* Submit row — surfaces user's progress and lets them commit early */}
-          {answeredCount > 0 && (
-            <div className="border-t border-canvas-border/60 flex items-center justify-between gap-3 px-4 py-2.5 bg-brand-50">
-              <span className="text-[12px] text-ink-500 tabular-nums">
-                {answeredCount} of {total} answered
-              </span>
-              <button
-                onClick={onSubmit}
-                className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
-              >
-                Submit {answeredCount} answer{answeredCount === 1 ? '' : 's'}
-              </button>
-            </div>
-          )}
-
-          {/* Custom input row */}
-          <div className="border-t border-canvas-border/60 flex items-center gap-3 px-4 py-2">
-            <Pencil size={13} className="text-ink-400 shrink-0" />
+          {/* Custom input row — sibling row inside the same card, no
+              tinted band. Pencil-in-square glyph mirrors the numbered
+              badges. Hairline divider above separates the freeform
+              entry from the listed options. */}
+          <div className="relative flex items-center gap-3 px-5 py-3 before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/70">
+            <span className="inline-flex items-center justify-center size-7 rounded-md bg-brand-50 text-brand-400 shrink-0" aria-hidden="true">
+              <Pencil size={13} />
+            </span>
             <input
               ref={inputRef}
               value={customInput}
@@ -689,11 +895,11 @@ function ClarificationBlock({
                 }
               }}
               placeholder="Something else"
-              className="flex-1 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 outline-none h-8"
+              className="no-focus-ring flex-1 bg-transparent text-[14px] text-ink-800 placeholder:text-ink-400 outline-none h-7"
             />
             <button
               onClick={skipCurrent}
-              className="px-3 h-7 text-[12px] font-medium text-ink-600 hover:text-ink-800 border border-canvas-border bg-canvas-elevated hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0"
+              className="px-3 h-7 text-[12px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 border border-canvas-border rounded-md transition-colors cursor-pointer shrink-0"
             >
               Skip
             </button>
@@ -701,19 +907,10 @@ function ClarificationBlock({
         </div>
       </div>
 
-      {/* Footer — kbd hints in mono on the left, progress tally on the right.
-          Mono framing reads as "shortcut atoms" rather than prose, so the eye
-          doesn't try to parse them as a sentence. */}
-      <div className="flex items-center justify-between gap-4 text-[11px] text-ink-400 px-1">
-        <div className="flex items-center gap-2 font-mono">
-          <span><kbd className="text-ink-500">↑↓</kbd> navigate</span>
-          <span aria-hidden="true" className="text-canvas-border">·</span>
-          <span><kbd className="text-ink-500">↵</kbd> select</span>
-          <span aria-hidden="true" className="text-canvas-border">·</span>
-          <span><kbd className="text-ink-500">esc</kbd> skip</span>
-        </div>
-        <span className="tabular-nums text-ink-500">{answeredCount} of {total} answered</span>
-      </div>
+      {/* No footer inside this card — the hint row below the composer
+          handles navigation hints (Claude pattern). Submission is
+          handled by the parent: once all questions are answered it
+          fires onSubmit automatically. */}
     </div>
   );
 }
@@ -1127,8 +1324,18 @@ function InlineEditBubble({
   };
   const canSave = value.trim().length > 0;
   return (
-    <div className="w-full max-w-[66ch]">
-      <div className="rounded-2xl bg-canvas-elevated border border-canvas-border px-4 py-2.5 shadow-sm shadow-ink-900/[0.03] focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-300/20 transition-[border-color,box-shadow] duration-200">
+    // Claude-style edit card with smooth open/close. Outer tinted container
+    // carries the brand focus border; inner panel stays white with a
+    // hairline border. The message text (now stored as a Q:/A: transcript
+    // for clarification turns) is editable directly in the textarea.
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98, y: -2 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98, y: -2 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      className="w-[40rem] max-w-full rounded-2xl bg-canvas border border-canvas-border focus-within:border-brand-400 transition-colors duration-150 p-3"
+    >
+      <div className="rounded-xl bg-canvas-elevated border border-canvas-border">
         <textarea
           ref={ref}
           value={value}
@@ -1136,27 +1343,33 @@ function InlineEditBubble({
           onKeyDown={onKey}
           rows={1}
           aria-label="Edit message"
-          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none text-sm leading-relaxed text-ink-800 placeholder:text-ink-400 min-h-[20px] max-h-[240px]"
+          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 py-2.5 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
         />
       </div>
-      <div className="mt-1.5 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-7 px-2.5 rounded-md text-[12px] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={!canSave}
-          className="h-7 px-3 rounded-md text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
-        >
-          Save & resend
-        </button>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-1.5 text-[12px] text-ink-500 leading-snug min-w-0 pt-1.5">
+          <Info size={13} className="shrink-0 mt-0.5 text-ink-400" aria-hidden="true" />
+          <span>Saving will start a new conversation from here. Use the arrows below the message to switch between versions.</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex items-center h-8 px-3 rounded-md text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!canSave}
+            className="inline-flex items-center h-8 px-3.5 rounded-md text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            Save
+          </button>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -1314,6 +1527,43 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setEditingTitle(false);
   }, [setShowArtifacts, setArtifactMode, setActiveArtifactTab]);
 
+  // ─── Global keyboard shortcuts (Claude-aligned) ─────────────────────────
+  // Cmd/Ctrl + .       → toggle the chat-history sidebar
+  // Cmd/Ctrl + Shift + O → start a new chat (clears thread)
+  // Cmd/Ctrl + /       → show the keyboard-shortcuts help modal
+  // Esc inside the modal also closes it (the modal handles that itself).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      // Don't hijack shortcuts while the user is typing into a field —
+      // except for Cmd+/ which is a global help shortcut.
+      const target = e.target as HTMLElement | null;
+      const inTextField =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+      if (e.key === '/' && !e.shiftKey) {
+        e.preventDefault();
+        setShowShortcutsModal((v) => !v);
+        return;
+      }
+      if (inTextField) return;
+      if (e.key === '.') {
+        e.preventDefault();
+        toggleChatHistory();
+        return;
+      }
+      if (e.shiftKey && (e.key === 'O' || e.key === 'o')) {
+        e.preventDefault();
+        resetChat();
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [resetChat, toggleChatHistory]);
+
   // ─── Load a saved conversation by id (used by slide-out + Recents) ───
   const loadChatById = useCallback((chatId: string) => {
     const convo = CHAT_CONVERSATIONS[chatId];
@@ -1418,8 +1668,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }));
 
     schedule(() => {
+      // Claude-style Q/A transcript: each clarification pair on its own
+      // pair of lines so the user pill (and the edit textarea) reads as
+      // a structured transcript, not a bare bullet list.
       const userText = consolidated.length
-        ? consolidated.map(c => `• ${c.answer}`).join('\n')
+        ? consolidated.map(c => `Q: ${c.question}\nA: ${c.answer}`).join('\n\n')
         : (fromSkip ? 'Skip: use sensible defaults.' : 'Run with the inputs above.');
       setMessages(prev => [...prev, {
         id: `msg-user-clarify-${Date.now()}`,
@@ -1578,7 +1831,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       if (m.id !== targetId) return m;
       return {
         ...m,
-        text: "Done. I scanned 1.2M invoice records and surfaced 8 potential duplicates. Total exposure ₹6.16L, with the highest-confidence pair at 96% match (Acme Corp). Acme accounts for half of the flags and is the first place I'd look.",
+        text: `## Duplicate invoice detection — Q1 FY26
+
+Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
+
+> Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
+
+### Where to look first
+
+- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
+  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
+  - The other pair crossed an approval-limit boundary; payment may have already cleared.
+- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
+- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
+
+The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`,
         followUps: AUDIT_FOLLOWUPS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
@@ -2106,6 +2373,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     });
   };
 
+  // Long-paste threshold per Claude's interaction spec — pastes over this
+  // length get auto-attached as a Pasted-N.txt chip instead of stuffing the
+  // textarea. Keeps the composer scannable for short replies and treats
+  // dumped logs / docs as the attachments they really are.
+  const PASTE_AS_FILE_THRESHOLD = 2500;
+  const pastedCounterRef = useRef(0);
+
   const handleComposerPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const cb = e.clipboardData;
     if (cb?.files && cb.files.length > 0) {
@@ -2113,25 +2387,36 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       ingestFiles(cb.files);
       return;
     }
-    // Truncate text pastes that would push the input past the hard limit, so
-    // a 10k-char paste doesn't silently overrun the counter cap. The textarea
-    // has maxLength=MAX_INPUT_CHARS+200 (slack), but a single paste can still
-    // exceed that; intercept and clip.
     const pasted = cb?.getData('text');
     if (!pasted) return;
+
+    // Long-paste auto-attach (Claude pattern): if the paste is large, drop
+    // it into the attachments row as a Pasted-N.txt file rather than the
+    // textarea. The user can still remove it via the chip's X button.
+    if (pasted.length >= PASTE_AS_FILE_THRESHOLD) {
+      e.preventDefault();
+      pastedCounterRef.current += 1;
+      const name = `Pasted-${pastedCounterRef.current}.txt`;
+      const blob = new Blob([pasted], { type: 'text/plain' });
+      const file = new File([blob], name, { type: 'text/plain', lastModified: Date.now() });
+      ingestFiles([file]);
+      return;
+    }
+
+    // Short pastes that still push the textarea past the hard limit get
+    // trimmed (existing safety net).
     const room = MAX_INPUT_CHARS - input.length;
     if (pasted.length > room) {
       e.preventDefault();
       const accepted = room > 0 ? pasted.slice(0, room) : '';
       const next = input + accepted;
       setInput(next);
-      // Restore caret to the end after React commits.
       requestAnimationFrame(() => {
         const ta = textareaRef.current;
         if (!ta) return;
         ta.selectionStart = ta.selectionEnd = next.length;
         ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+        ta.style.height = Math.min(ta.scrollHeight, 260) + 'px';
       });
       addToast({
         type: 'info',
@@ -2184,6 +2469,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   // Tracks 👍 / 👎 selection per message. Mock-only — no backend persistence.
   const [feedbackByMsgId, setFeedbackByMsgId] = useState<Record<string, 'up' | 'down'>>({});
+  // Open feedback popover: tracks which message+kind is showing the
+  // "Tell us more" form. Closed when null.
+  const [feedbackPopover, setFeedbackPopover] = useState<{ msgId: string; kind: 'up' | 'down' } | null>(null);
+  const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [feedbackReason, setFeedbackReason] = useState<string>('');
+  const [feedbackSubmittedIds, setFeedbackSubmittedIds] = useState<Set<string>>(new Set());
+  // Keyboard-shortcuts help modal — opens on Cmd/Ctrl + /.
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   // Which "What next?" card the user picked for each assistant message — so the
   // selected card stays highlighted in the conversation history after the click
@@ -2221,6 +2514,35 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setEditingMsgId(msgId);
     setEditingDraft(text);
   }, []);
+
+  // Branch-arrow navigation on edited user messages. Swaps the user text
+  // AND the full downstream conversation to the prev/next saved version.
+  // Before switching, we snapshot the current downstream into the active
+  // branch so anything that happened since landing on it (e.g. follow-up
+  // chips picked, dashboards added) is preserved when we return.
+  const switchBranch = useCallback((msgId: string, direction: -1 | 1) => {
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === msgId);
+      if (idx === -1) return prev;
+      const target = prev[idx];
+      if (!target.branches || target.branches.length <= 1) return prev;
+      const current = target.branchIndex ?? (target.branches.length - 1);
+      const nextIdx = Math.max(0, Math.min(target.branches.length - 1, current + direction));
+      if (nextIdx === current) return prev;
+      const downstreamBefore = prev.slice(idx + 1);
+      const refreshedBranches = target.branches.map((b, i) =>
+        i === current ? { ...b, downstream: downstreamBefore } : b
+      );
+      const incomingBranch = refreshedBranches[nextIdx];
+      const updatedTarget: ChatMessage = {
+        ...target,
+        text: incomingBranch.text,
+        branches: refreshedBranches,
+        branchIndex: nextIdx,
+      };
+      return [...prev.slice(0, idx), updatedTarget, ...incomingBranch.downstream];
+    });
+  }, []);
   const cancelEditingMessage = useCallback(() => {
     setEditingMsgId(null);
     setEditingDraft('');
@@ -2240,11 +2562,33 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setEditingMsgId(null);
     setEditingDraft('');
 
-    // Update the user message text + trim everything after it. The previous
-    // assistant reply is stale once the question changed, so we drop it.
+    // Update the user message text + trim everything after it. Branching:
+    // snapshot the OLD text + the downstream messages it produced into the
+    // branches array, then add the NEW text with an empty downstream
+    // (simulateResponse will populate it). Switching branches restores
+    // the full conversation under that branch.
     setMessages(prev => {
+      const current = prev[idx];
+      const downstreamBefore = prev.slice(idx + 1);
+      const previousBranches: { text: string; downstream: ChatMessage[] }[] =
+        current.branches ?? [{ text: current.text, downstream: downstreamBefore }];
+      // If branches already existed, refresh the active branch's downstream
+      // snapshot so it reflects any in-thread state changes (added-to-dashboard,
+      // bookmarks, etc.) before we move off it.
+      const refreshedBranches = previousBranches.map((b, i) =>
+        i === (current.branchIndex ?? previousBranches.length - 1)
+          ? { ...b, downstream: downstreamBefore }
+          : b
+      );
+      const updatedBranches = [...refreshedBranches, { text: trimmed, downstream: [] as ChatMessage[] }];
       const next = prev.slice(0, idx + 1);
-      next[idx] = { ...next[idx], text: trimmed, timestamp: new Date() };
+      next[idx] = {
+        ...current,
+        text: trimmed,
+        branches: updatedBranches,
+        branchIndex: updatedBranches.length - 1,
+        timestamp: new Date(),
+      };
       return next;
     });
 
@@ -2317,7 +2661,41 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       }
       return { ...prev, [msgId]: kind };
     });
+    // Open the inline "tell us more" popover (Claude pattern). Always
+    // opens fresh — re-clicking the same icon re-arms the form.
+    setFeedbackPopover({ msgId, kind });
+    setFeedbackDraft('');
+    setFeedbackReason('');
   }, []);
+
+  const submitFeedback = useCallback(() => {
+    if (!feedbackPopover) return;
+    // Mark as submitted so the action bar can swap the icon to a check
+    // and the popover collapses into a quiet "Thanks" confirmation.
+    setFeedbackSubmittedIds(prev => new Set(prev).add(feedbackPopover.msgId));
+    setFeedbackPopover(null);
+    setFeedbackDraft('');
+    setFeedbackReason('');
+    addToast({ type: 'success', message: 'Feedback sent. Thanks for telling Ira.' });
+  }, [feedbackPopover, addToast]);
+
+  const cancelFeedback = useCallback(() => {
+    setFeedbackPopover(null);
+    setFeedbackDraft('');
+    setFeedbackReason('');
+  }, []);
+
+  // Claude's negative-feedback reason taxonomy (with one tweak — "Inaccurate
+  // citations" — for our auditor context). Used in the 👎 popover dropdown.
+  const FEEDBACK_REASONS = [
+    'Not factually correct',
+    "Didn't follow my instructions",
+    'Inaccurate citations or sources',
+    'Refused when it should not have',
+    'Too verbose / not detailed enough',
+    'Style or tone issue',
+    'Other',
+  ];
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
@@ -2351,14 +2729,25 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const handleTextareaInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      // Cap matches the textarea's max-h-[240px] visual cap. Past this the
-      // textarea internally scrolls instead of pushing the chat composer
-      // off-screen.
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 240) + 'px';
+      // Cap matches the textarea's visual ceiling (260px in-thread, 280px
+      // empty state). Past this the textarea internally scrolls instead of
+      // pushing the chat composer off-screen. Using the higher of the two
+      // here is safe because CSS max-h enforces the per-surface limit.
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 260) + 'px';
     }
   };
 
   const isEmpty = messages.length === 0;
+
+  // Workspace panel is contextual to a query — it shows the plan, sources,
+  // code, and output of an in-flight or completed run. On an empty chat
+  // there's nothing meaningful to display, so force-close any panel state
+  // inherited from a previous session. The empty-state header below also
+  // omits the workspace toggle, so the panel can't be re-opened until the
+  // user actually asks something.
+  useEffect(() => {
+    if (isEmpty && showArtifacts) setShowArtifacts(false);
+  }, [isEmpty, showArtifacts, setShowArtifacts]);
 
   // Derive a chat title from the first user message — truncated for the top bar.
   // User can override via double-click-to-edit (mock-only — no backend persist).
@@ -2467,7 +2856,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       <div className="flex h-full w-full">
         {chatHistoryPanel}
 
-        <div className="flex-1 min-w-0 h-full flex flex-col bg-hero-pattern bg-grid-subtle relative" style={{ background: 'var(--color-canvas)' }}>
+        <div className="flex-1 min-w-0 h-full flex flex-col chat-canvas-mesh relative">
           <FloatingLines
             enabledWaves={['top', 'middle', 'bottom']}
             lineCount={5}
@@ -2526,7 +2915,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className="w-[720px] max-w-full text-center"
+              className="w-[52.5rem] max-w-full text-center"
             >
               <div className="mb-4">
                 <AuditifyHelloEffect
@@ -2545,7 +2934,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 2.5, duration: 0.6 }}
-                className="text-[15px] text-text-muted mb-10"
+                className="text-[15px] text-ink-500 mb-10"
               >
                 Your AI copilot already knows what to look for. Just ask.
               </motion.p>
@@ -2557,85 +2946,103 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                {/* Drop overlay — only renders during an active file drag. */}
-                {isDragging && (
-                  <div
-                    aria-hidden="true"
-                    className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.5rem] bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
-                  >
-                    <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
-                      <Paperclip size={14} />
-                      <span>Drop to attach</span>
-                    </div>
-                  </div>
-                )}
+                {/* Drop overlay — only renders during an active file drag.
+                    Reveals on a 120ms fade so it doesn't snap in. */}
+                <AnimatePresence>
+                  {isDragging && (
+                    <motion.div
+                      key="hero-composer-drop-overlay"
+                      aria-hidden="true"
+                      initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
+                    >
+                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                        <Paperclip size={14} />
+                        <span>Drop to attach</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Attachment chips — picked sources + fresh uploads. */}
                 {(files.length > 0 || attachedSources.length > 0) && (
                   <div className="composer-chips-row flex items-center gap-1.5 overflow-x-auto px-4 pt-3 pb-1 text-left">
                     {attachedSources.map((s, i) => (
                       s.kind === 'source' && (
-                        <div key={`src-${i}`} title={s.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
-                          <span className="text-[10px] uppercase font-bold tracking-[0.06em] text-ink-400">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                        <div
+                          key={`src-${i}`}
+                          title={s.name}
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                        >
+                          <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                           <span className="truncate max-w-[10rem]">{s.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
-                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            className="text-ink-400 hover:text-ink-800 hover:bg-brand-100 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
                             aria-label={`Remove ${s.name}`}
-                          ><X size={12} /></button>
+                          ><X size={11} /></button>
                         </div>
                       )
                     ))}
                     {files.map((f, i) => (
-                      <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
-                        <FileText size={12} className="text-ink-400" />
+                      <div
+                        key={`file-${i}`}
+                        title={f.name}
+                        className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                      >
+                        <FileText size={12} className="text-ink-500" />
                         <span className="truncate max-w-[6.25rem]">{f.name}</span>
                         <button
                           type="button"
                           onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
-                          className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                          className="text-ink-400 hover:text-ink-800 hover:bg-brand-100 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
                           aria-label={`Remove ${f.name}`}
-                        ><X size={12} /></button>
+                        ><X size={11} /></button>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {/* Textarea — empty-state slightly taller than the in-chat
-                    composer (60px vs 44px) because this is the hero entry
-                    point and the surface should feel inviting. 15px body
-                    line-height 1.5 for cozy single-line, grows to 240px. */}
+                    composer because this is the hero entry point and the
+                    surface should feel inviting. Claude-aligned 15px body,
+                    1.55 line-height; padding tighter than before to match
+                    Claude's compact composer (px-3.5 / pt-3.5 / pb-1). */}
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                   onKeyDown={handleKeyDown}
                   onPaste={handleComposerPaste}
-                  placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Ask a question or run a query…'}
+                  placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Message Ira…'}
                   aria-label="Message IRA"
                   maxLength={MAX_INPUT_CHARS + 200}
-                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-5 pb-1 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[60px] max-h-[240px] text-left"
+                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
                   rows={1}
                 />
 
-                {/* Action row — attach + mode toggle on the left, char counter
-                    + primary CTA on the right. The primary CTA carries a
-                    text label here (vs icon-only in the in-chat composer)
-                    because this is the first-time-user surface and the verb
-                    should be explicit. */}
-                <div className="flex items-center justify-between gap-2 px-3 pb-3">
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      iconOnly
+                {/* Action row — matches the in-thread composer exactly:
+                    single + attach on the left, quiet Query/Workflow picker
+                    + dark Send disc on the right (only renders when there
+                    is input or attachments). */}
+                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+                  <div className="flex items-center">
+                    <button
+                      type="button"
                       onClick={() => setShowDataPicker(true)}
                       aria-label="Attach data sources or files"
                       title="Attach data or files"
+                      className="inline-flex items-center justify-center size-8 rounded-full text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
-                      <Plus size={16} />
-                    </Button>
+                      <Plus size={18} strokeWidth={2} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       role="switch"
@@ -2643,42 +3050,36 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       aria-label="Build a workflow"
                       title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
                       onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         buildWorkflowMode
-                          ? 'bg-brand-50 text-brand-700'
+                          ? 'text-brand-700 hover:bg-brand-50'
                           : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
                       }`}
                     >
-                      <Workflow size={12} className={buildWorkflowMode ? 'text-brand-600' : 'text-ink-400'} />
-                      Build a workflow
+                      {buildWorkflowMode ? 'Workflow' : 'Query'}
+                      <ChevronDown size={14} className="opacity-70" />
                     </button>
-                  </div>
 
-                  <div className="flex items-center gap-2.5">
-                    {inputCount >= WARN_INPUT_CHARS && (
-                      <span
-                        aria-live="polite"
-                        className={`text-[11px] tabular-nums font-medium ${overLimit ? 'text-risk' : 'text-mitigated-700'}`}
+                    {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={handleSend}
+                        disabled={overLimit}
+                        aria-label={overLimit ? 'Message too long' : 'Send message'}
+                        title={overLimit ? 'Message too long' : 'Send · Enter to send, Shift+Enter for new line'}
+                        className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-brand-200 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
-                        {inputCount.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
-                      </span>
+                        <ArrowUp size={16} strokeWidth={2.25} />
+                      </button>
                     )}
-                    <Button
-                      variant="primary"
-                      size="md"
-                      shape="lg"
-                      leftIcon={buildWorkflowMode ? <Workflow size={14} /> : <Send size={14} />}
-                      onClick={handleSend}
-                      disabled={(!input.trim() && files.length === 0 && attachedSources.length === 0) || overLimit}
-                      aria-label={overLimit ? `Message too long (${inputCount.toLocaleString()} / ${MAX_INPUT_CHARS.toLocaleString()} max)` : (buildWorkflowMode ? 'Build workflow' : 'Run a query')}
-                      title={overLimit ? 'Message too long' : 'Enter to send · Shift+Enter for new line'}
-                    >
-                      {buildWorkflowMode ? 'Build workflow' : 'Run a query'}
-                    </Button>
                   </div>
                 </div>
               </div>
 
+              {/* Disclaimer — quiet trust line: 10px, very muted, mt-1, no own bottom margin. */}
+              <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
+                Irame.ai may display inaccurate info, including about people, so double-check its responses.
+              </p>
             </motion.div>
           </div>
         </div>
@@ -2699,8 +3100,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     <div className="flex h-full w-full" style={{ flex: '1 1 0%', minWidth: 0 }}>
       {chatHistoryPanel}
       <div
-        className="flex flex-col h-full bg-hero-pattern bg-grid-subtle"
-        style={{ flex: '1 1 0%', minWidth: 0, background: 'var(--color-canvas)' }}
+        className="flex flex-col h-full chat-canvas-mesh"
+        style={{ flex: '1 1 0%', minWidth: 0 }}
       >
         {/* Claude-style header — title + chevron on left (opens chat history),
             separate icon buttons on the right (no merged chip background). */}
@@ -2712,6 +3113,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               autoFocus
               defaultValue={currentChatTitle === 'New chat' ? '' : currentChatTitle}
               placeholder="Rename chat"
+              onFocus={(e) => {
+                const len = e.currentTarget.value.length;
+                e.currentTarget.setSelectionRange(len, len);
+              }}
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 setChatTitleOverride(v ? v : null);
@@ -2726,7 +3131,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   setEditingTitle(false);
                 }
               }}
-              className="max-w-[60%] text-[16px] font-semibold tracking-tight text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
+              className="max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
             />
           ) : (
             <button
@@ -2734,10 +3139,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
               title="Click for history · Double-click to rename"
               aria-label="Chat history"
-              className="flex items-center gap-1.5 max-w-[60%] text-[16px] font-semibold tracking-tight text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
+              aria-expanded={showChatHistory}
+              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
             >
               <span className="truncate">{currentChatTitle || 'New chat'}</span>
-              <History size={14} className="text-ink-500 shrink-0" />
+              <motion.span
+                animate={{
+                  rotate: showChatHistory ? -180 : 0,
+                  scale: showChatHistory ? 1.05 : 1,
+                }}
+                whileHover={{ scale: 1.12 }}
+                whileTap={{ scale: 0.92 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                className="inline-flex shrink-0 text-ink-500 group-hover:text-ink-700"
+              >
+                <History size={14} />
+              </motion.span>
             </button>
           )}
           <div className="flex items-center gap-2">
@@ -2750,8 +3167,17 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               onClick={() => setShowArtifacts(!showArtifacts)}
               title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
               aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
+              aria-expanded={showArtifacts}
             >
-              <FileText size={14} />
+              <motion.span
+                key={showArtifacts ? 'open' : 'closed'}
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+                className="inline-flex"
+              >
+                {showArtifacts ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+              </motion.span>
             </Button>
             <Button
               variant="ghost"
@@ -2769,14 +3195,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
         {/* Pending Dashboard Banner */}
         {pendingDashboard && (
-          <div className="shrink-0 px-4 py-2.5 bg-brand-50 border-b border-border-light flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-lg bg-ink-900 flex items-center justify-center">
-                <BarChart3 size={14} className="text-white" />
+          <div className="shrink-0 px-4 sm:px-6 py-2.5 bg-brand-50 border-b border-canvas-border flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-8 rounded-lg bg-canvas-elevated border border-brand-200 flex items-center justify-center shrink-0">
+                <BarChart3 size={14} className="text-brand-700" />
               </div>
-              <div>
-                <p className="text-sm font-semibold text-text">Creating: {pendingDashboard.name}</p>
-                <p className="text-xs text-text-muted">Run a query, then add results to your dashboard</p>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-ink-800 truncate">Creating: {pendingDashboard.name}</p>
+                <p className="text-[12px] text-ink-500">Run a query, then add results to your dashboard.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -2820,7 +3246,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           aria-label="Chat conversation"
           className="h-full overflow-y-auto [scrollbar-gutter:stable]"
         >
-          <div className={`max-w-[45rem] mx-auto w-full px-4 sm:px-6 pb-8 space-y-6 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
+          <div className={`max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-8 space-y-10 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
             <AnimatePresence initial={false}>
               {messages.map((msg, msgIdx) => (
                 <motion.div
@@ -2832,7 +3258,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   transition={{ duration: prefersReducedMotion ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }}
                   className={`group flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={msg.role === 'user' ? 'flex flex-col items-end w-fit max-w-[85%] ml-auto' : 'w-full'}>
+                  <div className={msg.role === 'user' ? 'flex flex-col items-end w-fit max-w-[80%] ml-auto' : 'w-full'}>
+                    <div className={msg.role === 'user' ? 'flex flex-col items-end w-full group/msg' : 'w-full group/msg'}>
                     {/* Single thinking trail per IRA message */}
                     {msg.role === 'assistant' && msg.thinking && msg.thinking.length > 0 && (
                       <ThinkingTrail
@@ -2849,11 +3276,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       />
                     )}
 
-                    {/* IRA mark — single brand dot replaces the old uppercase
-                        ALL-CAPS byline. Identity stays, chrome dies. */}
-                    {msg.role === 'assistant' && (msg.text || msg.richType) && (
-                      <div className="size-1.5 rounded-full bg-primary mb-2" aria-label="IRA" />
-                    )}
+                    {/* No assistant avatar / no brand dot — Claude-style.
+                        Identity is carried by alignment (left-flush prose
+                        vs. right-side pill) and by the unique typography
+                        of each voice. */}
 
                     {/* Rich inline components */}
                     {msg.richType === 'clarification' ? (
@@ -2908,7 +3334,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       <div className="space-y-4 w-full">
                         {/* Body text */}
                         {msg.text && (
-                          <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{msg.text}</div>
+                          <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
                         )}
 
                         {/* Affordance: link inline result to the auto-opened panel.
@@ -2925,63 +3351,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           </button>
                         )}
 
-                        {/* KPI scoreboard — mirrors the dashboard widget grid:
-                            4 separate glass-cards (rounded-xl, hairline border,
-                            brand-200 hover) in a 2/4-col grid. Typography matches
-                            DashboardView's KPI block exactly: 26px bold ink-900
-                            value over an 11px uppercase tracking-wide label.
-                            Same widget, same color, both surfaces. */}
-                        {/* Evidence ledger — inline metrics, no cards.
-                            Source Serif numerals + Inter labels, separated
-                            by hairline vertical rules. Reads as the auditor's
-                            scoreboard sitting in the prose, not as a hero-
-                            metric template. Layout: 4 cells per row, wraps
-                            to 2 rows on narrow widths. */}
-                        <div
-                          role="list"
-                          aria-label="Key results"
-                          className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 divide-x divide-canvas-border border-y border-canvas-border py-4"
-                        >
-                          {AUDIT_RESULT.kpis.slice(0, 8).map((kpi, ki) => (
-                            <motion.div
-                              key={kpi.label}
-                              role="listitem"
-                              aria-label={`${kpi.label}: ${kpi.value}`}
-                              initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{
-                                delay: prefersReducedMotion ? 0 : 0.1 + ki * 0.04,
-                                duration: prefersReducedMotion ? 0 : 0.42,
-                                ease: [0.16, 1, 0.3, 1],
-                              }}
-                              className="px-4 first:pl-0 [&:nth-child(4n+1)]:sm:pl-0 [&:nth-child(odd)]:pl-0 sm:[&:nth-child(odd)]:pl-4"
-                            >
-                              <div
-                                className="font-display text-[28px] leading-none tracking-tight text-ink-900 tabular-nums"
-                                aria-hidden="true"
-                              >
-                                {kpi.value}
-                              </div>
-                              <div
-                                className="mt-1.5 text-[12px] text-ink-500 leading-snug"
-                                aria-hidden="true"
-                              >
-                                {kpi.label}
-                              </div>
-                            </motion.div>
+                        {/* KPI scoreboard — mirrors DashboardView's KPI grid
+                            exactly: glass-cards (rounded-xl, hairline border,
+                            brand-200 hover) in a 2/4-col grid. 11px uppercase
+                            label over a 26px bold ink-900 value. Scales to N
+                            rows when the result carries many KPIs — same
+                            widget, same typography on both surfaces. */}
+                        <div role="list" aria-label="Key results" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                          {AUDIT_RESULT.kpis.map((kpi, ki) => (
+                            <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
                           ))}
                         </div>
 
-                        {/* Chart — clean white card sitting on the paper
-                            canvas. Subtle hairline border, no shadow. The
-                            ledger above carries the data, the chart adds
-                            shape. */}
-                        <section
-                          aria-label="Audit result chart"
-                          className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden"
-                        >
-                          <ChartGroup charts={AUDIT_RESULT.charts} embedded />
-                        </section>
+                        {/* Chart — ChartGroup carries its own widget shell
+                            (title, toggle, expand button), matched to the
+                            ResultsTable below so they read as a pair. */}
+                        <ChartGroup charts={AUDIT_RESULT.charts} embedded />
 
                         {/* Table preview */}
                         <ResultsTable
@@ -3124,14 +3509,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         </div>
                       </div>
                     ) : msg.richType === 'summary-kpi' ? (
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {((msg.richData?.kpis as { label: string; value: string; color: string }[] | undefined) || []).map((kpi, ki) => (
-                          <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: ki * 0.1 }}
-                            className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-center"
-                          >
-                            <div className={`text-lg font-semibold tabular-nums ${kpi.color}`}>{kpi.value}</div>
-                            <div className="text-[12px] text-ink-500 mt-0.5">{kpi.label}</div>
-                          </motion.div>
+                          <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
                         ))}
                       </div>
                     ) : msg.richType === 'workflow-checkpoint' ? (
@@ -3267,84 +3647,142 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       })()
                     ) : msg.text ? (
                       msg.role === 'user' ? (
-                        // Purple pill — matches the reference (soft brand-xlight
-                        // fill, brand-700 text, fully-rounded). Single-line
-                        // messages read as a pill; longer ones become elongated
-                        // capsules and still feel cohesive.
-                        // Hover row beneath the bubble carries Edit / Copy /
-                        // Bookmark + the timestamp. When edit is active for
-                        // this message, the bubble becomes an in-place
-                        // textarea with Save/Cancel — no composer trip.
+                        // Editorial margin-note — no pill, no fill, no chrome.
+                        // Right-aligned italic prose anchored to the chat
+                        // column by a 1px brand-300 vertical rule. Reads as
+                        // marginalia in the auditor's own hand, not as a
+                        // chat-app bubble. The rule is the entire visual
+                        // identity of the user voice; everything else is
+                        // type and alignment. Hover row beneath carries
+                        // Edit / Copy / Bookmark + the timestamp. Edit mode
+                        // promotes the line into an inline textarea (which
+                        // does carry a soft fill, since interactive surfaces
+                        // need an affordance).
                         editingMsgId === msg.id ? (
-                          <InlineEditBubble
-                            value={editingDraft}
-                            onChange={setEditingDraft}
-                            onSave={saveEditingMessage}
-                            onCancel={cancelEditingMessage}
-                          />
+                          <AnimatePresence mode="wait">
+                            <InlineEditBubble
+                              key="edit-bubble"
+                              value={editingDraft}
+                              onChange={setEditingDraft}
+                              onSave={saveEditingMessage}
+                              onCancel={cancelEditingMessage}
+                            />
+                          </AnimatePresence>
                         ) : (
                           <>
-                            <div className="px-4 py-2.5 rounded-2xl bg-canvas-elevated text-ink-800 text-sm leading-relaxed max-w-[66ch] border border-canvas-border shadow-sm shadow-ink-900/[0.03]">
+                            <div className="px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[14px] leading-[1.6] whitespace-pre-wrap break-words">
                               {msg.text}
                             </div>
-                            {/* Hover-revealed footer: Edit / Copy / Bookmark
-                                actions + the timestamp. Hidden by default
-                                so the user bubble reads as a clean pill;
-                                hover or keyboard-focus inside the message
-                                wrapper reveals the whole row at once. */}
-                            <div className="mt-1.5 flex items-center justify-end gap-1.5 text-xs text-text-muted opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
-                              <div className="flex items-center gap-0.5">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  iconOnly
-                                  onClick={() => startEditingMessage(msg.id, msg.text)}
-                                  title="Edit message"
-                                  aria-label="Edit message"
-                                >
-                                  <Pencil size={13} />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  iconOnly
-                                  onClick={() => copyMessage(msg)}
-                                  title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
-                                  aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
-                                >
-                                  {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  iconOnly
-                                  pressed={bookmarkedMsgIds.has(msg.id)}
-                                  onClick={() => toggleBookmark(msg.id, msg.text)}
-                                  title={bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
-                                  aria-label={bookmarkedMsgIds.has(msg.id) ? 'Remove bookmark' : 'Bookmark message'}
-                                >
-                                  {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
-                                </Button>
-                              </div>
-                              <span className="tabular-nums">{formatChatTime(msg.timestamp)}</span>
+                            {/* Below the pill: branch arrows + edit pencil.
+                                Arrows render only when the user has edited
+                                this message at least once (branches.length > 1).
+                                Edit pencil is persistent on hover. */}
+                            <div className="mt-1.5 flex items-center gap-1 self-end">
+                              {msg.branches && msg.branches.length > 1 && (() => {
+                                const total = msg.branches.length;
+                                const current = msg.branchIndex ?? (total - 1);
+                                const atStart = current <= 0;
+                                const atEnd = current >= total - 1;
+                                return (
+                                  <div className="inline-flex items-center gap-0.5 mr-0.5 text-ink-400" role="group" aria-label="Switch between edited versions">
+                                    <button
+                                      type="button"
+                                      onClick={() => switchBranch(msg.id, -1)}
+                                      disabled={atStart}
+                                      aria-label="Previous version"
+                                      title="Previous version"
+                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                    >
+                                      <ChevronLeft size={13} />
+                                    </button>
+                                    <span className="px-0.5 text-[11px] tabular-nums font-medium text-ink-500" aria-live="polite">
+                                      {current + 1} / {total}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => switchBranch(msg.id, 1)}
+                                      disabled={atEnd}
+                                      aria-label="Next version"
+                                      title="Next version"
+                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                    >
+                                      <ChevronRight size={13} />
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                              <button
+                                type="button"
+                                onClick={() => startEditingMessage(msg.id, msg.text)}
+                                aria-label="Edit message"
+                                title="Edit"
+                                className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              {/* Bookmark — persistent when starred (filled),
+                                  hover-revealed otherwise. */}
+                              <button
+                                type="button"
+                                onClick={() => toggleBookmark(msg.id, msg.text)}
+                                aria-label={bookmarkedMsgIds.has(msg.id) ? 'Remove bookmark' : 'Bookmark message'}
+                                aria-pressed={bookmarkedMsgIds.has(msg.id)}
+                                title={bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
+                                className={`inline-flex items-center justify-center size-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                                  bookmarkedMsgIds.has(msg.id)
+                                    ? 'text-brand-700 hover:bg-brand-50'
+                                    : 'text-ink-400 hover:text-ink-800 hover:bg-brand-50 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100'
+                                }`}
+                              >
+                                {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+                              </button>
+                              {/* Copy — hover-revealed; flips to a check for ~1.5s. */}
+                              <button
+                                type="button"
+                                onClick={() => copyMessage(msg)}
+                                aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
+                                title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
+                                className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
+                              >
+                                {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                              </button>
+                              {/* Timestamp — sits at the far right, hover-only.
+                                  Hovering it reveals the full date+time in a
+                                  tooltip below (matches Claude's date-tooltip
+                                  direction). */}
+                              <span className="relative group/ts ml-1 inline-flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity">
+                                <span className="text-[11px] tabular-nums text-ink-400 cursor-default">
+                                  {formatChatTime(msg.timestamp)}
+                                </span>
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
+                                  {msg.timestamp.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                </span>
+                              </span>
                             </div>
                           </>
                         )
                       ) : (
-                        // Editorial: AI response is prose, not a bubble. No border, no shadow, no avatar gutter.
-                        // 66ch cap per DESIGN.md "66ch Response Rule" so prose reads as conversation, not document.
-                        <div className="text-base leading-[1.65] text-ink-800 max-w-[66ch]">
-                          {msg.text}
+                        // Editorial: AI response is prose, not a bubble. No
+                        // border, no shadow, no avatar gutter. 15px body /
+                        // 1.65 leading per DESIGN.md, capped at 66ch so prose
+                        // reads as conversation, not document. Any ```fenced```
+                        // code segments are extracted into a CodeBlock toolbar
+                        // panel by renderAssistantText.
+                        <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                          {renderAssistantText(msg.text)}
                         </div>
                       )
                     ) : null}
 
-                    {/* Stopped marker — JetBrains Mono meta line, no side-stripe.
-                        Renders only on assistant messages whose generation was
-                        halted by the user via Esc / Stop. */}
+                    {/* Stopped marker — Inter 11px uppercase, matches the
+                        follow-up category-label system. No side-stripe.
+                        Mono is reserved for verifiable atoms; status is not
+                        an atom, so it gets sans like every other state label.
+                        Renders only on assistant messages whose generation
+                        was halted by the user via Esc / Stop. */}
                     {msg.role === 'assistant' && msg.stopped && (
-                      <div className="mt-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-500">
-                        <Square size={10} className="text-ink-500" fill="currentColor" />
+                      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                        <Square size={9} className="text-ink-500" fill="currentColor" />
                         <span>Stopped</span>
                       </div>
                     )}
@@ -3356,59 +3794,108 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         checkpoint, qna-plan) — those carry their own controls. */}
                     {msg.role === 'assistant' && (
                       (msg.text && !msg.richType) || msg.richType === 'audit-result' || msg.stopped
-                    ) && (
-                      <div className="mt-2 -ml-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          onClick={() => copyMessage(msg)}
-                          title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
-                          aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
-                        >
-                          {copiedMsgId === msg.id ? <Check size={14} /> : <Copy size={14} />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          onClick={() => retryFromMessage(msgIdx)}
-                          disabled={isTyping}
-                          title="Retry"
-                          aria-label="Retry response"
-                        >
-                          <RotateCcw size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          pressed={feedbackByMsgId[msg.id] === 'up'}
-                          onClick={() => setFeedback(msg.id, 'up')}
-                          title="Good response"
-                          aria-label="Mark response as helpful"
-                        >
-                          <ThumbsUp size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          pressed={feedbackByMsgId[msg.id] === 'down'}
-                          onClick={() => setFeedback(msg.id, 'down')}
-                          title="Bad response"
-                          aria-label="Mark response as unhelpful"
-                        >
-                          <ThumbsDown size={14} />
-                        </Button>
-                      </div>
-                    )}
+                    ) && (() => {
+                      // Claude pattern: action bar is hover-only for older
+                      // assistant turns but PERMANENTLY visible on the most
+                      // recent one (the message the user is most likely to
+                      // act on — copy / rate / retry).
+                      const isLastAssistant = msgIdx === messages.length - 1;
+                      const visibilityClass = isLastAssistant
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity';
+                      return (
+                      <div className={`mt-2 -ml-2 flex items-center gap-0.5 ${visibilityClass}`}>
+                        {/* Copy */}
+                        <span className="relative group/copy">
+                          <button
+                            type="button"
+                            onClick={() => copyMessage(msg)}
+                            aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
+                            className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            {copiedMsgId === msg.id ? <Check size={16} /> : <Copy size={16} />}
+                          </button>
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
+                            {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
+                          </span>
+                        </span>
 
-                    {/* Follow-up suggestions — single-column editorial
-                        list. Each row is a verb-prefixed text link, no
-                        cards, no borders, no shadows. Hover shifts the
-                        ink color and slides the chevron. Reads as prose-
-                        adjacent next steps, not as a UI panel. */}
+                        {/* Thumbs up */}
+                        <span className="relative group/up">
+                          <button
+                            type="button"
+                            onClick={() => setFeedback(msg.id, 'up')}
+                            aria-label="Mark response as helpful"
+                            aria-pressed={feedbackByMsgId[msg.id] === 'up'}
+                            className={`inline-flex items-center justify-center size-8 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              feedbackByMsgId[msg.id] === 'up'
+                                ? 'text-brand-700 bg-brand-50'
+                                : 'text-ink-500 hover:text-ink-800 hover:bg-brand-50'
+                            }`}
+                          >
+                            <ThumbsUp size={16} />
+                          </button>
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
+                            Give positive feedback
+                          </span>
+                        </span>
+
+                        {/* Thumbs down */}
+                        <span className="relative group/down">
+                          <button
+                            type="button"
+                            onClick={() => setFeedback(msg.id, 'down')}
+                            aria-label="Mark response as unhelpful"
+                            aria-pressed={feedbackByMsgId[msg.id] === 'down'}
+                            className={`inline-flex items-center justify-center size-8 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              feedbackByMsgId[msg.id] === 'down'
+                                ? 'text-brand-700 bg-brand-50'
+                                : 'text-ink-500 hover:text-ink-800 hover:bg-brand-50'
+                            }`}
+                          >
+                            <ThumbsDown size={16} />
+                          </button>
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
+                            Give negative feedback
+                          </span>
+                        </span>
+
+                        {/* Retry */}
+                        <span className="relative group/retry">
+                          <button
+                            type="button"
+                            onClick={() => retryFromMessage(msgIdx)}
+                            disabled={isTyping}
+                            aria-label="Retry response"
+                            className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
+                            Retry
+                          </span>
+                        </span>
+                      </div>
+                      );
+                    })()}
+
+                    {/* Feedback form renders as a centered modal (see the
+                        Feedback modal block down by the other modals). The
+                        only thing this message still owns is the quiet
+                        post-submission "Thanks" confirmation below. */}
+
+                    {/* "Thanks" confirmation after feedback submitted. */}
+                    {msg.role === 'assistant' && feedbackSubmittedIds.has(msg.id) && (!feedbackPopover || feedbackPopover.msgId !== msg.id) && (
+                      <p className="mt-1.5 text-[11px] text-ink-400">Feedback sent. Thank you.</p>
+                    )}
+                    </div>
+
+                    {/* Follow-up suggestions — Claude-style chip row.
+                        Wrapping horizontal flex of small rounded pills,
+                        no heading, no category labels. Hover lifts the
+                        chip to brand-50 and tints the border to brand-200.
+                        In our theme: canvas-elevated fill + canvas-border
+                        at rest, brand-50 + brand-200 on hover. */}
                     {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && (
                       <motion.div
                         role="region"
@@ -3416,59 +3903,36 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: prefersReducedMotion ? 0 : 0.3, duration: prefersReducedMotion ? 0 : 0.2 }}
-                        className="mt-1"
+                        className="mt-4 flex flex-wrap gap-2"
                       >
-                        <div className="text-[12px] text-ink-500 mb-2">What next?</div>
-                        <ul role="list" className="divide-y divide-canvas-border/70 border-y border-canvas-border/70">
-                          {msg.followUps.map((q, i) => {
-                            const isSelected = selectedFollowUpByMsgId[msg.id] === q;
-                            const { category } = classifyFollowUp(q);
-                            return (
-                              <motion.li
-                                key={i}
-                                initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{
-                                  delay: prefersReducedMotion ? 0 : 0.32 + i * 0.04,
-                                  duration: prefersReducedMotion ? 0 : 0.3,
-                                  ease: [0.16, 1, 0.3, 1],
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                    handleFollowUpClick(q);
-                                  }}
-                                  aria-pressed={isSelected}
-                                  aria-label={`${category}: ${q}`}
-                                  className={`group/row w-full flex items-baseline gap-3 text-left py-2.5 px-1 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm transition-colors duration-200 ${
-                                    isSelected ? 'text-brand-700' : 'text-ink-800 hover:text-brand-700'
-                                  }`}
-                                >
-                                  <span
-                                    className={`shrink-0 text-[11px] font-medium uppercase tracking-[0.08em] w-[88px] transition-colors duration-200 ${
-                                      isSelected ? 'text-brand-500' : 'text-ink-400 group-hover/row:text-brand-500'
-                                    }`}
-                                    aria-hidden="true"
-                                  >
-                                    {category}
-                                  </span>
-                                  <span className="flex-1 text-[14px] leading-snug">{q}</span>
-                                  <ArrowRight
-                                    size={14}
-                                    aria-hidden="true"
-                                    className={`shrink-0 self-center transition-[opacity,transform,color] duration-200 ${
-                                      isSelected
-                                        ? 'opacity-100 text-brand-500 translate-x-0'
-                                        : 'opacity-0 -translate-x-1 text-ink-400 group-hover/row:opacity-100 group-hover/row:translate-x-0 group-hover/row:text-brand-500'
-                                    }`}
-                                  />
-                                </button>
-                              </motion.li>
-                            );
-                          })}
-                        </ul>
+                        {msg.followUps.map((q, i) => {
+                          const isSelected = selectedFollowUpByMsgId[msg.id] === q;
+                          return (
+                            <motion.button
+                              key={i}
+                              type="button"
+                              onClick={() => {
+                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                handleFollowUpClick(q);
+                              }}
+                              aria-pressed={isSelected}
+                              initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{
+                                delay: prefersReducedMotion ? 0 : 0.32 + i * 0.04,
+                                duration: prefersReducedMotion ? 0 : 0.3,
+                                ease: [0.16, 1, 0.3, 1],
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                                isSelected
+                                  ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                                  : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+                              }`}
+                            >
+                              <span>{q}</span>
+                            </motion.button>
+                          );
+                        })}
                       </motion.div>
                     )}
                   </div>
@@ -3486,44 +3950,34 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               >
                 <div className="w-full">
                   <div className="flex-1 min-w-0">
-                    <div className="size-1.5 rounded-full bg-primary mb-2" aria-label="IRA" />
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <span className="text-xs font-semibold text-text">IRA</span>
-                      <span className="text-xs text-text-muted">is thinking…</span>
-                    </div>
+                    {/* No avatar, no dot — Claude-style. The signal is
+                        carried by a single quiet beat: either the
+                        live-thinking trail (when reasoning steps stream
+                        through) or three pulsing dots. Claude never
+                        doubles up indicators; the previous skeleton bars
+                        competed with the dot pulse and made the surface
+                        read as "loading" rather than "thinking". */}
 
-                      {thinkingSteps.length > 0 && (
+                      {thinkingSteps.length > 0 ? (
                         <div className="mb-2">
-                          <div className="pl-3 border-l-2 border-primary/20 space-y-1">
+                          <div className="pl-3 border-l border-canvas-border space-y-1">
                             {thinkingSteps.map((step, i) => (
-                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-xs text-text-muted flex items-center gap-1.5">
-                                <div className={`w-1.5 h-1.5 rounded-full ${i === thinkingSteps.length - 1 ? 'bg-primary' : 'bg-primary/30'}`} />
+                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[12px] text-ink-500 flex items-center gap-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full ${i === thinkingSteps.length - 1 ? 'bg-primary' : 'bg-brand-200'}`} />
                                 {step}
                               </motion.div>
                             ))}
                           </div>
                         </div>
-                      )}
-
-                      {thinkingSteps.length === 0 && (
-                        <div className="inline-flex items-center gap-1.5 px-1 py-2">
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 py-1.5" aria-label="Thinking">
                           <div className="flex gap-1.5 items-center h-5">
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
-                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} className="w-1.5 h-1.5 rounded-full bg-ink-300" />
+                            <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity, delay: 0, ease: 'easeInOut' }} className="w-1.5 h-1.5 rounded-full bg-ink-400" />
+                            <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity, delay: 0.2, ease: 'easeInOut' }} className="w-1.5 h-1.5 rounded-full bg-ink-400" />
+                            <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity, delay: 0.4, ease: 'easeInOut' }} className="w-1.5 h-1.5 rounded-full bg-ink-400" />
                           </div>
                         </div>
                       )}
-
-                      {/* Response-slot skeleton — three shimmer bars showing
-                          where the assistant text will land. Gives the eye a
-                          stable anchor instead of jumping when content arrives.
-                          Pulse gated by motion-safe so reduced-motion users see a static placeholder. */}
-                      <div className="space-y-2 max-w-[66ch] mt-1" aria-hidden="true">
-                        <div className="h-3 w-[92%] rounded-md bg-brand-50 motion-safe:animate-pulse" />
-                        <div className="h-3 w-[76%] rounded-md bg-brand-50 motion-safe:animate-pulse" style={{ animationDelay: '120ms' }} />
-                        <div className="h-3 w-[60%] rounded-md bg-brand-50 motion-safe:animate-pulse" style={{ animationDelay: '240ms' }} />
-                      </div>
                   </div>
                 </div>
               </motion.div>
@@ -3533,11 +3987,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
           {/* Inline rich messages render the loader + clarification — no global panel */}
         </div>
-          {/* Soft fade — the last message tucks under a faint gradient before
-              the composer, so content slides under chrome rather than meeting
-              it at a hard seam. Rendered FIRST so the scroll-to-bottom pill
-              stacks above it. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-canvas to-transparent z-[1]" aria-hidden="true" />
+          {/* Fade removed — the tinted chat-canvas mesh already provides
+              ambient separation between the message stream and the composer,
+              so a hard-edged gradient strip was just visual noise. */}
           {/* Scroll-to-bottom pill — appears when the user has scrolled up
               more than 100px from the bottom. Click jumps back to the latest.
               z-20 keeps it above any rich result content (action bars,
@@ -3546,24 +3998,25 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             {showScrollToBottom && (
               <motion.button
                 key="scroll-to-bottom"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
                 onClick={scrollToBottom}
                 aria-label="Scroll to latest message"
                 title="Scroll to latest"
-                className="absolute left-1/2 -translate-x-1/2 bottom-5 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-canvas-elevated border border-canvas-border text-xs font-medium text-ink-600 shadow-md shadow-ink-900/[0.08] hover:bg-brand-50 hover:text-ink-800 hover:border-brand-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="absolute left-1/2 -translate-x-1/2 bottom-5 z-20 inline-flex items-center justify-center size-9 rounded-full bg-canvas-elevated border border-canvas-border text-ink-600 hover:bg-brand-50 hover:text-ink-800 hover:border-brand-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <ArrowDown size={14} />
-                Latest
+                <ArrowDown size={16} />
               </motion.button>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Input area */}
-        <div className="shrink-0 px-4 sm:px-6 pb-5 max-w-[45rem] mx-auto w-full">
+        {/* Input area — full 52.5rem column at desktop. Matches the
+            messages column's true 52.5rem width so both surfaces span
+            edge-to-edge identically. px-4 retained on mobile only. */}
+        <div className="shrink-0 pb-2 max-w-[52.5rem] mx-auto w-full px-4 sm:px-0">
           {/* Workflow clarification (legacy ClarificationCard kept for the workflow flow only) */}
           <AnimatePresence>
             {showClarificationCard && workflowBuildPhase > 0 && (
@@ -3580,27 +4033,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             )}
           </AnimatePresence>
 
-          {openClarification ? (
-            // Audit-query clarification — docked picker replaces the chat input until submitted/dismissed
-            <ClarificationBlock
-              data={openClarification.richData as unknown as ClarificationData}
-              onAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
-              onSubmit={() => submitClarification(openClarification.id)}
-              onSkipAll={() => submitClarification(openClarification.id, true)}
-              onSkipCurrent={(qi) => skipClarificationQuestion(openClarification.id, qi)}
-            />
-          ) : (
+          {openClarification && (
+            // Audit-query clarification — Claude pattern: sits ABOVE the
+            // chat composer so the user can either pick an option or
+            // bypass the form and reply directly via the composer below.
+            <div className="mb-2">
+              <ClarificationBlock
+                data={openClarification.richData as unknown as ClarificationData}
+                onAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
+                onSubmit={() => submitClarification(openClarification.id)}
+                onSkipAll={() => submitClarification(openClarification.id, true)}
+                onSkipCurrent={(qi) => skipClarificationQuestion(openClarification.id, qi)}
+              />
+            </div>
+          )}
+          {(
             <>
               {/* Locked Workflow-mode pill — appears once Path 3 has flipped the
                   thread. Non-clickable on purpose: PRD says toggle is irreversible
                   per thread. To do a query again, user starts + New chat. */}
               {lockedAsWorkflow && (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-text text-xs font-semibold cursor-default select-none">
-                    <Lock size={12} /> Workflow mode
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold uppercase tracking-[0.06em] cursor-default select-none">
+                    <Lock size={11} /> Workflow mode
                   </div>
-                  <span className="text-xs text-text-muted">
-                    Switched at save. Start a <button onClick={resetChat} className="underline hover:text-primary cursor-pointer">new chat</button> for a query.
+                  <span className="text-[12px] text-ink-500">
+                    Switched at save. Start a <button onClick={resetChat} className="underline decoration-ink-300 underline-offset-2 hover:text-brand-700 hover:decoration-brand-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm">new chat</button> for a query.
                   </span>
                 </div>
               )}
@@ -3613,20 +4071,28 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               >
                 {/* Drop overlay — only renders during an active file drag.
                     Covers the entire composer with a brand-tinted veil + a
-                    dashed border so the drop affordance reads at a glance. */}
-                {isDragging && (
-                  <div
-                    aria-hidden="true"
-                    className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.5rem] bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
-                  >
-                    <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
-                      <Paperclip size={14} />
-                      <span>Drop to attach</span>
-                    </div>
-                  </div>
-                )}
+                    dashed border so the drop affordance reads at a glance.
+                    Reveals on a 120ms fade so it doesn't snap in. */}
+                <AnimatePresence>
+                  {isDragging && (
+                    <motion.div
+                      key="composer-drop-overlay"
+                      aria-hidden="true"
+                      initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
+                    >
+                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                        <Paperclip size={14} />
+                        <span>Drop to attach</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                <div className="rounded-[1.5rem]">
+                <div className="rounded-2xl">
                   {/* Attachment chips — picked sources + fresh uploads. Single
                       horizontally-scrolling row inside the composer surface so
                       they read as part of the message you're composing, not
@@ -3634,29 +4100,39 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   {(files.length > 0 || attachedSources.length > 0) && (
                     <div className="composer-chips-row flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1">
                       {attachedSources.map((s, i) => (
-                        <div key={`src-${i}`} title={s.kind === 'source' ? s.name : undefined} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
+                        <div
+                          key={`src-${i}`}
+                          title={s.kind === 'source' ? s.name : undefined}
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                        >
                           {s.kind === 'source' && (
                             <>
-                              <span className="text-[10px] uppercase font-bold tracking-[0.06em] text-ink-400">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                              <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                               <span className="truncate max-w-[10rem]">{s.name}</span>
                             </>
                           )}
                           <button
                             type="button"
                             onClick={() => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
-                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            className="text-ink-400 hover:text-ink-800 hover:bg-brand-100 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
                             aria-label={`Remove ${s.kind === 'source' ? s.name : 'attachment'}`}
-                          ><X size={12} /></button>
+                          ><X size={11} /></button>
                         </div>
                       ))}
                       {files.map((f, i) => (
-                        <div key={`file-${i}`} title={f.name} className="flex items-center gap-1 bg-brand-50 text-ink-700 text-xs px-2 py-1 rounded-md font-medium border border-canvas-border shrink-0">
-                          <FileText size={12} className="text-ink-400" />
-                          <span className="truncate max-w-[6.25rem]">{f.name}</span>
+                        <div
+                          key={`file-${i}`}
+                          title={f.name}
+                          className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[13px] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0 transition-colors duration-150 hover:border-brand-200"
+                        >
+                          <span className="inline-flex items-center justify-center size-6 rounded bg-brand-50 text-brand-700 shrink-0">
+                            <FileText size={13} />
+                          </span>
+                          <span className="truncate max-w-[10rem]">{f.name}</span>
                           <button
                             type="button"
                             onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
-                            className="text-ink-400 hover:text-ink-700 ml-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                            className="text-ink-400 hover:text-ink-800 hover:bg-brand-50 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
                             aria-label={`Remove ${f.name}`}
                           ><X size={12} /></button>
                         </div>
@@ -3664,39 +4140,40 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                     </div>
                   )}
 
-                  {/* Textarea — 15px body, 1.5 line-height. Empty state stays
-                      compact (44px min) so the composer doesn't read as a
-                      half-empty room; grows to ~12 rows for multi-paragraph
-                      drafts, then scrolls internally. */}
+                  {/* Textarea — Claude-aligned. Generous side padding so
+                      the text reads inside a roomy pill, not against the
+                      edge. min-h kept tight so the empty pill stays compact. */}
                   <textarea
                     ref={textareaRef}
                     value={input}
                     onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                     onKeyDown={handleKeyDown}
                     onPaste={handleComposerPaste}
-                    placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Ask anything or run a query…'}
+                    placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
                     aria-label="Message IRA"
                     maxLength={MAX_INPUT_CHARS + 200}
-                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-3 pb-1 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[240px]"
+                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
                   />
 
-                  {/* Action row — attach + mode toggle on the left;
-                      char counter (only near the limit) + send/stop on the
-                      right. The keyboard hint moved to the send button's
-                      tooltip so the row reads quieter at rest. */}
-                  <div className="flex items-center justify-between gap-2 px-2 pb-2">
-                    <div className="flex items-center gap-0.5">
-                      <Button
-                        variant="ghost"
-                        size="md"
-                        iconOnly
+                  {/* Action row — Claude exact shape: single "+" attach on
+                      the left; quiet text+chevron "Query / Workflow" picker
+                      on the right; Send button ONLY when there is input or
+                      an attachment. Empty composer hides Send entirely. */}
+                  <div className="flex items-center justify-between gap-2 px-3 pb-4">
+                    <div className="flex items-center">
+                      <button
+                        type="button"
                         onClick={() => setShowDataPicker(true)}
                         aria-label="Attach data sources or files"
                         title="Attach data or files"
+                        className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
-                        <Paperclip size={15} />
-                      </Button>
+                        <Plus size={18} strokeWidth={2} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         role="switch"
@@ -3704,62 +4181,59 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         aria-label="Build a workflow"
                         title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
                         onClick={() => setBuildWorkflowMode(v => !v)}
-                        className={`flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                           buildWorkflowMode
-                            ? 'bg-brand-50 text-brand-700'
+                            ? 'text-brand-700 hover:bg-brand-50'
                             : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
                         }`}
                       >
-                        <Workflow size={12} className={buildWorkflowMode ? 'text-brand-600' : 'text-ink-400'} />
-                        Build a workflow
+                        {buildWorkflowMode ? 'Workflow' : 'Query'}
+                        <ChevronDown size={14} className="opacity-70" />
                       </button>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      {/* Char counter — soft warn at 3000, red at 4000+. Only
-                          surfaces when there's something worth surfacing. */}
-                      {inputCount >= WARN_INPUT_CHARS && (
-                        <span
-                          aria-live="polite"
-                          className={`text-[11px] tabular-nums font-medium ${
-                            overLimit ? 'text-risk' : 'text-mitigated-700'
-                          }`}
-                        >
-                          {inputCount.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
-                        </span>
-                      )}
 
                       {isTyping ? (
-                        <Button
-                          variant="stop"
-                          size="md"
-                          iconOnly
-                          shape="full"
+                        <button
+                          type="button"
                           onClick={stopGenerating}
                           aria-label="Stop generating"
                           title="Stop generating (Esc)"
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-canvas-elevated hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
-                          <Square size={13} fill="currentColor" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          size="md"
-                          iconOnly
-                          shape="full"
+                          <Square size={11} fill="currentColor" />
+                        </button>
+                      ) : (input.trim() || files.length > 0 || attachedSources.length > 0) ? (
+                        <button
+                          type="button"
                           onClick={handleSend}
-                          disabled={(!input.trim() && files.length === 0 && attachedSources.length === 0) || overLimit}
-                          aria-label={overLimit ? `Message too long (${inputCount.toLocaleString()} / ${MAX_INPUT_CHARS.toLocaleString()} max)` : 'Send message'}
-                          title={overLimit ? 'Message too long' : 'Send · Enter for send, Shift+Enter for new line'}
+                          disabled={overLimit}
+                          aria-label={overLimit ? `Message too long` : 'Send message'}
+                          title={overLimit ? 'Message too long' : 'Send · Enter to send, Shift+Enter for new line'}
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-brand-200 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
-                          <Send size={14} />
-                        </Button>
-                      )}
+                          <ArrowUp size={16} strokeWidth={2.25} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
               </div>
             </>
+          )}
+          {/* Below the composer: when clarification is open, surface the
+              keyboard-hint trio centered (Claude pattern). Otherwise the
+              standard "may display inaccurate info" disclaimer. */}
+          {openClarification ? (
+            <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-ink-400">
+              <span><span className="text-ink-500">↑↓</span> to navigate</span>
+              <span aria-hidden="true" className="text-canvas-border">·</span>
+              <span><span className="text-ink-500">Enter</span> to select</span>
+              <span aria-hidden="true" className="text-canvas-border">·</span>
+              <span>or type below</span>
+            </div>
+          ) : (
+            <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
+              Irame.ai may display inaccurate info, including about people, so double-check its responses.
+            </p>
           )}
         </div>
       </div>
@@ -3785,6 +4259,166 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             />
           );
         })()}
+      </AnimatePresence>
+
+      {/* Feedback modal — centered, opens on click of 👍 / 👎 on any
+          assistant message. Carries a reason dropdown for 👎 (Claude
+          pattern) and a textarea for the open-ended note. */}
+      <AnimatePresence>
+        {feedbackPopover && (
+          <motion.div
+            key="feedback-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            onClick={cancelFeedback}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 backdrop-blur-[2px]"
+          >
+            <motion.div
+              key="feedback-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="feedback-modal-title"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { e.preventDefault(); cancelFeedback(); }
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitFeedback(); }
+              }}
+              className="w-[32rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h2 id="feedback-modal-title" className="text-[15px] font-semibold text-ink-800 mb-1">
+                    {feedbackPopover.kind === 'up' ? 'What did you like about this response?' : 'What was unsatisfying about this response?'}
+                  </h2>
+                  <p className="text-[12px] text-ink-500">Your feedback helps Ira improve. Optional.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelFeedback}
+                  aria-label="Close"
+                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              {feedbackPopover.kind === 'down' && (
+                <div className="mb-3">
+                  <label className="block text-[11px] font-medium text-ink-500 uppercase tracking-[0.06em] mb-1.5">
+                    What type of issue do you wish to report?
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={feedbackReason}
+                      onChange={(e) => setFeedbackReason(e.target.value)}
+                      className="w-full appearance-none bg-canvas border border-canvas-border rounded-lg px-3 pr-8 h-9 text-[13px] text-ink-800 outline-none focus:border-brand-300 transition-colors cursor-pointer"
+                    >
+                      <option value="">Select an issue…</option>
+                      {FEEDBACK_REASONS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+              <textarea
+                value={feedbackDraft}
+                onChange={(e) => setFeedbackDraft(e.target.value)}
+                autoFocus
+                rows={4}
+                placeholder={feedbackPopover.kind === 'up' ? 'Was it accurate? Well-explained? Saved you time?' : 'Describe what was wrong (optional)'}
+                className="w-full bg-canvas border border-canvas-border rounded-lg px-3 py-2.5 text-[13px] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-300 transition-colors resize-none"
+              />
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={cancelFeedback}
+                  className="inline-flex items-center h-8 px-3 rounded-md text-[13px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitFeedback}
+                  className="inline-flex items-center h-8 px-3.5 rounded-md text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Send feedback
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Keyboard-shortcuts help modal — opens on Cmd/Ctrl + /. Lists the
+          Claude-aligned shortcuts the chat surface supports. */}
+      <AnimatePresence>
+        {showShortcutsModal && (
+          <motion.div
+            key="shortcuts-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            onClick={() => setShowShortcutsModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 backdrop-blur-[2px]"
+          >
+            <motion.div
+              key="shortcuts-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="shortcuts-title"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => { if (e.key === 'Escape') setShowShortcutsModal(false); }}
+              className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 id="shortcuts-title" className="text-[15px] font-semibold text-ink-800">Keyboard shortcuts</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowShortcutsModal(false)}
+                  aria-label="Close"
+                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <ul className="space-y-2.5">
+                {[
+                  { label: 'New chat', keys: ['⌘', '⇧', 'O'] },
+                  { label: 'Toggle chat history', keys: ['⌘', '.'] },
+                  { label: 'Show this shortcuts panel', keys: ['⌘', '/'] },
+                  { label: 'Send message', keys: ['↵'] },
+                  { label: 'New line in composer', keys: ['⇧', '↵'] },
+                  { label: 'Stop generating', keys: ['Esc'] },
+                  { label: 'Edit last message (when composer empty)', keys: ['↑'] },
+                ].map(({ label, keys }) => (
+                  <li key={label} className="flex items-center justify-between gap-4">
+                    <span className="text-[13px] text-ink-700">{label}</span>
+                    <span className="inline-flex items-center gap-1">
+                      {keys.map((k, i) => (
+                        <kbd key={i} className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-md bg-canvas border border-canvas-border text-[11px] font-medium font-mono text-ink-700 tabular-nums">
+                          {k}
+                        </kbd>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-[11px] text-ink-400">Cmd on Mac, Ctrl on Windows / Linux.</p>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Data picker modal — attach existing sources or upload fresh files */}
