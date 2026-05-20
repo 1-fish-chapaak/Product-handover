@@ -1,7 +1,7 @@
 // ─── Internal Audit Announcement — Types & Helpers ────────────────────────
 
 export type AnnouncementStatus = 'DRAFT' | 'READY_TO_SEND' | 'SENT' | 'ACKNOWLEDGED';
-export type AnnouncementAction = 'DRAFT_CREATED' | 'UPDATED' | 'SENT' | 'ACKNOWLEDGED';
+export type AnnouncementAction = 'DRAFT_CREATED' | 'UPDATED' | 'SENT' | 'ACKNOWLEDGED' | 'SAVED_DRAFT';
 
 export interface AnnouncementHistoryItem {
   id: string;

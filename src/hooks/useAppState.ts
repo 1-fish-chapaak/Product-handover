@@ -27,6 +27,14 @@ export type View =
   | 'audit-risk-register'
   | 'audit-planning'
   | 'programs'
+  // Engagements
+  | 'engagements'
+  | 'engagement-overview'
+  | 'engagement-case-management'
+  | 'my-queue'
+  | 'closed-case-sampling'
+  | 'vendor-360'
+  | 'engagement-compare'
   // Execution
   | 'audit-execution'
   | 'engagement-detail'
@@ -60,6 +68,9 @@ export type View =
   | 'chat-trash'
   // Dev-only preview routes
   | 'dev-configurable-engagement-v3'
+  // Platform
+  | 'platform-usage'
+  | 'racm-full-editor'
   // Engagement Config (under Programs)
   | 'engagement-config';
 

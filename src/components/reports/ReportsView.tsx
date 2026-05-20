@@ -4211,7 +4211,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
                   if (section.kind === 'cover') {
                     return [
-                      <Reorder.Item key={`${section.id}-item`} {...sectionProps}>
+                      <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
                           <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                             <FloatingLines
@@ -5076,6 +5076,7 @@ export default function ReportsView({
                             generatedAt: today,
                             status: 'draft',
                             pages: Math.max(1, sectionsCount),
+                            queries: 0,
                             isEmpty: true,
                           };
                           setGeneratedReports(prev => [newReport, ...prev]);
@@ -5276,6 +5277,7 @@ export default function ReportsView({
                         generatedAt: today,
                         status: 'draft',
                         pages: Math.max(1, sectionsCount),
+                        queries: 0,
                         isEmpty: true,
                       };
                       setGeneratedReports(prev => [newReport, ...prev]);

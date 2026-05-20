@@ -20,7 +20,7 @@ const STATUS_CLS: Record<AnnouncementStatus, string> = {
   SENT: 'bg-emerald-50 text-emerald-700',
   ACKNOWLEDGED: 'bg-primary/10 text-primary',
 };
-const ACTION_CLS = { DRAFT_CREATED: 'text-gray-500', UPDATED: 'text-blue-600', SENT: 'text-emerald-600', ACKNOWLEDGED: 'text-primary' };
+const ACTION_CLS: Record<string, string> = { DRAFT_CREATED: 'text-gray-500', UPDATED: 'text-blue-600', SENT: 'text-emerald-600', ACKNOWLEDGED: 'text-primary', SAVED_DRAFT: 'text-gray-500' };
 
 interface Props {
   engagement: ConfigurableEngagement;

@@ -411,7 +411,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                             <button onClick={() => selectAllWfs(ctrl)}
                               className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">Select All ({wfCount})</button>
                             {selectedCount > 0 && (
-                              <button onClick={clearSelection}
+                              <button onClick={clearWfSelection}
                                 className="text-[10px] font-semibold text-gray-400 hover:text-gray-600 cursor-pointer">Clear</button>
                             )}
                             {selectedCount > 0 && (
@@ -487,7 +487,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
       {showBulkModal && selectedLibraryWorkflows.length > 0 && (
         <BulkExecuteModal
           selectedWorkflows={selectedLibraryWorkflows}
-          onClose={() => { setShowBulkModal(false); setRunControlId(null); }}
+          onClose={() => { setShowBulkModal(false); }}
           onContinue={() => handleBulkRunComplete()}
         />
       )}
