@@ -20,6 +20,7 @@ import type { CommonDetails } from './components';
 import AutomationPortfolioView from './AutomationPortfolioView';
 import ComplianceEngagementView from './ComplianceEngagementView';
 import InternalAuditAssignmentView from './InternalAuditAssignmentView';
+import EngagementLibraryView from './EngagementLibraryView';
 import EngagementExecutionV2 from '../engagement-execution-v2/EngagementExecutionV2';
 
 // ─── Step definitions ─────────────────────────────────────────────────────
@@ -277,26 +278,25 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
     return 'Create Automation Project';
   }, [selectedPattern]);
 
-  // ── Hub: pattern selection (landing page for Work Type) ────────────────
+  // ── Hub: unified Engagement Library ────────────────────────────────────
 
   const renderHub = () => (
-    <div className="max-w-3xl mx-auto py-6 px-4">
-      <PatternSelectionStep
-        selectedPattern={selectedPattern}
-        onSelect={(pt) => {
-          handlePatternSelect(pt);
-          if (pt === EPT.COMPLIANCE_CONTROL_TESTING) {
-            setShowComplianceView(true);
-          } else if (pt === EPT.WORKFLOW_AUTOMATION_PROJECT) {
-            setShowPortfolio(true);
-          } else if (pt === EPT.INTERNAL_AUDIT_ASSIGNMENT) {
-            setShowIAView(true);
-          } else {
-            openWizardModal(pt);
-          }
-        }}
-      />
-    </div>
+    <EngagementLibraryView
+      onOpenEngagement={(id, type) => {
+        if (type === 'Compliance') {
+          setShowComplianceView(true);
+        } else if (type === 'Internal Audit') {
+          setShowIAView(true);
+        } else if (type === 'Automation') {
+          setShowPortfolio(true);
+        }
+      }}
+      onPlanEngagement={() => {
+        // Open wizard modal at pattern selection (step 0)
+        setCurrentStep(0);
+        setShowWizardModal(true);
+      }}
+    />
   );
 
   // ── Determine base view ────────────────────────────────────────────────

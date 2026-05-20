@@ -111,7 +111,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
     <div className="space-y-6">
       {/* Back */}
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer">
-        <ArrowLeft size={14} />Back to Work Type
+        <ArrowLeft size={14} />Back to Engagement Library
       </button>
 
       {/* Header — matches Process Hub style */}
