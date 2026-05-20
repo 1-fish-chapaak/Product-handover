@@ -61,6 +61,8 @@ import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPane
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
 import NotificationDrawer from './components/notifications/NotificationDrawer';
 import { createNotification, type PlatformNotification } from './data/notifications';
+// V3 Configurable Engagement — dev-only preview (not wired to main flow)
+import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
 
 const LAUNCHED_FROM_REPORT =
   typeof window !== 'undefined' &&
@@ -147,13 +149,7 @@ export default function App() {
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
   const [controlDrawerData, setControlDrawerData] = useState<any>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
-  // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' };
-  const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
-  const openRacmFullEditor = (ctx: RacmEditorContext) => {
-    setRacmEditorContext(ctx);
-    setView('racm-full-editor');
-  };
+  const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
@@ -379,11 +375,23 @@ export default function App() {
         );
 
       case 'workflow-detail': {
-        const fromLibrary = state.selectedWorkflowId?.startsWith('lw-');
+        const fromLibrary = state.selectedWorkflowId?.startsWith('lw-') || workflowBackView === 'workflow-library';
+        const fromProcessHub = workflowBackView === 'business-processes';
         return (
           <WorkflowDetail
             workflowId={state.selectedWorkflowId!}
-            onBack={() => fromLibrary ? setView('workflow-library') : setSelectedWorkflow(null)}
+            onBack={() => {
+              if (fromProcessHub) {
+                setSelectedWorkflow(null);
+                setView('business-processes' as any);
+                setWorkflowBackView(null);
+              } else if (fromLibrary) {
+                setView('workflow-library');
+                setWorkflowBackView(null);
+              } else {
+                setSelectedWorkflow(null);
+              }
+            }}
             onOpenExecutor={() => openWorkflowExecutor(state.selectedWorkflowId!)}
             onEditInChat={() => enterWorkflowMode({ workflowId: state.selectedWorkflowId! })}
           />
@@ -431,6 +439,11 @@ export default function App() {
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            onNavigateToExecution={(engId) => {
+              setEngagementBackView('programs');
+              openAuditExecution(engId);
+              setView('engagement-detail' as any);
+            }}
           />
         );
 
@@ -445,12 +458,10 @@ export default function App() {
               openAuditExecution(engId);
               setView('engagement-detail' as any);
             }}
-            onOpenRacmEditor={(racm) => openRacmFullEditor({
-              racmId: racm.id,
-              racmName: racm.name,
-              processLabel: racm.process,
-              backView: 'bp-detail',
-            })}
+            onOpenWorkflowDetail={(wfId) => {
+              setWorkflowBackView('business-processes');
+              setSelectedWorkflow(wfId);
+            }}
           />
         );
 
@@ -471,7 +482,6 @@ export default function App() {
           <EngagementExecutionV2
             engagementId={state.selectedEngagementId ?? undefined}
             onBack={() => setView(engagementBackView)}
-            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
 
@@ -575,12 +585,6 @@ export default function App() {
               setView('engagement-detail' as any);
             }}
             onOpenCaseManagement={openCaseManagement}
-            onOpenRacmFullEditor={() => openRacmFullEditor({
-              racmId: 'racm-procurement-fy26',
-              racmName: 'Procurement SOP — Budget to Payment RACM',
-              processLabel: 'P2P',
-              backView: 'engagement-overview',
-            })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
@@ -613,11 +617,10 @@ export default function App() {
         return <AuditPlanningPage
           onOpenEngagements={() => setView('engagements')}
           onNavigateToExecution={(engId) => {
-            setEngagementBackView('audit-planning');
-            openAuditExecution(engId);
-            setView('engagement-detail' as any);
-          }}
-        />;
+          setEngagementBackView('audit-planning');
+          openAuditExecution(engId);
+          setView('engagement-detail' as any);
+        }} />;
 
       case 'knowledge-hub':
         return <KnowledgeHubView />;
@@ -633,16 +636,6 @@ export default function App() {
       case 'governance-racm-detail':
       case 'governance-racm-generate':
         return <RACMView />;
-
-      case 'racm-full-editor':
-        return (
-          <RacmFullPageEditor
-            onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
-            racmName={racmEditorContext?.racmName ?? 'Procurement SOP — Budget to Payment RACM'}
-            racmId={racmEditorContext?.racmId}
-            processLabel={racmEditorContext?.processLabel}
-          />
-        );
 
       case 'governance-controls':
       case 'governance-control-detail':
@@ -692,10 +685,6 @@ export default function App() {
           />
         );
 
-      // System
-      case 'platform-usage':
-        return <PlatformUsageView />;
-
       // Admin
       case 'admin-users':
         return <AdminView activeTab="users" />;
@@ -707,6 +696,15 @@ export default function App() {
         return <AdminView activeTab="integrations" />;
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
+
+      // V3 Configurable Engagement — dev-only preview route
+      case 'dev-configurable-engagement-v3':
+      case 'engagement-config':
+        return (
+          <div className="px-8 py-6 h-full overflow-y-auto">
+            <ConfigurableEngagementWizard onNavigateToView={setView} />
+          </div>
+        );
 
       default:
         return (
