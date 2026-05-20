@@ -195,7 +195,7 @@ export function deriveEvidenceMatrixReadiness(ctrl: ExecutionControl): EvidenceM
 }
 
 // ─── 7. deriveNextAction ──────────────────────────────────────────────────
-// Simplified flow: Overview → Samples → Attribute Testing → Working Paper → Review → Conclusion
+// Simplified flow: Overview → Request PBC → Samples → Attribute Testing → Working Paper → Review → Conclusion
 
 export function deriveNextAction(ctrl: ExecutionControl): string {
   const exec = ctrl.execution;
@@ -252,11 +252,13 @@ export interface StepState {
 
 export interface StepAvailability {
   overview: StepState;
+  requestPbc: StepState;
   samples: StepState;
   attributeTesting: StepState;
   workingPaper: StepState;
   review: StepState;
   conclusion: StepState;
+  auditTrail: StepState;
 }
 
 const STATUS_ORDER: ControlExecStatus[] = [
@@ -284,6 +286,8 @@ export function deriveStepAvailability(ctrl: ExecutionControl): StepAvailability
   return {
     overview: { enabled: true, reason: '' },
 
+    requestPbc: { enabled: true, reason: '' },
+
     samples: {
       enabled: coverage.isReadyForExecution || ctrl.attributes.length === 0,
       reason: !coverage.isReadyForExecution && ctrl.attributes.length > 0 ? 'Complete workflow mapping before uploading samples.' : '',
@@ -308,6 +312,8 @@ export function deriveStepAvailability(ctrl: ExecutionControl): StepAvailability
       enabled: s === ControlExecStatus.CONCLUDED,
       reason: s !== ControlExecStatus.CONCLUDED ? 'Reviewer must approve before conclusion is set' : '',
     },
+
+    auditTrail: { enabled: true, reason: '' },
   };
 }
 

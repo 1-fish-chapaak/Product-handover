@@ -22,19 +22,19 @@ export type View =
   | 'governance-racm'
   | 'governance-racm-detail'
   | 'governance-racm-generate'
-  | 'racm-full-editor'
   | 'governance-controls'
   | 'governance-control-detail'
   | 'audit-risk-register'
   | 'audit-planning'
+  | 'programs'
+  // Engagements
   | 'engagements'
   | 'engagement-overview'
   | 'engagement-case-management'
-  | 'engagement-compare'
   | 'my-queue'
   | 'closed-case-sampling'
   | 'vendor-360'
-  | 'programs'
+  | 'engagement-compare'
   // Execution
   | 'audit-execution'
   | 'engagement-detail'
@@ -55,7 +55,6 @@ export type View =
   | 'configuration'
   | 'data-sources'
   | 'knowledge-hub'
-  | 'platform-usage'
   | 'admin-users'
   | 'admin-roles'
   | 'admin-settings'
@@ -66,7 +65,14 @@ export type View =
   // Case Management
   | 'manage-exceptions'
   // Chat trash
-  | 'chat-trash';
+  | 'chat-trash'
+  // Dev-only preview routes
+  | 'dev-configurable-engagement-v3'
+  // Platform
+  | 'platform-usage'
+  | 'racm-full-editor'
+  // Engagement Config (under Programs)
+  | 'engagement-config';
 
 export type ChatMode = 'chat' | 'workflow';
 export type ExceptionRole = 'risk-owner' | 'auditor';
@@ -157,8 +163,7 @@ const getInitialView = (): View => {
   const v = params.get('view');
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
-  if (v === 'racm-full-editor') return 'racm-full-editor';
-  if (v === 'engagement-detail') return 'engagement-detail';
+  if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
 };
 

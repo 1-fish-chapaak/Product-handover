@@ -274,6 +274,10 @@ All helpers must be **pure functions** — no side effects, no state mutations. 
 | 2026-05-04 | Bulk upload v2: True folder upload via webkitdirectory + multi-file fallback. Matching uses file path + name: bulkInferSampleMatch (referenceId + description keywords, tolerates hyphens/underscores), bulkInferEvidenceType (ordered keyword matching for 11 types), bulkInferAttrMapping (evidence type → attribute keywords). Review table now has editable attribute multi-select chips per row + relative path display. deriveBulkStatus recalculates on edits. Apply only processes Matched rows, keeps unmatched in review with warning. Unrelated files shown as Unmatched with manual mapping option. |
 | 2026-05-05 | Engagement View redesign: Simplified Process Hub → Engagement View table. Removed Progress bar, Effective, Failed, Pending, Remaining columns from default list. Added summary cards, search, row expansion, empty states. |
 | 2026-05-05 | Engagement View v2 cleanup: Removed separate Scope column (redundant with engagement name). Merged process chip + audit period + alert tags into Engagement column. Renamed Health → Attention. Final 6 columns: Engagement, Type/Framework, Owner, Status, Attention, Next Action. Made summary cards more compact (horizontal layout). Improved spacing, row padding, hover states, and secondary text opacity for cleaner visual hierarchy. |
+| 2026-05-11 | RACM mapped controls redesign: Each mapped control card now shows linked workflows inline (name, version, status badge) with attribute chips per workflow. Nature badge (Preventive/Detective) added to control headers. Remove control with inline confirmation showing impact (workflow/attribute count). Remove workflow via trash icon on hover. Risk-level summary shows readiness counts (N ready · N missing workflows · N needs setup). |
+| 2026-05-11 | Working Paper redesign: Added summary chips at top (samples, attributes, checks, evidence, result, conclusion). Added Test Attribute Legend (A/B/C codes mapped to attributes/assertions/workflows). Replaced flat evidence log with structured sample×attribute evidence table. Improved Attribute Testing Matrix with code columns + reference + sample result column. Added Sample-Level Testing Details with expandable per-sample cards showing attribute/assertion/result/evidence/notes. Improved Sample Results with pass/fail/pending counts + failed warning. Improved Review section with rejection banner. Conclusion remains locked until approval. |
+| 2026-05-11 | Working Paper optimization: Replaced long evidence table with compact Evidence Coverage Matrix (one row per sample, A/B/C columns show evidence counts, expandable for file details). Sample-Level Testing Details collapsed by default with inline A:P B:F C:— summary chips. Full traceability preserved through expansion. |
+| 2026-05-11 | Working Paper evidence count fix: A/B/C columns now show user-uploaded files only, System column shows workflow-generated logs only. Expanded detail separates User Evidence and System Evidence into labeled groups. Attribute Legend shows evidence requirement type (System + User / User Evidence). Sample-Level Testing Details splits evidence into User Ev and Sys Ev columns. |
 
 ---
 
@@ -288,3 +292,34 @@ All helpers must be **pure functions** — no side effects, no state mutations. 
 - **Row expansion** provides optional detail (control counts, tested, effective, failed, pending review, last activity) without cluttering the default view.
 - **Summary cards** above the table show only 5 compact counts: Total, Active/In Execution, Pending Review, At Risk/Failed, Planned.
 - **Clicking a row or action** routes to Engagement Execution V2 (for active engagements) or the setup panel (for draft/planned).
+
+---
+
+## 14. RACM Mapping Page Design Rules
+
+- **RACM page shows setup readiness only, not execution/testing state.** No Run, Execute, or testing CTAs on this page.
+- **Mapped controls inside RACM must show workflow coverage and attribute mapping.** Each control card displays linked workflows inline with their attributes.
+- **Control readiness requires at least one workflow and all required attributes mapped.** Readiness states: Ready, Workflow Missing, Configuration Pending.
+- **RACM readiness is blocked when risks are unmapped or mapped controls are missing workflow/attribute coverage.** Validate button remains disabled until all checks pass.
+- **Execution CTAs must not appear on RACM mapping page.** RACM is the governance/mapping layer; execution happens in Engagement Execution V2.
+- **Risk-level summary** shows readiness counts next to "Mapped Controls (N)": e.g., "2 ready · 1 missing workflows".
+- **Remove control** requires inline confirmation with impact message (workflow/attribute count). Control remains in Control Library.
+- **Remove workflow** uses trash icon (appears on hover), removes workflow from the control mapping.
+
+---
+
+## 15. Working Paper Design Rules
+
+- **Working Paper must show both sample-level and attribute-level testing.** Not just one view.
+- **Attribute legend maps display codes (A/B/C) to actual test attributes.** Shows assertion, workflow, type, and required status per attribute.
+- **Evidence log default view is a compact Evidence Coverage Matrix** — one row per sample, attribute codes as columns showing evidence counts, expandable for full file details. Avoids long repeated rows.
+- **Attribute Testing Matrix must show samples as rows and attributes as columns,** with code headers (A/B/C), reference column, and sample result column. Cell values: P/F/—/N/A.
+- **Sample-Level Testing Details** are collapsed by default with compact inline summary (A:P B:F C:—). Expandable for full attribute/evidence/notes detail.
+- **Sample Results section** shows pass/fail/pending counts and per-sample chips. Failed samples trigger a warning about conclusion impact.
+- **Conclusion remains locked until reviewer approval.** Never set before approval.
+- **Rejected working paper still shows all testing details.** Rejection banner displayed clearly.
+- **Summary chips at top** give reviewer instant context: samples, attributes, checks, evidence count, review status, conclusion.
+- **Working Paper is audit documentation, not an action dashboard.** No execution CTAs inside.
+- **Evidence counts must separate user-uploaded from system-generated.** A/B/C columns show user files only. System Evidence column shows workflow logs only. No double-counting.
+- **Expanded sample evidence details** group files under "User Evidence" and "System Evidence" labels.
+- **Attribute Legend** shows evidence requirement type per attribute (System + User, User Evidence).

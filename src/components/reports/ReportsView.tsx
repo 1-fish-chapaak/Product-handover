@@ -8,7 +8,7 @@ import {
   Sparkles, Settings, Palette, Type,
   Image, Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
-  ShieldAlert, MoreVertical, Eye, Database, Search, PackageOpen, ExternalLink, Copy,
+  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink, Copy,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Star, Layers, Check, CloudUpload,
 } from 'lucide-react';
@@ -22,6 +22,7 @@ import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
 import ReportBuilder from './ReportBuilder';
+import { BulkAuditVariantView } from './BulkAuditVariants';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -53,9 +54,33 @@ type AttachedQuery = {
   attachedBy: string;
 };
 
+// Shared shape used by Bulk Audit reports. A workflow result is the bulk-run
+// counterpart of a saved query — same place in the report, different content.
+export type WorkflowResult = {
+  id: string;
+  workflowId: string;        // display id, e.g. "P2P-001"
+  name: string;
+  businessProcess?: string;
+  severity: 'High' | 'Medium' | 'Low';
+  riskOwner?: string;        // optional — empty until the user fills it in
+  findings: string[];
+  observations: string[];
+  outputTable?: {
+    columns: string[];
+    rows: (string | number)[][];
+  };
+};
+
+// Four design treatments for the bulk audit report detail page, exposed as
+// side-by-side demos in My Reports so we can compare against the default.
+export type BulkAuditAestheticVariant = 'editorial' | 'forensic' | 'minimal' | 'architectural';
+
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isEmpty?: boolean;
   attachedQueries?: AttachedQuery[];
+  description?: string;
+  workflowResults?: WorkflowResult[];
+  aestheticVariant?: BulkAuditAestheticVariant;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
@@ -157,6 +182,9 @@ interface ReportsViewProps {
   onOpenQuery?: (query: { id: string; title: string }) => void;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onAddCustomTemplate?: (template: typeof REPORT_TEMPLATES[number]) => void;
+  /** When set, ReportsView opens that report in the full detail view. Cleared by the parent after consumption. */
+  focusReportId?: string | null;
+  onFocusReportConsumed?: () => void;
 }
 
 function TemplateCarousel({ children }: { children: React.ReactNode }) {
@@ -1490,7 +1518,7 @@ function ConfirmDialog({
   );
 }
 
-function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, comments = [], onAddComment, casesPhase, onCasesPhaseChange }: { query: QueryShape; index: number; onManageExceptions?: () => void; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; casesPhase: CasesPhase; onCasesPhaseChange: (phase: CasesPhase) => void }) {
+function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, comments = [], onAddComment, casesPhase, onCasesPhaseChange, title }: { query: QueryShape; index: number; onManageExceptions?: () => void; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; casesPhase: CasesPhase; onCasesPhaseChange: (phase: CasesPhase) => void; title?: string }) {
   const { addToast } = useToast();
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1534,16 +1562,8 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
           : '0 0 0 rgba(0,0,0,0)',
         transition: 'box-shadow 220ms ease',
       }}
-      className="border-x border-b border-border-light bg-white overflow-hidden"
+      className="relative border-y border-border-light bg-white overflow-hidden"
     >
-      {/* Animated accent bar — sweeps in from left */}
-      <motion.div
-        initial={{ scaleX: 0, transformOrigin: 'left' }}
-        animate={{ scaleX: 1 }}
-        transition={{ delay: baseDelay + 0.1, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="h-[2px]"
-        style={{ background: 'linear-gradient(90deg, #2F0D5F, #A05CFF)' }}
-      />
 
       <div className="px-6 py-5">
         {/* Meta row */}
@@ -1554,7 +1574,7 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
           className="flex items-center justify-between mb-4 gap-4"
         >
           <div className="flex items-center gap-2.5 text-[11px] min-w-0">
-            <span className="font-bold text-primary uppercase tracking-wider shrink-0">Query · {query.id}</span>
+            <span className="font-bold text-primary uppercase tracking-wider shrink-0">{title ?? `Query · ${query.id}`}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">{query.risk}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
@@ -1692,25 +1712,19 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
               ))}
             </div>
           );
-        })() : (
+        })() : casesPhase === 'generating' ? (
           <div className="border border-dashed border-border-light rounded-xl px-4 py-5 mb-5 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-paper-50 flex items-center justify-center shrink-0">
-              {casesPhase === 'generating'
-                ? <Loader2 size={15} className="text-primary animate-spin" />
-                : <ShieldAlert size={15} className="text-text-muted" />}
+              <Loader2 size={15} className="text-primary animate-spin" />
             </div>
             <div className="min-w-0">
-              <p className="text-[12.5px] font-semibold text-text">
-                {casesPhase === 'generating' ? 'Generating cases…' : 'Exception metrics not generated yet'}
-              </p>
+              <p className="text-[12.5px] font-semibold text-text">Generating cases…</p>
               <p className="text-[11.5px] text-text-muted leading-snug">
-                {casesPhase === 'generating'
-                  ? 'Cases are being created — KPIs will appear here in a moment.'
-                  : 'Turn on Generate Cases to populate Total Exceptions, Open, Closed and Check Health.'}
+                Cases are being created — KPIs will appear here in a moment.
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Attached graph (selected from Add Graph modal) */}
         {attachedGraph && (
@@ -2444,6 +2458,648 @@ function ReportActivityLogDrawer({
   );
 }
 
+// Single row in the Contents table-of-contents block.
+// Owns its own dragControls so each row is drag-handle-driven (not drag-on-row).
+function ContentsRow({
+  section,
+  index,
+  isEditing,
+  draftValue,
+  onDraftChange,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onScroll,
+  onDelete,
+}: {
+  section: { id: string; title: string; kind: string };
+  index: number;
+  isEditing: boolean;
+  draftValue: string;
+  onDraftChange: (v: string) => void;
+  onStartEdit: () => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onScroll: () => void;
+  onDelete: () => void;
+}) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={section}
+      dragControls={controls}
+      dragListener={false}
+      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
+    >
+      <button
+        onPointerDown={(e) => { controls.start(e); }}
+        aria-label="Drag to reorder"
+        className="shrink-0 p-1 text-text-muted/40 hover:text-text-muted cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
+      >
+        <GripVertical size={13} />
+      </button>
+      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      {isEditing ? (
+        <input
+          value={draftValue}
+          onChange={(e) => onDraftChange(e.target.value)}
+          onBlur={onSaveEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSaveEdit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+          }}
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[12.5px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
+        />
+      ) : (
+        <button
+          onClick={onScroll}
+          className="flex-1 min-w-0 text-left text-[12.5px] text-text-secondary truncate transition-colors cursor-pointer"
+        >
+          {section.title}
+        </button>
+      )}
+      {!isEditing && (
+        <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/crow:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+            aria-label="Rename section"
+            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+          >
+            <Edit3 size={13} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            aria-label="Delete section"
+            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
+    </Reorder.Item>
+  );
+}
+
+function ObservationActionsMenu({
+  hasAttachment,
+  attachmentHidden,
+  onEdit,
+  onToggleAttachment,
+  onDelete,
+}: {
+  hasAttachment: boolean;
+  attachmentHidden: boolean;
+  onEdit: () => void;
+  onToggleAttachment: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const close = () => setOpen(false);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
+  // Portal-positioned menu — escapes ancestor `overflow-hidden` + stacking contexts,
+  // and flips up when the trigger is too close to the viewport bottom.
+  const handleToggle = () => {
+    const next = !open;
+    if (next && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const estimatedHeight = hasAttachment ? 160 : 120;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const flipUp = spaceBelow < estimatedHeight + 16;
+      const style: React.CSSProperties = {
+        position: 'fixed',
+        right: window.innerWidth - rect.right,
+        zIndex: 1000,
+      };
+      if (flipUp) {
+        style.bottom = window.innerHeight - rect.top + 6;
+      } else {
+        style.top = rect.bottom + 6;
+      }
+      setMenuStyle(style);
+    }
+    setOpen(next);
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={handleToggle}
+        title="More options"
+        aria-label="More options"
+        className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+      >
+        <MoreVertical size={15} />
+      </button>
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle}
+          className="w-[210px] bg-white border border-border-light rounded-[10px] shadow-xl py-1"
+        >
+          <button
+            onClick={() => { setOpen(false); onEdit(); }}
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+          >
+            <Edit3 size={13} />
+            Edit observation
+          </button>
+          {hasAttachment && (
+            <button
+              onClick={() => { setOpen(false); onToggleAttachment(); }}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+            >
+              {attachmentHidden ? <Eye size={13} /> : <EyeOff size={13} />}
+              {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
+            </button>
+          )}
+          <div className="my-1 border-t border-border-light/60" />
+          <button
+            onClick={() => { setOpen(false); onDelete(); }}
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+          >
+            <Trash2 size={13} />
+            Delete observation
+          </button>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// Visual twin of QueryCard — same motion timing, hover lift, shadow, type scale.
+// Renders an observation as a continuous-report card so it sits naturally beside
+// QueryCards without looking like a different control.
+function ObservationCard({
+  obs,
+  index,
+  onEdit,
+  onToggleAttachment,
+  onDelete,
+}: {
+  obs: { id: string; obsId: string; title: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
+  index: number;
+  onEdit: () => void;
+  onToggleAttachment: () => void;
+  onDelete: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const baseDelay = index * 0.08;
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+    };
+    window.addEventListener('keydown', handler);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handler);
+      document.body.style.overflow = prev;
+    };
+  }, [lightboxOpen]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      whileHover={{ y: -2 }}
+      style={{
+        boxShadow: hovered
+          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
+          : '0 0 0 rgba(0,0,0,0)',
+        transition: 'box-shadow 220ms ease',
+      }}
+      className="relative border-y border-border-light bg-white overflow-hidden"
+    >
+      <div className="px-6 py-5">
+        {/* Meta row — mirrors QueryCard */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
+          className="flex items-center justify-between mb-4 gap-4"
+        >
+          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+            <span className="font-bold text-primary uppercase tracking-wider shrink-0">{obs.obsId}</span>
+            <span className="w-px h-3 bg-border-light shrink-0" />
+            <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">Observation</span>
+          </div>
+          <ObservationActionsMenu
+            hasAttachment={!!obs.attachmentDataUrl}
+            attachmentHidden={!!obs.attachmentHidden}
+            onEdit={onEdit}
+            onToggleAttachment={onToggleAttachment}
+            onDelete={onDelete}
+          />
+        </motion.div>
+
+        {/* Title */}
+        <motion.h3
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
+          className="text-[15px] font-semibold text-text leading-[1.5] mb-5"
+        >
+          {obs.title}
+        </motion.h3>
+
+        {/* Description */}
+        {obs.description && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: baseDelay + 0.4, duration: 0.4 }}
+            className="text-[13px] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
+          >
+            {obs.description}
+          </motion.p>
+        )}
+
+        {/* Attachment — click to open lightbox */}
+        {obs.attachmentDataUrl && !obs.attachmentHidden && (
+          <motion.button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: baseDelay + 0.5, duration: 0.35 }}
+            whileHover={{ scale: 1.02 }}
+            title="Click to view full size"
+            aria-label="Open attachment in full screen"
+            className="block w-[100px] h-[100px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
+          >
+            <img src={obs.attachmentDataUrl} alt={obs.title} className="w-full h-full object-cover" />
+          </motion.button>
+        )}
+      </div>
+
+      {/* Fullscreen lightbox */}
+      {lightboxOpen && obs.attachmentDataUrl && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={() => setLightboxOpen(false)}
+          className="fixed inset-0 z-[1100] bg-ink-900/85 flex items-center justify-center p-8 cursor-zoom-out"
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+            aria-label="Close preview"
+            className="absolute top-5 right-5 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
+          >
+            <X size={18} />
+          </button>
+          <motion.img
+            initial={{ scale: 0.96, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            src={obs.attachmentDataUrl}
+            alt={obs.title}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
+          />
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[12px] text-white/70 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
+            {obs.obsId} · {obs.title}
+          </div>
+        </motion.div>,
+        document.body,
+      )}
+    </motion.div>
+  );
+}
+
+// Bulk-audit counterpart of QueryCard. Same chrome (border-y, hover lift,
+// motion stagger, meta row with primary id, generate-cases gate) but the body
+// is workflow-shaped: severity, optional risk owner, findings, observations,
+// and an output data table from the run.
+function WorkflowResultCard({
+  workflow,
+  index,
+  casesPhase,
+  onCasesPhaseChange,
+  onUpdateRiskOwner,
+  onDelete,
+}: {
+  workflow: WorkflowResult;
+  index: number;
+  casesPhase: CasesPhase;
+  onCasesPhaseChange: (phase: CasesPhase) => void;
+  onUpdateRiskOwner?: (owner: string) => void;
+  onDelete?: () => void;
+}) {
+  const { addToast } = useToast();
+  const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerDraft, setOwnerDraft] = useState(workflow.riskOwner ?? '');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const baseDelay = index * 0.08;
+
+  const severityStyle = workflow.severity === 'High'
+    ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
+    : workflow.severity === 'Medium'
+      ? { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' }
+      : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (ev: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(ev.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const commitOwner = () => {
+    const trimmed = ownerDraft.trim();
+    onUpdateRiskOwner?.(trimmed);
+    setEditingOwner(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      whileHover={{ y: -2 }}
+      style={{
+        boxShadow: hovered
+          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
+          : '0 0 0 rgba(0,0,0,0)',
+        transition: 'box-shadow 220ms ease',
+      }}
+      className="relative border-y border-border-light bg-white overflow-hidden"
+    >
+      <div className="px-6 py-5">
+        {/* Meta row */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
+          className="flex items-center justify-between mb-4 gap-4"
+        >
+          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+            <span className="font-bold text-primary uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
+            {workflow.businessProcess && (
+              <>
+                <span className="w-px h-3 bg-border-light shrink-0" />
+                <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">{workflow.businessProcess}</span>
+              </>
+            )}
+            <span className="w-px h-3 bg-border-light shrink-0" />
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
+              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <GenerateCasesGate queryId={workflow.id} phase={casesPhase} onPhaseChange={onCasesPhaseChange} />
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(o => !o)}
+                title="More options"
+                aria-label="More options"
+                className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+              >
+                <MoreVertical size={15} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigator.clipboard?.writeText(workflow.workflowId);
+                      addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
+                    }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                  >
+                    <Copy size={13} />
+                    Copy Workflow ID
+                  </button>
+                  {onDelete && (
+                    <>
+                      <div className="my-1 border-t border-border-light" />
+                      <button
+                        onClick={() => { setMenuOpen(false); onDelete(); }}
+                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Title row: workflow name + inline risk owner */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
+          className="mb-5"
+        >
+          <h3 className="text-[15px] font-semibold text-text leading-[1.5] mb-2">
+            {workflow.name}
+          </h3>
+
+          {/* Risk owner — inline editable. Filled state renders as initials chip + name; empty state stays understated. */}
+          <div className="flex items-center gap-2 text-[12px]">
+            <span className="text-text-muted">Risk owner</span>
+            {editingOwner ? (
+              <input
+                autoFocus
+                value={ownerDraft}
+                onChange={(e) => setOwnerDraft(e.target.value)}
+                onBlur={commitOwner}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitOwner();
+                  if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
+                }}
+                placeholder="e.g., Priya Mehta"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
+              />
+            ) : workflow.riskOwner ? (
+              <button
+                onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-primary-xlight transition-colors cursor-pointer"
+              >
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold tabular-nums">
+                  {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+                <span className="text-text font-medium">{workflow.riskOwner}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => { setOwnerDraft(''); setEditingOwner(true); }}
+                className="text-text-muted hover:text-primary transition-colors cursor-pointer"
+              >
+                Unassigned · <span className="underline">assign</span>
+              </button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Findings + Observations */}
+        <div className="space-y-6 pt-1">
+          {[
+            { title: 'Findings', items: workflow.findings, emptyCopy: 'No findings recorded for this workflow yet.' },
+            { title: 'Observations', items: workflow.observations, emptyCopy: 'No observations recorded for this workflow yet.' },
+          ].map(section => (
+            <div key={section.title}>
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+                <span>{section.title}</span>
+                {section.items.length > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                    {section.items.length}
+                  </span>
+                )}
+              </h4>
+              {section.items.length === 0 ? (
+                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {section.items.map((item, i) => (
+                    <motion.li
+                      key={i}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: baseDelay + 0.4 + i * 0.05, duration: 0.3 }}
+                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
+                    >
+                      <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
+                      {item}
+                    </motion.li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+
+          {/* Output table */}
+          {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
+            <div>
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+                <span>Output</span>
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                  {workflow.outputTable.rows.length}
+                </span>
+              </h4>
+              <div className="border border-border-light rounded-xl overflow-hidden">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr className="bg-paper-50/70">
+                      {workflow.outputTable.columns.map((col, ci) => (
+                        <th
+                          key={col}
+                          className={`px-3 py-2 text-[10.5px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workflow.outputTable.rows.map((row, ri) => (
+                      <tr
+                        key={ri}
+                        className="hover:bg-primary-xlight/30 transition-colors"
+                      >
+                        {row.map((cell, ci) => {
+                          const cellStr = String(cell);
+                          const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
+                          const isLast = ci === row.length - 1;
+                          const isId = ci === 0;
+                          return (
+                            <td
+                              key={ci}
+                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[12px] text-text-secondary tabular-nums' : ''}`}
+                            >
+                              {isSeverity ? (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold ${
+                                    cellStr === 'High'
+                                      ? 'bg-risk-50 text-risk-700'
+                                      : cellStr === 'Medium'
+                                        ? 'bg-high-50 text-high-700'
+                                        : 'bg-compliant-50 text-compliant-700'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      cellStr === 'High'
+                                        ? 'bg-risk-500'
+                                        : cellStr === 'Medium'
+                                          ? 'bg-high-500'
+                                          : 'bg-compliant-500'
+                                    }`}
+                                  />
+                                  {cellStr}
+                                </span>
+                              ) : (
+                                cell
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[11px] text-text-muted">
+                  <span>{workflow.outputTable.rows.length} {workflow.outputTable.rows.length === 1 ? 'record' : 'records'}</span>
+                  <button
+                    onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
+                    className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                  >
+                    <Download size={11} />
+                    Download CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function DraggableQuerySection({
   section,
   index,
@@ -2467,21 +3123,12 @@ function DraggableQuerySection({
   casesPhase: CasesPhase;
   onCasesPhaseChange: (phase: CasesPhase) => void;
 }) {
-  const controls = useDragControls();
   return (
-    <Reorder.Item {...sectionProps} dragControls={controls} className={`${sectionProps.className} relative group/dragrow`}>
-      {/* Reorder handle — floats on the left edge, visible on hover */}
-      <button
-        onPointerDown={(e) => controls.start(e)}
-        aria-label={`Drag ${section.title} to reorder`}
-        title="Drag to reorder query"
-        className="absolute left-[-18px] top-1/2 -translate-y-1/2 z-10 inline-flex items-center justify-center w-6 h-10 rounded-[6px] text-text-muted hover:text-primary hover:bg-primary-xlight bg-white border border-border-light cursor-grab active:cursor-grabbing opacity-0 group-hover/dragrow:opacity-100 transition-opacity shadow-sm touch-none"
-      >
-        <GripVertical size={14} />
-      </button>
+    <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
       <QueryCard
         query={section.query}
         index={index}
+        title={section.title}
         onManageExceptions={onManageExceptions}
         onOpenQuery={onOpenQuery}
         onDelete={onDelete}
@@ -2964,7 +3611,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
 }
 
 // ─── Report View (with multiple queries) ───
-function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery }: {
+function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription }: {
   report: GeneratedReport;
   onAddQuery: (reportId: string, query: AttachedQuery) => void;
   onRemoveQuery: (reportId: string, queryId: string) => void;
@@ -2974,6 +3621,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   onOpenQuery?: (query: { id: string; title: string }) => void;
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
+  onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
   const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
@@ -3010,6 +3658,76 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     REPORT_TEMPLATES.find(t => t.id === report.templateId) ??
     customTemplates.find(t => t.id === report.templateId) ??
     null;
+
+  const displayDescription = report.description ?? reportTemplate?.desc ?? '';
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState(displayDescription);
+
+  const startEditDesc = () => {
+    setDescDraft(displayDescription);
+    setIsEditingDesc(true);
+  };
+  const cancelEditDesc = () => {
+    setDescDraft(displayDescription);
+    setIsEditingDesc(false);
+  };
+  const saveEditDesc = () => {
+    const next = descDraft.trim();
+    if (next !== displayDescription && onUpdateDescription) {
+      onUpdateDescription(report.id, next);
+    }
+    setIsEditingDesc(false);
+  };
+
+  const EditableDescription = () => {
+    if (isEditingDesc) {
+      return (
+        <div className="mb-3">
+          <textarea
+            value={descDraft}
+            onChange={e => setDescDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { e.preventDefault(); cancelEditDesc(); }
+              else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveEditDesc(); }
+            }}
+            rows={2}
+            placeholder="Add a description for this report…"
+            autoFocus
+            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-white text-[13px] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={saveEditDesc}
+              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[11.5px] font-semibold rounded-md hover:bg-white/90 transition-colors cursor-pointer"
+            >
+              <Check size={12} /> Save
+            </button>
+            <button
+              onClick={cancelEditDesc}
+              className="h-7 px-2.5 text-white/75 text-[11.5px] font-medium hover:text-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <span className="text-white/40 text-[10.5px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
+        <p className="text-white/65 text-[13px] leading-snug pl-0.5">
+          {displayDescription || <span className="italic text-white/40">No description</span>}
+        </p>
+        <button
+          onClick={startEditDesc}
+          aria-label="Edit description"
+          className="shrink-0 p-1 -mt-0.5 rounded-md text-white/55 hover:text-white hover:bg-white/15 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer"
+        >
+          <Edit3 size={11} />
+        </button>
+      </div>
+    );
+  };
 
   const DEFAULT_QUERIES = [
     {
@@ -3153,14 +3871,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ? TEMPLATE_QUERIES[appliedTemplate.id]
     : DEFAULT_QUERIES;
 
-  const activeStats = appliedTemplate && TEMPLATE_STATS[appliedTemplate.id]
-    ? TEMPLATE_STATS[appliedTemplate.id]
-    : [
-        { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
-        { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
-        { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
-        { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+  const activeStats = (() => {
+    if (appliedTemplate && TEMPLATE_STATS[appliedTemplate.id]) return TEMPLATE_STATS[appliedTemplate.id];
+    if (report.tag === 'Bulk Audit' && (report.workflowResults?.length ?? 0) > 0) {
+      const wr = report.workflowResults!;
+      const totalRecords = wr.reduce((sum, w) => sum + (w.outputTable?.rows.length ?? 0), 0);
+      const highCount = wr.filter(w => w.severity === 'High').length;
+      const mediumCount = wr.filter(w => w.severity === 'Medium').length;
+      return [
+        { label: 'Workflows Run', value: String(wr.length), icon: Layers, color: 'text-brand-700 bg-brand-50' },
+        { label: 'Records Flagged', value: String(totalRecords), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+        { label: 'High Severity', value: String(highCount), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+        { label: 'Medium Severity', value: String(mediumCount), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
       ];
+    }
+    return [
+      { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+      { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+      { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
+      { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+    ];
+  })();
 
   // Sections — reorderable / add / remove
   type SectionItem =
@@ -3168,23 +3899,56 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     | { id: string; kind: 'summary'; title: string; content: string }
     | { id: string; kind: 'stats'; title: string }
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
-    | { id: string; kind: 'note'; title: string; content: string };
+    | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
+    | { id: string; kind: 'note'; title: string; content: string }
+    | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
 
-  const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => [
-    { id: 'sec-cover', kind: 'cover', title: 'Cover' },
-    {
-      id: 'sec-summary',
-      kind: 'summary',
-      title: 'Executive Summary',
-      content: 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.',
-    },
-    ...queries.map(q => ({
-      id: `sec-query-${q.id}`,
-      kind: 'query' as const,
-      title: `Query · ${q.id}`,
-      query: q,
-    })),
-  ];
+  type ObservationItem = {
+    id: string;
+    kind: 'observation';
+    title: string;
+    obsId: string;
+    description: string;
+    attachmentDataUrl?: string;
+    attachmentHidden?: boolean;
+  };
+
+  const isBulkAudit = report.tag === 'Bulk Audit';
+  const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+
+  const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => {
+    const head: SectionItem[] = [
+      { id: 'sec-cover', kind: 'cover', title: 'Cover' },
+      {
+        id: 'sec-summary',
+        kind: 'summary',
+        title: 'Executive Summary',
+        content: isBulkAudit
+          ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
+          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.',
+      },
+    ];
+    if (isBulkAudit) {
+      return [
+        ...head,
+        ...reportWorkflows.map(w => ({
+          id: `sec-workflow-${w.id}`,
+          kind: 'workflow' as const,
+          title: `Workflow · ${w.workflowId}`,
+          workflow: w,
+        })),
+      ];
+    }
+    return [
+      ...head,
+      ...queries.map(q => ({
+        id: `sec-query-${q.id}`,
+        kind: 'query' as const,
+        title: `Query · ${q.id}`,
+        query: q,
+      })),
+    ];
+  };
 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
@@ -3195,10 +3959,210 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appliedTemplateId]);
+  }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
+
+  // Update one workflow's risk owner across both state and the parent report.
+  const updateWorkflowRiskOwner = (workflowId: string, owner: string) => {
+    setSections(prev => prev.map(s =>
+      s.kind === 'workflow' && s.workflow.id === workflowId
+        ? { ...s, workflow: { ...s.workflow, riskOwner: owner || undefined } }
+        : s
+    ));
+  };
 
   const removeSection = (id: string) => {
     setSections(prev => prev.filter(s => s.id !== id));
+  };
+
+  // ─── Add-Observation modal state ───
+  const [showAddObservation, setShowAddObservation] = useState(false);
+  const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
+  const [editingObservationObsId, setEditingObservationObsId] = useState<string | null>(null);
+  const [obsForm, setObsForm] = useState<{ name: string; description: string; attachmentDataUrl: string }>({ name: '', description: '', attachmentDataUrl: '' });
+  // Separate stream of observations added to applied-template view (where the body is template-driven)
+  const [appliedObservations, setAppliedObservations] = useState<ObservationItem[]>([]);
+
+  // Auto-generate next sequential OBS ID across both streams + existing sections
+  const nextObservationId = () => {
+    const inSections = sections
+      .filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation')
+      .map(s => s.obsId);
+    const inApplied = appliedObservations.map(o => o.obsId);
+    const all = [...inSections, ...inApplied];
+    const maxN = all.reduce((max, id) => {
+      const m = id.match(/^OBS-(\d+)$/i);
+      const n = m ? parseInt(m[1], 10) : 0;
+      return n > max ? n : max;
+    }, 0);
+    return `OBS-${String(maxN + 1).padStart(3, '0')}`;
+  };
+
+  const openAddObservation = () => {
+    setEditingObservationId(null);
+    setEditingObservationObsId(null);
+    setObsForm({ name: '', description: '', attachmentDataUrl: '' });
+    setShowAddObservation(true);
+  };
+  const openEditObservation = (obs: { id: string; obsId: string; title: string; description: string; attachmentDataUrl?: string }) => {
+    setEditingObservationId(obs.id);
+    setEditingObservationObsId(obs.obsId);
+    setObsForm({
+      name: obs.title,
+      description: obs.description,
+      attachmentDataUrl: obs.attachmentDataUrl ?? '',
+    });
+    setShowAddObservation(true);
+  };
+  const closeAddObservation = () => {
+    setShowAddObservation(false);
+    setEditingObservationId(null);
+    setEditingObservationObsId(null);
+  };
+
+  const toggleObservationAttachment = (id: string) => {
+    setSections(prev => prev.map(s =>
+      s.id === id && s.kind === 'observation'
+        ? { ...s, attachmentHidden: !s.attachmentHidden }
+        : s
+    ));
+    setAppliedObservations(prev => prev.map(o =>
+      o.id === id ? { ...o, attachmentHidden: !o.attachmentHidden } : o
+    ));
+  };
+
+  const handleObservationAttachment = (file: File | null) => {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|jpg)$/.test(file.type)) {
+      addToast({ type: 'info', message: 'Only PNG or JPG images are supported.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setObsForm(prev => ({ ...prev, attachmentDataUrl: String(e.target?.result ?? '') }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveObservation = () => {
+    const name = obsForm.name.trim();
+    if (!name) return;
+    const description = obsForm.description.trim();
+    const attachmentDataUrl = obsForm.attachmentDataUrl || undefined;
+    if (editingObservationId) {
+      setSections(prev => prev.map(s =>
+        s.id === editingObservationId && s.kind === 'observation'
+          ? { ...s, title: name, description, attachmentDataUrl }
+          : s
+      ));
+      setAppliedObservations(prev => prev.map(o =>
+        o.id === editingObservationId
+          ? { ...o, title: name, description, attachmentDataUrl }
+          : o
+      ));
+      addToast({ type: 'success', message: `${editingObservationObsId ?? 'Observation'} updated.` });
+    } else {
+      const obsId = nextObservationId();
+      const newItem: ObservationItem = {
+        id: `sec-obs-${Date.now()}`,
+        kind: 'observation',
+        title: name,
+        obsId,
+        description,
+        attachmentDataUrl,
+      };
+      if (appliedTemplate) {
+        setAppliedObservations(prev => [...prev, newItem]);
+      } else {
+        setSections(prev => [...prev, newItem]);
+      }
+      addToast({ type: 'success', message: `${obsId} added.` });
+    }
+    setShowAddObservation(false);
+    setEditingObservationId(null);
+    setEditingObservationObsId(null);
+  };
+
+  // ─── Contents (table of contents) state + handlers ───
+  const [contentsEditingId, setContentsEditingId] = useState<string | null>(null);
+  const [contentsDraft, setContentsDraft] = useState('');
+  const [sectionPendingDelete, setSectionPendingDelete] = useState<SectionItem | null>(null);
+
+  const renameSection = (id: string, newTitle: string) => {
+    setSections(prev => prev.map(s => s.id === id ? ({ ...s, title: newTitle } as SectionItem) : s));
+  };
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(`section-${id}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const handleStartContentsRename = (s: SectionItem) => {
+    setContentsDraft(s.title);
+    setContentsEditingId(s.id);
+  };
+  const handleSaveContentsRename = () => {
+    if (!contentsEditingId) return;
+    const trimmed = contentsDraft.trim();
+    if (trimmed) renameSection(contentsEditingId, trimmed);
+    setContentsEditingId(null);
+  };
+  const handleCancelContentsRename = () => {
+    setContentsEditingId(null);
+  };
+  const confirmDeleteSection = () => {
+    if (sectionPendingDelete) {
+      const id = sectionPendingDelete.id;
+      setSections(prev => prev.filter(s => s.id !== id));
+      setAppliedObservations(prev => prev.filter(o => o.id !== id));
+      addToast({ type: 'success', message: `"${sectionPendingDelete.title}" removed.` });
+    }
+    setSectionPendingDelete(null);
+  };
+
+  const ContentsBlock = () => {
+    const coverSection = sections.find(s => s.kind === 'cover');
+    const nonCoverSections = sections.filter(s => s.kind !== 'cover');
+    if (nonCoverSections.length === 0) return null;
+    return (
+      <div className="border-x border-b border-border-light bg-white p-6">
+        <div className="flex items-center justify-between gap-3 mb-8">
+          <div className="flex items-center gap-2">
+            <List size={16} className="text-primary" />
+            <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+          </div>
+          <button
+            onClick={openAddObservation}
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
+          >
+            <Plus size={13} />
+            Add Observation
+          </button>
+        </div>
+        <Reorder.Group
+          axis="y"
+          values={nonCoverSections}
+          onReorder={(newOrder) => {
+            setSections(coverSection ? [coverSection, ...newOrder] : newOrder);
+          }}
+          as="ol"
+          className="list-none p-0 m-0 space-y-0.5"
+        >
+          {nonCoverSections.map((section, i) => (
+            <ContentsRow
+              key={section.id}
+              section={section}
+              index={i + 1}
+              isEditing={contentsEditingId === section.id}
+              draftValue={contentsDraft}
+              onDraftChange={setContentsDraft}
+              onStartEdit={() => handleStartContentsRename(section)}
+              onSaveEdit={handleSaveContentsRename}
+              onCancelEdit={handleCancelContentsRename}
+              onScroll={() => scrollToSection(section.id)}
+              onDelete={() => setSectionPendingDelete(section)}
+            />
+          ))}
+        </Reorder.Group>
+      </div>
+    );
   };
 
   // Report-level activity log drawer (consolidates activity across all query cards).
@@ -3236,7 +4200,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
       className="h-full overflow-y-auto bg-surface-2"
     >
-      <div className={`mx-auto px-8 py-6 ${appliedTemplate ? 'max-w-4xl' : 'max-w-6xl'}`}>
+      <div className="mx-auto px-8 py-6 max-w-6xl">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
           <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer">
@@ -3248,7 +4212,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 onClick={() => setShowApplyTemplate(p => !p)}
                 className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
               >
-                <Layout size={13} /> Apply Template
+                <Layout size={13} />
+                <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
                 <motion.span
                   animate={{ rotate: showApplyTemplate ? 180 : 0 }}
                   transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -3340,6 +4305,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
+                    {report.tag && (
+                      <span
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        style={{
+                          borderRadius: '8px',
+                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                        }}
+                      >
+                        {report.tag}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => setAddQueryOpen(true)}
@@ -3470,9 +4447,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               </div>
               <div className="relative z-10 px-8 py-7">
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-                {reportTemplate && (
-                  <p className="text-white/60 text-[13px] mb-3">{reportTemplate.desc}</p>
-                )}
+                <EditableDescription />
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-[13px]">
                     <span className="font-semibold text-white">{report.generatedBy}</span>
@@ -3480,6 +4455,21 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                    {report.tag && (
+                      <span
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        style={{
+                          borderRadius: '8px',
+                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                        }}
+                      >
+                        {report.tag}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
+                      {appliedTemplate.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -3502,6 +4492,64 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               </div>
             </div>
 
+            {/* Contents — read-only list of template-defined sections */}
+            {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
+              <div className="border border-border-light rounded-2xl bg-white p-6 mb-5">
+                <div className="flex items-center justify-between gap-3 mb-8">
+                  <div className="flex items-center gap-2">
+                    <List size={16} className="text-primary" />
+                    <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+                  </div>
+                  <button
+                    onClick={openAddObservation}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    Add Observation
+                  </button>
+                </div>
+                <Reorder.Group
+                  axis="y"
+                  values={appliedObservations}
+                  onReorder={setAppliedObservations}
+                  as="ol"
+                  className="list-none p-0 m-0 space-y-0.5"
+                >
+                  {appliedTemplate.sections.map((s, i) => (
+                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors">
+                      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{s.name}</span>
+                    </li>
+                  ))}
+                  {appliedObservations.map((o, i) => {
+                    const idx = (appliedTemplate.sections?.length ?? 0) + i + 1;
+                    return (
+                      <ContentsRow
+                        key={o.id}
+                        section={o}
+                        index={idx}
+                        isEditing={contentsEditingId === o.id}
+                        draftValue={contentsDraft}
+                        onDraftChange={setContentsDraft}
+                        onStartEdit={() => handleStartContentsRename(o as unknown as SectionItem)}
+                        onSaveEdit={() => {
+                          if (!contentsEditingId) return;
+                          const trimmed = contentsDraft.trim();
+                          if (trimmed) {
+                            setAppliedObservations(prev => prev.map(x => x.id === contentsEditingId ? { ...x, title: trimmed } : x));
+                          }
+                          setContentsEditingId(null);
+                        }}
+                        onCancelEdit={handleCancelContentsRename}
+                        onScroll={() => scrollToSection(o.id)}
+                        onDelete={() => setAppliedObservations(prev => prev.filter(x => x.id !== o.id))}
+                      />
+                    );
+                  })}
+                </Reorder.Group>
+              </div>
+            )}
+
             {/* Summary Stats Bar */}
             <div className="grid grid-cols-4 gap-3 mb-5">
               {activeStats.map(stat => (
@@ -3520,6 +4568,23 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 <TemplateLayout templateId={appliedTemplate.id} template={appliedTemplate} report={report} />
               </motion.div>
             </AnimatePresence>
+
+            {/* Observations added on top of the template — match Query Card UI */}
+            {appliedObservations.length > 0 && (
+              <div className="mt-5 space-y-3">
+                {appliedObservations.map((o, i) => (
+                  <div key={o.id} id={`section-${o.id}`}>
+                    <ObservationCard
+                      obs={o}
+                      index={i}
+                      onEdit={() => openEditObservation(o)}
+                      onToggleAttachment={() => toggleObservationAttachment(o.id)}
+                      onDelete={() => setSectionPendingDelete(o as unknown as SectionItem)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <div className="w-full">
@@ -3541,8 +4606,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   };
 
                   if (section.kind === 'cover') {
-                    return (
-                      <Reorder.Item {...sectionProps}>
+                    return [
+                      <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
                           <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                             <FloatingLines
@@ -3559,16 +4624,33 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                           </div>
                           <div className="relative z-10 px-8 py-7">
                             <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-                            {reportTemplate && (
-                              <p className="text-white/60 text-[13px] mb-3">{reportTemplate.desc}</p>
-                            )}
+                            <EditableDescription />
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2 text-[13px]">
                                 <span className="font-semibold text-white">{report.generatedBy}</span>
                                 <span className="text-white/30 mx-0.5">|</span>
                                 <span className="text-white/70">{report.generatedAt}</span>
                                 <span className="text-white/30 mx-0.5">|</span>
-                                <span className="text-white/70">{sections.filter(s => s.kind === 'query').length} {sections.filter(s => s.kind === 'query').length === 1 ? 'query' : 'queries'}</span>
+                                {(() => {
+                                  if (isBulkAudit) {
+                                    const n = sections.filter(s => s.kind === 'workflow').length;
+                                    return <span className="text-white/70">{n} {n === 1 ? 'workflow' : 'workflows'}</span>;
+                                  }
+                                  const n = sections.filter(s => s.kind === 'query').length;
+                                  return <span className="text-white/70">{n} {n === 1 ? 'query' : 'queries'}</span>;
+                                })()}
+                                {report.tag && (
+                                  <span
+                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                                    style={{
+                                      borderRadius: '8px',
+                                      background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                                      color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                                    }}
+                                  >
+                                    {report.tag}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
@@ -3590,8 +4672,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             </div>
                           </div>
                         </div>
-                      </Reorder.Item>
-                    );
+                      </Reorder.Item>,
+                      <ContentsBlock key={`${section.id}-contents`} />,
+                    ];
                   }
 
                   if (section.kind === 'summary') {
@@ -3655,6 +4738,21 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     );
                   }
 
+                  if (section.kind === 'workflow') {
+                    return (
+                      <Reorder.Item {...sectionProps}>
+                        <WorkflowResultCard
+                          workflow={section.workflow}
+                          index={i}
+                          casesPhase={casesPhases[section.workflow.id] ?? 'idle'}
+                          onCasesPhaseChange={(p) => setCasesPhase(section.workflow.id, p)}
+                          onUpdateRiskOwner={(owner) => updateWorkflowRiskOwner(section.workflow.id, owner)}
+                          onDelete={() => removeSection(section.id)}
+                        />
+                      </Reorder.Item>
+                    );
+                  }
+
                   if (section.kind === 'note') {
                     return (
                       <Reorder.Item {...sectionProps}>
@@ -3664,6 +4762,20 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                           </div>
                           <p className="text-[13px] text-text leading-relaxed">{section.content}</p>
                         </div>
+                      </Reorder.Item>
+                    );
+                  }
+
+                  if (section.kind === 'observation') {
+                    return (
+                      <Reorder.Item {...sectionProps}>
+                        <ObservationCard
+                          obs={section}
+                          index={i}
+                          onEdit={() => openEditObservation(section)}
+                          onToggleAttachment={() => toggleObservationAttachment(section.id)}
+                          onDelete={() => setSectionPendingDelete(section)}
+                        />
                       </Reorder.Item>
                     );
                   }
@@ -3705,6 +4817,136 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
           addToast({ type: 'success', message: `${verb} "${selection.label}" — data syncing…` });
         }}
       />
+
+      {/* Confirm dialog — section delete from Contents */}
+      <ConfirmDialog
+        open={!!sectionPendingDelete}
+        onClose={() => setSectionPendingDelete(null)}
+        onConfirm={confirmDeleteSection}
+        title="Remove section?"
+        description={sectionPendingDelete && (
+          <>This will remove <span className="font-semibold text-text">{sectionPendingDelete.title}</span> from the report. This action cannot be undone.</>
+        )}
+        confirmLabel="Remove"
+        destructive
+      />
+
+      {/* Add Observation modal */}
+      {showAddObservation && createPortal(
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
+            onClick={closeAddObservation}
+          >
+            <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-labelledby="add-observation-title"
+              className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[520px] max-w-[calc(100vw-32px)] p-6"
+            >
+              <button
+                onClick={closeAddObservation}
+                aria-label="Close"
+                className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+              <h3 id="add-observation-title" className="text-[16px] font-bold text-text tracking-tight mb-5">{editingObservationId ? 'Edit observation' : 'Add observation'}</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
+                  <input
+                    type="text"
+                    value={editingObservationObsId ?? nextObservationId()}
+                    readOnly
+                    className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[13px] font-mono text-text tabular-nums cursor-default"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Name <span className="text-risk normal-case font-normal">*</span></label>
+                  <input
+                    type="text"
+                    value={obsForm.name}
+                    onChange={(e) => setObsForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g. Vendor master review gap"
+                    autoFocus
+                    className="w-full bg-white border border-border-light rounded-[8px] px-3 py-2 text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
+                  <div className="bg-white border border-border-light rounded-[8px] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-all overflow-hidden">
+                    <textarea
+                      value={obsForm.description}
+                      onChange={(e) => setObsForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Add observation details, evidence, and recommended actions."
+                      rows={4}
+                      className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-text focus:outline-none focus:ring-0 resize-none"
+                    />
+                    {obsForm.attachmentDataUrl && (
+                      <div className="px-3 pb-2">
+                        <div className="relative inline-block w-20 h-20 rounded-lg border border-border-light overflow-hidden bg-paper-50">
+                          <img src={obsForm.attachmentDataUrl} alt="Attachment preview" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setObsForm(prev => ({ ...prev, attachmentDataUrl: '' }))}
+                            aria-label="Remove attachment"
+                            className="absolute top-0.5 right-0.5 inline-flex items-center justify-center w-4 h-4 rounded-md bg-ink-900/75 text-white hover:bg-ink-900 transition-colors cursor-pointer"
+                          >
+                            <X size={9} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
+                      <label
+                        title={obsForm.attachmentDataUrl ? 'Change attachment' : 'Attach image (PNG / JPG)'}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+                      >
+                        <Paperclip size={14} />
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={(e) => handleObservationAttachment(e.target.files?.[0] ?? null)}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 mt-6">
+                <button
+                  onClick={closeAddObservation}
+                  className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveObservation}
+                  disabled={!obsForm.name.trim()}
+                  className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {editingObservationId ? 'Update observation' : 'Save observation'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body,
+      )}
     </motion.div>
   );
 }
@@ -3716,6 +4958,8 @@ export default function ReportsView({
   onOpenQuery,
   customTemplates: customTemplatesProp,
   onAddCustomTemplate,
+  focusReportId,
+  onFocusReportConsumed,
 }: ReportsViewProps = {}) {
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
@@ -3726,6 +4970,8 @@ export default function ReportsView({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [tagFilter, setTagFilter] = useState<string>('All');
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [gridSearch, setGridSearch] = useState('');
+  const [sharedGridSearch, setSharedGridSearch] = useState('');
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
@@ -3736,7 +4982,7 @@ export default function ReportsView({
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
   };
-  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v1';
+  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v6';
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
@@ -3750,6 +4996,30 @@ export default function ReportsView({
   useEffect(() => {
     try { localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports)); } catch { /* ignore */ }
   }, [generatedReports]);
+
+  // Hot-receive new reports generated by a Bulk Run (BulkRunProgress dispatches
+  // this when its run completes). Prepend so it appears at the top of My Reports.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<GeneratedReport>).detail;
+      if (!detail || !detail.id) return;
+      setGeneratedReports(prev => (prev.some(r => r.id === detail.id) ? prev : [detail, ...prev]));
+    };
+    window.addEventListener('irame:bulk-report-created', handler);
+    return () => window.removeEventListener('irame:bulk-report-created', handler);
+  }, []);
+
+  // Toast "Open report" click flows through App.tsx, which sets focusReportId.
+  // When it changes, jump into the full-page view of that report.
+  useEffect(() => {
+    if (!focusReportId) return;
+    const report = generatedReports.find(r => r.id === focusReportId);
+    if (report) {
+      setActiveTab('my-reports');
+      setViewingReport(report);
+      onFocusReportConsumed?.();
+    }
+  }, [focusReportId, generatedReports, onFocusReportConsumed]);
 
   const addQueryToReport = (reportId: string, query: AttachedQuery) => {
     setGeneratedReports(prev => prev.map(r =>
@@ -3777,6 +5047,15 @@ export default function ReportsView({
     );
   };
 
+  const updateReportDescription = (reportId: string, description: string) => {
+    setGeneratedReports(prev => prev.map(r =>
+      r.id === reportId ? { ...r, description } : r
+    ));
+    setViewingReport(prev =>
+      prev && prev.id === reportId ? { ...prev, description } : prev
+    );
+  };
+
   const [previewingTemplate, setPreviewingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [reportAppliedTemplates, setReportAppliedTemplates] = useState<Record<string, typeof REPORT_TEMPLATES[0]>>({});
@@ -3800,9 +5079,13 @@ export default function ReportsView({
     setShowNewReportTemplateSelector(false);
   };
 
-  const filteredReports = tagFilter === 'All'
-    ? generatedReports
-    : generatedReports.filter(r => r.tag === tagFilter);
+  const filteredReports = (() => {
+    const q = gridSearch.trim().toLowerCase();
+    const byTag = tagFilter === 'All'
+      ? generatedReports
+      : generatedReports.filter(r => r.tag === tagFilter);
+    return q ? byTag.filter(r => r.name.toLowerCase().includes(q)) : byTag;
+  })();
 
   const TAG_FILTER_OPTIONS = ['All', 'Internal Audit', 'Bulk Audit'];
 
@@ -3834,8 +5117,28 @@ export default function ReportsView({
     </div>
   );
 
+  const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <span className="relative group/tt inline-flex">
+      {children}
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+        {label}
+      </span>
+    </span>
+  );
+
 
   if (viewingReport) {
+    // All Bulk Audit reports now render as Editorial (chosen treatment) unless
+    // an explicit aestheticVariant overrides it. Internal Audit reports keep
+    // the default ReportView.
+    if (viewingReport.aestheticVariant || viewingReport.tag === 'Bulk Audit') {
+      return (
+        <BulkAuditVariantView
+          report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
+          onBack={() => setViewingReport(null)}
+        />
+      );
+    }
     return (
       <ReportView
         report={viewingReport}
@@ -3847,13 +5150,14 @@ export default function ReportsView({
         customTemplates={customTemplates}
         onAddQuery={addQueryToReport}
         onRemoveQuery={removeAttachedQuery}
+        onUpdateDescription={updateReportDescription}
       />
     );
   }
 
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
-      <div className="max-w-5xl mx-auto px-8 py-8 relative">
+      <div className="px-[124px] py-8 relative flex flex-col min-h-full">
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -3912,6 +5216,7 @@ export default function ReportsView({
         {/* My Reports */}
         {activeTab === 'my-reports' && viewMode === 'list' && (
           <SmartTable
+            className="flex-1"
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search reports..."
@@ -3944,7 +5249,20 @@ export default function ReportsView({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-text font-medium hover:text-primary transition-colors">{String(item.name)}</span>
+                      {(() => {
+                        const n = String(item.name);
+                        const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
+                        return (
+                          <span className="relative group/nt inline-flex">
+                            <span className="text-text font-medium hover:text-primary transition-colors">{truncated}</span>
+                            {n.length > 100 && (
+                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
+                                {n}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })()}
                       {Boolean(item.tag) && (() => { const t = String(item.tag); return <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap shrink-0" style={{ borderRadius: '8px', background: t === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB', color: t === 'Internal Audit' ? '#BF2E84' : '#A74108' }}>{t}</span>; })()}
                       {reportAppliedTemplates[String(item.id)] && (
                         <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
@@ -3952,7 +5270,7 @@ export default function ReportsView({
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-text-muted">2 queries · {String(item.pages)} pages</div>
+                    <div className="text-[10px] text-text-muted">{String(item.queries)} queries · {String(item.pages)} pages</div>
                   </div>
                 </div>
               )},
@@ -3962,9 +5280,9 @@ export default function ReportsView({
               { key: 'status', label: 'Status', width: '100px', render: (item) => <StatusBadge status={String(item.status)} /> },
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
-                  <button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
-                  <button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={14} /></button>
+                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -3972,9 +5290,25 @@ export default function ReportsView({
         )}
 
         {activeTab === 'my-reports' && viewMode === 'grid' && (
-          <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+          <div className="w-full flex-1 bg-white rounded-xl border border-border-light overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-light bg-surface-2/50">
-              <p className="text-[12px] text-text-muted">{filteredReports.length} reports</p>
+              <div className="relative flex-1 max-w-xs">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  value={gridSearch}
+                  onChange={e => setGridSearch(e.target.value)}
+                  placeholder="Search reports..."
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                />
+                {gridSearch && (
+                  <button
+                    onClick={() => setGridSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
                 <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
@@ -4006,7 +5340,7 @@ export default function ReportsView({
                 )}
               </div>
             ) : (
-            <div className="p-4 grid grid-cols-3 gap-4 items-start">
+            <div className="w-full p-4 grid grid-cols-3 gap-4 items-start">
               {filteredReports.map((r, i) => {
                 return (
                   <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
@@ -4021,8 +5355,8 @@ export default function ReportsView({
                         <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="hover:text-risk transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Delete"><Trash2 size={15} /></button>
                       </div>
                     </div>
-                    <div className="font-medium text-text group-hover:text-primary transition-colors mb-1" style={{ fontSize: '14px', lineHeight: '20px' }}>{r.name}</div>
-                    <div className="text-[11px] text-text-muted mb-3">{r.pages} pages · {r.generatedAt}</div>
+                    <div className="font-medium text-text group-hover:text-primary transition-colors mb-1 line-clamp-2 min-h-[40px]" style={{ fontSize: '14px', lineHeight: '20px' }} title={r.name}>{r.name}</div>
+                    <div className="text-[11px] text-text-muted mb-3">{r.queries} queries · {r.pages} pages · {r.generatedAt}</div>
                     <div className="mt-auto">
                       {r.tag && (
                         <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap" style={{ borderRadius: '8px', background: r.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB', color: r.tag === 'Internal Audit' ? '#BF2E84' : '#A74108' }}>{r.tag}</span>
@@ -4039,6 +5373,7 @@ export default function ReportsView({
         {/* Shared Reports */}
         {activeTab === 'shared-reports' && viewMode === 'list' && (
           <SmartTable
+            className="flex-1"
             data={SHARED_REPORTS as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search shared reports..."
@@ -4063,7 +5398,7 @@ export default function ReportsView({
                   </div>
                   <div>
                     <div className="text-text font-medium">{String(item.name)}</div>
-                    <div className="text-[10px] text-text-muted">{String(item.pages)} pages · shared with {String(item.sharedWith)}</div>
+                    <div className="text-[10px] text-text-muted">{String(item.queries)} queries · {String(item.pages)} pages · shared with {String(item.sharedWith)}</div>
                   </div>
                 </div>
               )},
@@ -4080,35 +5415,62 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
-                  <button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
+                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
           />
         )}
 
-        {activeTab === 'shared-reports' && viewMode === 'grid' && (
-          <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        {activeTab === 'shared-reports' && viewMode === 'grid' && (() => {
+          const q = sharedGridSearch.trim().toLowerCase();
+          const filteredSharedReports = q
+            ? SHARED_REPORTS.filter(r =>
+                r.name.toLowerCase().includes(q) ||
+                r.sharedBy.toLowerCase().includes(q) ||
+                r.sharedWith.toLowerCase().includes(q)
+              )
+            : SHARED_REPORTS;
+          return (
+          <div className="w-full flex-1 bg-white rounded-xl border border-border-light overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-light bg-surface-2/50">
-              <p className="text-[12px] text-text-muted">{SHARED_REPORTS.length} reports</p>
+              <div className="relative flex-1 max-w-xs">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  value={sharedGridSearch}
+                  onChange={e => setSharedGridSearch(e.target.value)}
+                  placeholder="Search shared reports..."
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                />
+                {sharedGridSearch && (
+                  <button
+                    onClick={() => setSharedGridSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
                 <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
                 <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
               </div>
             </div>
-            {SHARED_REPORTS.length === 0 ? (
+            {filteredSharedReports.length === 0 ? (
               <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
                 <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-3">
                   <Share2 size={18} className="text-text-muted/50" />
                 </div>
                 <div className="text-[13px] font-medium text-text-secondary">
-                  No reports have been shared with you yet.
+                  {SHARED_REPORTS.length === 0
+                    ? 'No reports have been shared with you yet.'
+                    : 'No shared reports match your search.'}
                 </div>
               </div>
             ) : (
-            <div className="p-4 grid grid-cols-3 gap-4 items-start">
-              {SHARED_REPORTS.map((r, i) => (
+            <div className="w-full p-4 grid grid-cols-3 gap-4 items-start">
+              {filteredSharedReports.map((r, i) => (
                 <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                   className="glass-card rounded-xl p-4 hover:border-primary/20 transition-all group cursor-pointer flex flex-col"
                 >
@@ -4119,8 +5481,8 @@ export default function ReportsView({
                       <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Share"><Share2 size={15} /></button>
                     </div>
                   </div>
-                  <div className="font-medium text-[13px] text-text group-hover:text-primary transition-colors leading-snug mb-1">{r.name}</div>
-                  <div className="text-[11px] text-text-muted mb-3">{r.pages} pages · {r.sharedAt}</div>
+                  <div className="font-medium text-[13px] text-text group-hover:text-primary transition-colors leading-snug mb-1 line-clamp-2 min-h-[36px]" title={r.name}>{r.name}</div>
+                  <div className="text-[11px] text-text-muted mb-3">{r.queries} queries · {r.pages} pages · {r.sharedAt}</div>
                   <div className="mt-auto flex items-center justify-between gap-2">
                     <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap" style={{ borderRadius: '8px', background: 'rgba(106,18,205,0.08)', color: '#6a12cd' }}>{r.sharedWith}</span>
                     <div className="flex items-center gap-1.5">
@@ -4135,7 +5497,8 @@ export default function ReportsView({
             </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {activeTab === 'templates' && (() => {
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean) => {
@@ -4180,6 +5543,7 @@ export default function ReportsView({
                             generatedAt: today,
                             status: 'draft',
                             pages: Math.max(1, sectionsCount),
+                            queries: 0,
                             isEmpty: true,
                           };
                           setGeneratedReports(prev => [newReport, ...prev]);
@@ -4380,6 +5744,7 @@ export default function ReportsView({
                         generatedAt: today,
                         status: 'draft',
                         pages: Math.max(1, sectionsCount),
+                        queries: 0,
                         isEmpty: true,
                       };
                       setGeneratedReports(prev => [newReport, ...prev]);
