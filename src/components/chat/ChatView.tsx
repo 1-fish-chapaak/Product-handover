@@ -9,7 +9,7 @@ import {
   ExternalLink, Download, MoreHorizontal, Pencil, CornerDownLeft, ArrowUpRight,
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
-  Search, GitCompare, ShieldCheck, Info, type LucideIcon,
+  Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
@@ -491,7 +491,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
 
             <button
               onClick={() => setFullscreen(true)}
-              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Expand chart"
               title="Expand chart"
             >
@@ -586,7 +586,7 @@ function FullscreenChartModal({
             )}
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
               <X size={16} />
@@ -624,6 +624,7 @@ function ResultsTable({
   onDownload: () => void;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   const openFullscreen = () => { setFullscreen(true); };
 
@@ -720,22 +721,29 @@ function ResultsTable({
     onDownload();
   };
 
-  // Excel path — emits an HTML table with the .xls extension and the
-  // application/vnd.ms-excel MIME. Excel opens this natively as a workbook
-  // (the legacy "HTML spreadsheet" format), avoiding a heavy xlsx library
-  // for a mock that doesn't need real formula support.
-  const handleExcelDownload = () => {
-    const escHtml = (s: string) => s.replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-    ));
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Flagged duplicates</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-<body><table border="1">
-<thead><tr>${columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead>
-<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${escHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>
-</table></body></html>`;
-    triggerDownload(new Blob([html], { type: 'application/vnd.ms-excel' }), 'flagged-duplicate-pairs.xls');
-    onDownload();
+  // Real .xlsx workbook with a single "Flagged duplicates" sheet, built
+  // via SheetJS. Lazy-loaded so the ~400KB lib only ships when a user
+  // actually clicks Excel. Replaces the HTML-as-Excel hack that modern
+  // Excel and Google Sheets refused to open as a real workbook.
+  const handleExcelDownload = async () => {
+    try {
+      const mod = await import('xlsx');
+      const XLSX = ((mod as unknown as { default?: typeof mod }).default ?? mod);
+      const wb = XLSX.utils.book_new();
+      const sheetRows: (string | number)[][] = [columns, ...rows];
+      const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
+      sheet['!cols'] = columns.map(() => ({ wch: 16 }));
+      XLSX.utils.book_append_sheet(wb, sheet, 'Flagged duplicates');
+      // Build the blob ourselves — see handleExcel for why writeFile is avoided.
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+      triggerDownload(
+        new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        'flagged-duplicate-pairs.xlsx',
+      );
+      onDownload();
+    } catch (err) {
+      console.error('Excel export failed', err);
+    }
   };
 
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -790,38 +798,45 @@ function ResultsTable({
                   <span>Download</span>
                   <ChevronDown size={12} className={`text-ink-400 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {downloadOpen && (
-                  <div
-                    role="menu"
-                    className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { setDownloadOpen(false); handleCsvDownload(); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:bg-paper-50"
+                <AnimatePresence>
+                  {downloadOpen && (
+                    <motion.div
+                      role="menu"
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.14, ease: [0.16, 1, 0.3, 1] }}
+                      // min-w-full pins the menu to the Download trigger's width.
+                      // origin-top-right matches the dropdown's anchor for the
+                      // subtle scale-in motion.
+                      className="absolute right-0 top-full mt-1.5 z-50 min-w-full origin-top-right rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_24px_-14px_rgba(15,8,30,0.20)] overflow-hidden py-1"
                     >
-                      <FileText size={13} className="text-ink-500 shrink-0" />
-                      <span className="flex-1">CSV</span>
-                      <span className="text-[10.5px] font-mono text-ink-400">.csv</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { setDownloadOpen(false); handleExcelDownload(); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:bg-paper-50"
-                    >
-                      <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
-                      <span className="flex-1">Excel</span>
-                      <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
-                    </button>
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setDownloadOpen(false); handleCsvDownload(); }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                      >
+                        <FileText size={13} className="text-ink-400 shrink-0" />
+                        <span>CSV</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setDownloadOpen(false); handleExcelDownload(); }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                      >
+                        <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
+                        <span>Excel</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
             <button
               onClick={openFullscreen}
-              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Expand to full view"
               title="Expand to full view"
             >
@@ -914,6 +929,7 @@ function FullscreenTableModal({
 }) {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -971,37 +987,41 @@ function FullscreenTableModal({
                 <span>Download</span>
                 <ChevronDown size={12} className={`text-ink-400 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
               </button>
-              {downloadOpen && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setDownloadOpen(false); onDownloadCsv(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+              <AnimatePresence>
+                {downloadOpen && (
+                  <motion.div
+                    role="menu"
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -4, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.14, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute right-0 top-full mt-1.5 z-50 min-w-full origin-top-right rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_24px_-14px_rgba(15,8,30,0.20)] overflow-hidden py-1"
                   >
-                    <FileText size={13} className="text-ink-500 shrink-0" />
-                    <span className="flex-1">CSV</span>
-                    <span className="text-[10.5px] font-mono text-ink-400">.csv</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setDownloadOpen(false); onDownloadExcel(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-                  >
-                    <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
-                    <span className="flex-1">Excel</span>
-                    <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setDownloadOpen(false); onDownloadCsv(); }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                    >
+                      <FileText size={13} className="text-ink-400 shrink-0" />
+                      <span>CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setDownloadOpen(false); onDownloadExcel(); }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                    >
+                      <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
+                      <span>Excel</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
               <X size={16} />
@@ -1327,7 +1347,7 @@ function ClarificationBlock({
               with an ellipsis for very long content; full text in the
               native tooltip. */}
           <p
-            className="text-[15px] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2 min-h-[2.8rem]"
+            className="text-[15px] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
             title={viewQ.question}
           >
             {viewQ.question}
@@ -1337,23 +1357,22 @@ function ClarificationBlock({
             onClick={onSkipAll}
             aria-label="Close clarification"
             title="Close — skip the rest"
-            className="inline-flex items-center justify-center size-7 rounded-md text-ink-400 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+            className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
           >
             <X size={14} />
           </button>
         </div>
 
-        {/* Numbered options — Claude-style calm rows. Highlighted state
-            is a soft canvas wash, badges sit on a flat paper fill, return
-            arrow stays neutral. Hairline dividers between rows, but the
-            highlighted row's neighbors hide their top borders so the wash
-            extends cleanly. */}
+        {/* Numbered options — refined: compact badges, brand-tinted hover,
+            picked state gets a left brand accent rail + soft fill. Hairline
+            dividers hide around active rows so the wash reads as one block. */}
         <div role="listbox" aria-label={viewQ.question} className="py-1">
           {viewQ.options.map((opt, idx) => {
             const isHighlighted = highlighted === idx;
             const isPicked = data.answers[viewIndex] === opt;
             const prevIsHighlighted = highlighted === idx - 1;
-            const showDivider = idx > 0 && !isHighlighted && !prevIsHighlighted && !isPicked;
+            const prevIsPicked = idx > 0 && data.answers[viewIndex] === viewQ.options[idx - 1];
+            const showDivider = idx > 0 && !isHighlighted && !prevIsHighlighted && !isPicked && !prevIsPicked;
             return (
               <button
                 key={opt}
@@ -1362,34 +1381,58 @@ function ClarificationBlock({
                 aria-selected={isHighlighted}
                 onClick={() => selectOption(opt)}
                 onMouseEnter={() => setHighlighted(idx)}
-                className={`relative w-full flex items-center gap-3 px-5 py-3 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
-                  isPicked ? 'bg-brand-50' : isHighlighted ? 'bg-canvas' : 'hover:bg-canvas/60'
-                } ${showDivider ? 'before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/70' : ''}`}
-              >
-                <span className={`inline-flex items-center justify-center size-7 rounded-md text-[12px] font-semibold tabular-nums shrink-0 transition-colors ${
+                className={`group/opt relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
                   isPicked
-                    ? 'bg-brand-600 text-white'
+                    ? 'bg-brand-50'
                     : isHighlighted
-                      ? 'bg-brand-100 text-brand-700'
-                      : 'bg-brand-50 text-brand-400'
-                }`} aria-hidden="true">
-                  {isPicked ? <Check size={13} /> : idx + 1}
+                      ? 'bg-brand-50/50'
+                      : 'hover:bg-brand-50/30'
+                } ${showDivider ? 'before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/60' : ''}`}
+              >
+                {/* Left accent rail — brand-600 when picked, faint brand-300 on hover */}
+                <span
+                  aria-hidden="true"
+                  className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-sm transition-all duration-200 ${
+                    isPicked ? 'h-[60%] bg-brand-600' : isHighlighted ? 'h-[40%] bg-brand-300' : 'h-0 bg-transparent'
+                  }`}
+                />
+                <span
+                  className={`inline-flex items-center justify-center size-6 rounded-md text-[11.5px] font-semibold tabular-nums shrink-0 transition-colors ${
+                    isPicked
+                      ? 'bg-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.10)]'
+                      : isHighlighted
+                        ? 'bg-brand-100 text-brand-700'
+                        : 'bg-brand-50 text-brand-500 group-hover/opt:bg-brand-100 group-hover/opt:text-brand-700'
+                  }`}
+                  aria-hidden="true"
+                >
+                  {isPicked ? <Check size={12} strokeWidth={2.75} /> : idx + 1}
                 </span>
-                <span className={`flex-1 text-[14px] leading-snug ${isPicked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>{opt}</span>
+                <span className={`flex-1 text-[14px] leading-snug transition-colors ${
+                  isPicked ? 'text-ink-900 font-medium' : isHighlighted ? 'text-ink-900' : 'text-ink-800'
+                }`}>
+                  {opt}
+                </span>
                 {isHighlighted && !isPicked && (
-                  <CornerDownLeft size={13} className="text-ink-500 shrink-0" aria-hidden="true" />
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-ink-400 shrink-0">
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[10px] leading-none">
+                      <CornerDownLeft size={11} strokeWidth={2.25} />
+                    </kbd>
+                  </span>
                 )}
               </button>
             );
           })}
 
-          {/* Custom input row — sibling row inside the same card, no
-              tinted band. Pencil-in-square glyph mirrors the numbered
-              badges. Hairline divider above separates the freeform
-              entry from the listed options. */}
-          <div className="relative flex items-center gap-3 px-5 py-3 before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/70">
-            <span className="inline-flex items-center justify-center size-7 rounded-md bg-brand-50 text-brand-400 shrink-0" aria-hidden="true">
-              <Pencil size={13} />
+          {/* Custom input row — visually distinct from the numbered options:
+              dashed pencil chip, thicker divider above, primary CTA appears
+              once the user has typed. */}
+          <div className="relative flex items-center gap-3 px-5 py-2.5 before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border">
+            <span
+              className="inline-flex items-center justify-center size-6 rounded-md bg-canvas-elevated border border-dashed border-canvas-border text-ink-400 shrink-0"
+              aria-hidden="true"
+            >
+              <Pencil size={11} strokeWidth={2.25} />
             </span>
             <input
               ref={inputRef}
@@ -1402,15 +1445,25 @@ function ClarificationBlock({
                   selectOption(customInputRef.current.trim());
                 }
               }}
-              placeholder="Something else"
+              placeholder="Type something else…"
               className="no-focus-ring flex-1 bg-transparent text-[14px] text-ink-800 placeholder:text-ink-400 outline-none h-7"
             />
-            <button
-              onClick={skipCurrent}
-              className="px-3 h-7 text-[12px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 border border-canvas-border rounded-md transition-colors cursor-pointer shrink-0"
-            >
-              Skip
-            </button>
+            {customInput.trim() ? (
+              <button
+                onClick={() => selectOption(customInput.trim())}
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Use this
+                <CornerDownLeft size={11} strokeWidth={2.25} />
+              </button>
+            ) : (
+              <button
+                onClick={skipCurrent}
+                className="h-7 px-2.5 text-[12px] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Skip
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1442,6 +1495,7 @@ function InlineAuditLoader({
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const onTabSwitchRef = useRef(onTabSwitch);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   onCompleteRef.current = onComplete;
   onTabSwitchRef.current = onTabSwitch;
 
@@ -1458,9 +1512,43 @@ function InlineAuditLoader({
     return () => clearTimeout(t);
   }, [stepIdx, steps, stepDurationMs]);
 
+  // Pin the loader near the top of the chat viewport on every step change.
+  // The loader bubble has a tall `paddingBottom: 50vh` buffer (see render
+  // site), so scrolling the container to scrollHeight puts the buffer at
+  // the bottom of the viewport and the loader text well above it. Parent
+  // ResizeObserver is gated on showProgressiveLoader so it won't override.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const findScrollParent = (node: HTMLElement | null): HTMLElement | null => {
+      let p = node?.parentElement ?? null;
+      while (p) {
+        const oy = window.getComputedStyle(p).overflowY;
+        if (oy === 'auto' || oy === 'scroll') return p;
+        p = p.parentElement;
+      }
+      return null;
+    };
+    const scrollable = findScrollParent(el);
+    const r1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollable) {
+          scrollable.scrollTo({ top: scrollable.scrollHeight, behavior: 'smooth' });
+        } else {
+          el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+      });
+    });
+    return () => cancelAnimationFrame(r1);
+  }, [stepIdx]);
+
   const active = steps[Math.min(stepIdx, steps.length - 1)];
   return (
-    <div className="flex items-center gap-2 text-[13px] text-ink-600">
+    <div
+      ref={rootRef}
+      style={{ scrollMarginBottom: 24 }}
+      className="flex items-center gap-2 text-[13px] text-ink-600"
+    >
       <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
         <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
@@ -1524,6 +1612,10 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
   const [description, setDescription] = useState(defaultDescription);
   const [bpId, setBpId] = useState<string>('');
   const [subProcessId, setSubProcessId] = useState<string>('');
+  const [bpOpen, setBpOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+  const bpRef = useRef<HTMLDivElement | null>(null);
+  const subRef = useRef<HTMLDivElement | null>(null);
   // Audit run frequency — same shape as Workflow Library > Configuration tab
   // (WorkflowDetail.tsx). Defaults match the canonical "Daily 06:00 Schedule 3x".
   const [frequency, setFrequency] = useState<WorkflowFrequencyConfig['frequency']>('Daily');
@@ -1540,6 +1632,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
       setDescription(defaultDescription);
       setBpId('');
       setSubProcessId('');
+      setBpOpen(false);
+      setSubOpen(false);
       setFrequency('Daily');
       setRunTime('06:00');
       setDayOfWeek('Mon');
@@ -1549,15 +1643,37 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
     }
   }, [open, defaultName, defaultDescription]);
 
+  // Click-outside + Escape close for the two custom dropdowns
+  useEffect(() => {
+    if (!bpOpen && !subOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (bpOpen && bpRef.current && !bpRef.current.contains(e.target as Node)) setBpOpen(false);
+      if (subOpen && subRef.current && !subRef.current.contains(e.target as Node)) setSubOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (bpOpen) setBpOpen(false);
+      if (subOpen) setSubOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [bpOpen, subOpen]);
+
   const pillCls = (active: boolean) =>
-    `px-3 py-1 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer ${
+    `inline-flex items-center h-7 px-3 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
       active
-        ? 'bg-primary border-primary text-white'
-        : 'bg-white border-border-light text-text-muted hover:border-primary/40 hover:text-text'
+        ? 'bg-brand-600 border-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
+        : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/60'
     }`;
 
   // Sub-process options derived from SOPs filtered by selected BP
   const subProcessOptions = bpId ? SOPS.filter(s => s.bpId === bpId) : [];
+  const selectedBp = BUSINESS_PROCESSES.find(b => b.id === bpId);
+  const selectedSub = subProcessOptions.find(s => s.id === subProcessId);
 
   const canConfirm = name.trim() && bpId && subProcessId;
 
@@ -1584,24 +1700,28 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-5 pb-3">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary-xlight flex items-center justify-center shrink-0">
-              <Save size={16} className="text-primary" />
+            <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+              <Save size={16} className="text-brand-600" />
             </div>
             <div>
-              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-text">Save as workflow</h2>
-              <p className="text-[12px] text-text-muted mt-0.5">Turn this query result into a re-runnable workflow.</p>
+              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-ink-900">Save as workflow</h2>
+              <p className="text-[12px] text-ink-500 mt-0.5">Turn this query result into a re-runnable workflow.</p>
             </div>
           </div>
-          <button onClick={onCancel} className="p-1.5 text-text-muted hover:text-text-secondary rounded-md hover:bg-brand-50 transition-colors cursor-pointer" aria-label="Close">
+          <button
+            onClick={onCancel}
+            aria-label="Close"
+            className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
             <X size={16} />
           </button>
         </div>
 
         {/* Warning */}
-        <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-mitigated-50 border border-mitigated/10 flex gap-2 items-start">
-          <Lightbulb size={13} className="text-mitigated-700 mt-0.5 shrink-0" />
-          <p className="text-[12px] leading-relaxed text-mitigated-700">
-            This chat will switch to <strong>workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
+        <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200/60 flex gap-2 items-start">
+          <Lightbulb size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          <p className="text-[12px] leading-relaxed text-ink-700">
+            This chat will switch to <strong className="text-brand-700">workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
           </p>
         </div>
 
@@ -1609,106 +1729,195 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         <div className="px-6 pb-5 flex-1 overflow-y-auto space-y-4">
           {/* Workflow name */}
           <div>
-            <label className="block text-[12px] font-semibold text-text mb-1.5">Workflow name <span className="text-risk">*</span></label>
+            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+              Workflow name <span className="text-brand-500" aria-hidden>*</span>
+            </label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all"
+              className="no-focus-ring w-full h-10 px-3 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
               placeholder="e.g., Duplicate Invoice Detection: Q1 ±3 days"
             />
-            <p className="text-[11px] text-text-muted mt-1">IRA pre-filled this from your query. Edit if needed.</p>
+            <p className="text-[11px] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
           </div>
 
-          {/* Two-column row: BP + Sub-process */}
+          {/* Two-column row: BP + Sub-process (custom dropdowns matching app theme) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[12px] font-semibold text-text mb-1.5">Business process <span className="text-risk">*</span></label>
-              <select
-                value={bpId}
-                onChange={e => { setBpId(e.target.value); setSubProcessId(''); }}
-                className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer"
-              >
-                <option value="">Select…</option>
-                {BUSINESS_PROCESSES.map(bp => (
-                  <option key={bp.id} value={bp.id}>{bp.name} ({bp.abbr})</option>
-                ))}
-              </select>
+              <label htmlFor="wf-bp-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+                Business process <span className="text-brand-500" aria-hidden>*</span>
+              </label>
+              <div ref={bpRef} className="relative">
+                <button
+                  id="wf-bp-trigger"
+                  type="button"
+                  onClick={() => { setBpOpen(o => !o); setSubOpen(false); }}
+                  aria-haspopup="listbox"
+                  aria-expanded={bpOpen}
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                    bpOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
+                  }`}
+                >
+                  <span className={selectedBp ? 'text-ink-800 truncate' : 'text-ink-400 truncate'}>
+                    {selectedBp ? `${selectedBp.name} (${selectedBp.abbr})` : 'Select…'}
+                  </span>
+                  <motion.span
+                    animate={{ rotate: bpOpen ? 180 : 0 }}
+                    transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+                    className="inline-flex shrink-0"
+                  >
+                    <ChevronDown size={14} strokeWidth={2.25} className={bpOpen ? 'text-brand-500' : 'text-ink-400'} />
+                  </motion.span>
+                </button>
+                <AnimatePresence>
+                  {bpOpen && (
+                    <motion.div
+                      role="listbox"
+                      aria-labelledby="wf-bp-trigger"
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ transformOrigin: 'top center' }}
+                      className="absolute z-20 left-0 right-0 top-full mt-1.5 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_16px_36px_-16px_rgba(15,8,30,0.22),0_4px_10px_-4px_rgba(15,8,30,0.08)] overflow-hidden py-1 max-h-64 overflow-y-auto"
+                    >
+                      {BUSINESS_PROCESSES.map(bp => {
+                        const isSelected = bpId === bp.id;
+                        return (
+                          <button
+                            key={bp.id}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => { setBpId(bp.id); setSubProcessId(''); setBpOpen(false); }}
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                              isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
+                            }`}
+                          >
+                            <span className="flex-1 truncate">{bp.name} <span className="text-ink-400 font-normal">({bp.abbr})</span></span>
+                            {isSelected && <Check size={13} strokeWidth={2.5} className="text-brand-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-text mb-1.5">Sub-process <span className="text-risk">*</span></label>
-              <select
-                value={subProcessId}
-                onChange={e => setSubProcessId(e.target.value)}
-                disabled={!bpId}
-                className="w-full h-10 px-3 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer disabled:bg-brand-50 disabled:text-text-muted disabled:cursor-not-allowed"
-              >
-                <option value="">{bpId ? 'Select…' : 'Pick a business process first'}</option>
-                {subProcessOptions.map(sp => (
-                  <option key={sp.id} value={sp.id}>{sp.name.replace(/\s*SOP$/i, '').trim()}</option>
-                ))}
-              </select>
+              <label htmlFor="wf-sub-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+                Sub-process <span className="text-brand-500" aria-hidden>*</span>
+              </label>
+              <div ref={subRef} className="relative">
+                <button
+                  id="wf-sub-trigger"
+                  type="button"
+                  disabled={!bpId}
+                  onClick={() => { setSubOpen(o => !o); setBpOpen(false); }}
+                  aria-haspopup="listbox"
+                  aria-expanded={subOpen}
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                    !bpId
+                      ? 'border-canvas-border text-ink-400 cursor-not-allowed bg-paper-50/40'
+                      : subOpen
+                        ? 'border-brand-400 cursor-pointer'
+                        : 'border-canvas-border hover:border-ink-300 cursor-pointer'
+                  }`}
+                >
+                  <span className={selectedSub ? 'text-ink-800 truncate' : 'text-ink-400 truncate'}>
+                    {selectedSub ? selectedSub.name.replace(/\s*SOP$/i, '').trim() : bpId ? 'Select…' : 'Pick a business process first'}
+                  </span>
+                  <motion.span
+                    animate={{ rotate: subOpen ? 180 : 0 }}
+                    transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+                    className="inline-flex shrink-0"
+                  >
+                    <ChevronDown size={14} strokeWidth={2.25} className={subOpen ? 'text-brand-500' : 'text-ink-400'} />
+                  </motion.span>
+                </button>
+                <AnimatePresence>
+                  {subOpen && subProcessOptions.length > 0 && (
+                    <motion.div
+                      role="listbox"
+                      aria-labelledby="wf-sub-trigger"
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ transformOrigin: 'top center' }}
+                      className="absolute z-20 left-0 right-0 top-full mt-1.5 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_16px_36px_-16px_rgba(15,8,30,0.22),0_4px_10px_-4px_rgba(15,8,30,0.08)] overflow-hidden py-1 max-h-64 overflow-y-auto"
+                    >
+                      {subProcessOptions.map(sp => {
+                        const isSelected = subProcessId === sp.id;
+                        return (
+                          <button
+                            key={sp.id}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => { setSubProcessId(sp.id); setSubOpen(false); }}
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                              isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
+                            }`}
+                          >
+                            <span className="flex-1 truncate">{sp.name.replace(/\s*SOP$/i, '').trim()}</span>
+                            {isSelected && <Check size={13} strokeWidth={2.5} className="text-brand-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-[12px] font-semibold text-text mb-1.5">Description</label>
+            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">Description</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 text-[13px] text-text border border-border-light rounded-lg bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all resize-none"
+              className="no-focus-ring w-full px-3 py-2 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
               placeholder="One-line summary of what this workflow does."
             />
-            <p className="text-[11px] text-text-muted mt-1">Optional. IRA pre-filled this from your query.</p>
+            <p className="text-[11px] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
           </div>
 
           {/* Audit run frequency — mirrors Workflow Library > Configuration tab */}
           <div>
-            <label className="text-[12px] font-semibold text-text mb-2 inline-flex items-center gap-1.5">
-              <Calendar size={12} className="text-primary" />
+            <label className="text-[12px] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
+              <Calendar size={12} className="text-brand-600" />
               Audit run frequency
             </label>
-            <div className="rounded-lg border border-border-light bg-brand-50 p-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5">
+            <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-4 grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Frequency</label>
+                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Frequency</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Hourly', 'Daily', 'Weekly', 'Monthly'] as const).map(f => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setFrequency(f)}
-                      className={pillCls(frequency === f)}
-                    >
-                      {f}
-                    </button>
+                    <button key={f} type="button" onClick={() => setFrequency(f)} className={pillCls(frequency === f)}>{f}</button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Run Time</label>
+                <label htmlFor="wf-run-time" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Run Time</label>
                 <input
+                  id="wf-run-time"
                   type="time"
                   value={runTime}
                   onChange={e => setRunTime(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-border-light text-[13px] bg-white text-text focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all"
+                  className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                 />
               </div>
 
               {frequency === 'Weekly' && (
                 <div className="col-span-2">
-                  <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Select day of the week</label>
+                  <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Day of the week</label>
                   <div className="flex flex-wrap gap-1.5">
                     {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(d => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDayOfWeek(d)}
-                        className={pillCls(dayOfWeek === d)}
-                      >
-                        {d}
-                      </button>
+                      <button key={d} type="button" onClick={() => setDayOfWeek(d)} className={pillCls(dayOfWeek === d)}>{d}</button>
                     ))}
                   </div>
                 </div>
@@ -1716,43 +1925,30 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
 
               {frequency === 'Monthly' && (
                 <div>
-                  <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Select date</label>
+                  <label htmlFor="wf-monthly-date" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
                   <input
+                    id="wf-monthly-date"
                     type="date"
                     value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-border-light text-[13px] bg-white text-text focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all"
+                    className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Trigger On</label>
+                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Trigger On</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Schedule', 'Data Change', 'Manual'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTriggerOn(t)}
-                      className={pillCls(triggerOn === t)}
-                    >
-                      {t}
-                    </button>
+                    <button key={t} type="button" onClick={() => setTriggerOn(t)} className={pillCls(triggerOn === t)}>{t}</button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-text-secondary block mb-1.5">Retry on Failure</label>
+                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Retry on Failure</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Off', '1x', '3x', '5x'] as const).map(r => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRetry(r)}
-                      className={pillCls(retry === r)}
-                    >
-                      {r}
-                    </button>
+                    <button key={r} type="button" onClick={() => setRetry(r)} className={pillCls(retry === r)}>{r}</button>
                   ))}
                 </div>
               </div>
@@ -1761,8 +1957,11 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border-light px-6 py-3 flex items-center justify-end gap-2 bg-brand-50">
-          <button onClick={onCancel} className="px-4 py-2 text-[12px] font-semibold text-text-muted hover:text-text-secondary hover:bg-white rounded-lg transition-colors cursor-pointer">
+        <div className="border-t border-canvas-border px-6 py-3.5 flex items-center justify-end gap-2 bg-canvas-elevated">
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
             Cancel
           </button>
           <button
@@ -1781,9 +1980,9 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               },
             })}
             disabled={!canConfirm}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-canvas-border disabled:text-text-muted disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <Save size={12} /> Save & switch to workflow
+            <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
           </button>
         </div>
       </motion.div>
@@ -1805,13 +2004,16 @@ function InlineEditBubble({
   onCancel: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  // Auto-focus + select-all on mount so the user can immediately retype or
-  // tweak. Resize the textarea to fit its content.
+  // Auto-focus with caret at the END of the text — no pre-selection. The
+  // previous select-all blanketed the bubble with a selection highlight on
+  // open, which read as "the whole answer is staged for delete" instead of
+  // "edit here". Resize the textarea to fit its content.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.focus();
-    el.select();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, []);
@@ -1884,17 +2086,53 @@ function InlineEditBubble({
 // ─── Export report button ───────────────────────────────────────────────────
 // Distinct from the per-table Download button on ResultsTable. Export bundles
 // the WHOLE audit result (KPIs + table + assumptions) into a deliverable:
-//   - PDF  → opens a print-ready page in a new tab and triggers the browser's
-//            Print → Save as PDF dialog.
-//   - XLSX → builds a single .xls workbook with a sheet for KPIs and a sheet
-//            for the flagged-duplicate table.
+//   - PDF  → fires the browser's native print-preview over a hidden iframe;
+//            user picks "Save as PDF" in the native dialog.
+//   - XLSX → builds a real .xlsx workbook via SheetJS with three sheets:
+//            Summary (KPIs), Flagged pairs (full table), Transcript (chat thread).
 // Single source of truth for "the full result", separate from per-artifact
 // downloads.
 
-function ExportReportButton() {
+function ExportReportButton({
+  messages,
+  upToMessageId,
+  chatTitle,
+}: {
+  messages: ChatMessage[];
+  upToMessageId: string;
+  /** Drives the print-dialog default filename. The browser picks up the
+   *  iframe's <title>, sanitizes it, and uses that as the suggested PDF name. */
+  chatTitle: string;
+}) {
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Brief "Building…" state on the trigger while the hidden print iframe
+  // mounts and srcdoc loads. The print dialog itself is the preview UI.
+  const [pdfBuilding, setPdfBuilding] = useState(false);
+
+  // Pull only THIS query + answer pair — the user message that triggered
+  // the export plus the assistant message the Export button sits on. We
+  // walk backwards from upToMessageId to the nearest preceding user msg,
+  // so earlier Q&A in the same thread are NOT included. Empty / system
+  // bubbles (loading placeholders) are skipped.
+  const getTranscript = (): ChatMessage[] => {
+    const idx = messages.findIndex(m => m.id === upToMessageId);
+    if (idx < 0) return [];
+    const assistant = messages[idx];
+    let userMsg: ChatMessage | undefined;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user' && messages[i].text && messages[i].text.trim().length > 0) {
+        userMsg = messages[i];
+        break;
+      }
+    }
+    const pair = [userMsg, assistant].filter(Boolean) as ChatMessage[];
+    return pair.filter(m => m.text && m.text.trim().length > 0);
+  };
+  const fmtTime = (d: Date) =>
+    d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
   useEffect(() => {
     if (!open) return;
@@ -1915,78 +2153,335 @@ function ExportReportButton() {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
   ));
 
-  // PDF — open a print-ready document, auto-trigger Print → user saves as PDF.
+  // PDF — open the browser's native print preview (Cmd/Ctrl-P) over a hidden
+  // iframe that holds a CHAT export (not a report). The user gets the OS
+  // native preview pane + "Save as PDF" destination, with no new tab and no
+  // localhost URL ever surfaced. The iframe is removed after the print
+  // dialog closes.
   const handlePdf = () => {
-    const kpiRows = AUDIT_RESULT.kpis.map(k => `<tr><td>${escHtml(k.label)}</td><td class="num">${escHtml(k.value)}</td></tr>`).join('');
-    const tableHeader = `<tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr>`;
-    const tableBody = AUDIT_RESULT.table.rows.map(r =>
+    const transcript = getTranscript();
+    // Filename hygiene — browsers use the iframe's <title> as the suggested
+    // Save-as-PDF filename. Strip filesystem-hostile chars, collapse runs of
+    // whitespace into "-", and fall back to "query-result" when the chat is
+    // still unnamed ("New chat") so the user never sees a blank suggestion.
+    const safeTitle = (chatTitle && chatTitle.trim() && chatTitle.trim() !== 'New chat'
+      ? chatTitle.trim()
+      : 'query-result'
+    )
+      .replace(/[\\/:*?"<>|]+/g, '')
+      .replace(/\s+/g, '-')
+      .slice(0, 80);
+    const displayTitle = chatTitle && chatTitle.trim() && chatTitle.trim() !== 'New chat'
+      ? chatTitle.trim()
+      : 'Exported chat';
+
+    // If the assistant message in this pair carries rich result data
+    // (audit-result), inline KPIs + chart + table INSIDE its bubble — they
+    // belong to the answer, not a separate "report" section.
+    const assistantMsg = transcript.find(m => m.role === 'assistant');
+    const includeRichResult = !!assistantMsg && (assistantMsg as ChatMessage).richType === 'audit-result';
+
+    const kpiGridHtml = !includeRichResult ? '' : `<div class="kpi-grid">${AUDIT_RESULT.kpis.map(k => `<div class="kpi"><div class="kpi-value">${escHtml(k.value)}</div><div class="kpi-label">${escHtml(k.label)}</div></div>`).join('')}</div>`;
+
+    // Every chart in AUDIT_RESULT.charts rendered as a real SVG — vertical
+    // bar with axis ticks + value labels, or pie with legend. Chart type per
+    // id mirrors the in-chat picker's config (see `renderChart` above). Fully
+    // static, print-perfect, no library required.
+    const CHART_TYPE: Record<string, 'bar' | 'pie'> = {
+      confidence: 'bar', vendor: 'pie', 'monthly-high': 'bar',
+      region: 'pie', 'match-method': 'pie', status: 'bar', 'amount-band': 'bar',
+    };
+    const PIE_COLORS = ['#6a12cd', '#8845d9', '#a474e3', '#bea2ed', '#d8d0f7', '#ecdcff'];
+    const fmtCount = (n: number) => n >= 1000 ? n.toLocaleString() : String(n);
+    const niceMax = (m: number) => {
+      if (m <= 0) return 1;
+      const pow = Math.pow(10, Math.floor(Math.log10(m)));
+      const norm = m / pow;
+      const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+      return nice * pow;
+    };
+    type ChartData = typeof AUDIT_RESULT.charts[number];
+    const barChartSVG = (chart: ChartData) => {
+      const W = 600, H = 220, PAD_L = 56, PAD_R = 16, PAD_T = 14, PAD_B = 60;
+      const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+      const n = chart.data.length;
+      const dataMax = Math.max(...chart.data.map(d => d.count));
+      const yMax = niceMax(dataMax * 1.1);
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => Math.round(yMax * t));
+      const slotW = plotW / n;
+      const barW = slotW * 0.62;
+      const longLabels = n > 6 || chart.data.some(d => d.bucket.length > 7);
+      const gridAndAxis = ticks.map(t => {
+        const y = PAD_T + plotH - (t / yMax) * plotH;
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#ebe7f0" stroke-width="0.6"/>` +
+          `<text x="${PAD_L - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#7b6f8c" font-family="Inter, system-ui, sans-serif">${escHtml(fmtCount(t))}</text>`;
+      }).join('');
+      const bars = chart.data.map((d, i) => {
+        const x = PAD_L + slotW * i + (slotW - barW) / 2;
+        const h = (d.count / yMax) * plotH;
+        const y = PAD_T + plotH - h;
+        const cx = x + barW / 2;
+        const valY = y - 4;
+        const xLabel = longLabels
+          ? `<text transform="translate(${cx} ${PAD_T + plotH + 10}) rotate(-28)" text-anchor="end" font-size="9" fill="#5a4a72" font-family="Inter, system-ui, sans-serif">${escHtml(d.bucket)}</text>`
+          : `<text x="${cx}" y="${PAD_T + plotH + 16}" text-anchor="middle" font-size="9.5" fill="#5a4a72" font-family="Inter, system-ui, sans-serif">${escHtml(d.bucket)}</text>`;
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h, 0.5)}" fill="#6a12cd" rx="2"/>` +
+          `<text x="${cx}" y="${valY}" text-anchor="middle" font-size="9" fill="#3a2f4a" font-family="Inter, system-ui, sans-serif" font-weight="500">${escHtml(fmtCount(d.count))}</text>` +
+          xLabel;
+      }).join('');
+      const axisBaseline = `<line x1="${PAD_L}" y1="${PAD_T + plotH}" x2="${W - PAD_R}" y2="${PAD_T + plotH}" stroke="#d8d3e0" stroke-width="0.8"/>`;
+      return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">${gridAndAxis}${axisBaseline}${bars}</svg>`;
+    };
+    const polar = (cx: number, cy: number, r: number, deg: number): [number, number] => {
+      const rad = (deg - 90) * Math.PI / 180;
+      return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+    };
+    const pieChartSVG = (chart: ChartData) => {
+      const W = 600, H = 220;
+      const cx = 130, cy = 110, r = 88;
+      const total = chart.data.reduce((s, d) => s + d.count, 0) || 1;
+      let angle = 0;
+      const slices = chart.data.map((d, i) => {
+        const sweep = (d.count / total) * 360;
+        const a0 = angle, a1 = angle + sweep;
+        angle = a1;
+        if (sweep >= 359.99) {
+          return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${PIE_COLORS[i % PIE_COLORS.length]}" stroke="#ffffff" stroke-width="2"/>`;
+        }
+        const [x0, y0] = polar(cx, cy, r, a0);
+        const [x1, y1] = polar(cx, cy, r, a1);
+        const largeArc = sweep > 180 ? 1 : 0;
+        return `<path d="M ${cx} ${cy} L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z" fill="${PIE_COLORS[i % PIE_COLORS.length]}" stroke="#ffffff" stroke-width="2"/>`;
+      }).join('');
+      const legendX = 250;
+      const rowH = 22;
+      const startY = Math.max(10, (H - chart.data.length * rowH) / 2);
+      const legend = chart.data.map((d, i) => {
+        const ly = startY + i * rowH;
+        const pct = ((d.count / total) * 100).toFixed(1);
+        return `<rect x="${legendX}" y="${ly}" width="11" height="11" fill="${PIE_COLORS[i % PIE_COLORS.length]}" rx="2"/>` +
+          `<text x="${legendX + 18}" y="${ly + 9}" font-size="10" fill="#3a2f4a" font-family="Inter, system-ui, sans-serif" font-weight="500">${escHtml(d.bucket)}</text>` +
+          `<text x="${legendX + 18}" y="${ly + 20}" font-size="9" fill="#7b6f8c" font-family="Inter, system-ui, sans-serif">${escHtml(fmtCount(d.count))} · ${pct}%</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">${slices}${legend}</svg>`;
+    };
+    const chartHtml = !includeRichResult ? '' : AUDIT_RESULT.charts.map(c => {
+      const type = CHART_TYPE[c.id] ?? 'bar';
+      const svg = type === 'pie' ? pieChartSVG(c) : barChartSVG(c);
+      return `<div class="chart"><div class="chart-title">${escHtml(c.label)}</div>${svg}</div>`;
+    }).join('');
+
+    const tableHtml = !includeRichResult ? '' : `<div class="data-table"><div class="data-table-title">Flagged duplicate pairs · ${AUDIT_RESULT.table.totalRows}</div><table><thead><tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead><tbody>${AUDIT_RESULT.table.rows.map(r =>
       `<tr>${r.map((c, j) => `<td class="${j === 3 || j === 8 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
-    ).join('');
+    ).join('')}</tbody></table></div>`;
+
+    const renderMsg = (m: ChatMessage) => {
+      const isAssistant = m.role === 'assistant';
+      const attachRich = isAssistant && includeRichResult && m.id === assistantMsg!.id;
+      return `<div class="msg msg-${m.role}">
+    <div class="msg-head"><span class="role">${isAssistant ? 'Ira' : 'You'}</span><span class="ts">${escHtml(fmtTime(m.timestamp))}</span></div>
+    <div class="text">${escHtml(m.text).replace(/\n/g, '<br>')}</div>
+    ${attachRich ? kpiGridHtml + chartHtml + tableHtml : ''}
+  </div>`;
+    };
+    const transcriptHtml = transcript.length === 0
+      ? '<p class="empty">No messages to export.</p>'
+      : transcript.map(renderMsg).join('\n');
+
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>Audit report · Flagged duplicate invoices</title>
+<title>${escHtml(safeTitle)}</title>
 <style>
-  @page { size: A4; margin: 18mm; }
+  @page { size: A4; margin: 16mm; }
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif; color: #1a1124; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  .sub { color: #7b6f8c; font-size: 11px; margin-bottom: 18px; }
-  h2 { font-size: 13px; margin: 22px 0 8px; color: #3a2f4a; text-transform: uppercase; letter-spacing: 0.04em; }
-  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-  thead th { text-align: left; padding: 8px 10px; font-weight: 600; color: #7b6f8c; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; border-bottom: 1px solid #d8d3e0; background: #f8f6fb; }
-  tbody td { padding: 7px 10px; border-bottom: 1px solid #ebe7f0; }
-  td.num { font-variant-numeric: tabular-nums; }
-  .kpis td:first-child { color: #7b6f8c; }
-  .kpis td.num { font-weight: 600; }
-  .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #ebe7f0; color: #9d92ab; font-size: 10px; }
+  body { margin: 0; font: 12px/1.55 -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif; color: #1a1124; background: #ffffff; }
+  h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+  .meta { color: #7b6f8c; font-size: 11px; margin-bottom: 22px; }
+  .msg { padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; page-break-inside: auto; }
+  .msg-user { background: #f3eefb; border: 1px solid #e4d8f4; page-break-inside: avoid; }
+  .msg-assistant { background: #f8f6fb; border: 1px solid #ebe7f0; }
+  .msg-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .role { font-size: 10px; font-weight: 600; color: #6a12cd; text-transform: uppercase; letter-spacing: 0.06em; }
+  .msg-assistant .role { color: #5a4a72; }
+  .ts { font-size: 10px; color: #9d92ab; font-variant-numeric: tabular-nums; }
+  .text { white-space: normal; word-wrap: break-word; }
+  .empty { color: #9d92ab; font-style: italic; }
+
+  /* KPI grid — inline inside the assistant bubble. */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0 4px; }
+  .kpi { background: #ffffff; border: 1px solid #ebe7f0; border-radius: 6px; padding: 8px 10px; }
+  .kpi-value { font-size: 14px; font-weight: 600; color: #1a1124; font-variant-numeric: tabular-nums; }
+  .kpi-label { font-size: 9.5px; color: #7b6f8c; margin-top: 2px; }
+
+  /* SVG charts — each chart keeps together across page breaks. The SVG
+     scales to the bubble width via width:100%, viewBox preserves the
+     400×600-ish aspect ratio so axes + labels stay legible. */
+  .chart { margin: 14px 0 4px; page-break-inside: avoid; break-inside: avoid; }
+  .chart-title { font-size: 11px; font-weight: 600; color: #3a2f4a; margin-bottom: 6px; }
+
+  /* Data table — full rows, page-break friendly. */
+  .data-table { margin: 14px 0 0; }
+  .data-table-title { font-size: 11px; font-weight: 600; color: #3a2f4a; margin-bottom: 6px; }
+  .data-table table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  .data-table thead th { text-align: left; padding: 6px 8px; font-weight: 600; color: #7b6f8c; text-transform: uppercase; letter-spacing: 0.04em; font-size: 9px; border-bottom: 1px solid #d8d3e0; background: #f8f6fb; }
+  .data-table tbody td { padding: 5px 8px; border-bottom: 1px solid #ebe7f0; }
+  .data-table tbody tr { page-break-inside: avoid; }
+  .data-table td.num { font-variant-numeric: tabular-nums; }
 </style></head><body>
-<h1>Flagged duplicate invoices</h1>
-<div class="sub">Audit report · generated ${new Date().toLocaleString()}</div>
-
-<h2>Summary</h2>
-<table class="kpis"><tbody>${kpiRows}</tbody></table>
-
-<h2>Flagged pairs · ${AUDIT_RESULT.table.totalRows} rows</h2>
-<table><thead>${tableHeader}</thead><tbody>${tableBody}</tbody></table>
-
-<div class="footer">Auditify · ${AUDIT_RESULT.kpis.length} KPIs · ${AUDIT_RESULT.table.totalRows} flagged pairs · ${AUDIT_RESULT.table.columns.length} columns per pair</div>
-<script>window.addEventListener('load', () => setTimeout(() => window.print(), 200));</script>
+<h1>${escHtml(displayTitle)}</h1>
+<div class="meta">Exported ${escHtml(new Date().toLocaleString())}</div>
+${transcriptHtml}
 </body></html>`;
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 8000);
-    addToast({ type: 'info', message: 'Report opened · use Print → Save as PDF.' });
+
+    // Hidden iframe — positioned off-screen (not display:none, since some
+    // browsers won't render content for printing on a hidden iframe). The
+    // print dialog is fired on the iframe's contentWindow so the parent
+    // page's URL never leaves the chat surface.
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    iframe.srcdoc = html;
+
+    // Some browsers (Chrome / Edge) use the TOP document.title — not the
+    // iframe's — as the Save-as-PDF suggested filename. Temporarily swap
+    // document.title to the chat name while the dialog is open, restore it
+    // after. This is the load-bearing fix; the iframe <title> only covers
+    // the Firefox path.
+    const previousDocTitle = document.title;
+    let restored = false;
+    const restoreDocTitle = () => {
+      if (restored) return;
+      restored = true;
+      document.title = previousDocTitle;
+    };
+
+    const cleanup = () => {
+      // Defer so Safari has time to close the dialog before we yank the doc.
+      window.setTimeout(() => {
+        iframe.remove();
+        window.removeEventListener('focus', onFocusBack);
+        restoreDocTitle();
+      }, 600);
+    };
+    const onFocusBack = () => {
+      // Fallback exit hatch — print dialogs that don't fire afterprint
+      // (some Safari builds) still return focus to the parent window.
+      cleanup();
+    };
+
+    setPdfBuilding(true);
+    iframe.onload = () => {
+      const win = iframe.contentWindow;
+      if (!win) {
+        setPdfBuilding(false);
+        iframe.remove();
+        restoreDocTitle();
+        addToast({ type: 'error', message: 'Could not open print preview — please try again.' });
+        return;
+      }
+      // afterprint fires when the native print dialog closes (Save or Cancel).
+      win.addEventListener('afterprint', cleanup, { once: true });
+      window.addEventListener('focus', onFocusBack, { once: true });
+      try {
+        // Swap title now — must happen BEFORE win.print() so the dialog
+        // captures the chat name as the suggested filename.
+        document.title = safeTitle;
+        win.focus();
+        win.print();
+      } catch (err) {
+        console.error('Print preview failed', err);
+        addToast({ type: 'error', message: 'Could not open print preview — please try again.' });
+        iframe.remove();
+        restoreDocTitle();
+      } finally {
+        setPdfBuilding(false);
+      }
+    };
+    document.body.appendChild(iframe);
   };
 
-  // XLSX (legacy HTML-spreadsheet) — workbook with two sheets:
-  // "Summary" (KPIs) + "Flagged pairs" (full table).
-  const handleExcel = () => {
-    const kpiRowsHtml = AUDIT_RESULT.kpis.map(k => `<tr><td>${escHtml(k.label)}</td><td>${escHtml(k.value)}</td></tr>`).join('');
-    const tableHeader = `<tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr>`;
-    const tableBody = AUDIT_RESULT.table.rows.map(r => `<tr>${r.map(c => `<td>${escHtml(c)}</td>`).join('')}</tr>`).join('');
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8">
-<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
-<x:ExcelWorksheet><x:Name>Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
-<x:ExcelWorksheet><x:Name>Flagged pairs</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
-</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-</head><body>
-<div>Summary</div>
-<table border="1"><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>${kpiRowsHtml}</tbody></table>
-<br/><br/>
-<div>Flagged pairs</div>
-<table border="1"><thead>${tableHeader}</thead><tbody>${tableBody}</tbody></table>
-</body></html>`;
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'audit-report.xls';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast({ type: 'success', message: 'Audit report downloaded as audit-report.xls' });
+  // Real .xlsx workbook with three sheets (Summary / Flagged pairs /
+  // Transcript), built via SheetJS. Lazy-loaded so the lib (~400KB
+  // minified) only ships to users who actually export. Replaces the prior
+  // HTML-as-Excel hack that modern Excel + Google Sheets opened as raw
+  // markup instead of a real workbook.
+  const handleExcel = async () => {
+    const transcript = getTranscript();
+    try {
+      // SheetJS ships both CJS + ESM; under Vite, dynamic import can land
+      // its helpers either on the namespace or under `.default`. Unwrap
+      // defensively so we work in both shapes.
+      const mod = await import('xlsx');
+      const XLSX = ((mod as unknown as { default?: typeof mod }).default ?? mod);
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1 — Summary (KPI table).
+      const summaryRows: (string | number)[][] = [
+        ['Metric', 'Value'],
+        ...AUDIT_RESULT.kpis.map(k => [k.label, k.value]),
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      summarySheet['!cols'] = [{ wch: 28 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+      // Sheet 2 — Flagged pairs (full table — header + rows).
+      const tableRows: (string | number)[][] = [
+        AUDIT_RESULT.table.columns,
+        ...AUDIT_RESULT.table.rows,
+      ];
+      const tableSheet = XLSX.utils.aoa_to_sheet(tableRows);
+      tableSheet['!cols'] = AUDIT_RESULT.table.columns.map(() => ({ wch: 16 }));
+      XLSX.utils.book_append_sheet(wb, tableSheet, 'Flagged pairs');
+
+      // Sheet 3 — Transcript (chat thread up to this assistant message).
+      const transcriptRows: (string | number)[][] = transcript.length === 0
+        ? [['Time', 'Role', 'Message'], ['—', '—', 'No messages.']]
+        : [
+            ['Time', 'Role', 'Message'],
+            ...transcript.map(m => [
+              fmtTime(m.timestamp),
+              m.role === 'user' ? 'You' : 'Ira',
+              m.text,
+            ]),
+          ];
+      const transcriptSheet = XLSX.utils.aoa_to_sheet(transcriptRows);
+      transcriptSheet['!cols'] = [{ wch: 22 }, { wch: 8 }, { wch: 90 }];
+      XLSX.utils.book_append_sheet(wb, transcriptSheet, 'Transcript');
+
+      const safeTitle = (chatTitle && chatTitle.trim() && chatTitle.trim() !== 'New chat'
+        ? chatTitle.trim()
+        : 'query-result'
+      )
+        .replace(/[\\/:*?"<>|]+/g, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 80);
+      // Use XLSX.write → Blob → anchor-download instead of XLSX.writeFile.
+      // writeFile's internal browser-vs-Node detection trips under Vite's
+      // ESM dynamic-import path and throws "fs.writeFileSync is not a
+      // function". Building the blob ourselves bypasses that entirely.
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeTitle}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      addToast({ type: 'success', message: `Query result downloaded as ${safeTitle}.xlsx` });
+    } catch (err) {
+      console.error('Excel export failed', err);
+      const detail = err instanceof Error ? err.message : String(err);
+      addToast({ type: 'error', message: `Could not generate Excel — ${detail}` });
+    }
   };
 
   return (
@@ -1994,42 +2489,55 @@ function ExportReportButton() {
       <Button
         variant="outline"
         size="md"
-        leftIcon={<Download size={14} />}
+        leftIcon={pdfBuilding ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
         rightIcon={<ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}
         onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={pdfBuilding}
       >
-        Export report
+        {pdfBuilding ? 'Building…' : 'Export'}
       </Button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 top-full mt-1 z-50 w-56 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); handlePdf(); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="menu"
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            // min-w-full pins the menu to the Export trigger's width, matching
+            // the platform Download menu's chrome (brand hover, subtle scale-in,
+            // refined shadow). Labels are short ("PDF" / "Excel") so the menu
+            // can actually sit at trigger width — the footer line carries the
+            // longer-form context.
+            className="absolute left-0 top-full mt-1.5 z-50 min-w-full origin-top-left rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_24px_-14px_rgba(15,8,30,0.20)] overflow-hidden py-1"
           >
-            <FileText size={13} className="text-ink-500 shrink-0" />
-            <span className="flex-1">PDF report</span>
-            <span className="text-[10.5px] font-mono text-ink-400">.pdf</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); handleExcel(); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
-            <span className="flex-1">Excel workbook</span>
-            <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
-          </button>
-          <div className="border-t border-canvas-border/70 mt-1 pt-1 px-3 pb-1.5 text-[10.5px] text-ink-400">
-            Full audit result · KPIs + flagged pairs
-          </div>
-        </div>
-      )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); handlePdf(); }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+            >
+              <FileText size={13} className="text-ink-400 shrink-0" />
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); handleExcel(); }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+            >
+              <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
+              <span>Excel</span>
+            </button>
+            <div className="border-t border-canvas-border/70 mt-1 pt-1 px-2.5 pb-1 text-[10.5px] text-ink-400 whitespace-nowrap">
+              Full query result
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
@@ -2038,6 +2546,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Tracks the saved-conversation id that is currently loaded — drives the
+  // active row highlight in the chat-history sidebar. Cleared by resetChat
+  // and by sending the first message in a fresh thread.
+  const [activeChatHistoryId, setActiveChatHistoryId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
@@ -2048,6 +2560,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [showClarificationCard, setShowClarificationCard] = useState(false);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
   const [showProgressiveLoader, setShowProgressiveLoader] = useState(false);
+  // Ref mirror of showProgressiveLoader — read inside the ResizeObserver
+  // closure (which would otherwise capture stale state) to gate the auto-
+  // snap-to-bottom while the InlineAuditLoader is in charge of positioning.
+  const progressiveLoaderRef = useRef(false);
+  useEffect(() => { progressiveLoaderRef.current = showProgressiveLoader; }, [showProgressiveLoader]);
 
   // Workflow build flow state
   const [workflowBuildPhase, setWorkflowBuildPhase] = useState(0); // 0=idle, 1=asking-files, 2=asking-logic, 3=confirming, 4=input-config, 5=freeze-confirm, 6=output-config, 7=save
@@ -2060,6 +2577,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Save-as-workflow flow state (Path 3 — query → workflow flip)
   const [showSaveAsWfModal, setShowSaveAsWfModal] = useState(false);
   const [lockedAsWorkflow, setLockedAsWorkflow] = useState(false);
+  // Dismissible state for the workflow-mode banner. Lock persists; banner
+  // is just the one-time post-save notice the user can clear.
+  const [lockedBannerDismissed, setLockedBannerDismissed] = useState(false);
   // Captured tolerance/threshold config from the pre-modal clarification —
   // drives the modal's prefilled name + description so the user sees their
   // choices reflected before they commit to the workflow.
@@ -2120,17 +2640,37 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setShowScrollToBottom(prev => prev === isUserScrolledUp.current ? prev : isUserScrolledUp.current);
   }, []);
 
-  // Direct scrollTop assignment — guaranteed to land at absolute bottom,
-  // independent of element layout / sticky / padding quirks that can
-  // throw off scrollIntoView. Returns false if the container isn't ready.
+  // Smooth-scroll-in-flight gate. When a smooth `scrollTo` is animating,
+  // the streaming-time ResizeObserver follow must stand down — otherwise
+  // its instant snap mid-animation cancels the smooth glide and the user
+  // sees a jarring jump instead of an animated transition.
+  const smoothScrollTimerRef = useRef<number | null>(null);
+
+  // Snap to the absolute bottom of the messages container — including the
+  // "What next?" heading and the follow-up chip row, since those sit just
+  // above the inner wrapper's padding. The scroll-intent refs are synced so
+  // the subsequent scroll event from this programmatic move isn't mis-read
+  // as the user dragging upward.
   const snapToBottom = useCallback((smooth: boolean = false) => {
     const container = messagesContainerRef.current;
     if (!container) return false;
+    const target = container.scrollHeight;
     if (smooth && !prefersReducedMotion) {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      // Mark smooth scroll in flight for ~650ms (typical browser smooth-
+      // scroll duration plus a small buffer). Successive smooth snaps reset
+      // the window so the RO stays muted through the whole post-gen burst.
+      if (smoothScrollTimerRef.current !== null) {
+        window.clearTimeout(smoothScrollTimerRef.current);
+      }
+      smoothScrollTimerRef.current = window.setTimeout(() => {
+        smoothScrollTimerRef.current = null;
+      }, 650);
+      container.scrollTo({ top: target, behavior: 'smooth' });
     } else {
-      container.scrollTop = container.scrollHeight;
+      container.scrollTop = target;
     }
+    lastScrollTopRef.current = container.scrollTop;
+    isUserScrolledUp.current = false;
     return true;
   }, [prefersReducedMotion]);
 
@@ -2151,9 +2691,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     let rafId: number | null = null;
     const followIfAtBottom = () => {
       if (isUserScrolledUp.current) return;
+      // Stand down while the InlineAuditLoader is running — it owns the
+      // scroll position during loading (it pins the active step in view
+      // using a tall bottom buffer on the loader bubble). Snapping to
+      // scrollHeight here would yank the loader text down behind the
+      // composer.
+      if (progressiveLoaderRef.current) return;
+      // Stand down while a smooth scroll is animating — otherwise our
+      // instant snap would cancel the animation and the user sees a jump.
+      if (smoothScrollTimerRef.current !== null) return;
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
+        snapToBottom(false);
         rafId = null;
       });
     };
@@ -2165,7 +2714,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       ro.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [snapToBottom]);
 
   // Boundary snaps + post-generation settle window. When isTyping flips to
   // false, rich cards (action bar, follow-up chips, feedback row) often
@@ -2188,14 +2737,23 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     if (!userMessageJustAdded && !generationJustFinished) return;
     if (generationJustFinished && isUserScrolledUp.current) return;
 
-    snapToBottom(false);
+    // User just sent a message → smooth scroll the new bubble into view.
+    // Smooth (not instant) so the transition reads as a controlled glide
+    // instead of a jarring jump.
+    snapToBottom(true);
     if (generationJustFinished) {
-      // Re-snap over the next few frames so action bar + follow-ups +
-      // feedback row (which can render in delayed ticks) end up in view.
-      const t1 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 80);
-      const t2 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 200);
-      const t3 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 450);
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      // Re-fire across ~900ms so the "What next?" heading + follow-up chip
+      // row both end up flush at the bottom of view. The chip row staggers
+      // its children (320ms base delay + 40ms per chip + 300ms duration ≈
+      // 820ms for 6 chips), and the feedback / "Thanks" rows can mount in
+      // delayed ticks — repeated snaps cover all of those. Each smooth
+      // re-fire smoothly redirects the prior in-flight scroll.
+      const t1 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 80);
+      const t2 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 200);
+      const t3 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 450);
+      const t4 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 700);
+      const t5 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 900);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
     }
   }, [messages, isTyping, snapToBottom]);
 
@@ -2203,6 +2761,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   useEffect(() => {
     return () => {
       timersRef.current.forEach(t => clearTimeout(t));
+      if (smoothScrollTimerRef.current !== null) {
+        window.clearTimeout(smoothScrollTimerRef.current);
+      }
     };
   }, []);
 
@@ -2284,6 +2845,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setWorkflowBuildPhase(0);
     setCurrentWorkflowType(null);
     setLockedAsWorkflow(false);
+    setLockedBannerDismissed(false);
     setAttachedSources([]);
     setFiles([]);
     clearTimers();
@@ -2293,7 +2855,25 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setBuildWorkflowMode(false);
     setChatTitleOverride(null);
     setEditingTitle(false);
+    setActiveChatHistoryId(null);
   }, [setShowArtifacts, setArtifactMode, setActiveArtifactTab]);
+
+  // Confirmation gate for New chat — when a generation is in flight
+  // (assistant typing or audit loader running), starting a new chat would
+  // discard the in-progress response. We surface a confirm dialog before
+  // proceeding so the user doesn't accidentally lose work.
+  const [newChatConfirmAfter, setNewChatConfirmAfter] = useState<null | (() => void)>(null);
+  const isGenerating = isTyping || showProgressiveLoader;
+  const requestNewChat = useCallback((after?: () => void) => {
+    if (isGenerating) {
+      // Stash the post-reset callback so the confirmation dialog can run it
+      // on confirm (e.g. closing the chat-history sidebar).
+      setNewChatConfirmAfter(() => () => { resetChat(); after?.(); });
+      return;
+    }
+    resetChat();
+    after?.();
+  }, [isGenerating, resetChat]);
 
   // ─── Global keyboard shortcuts (Claude-aligned) ─────────────────────────
   // Cmd/Ctrl + .       → toggle the chat-history sidebar
@@ -2324,7 +2904,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       }
       if (e.shiftKey && (e.key === 'O' || e.key === 'o')) {
         e.preventDefault();
-        resetChat();
+        requestNewChat();
         return;
       }
     };
@@ -2351,6 +2931,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setCurrentWorkflowType(null);
     setLockedAsWorkflow(false);
     clearTimers();
+    setActiveChatHistoryId(chatId);
     return true;
   }, []);
 
@@ -2620,38 +3201,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       };
     }));
 
-    // ─── Two-pass scroll: keep chat-fluency default (auto-scroll-to-bottom
-    //     fires on render via the messages effect), then once the rich result
-    //     has mounted and its motion-reveal has settled, re-position the
-    //     container so the headline body + KPI scoreboard sit ~12px from the
-    //     viewport top. Without this, tall results bury their headline numbers
-    //     above the fold.
-    //
-    //     Implementation notes (the first attempt got the cropped-top bug):
-    //     • Skip when the user has manually scrolled up — never yank them.
-    //     • Use container.scrollTo (NOT element.scrollIntoView) — scrollIntoView
-    //       walks ancestors and can bubble to window scroll in some browsers,
-    //       which pushed the message above the viewport last time.
-    //     • Wait 320 ms (past the 200 ms component-reveal + KPI 50 ms × 4 stagger
-    //       and chart paint) so the node is in its final layout when measured.
-    //     • Compute the node's top relative to the container's scroll origin,
-    //       not via offsetTop (which is relative to nearest positioned ancestor
-    //       and varies with flex/grid containers).
-    if (targetId && !isUserScrolledUp.current) {
-      schedule(() => {
-        const container = messagesContainerRef.current;
-        if (!container) return;
-        const node = container.querySelector<HTMLElement>(`[data-msg-id="${targetId}"]`);
-        if (!node) return;
-        const containerRect = container.getBoundingClientRect();
-        const nodeRect = node.getBoundingClientRect();
-        const offsetFromTop = nodeRect.top - containerRect.top + container.scrollTop;
-        const target = Math.max(0, offsetFromTop - 12);
-        container.scrollTo({
-          top: target,
-          behavior: prefersReducedMotion ? 'auto' : 'smooth',
-        });
-      }, 320);
+    // Claude-aligned scroll behavior: drive the same multi-fire snap-to-
+    // bottom window here as the regular post-generation path. The
+    // audit-result mount swaps the message in place (no isTyping toggle),
+    // so the messages/isTyping effect doesn't fire — we kick off the
+    // snaps directly so the "What next?" chip row at the bottom of the
+    // (often tall) audit-result message lands in view once its rich
+    // content + chip stagger has settled.
+    if (!isUserScrolledUp.current) {
+      schedule(() => snapToBottom(true), 0);
+      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 120);
+      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 280);
+      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 500);
+      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 750);
+      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 1000);
     }
   };
 
@@ -2844,51 +3407,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   };
 
   // Path 3 entry — open the Save-as-Workflow modal from the audit-result action bar.
-  // Path 3 entry — instead of jumping straight to the metadata modal, IRA first
-  // posts an inline clarification asking for tolerance / threshold config.
-  // submitClarification (purpose: 'save-workflow') opens the modal once
-  // those choices are captured.
+  // Path 3 entry — open the metadata modal directly. The previous flow
+  // posted an inline clarification asking for tolerance / threshold config
+  // first, but those choices are already captured by the assumptions on
+  // the audit result; re-asking before every save felt repetitive. The
+  // tolerance config can be edited inside the modal's Description (or by
+  // running a new query) instead.
   const openSaveAsWorkflowModal = () => {
-    const hasOpenSaveClarify = messages.some(
-      m => m.richType === 'clarification' &&
-        (m.richData as unknown as ClarificationData)?.purpose === 'save-workflow' &&
-        (m.richData as unknown as ClarificationData)?.status === 'open'
-    );
-    if (hasOpenSaveClarify) return;
-
-    const data: ClarificationData = {
-      intro: "Before I save this as a re-runnable workflow, let me confirm the matching tolerances and thresholds. Pick what fits, or type your own.",
-      questions: [
-        {
-          question: 'Amount tolerance for duplicate matching',
-          options: ['Exact match (₹0)', '±₹1,000', '±₹5,000', '±2% of invoice value'],
-        },
-        {
-          question: 'Date tolerance for duplicate matching',
-          options: ['Same day only', '±3 days (current)', '±7 days', '±14 days'],
-        },
-        {
-          question: 'Match-score threshold to flag',
-          options: ['≥90% (current)', '≥85%', '≥80%', '≥95%'],
-        },
-      ],
-      answers: {},
-      status: 'open',
-      purpose: 'save-workflow',
-    };
-    setMessages(prev => [...prev, {
-      id: `msg-clarify-savewf-${Date.now()}`,
-      role: 'assistant',
-      text: '',
-      thinking: [
-        'User asked to save as workflow',
-        'Identified tolerances + threshold as configurable parameters',
-        'Asking before locking the workflow definition',
-      ],
-      timestamp: new Date(),
-      richType: 'clarification',
-      richData: data as unknown as Record<string, unknown>,
-    }]);
+    setShowSaveAsWfModal(true);
   };
 
   // Path 3 commit — modal confirmed. Lock the thread into workflow mode,
@@ -2899,6 +3425,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
     // Lock the composer pill — visual signal that mode is irreversible per thread.
     setLockedAsWorkflow(true);
+    setLockedBannerDismissed(false);
+    setBuildWorkflowMode(true);
 
     // Toast the save intent immediately so the user sees commit feedback
     // independently of the canvas-flip animation.
@@ -3016,16 +3544,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed && files.length === 0) return;
-    // Block send when the message exceeds the hard cap. The counter already
-    // shows red past MAX_INPUT_CHARS — this catches keyboard-Enter users who
-    // haven't looked at the counter.
-    if (trimmed.length > MAX_INPUT_CHARS) {
-      addToast({
-        type: 'info',
-        message: `Trim your message to ${MAX_INPUT_CHARS.toLocaleString()} characters or fewer to send.`,
-      });
-      return;
-    }
     let text = trimmed;
     const attachmentLabels = [
       ...attachedSources.map(s => s.kind === 'source' ? s.name : ''),
@@ -3116,10 +3634,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // ── Composer file ingestion ─────────────────────────────────────────────────
   // Shared by paste (Cmd+V with files in clipboard) and drag-and-drop. Cap at
   // 8 attached files so we don't choke the chip row or blow past mock limits.
-  // Char counter — soft cap (warn) and hard cap (block send / truncate paste).
-  // Hoisted above ingestFiles/handleComposerPaste so paste can validate length.
-  const MAX_INPUT_CHARS = 4000;
-  const WARN_INPUT_CHARS = 3000;
   const MAX_FILES = 8;
   const ingestFiles = (incoming: FileList | File[] | null) => {
     if (!incoming) return;
@@ -3171,28 +3685,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       return;
     }
 
-    // Short pastes that still push the textarea past the hard limit get
-    // trimmed (existing safety net).
-    const room = MAX_INPUT_CHARS - input.length;
-    if (pasted.length > room) {
-      e.preventDefault();
-      const accepted = room > 0 ? pasted.slice(0, room) : '';
-      const next = input + accepted;
-      setInput(next);
-      requestAnimationFrame(() => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-        ta.selectionStart = ta.selectionEnd = next.length;
-        ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight, 260) + 'px';
-      });
-      addToast({
-        type: 'info',
-        message: room > 0
-          ? `Trimmed paste to the ${MAX_INPUT_CHARS.toLocaleString()}-character limit.`
-          : `Message is already at the ${MAX_INPUT_CHARS.toLocaleString()}-character limit.`,
-      });
-    }
   };
 
   // Drag-and-drop state lives at the wrapper level. Use a counter for enter /
@@ -3225,10 +3717,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     ingestFiles(e.dataTransfer.files);
   };
 
-  // Char counter — MAX_INPUT_CHARS / WARN_INPUT_CHARS hoisted above for paste use.
-  const inputCount = input.length;
-  const overLimit = inputCount > MAX_INPUT_CHARS;
-
   // ── Message-level actions (Copy / Retry / Feedback) ────────────────────────
   // Bound to the hover-revealed action bar under each assistant text message.
 
@@ -3242,6 +3730,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   const [feedbackPopover, setFeedbackPopover] = useState<{ msgId: string; kind: 'up' | 'down' } | null>(null);
   const [feedbackDraft, setFeedbackDraft] = useState('');
   const [feedbackReason, setFeedbackReason] = useState<string>('');
+  // Custom-dropdown open state for the feedback "type of issue" picker.
+  const [feedbackReasonOpen, setFeedbackReasonOpen] = useState(false);
+  const feedbackReasonRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!feedbackReasonOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (feedbackReasonRef.current && !feedbackReasonRef.current.contains(e.target as Node)) {
+        setFeedbackReasonOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFeedbackReasonOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [feedbackReasonOpen]);
   const [feedbackSubmittedIds, setFeedbackSubmittedIds] = useState<Set<string>>(new Set());
   // Keyboard-shortcuts help modal — opens on Cmd/Ctrl + /.
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
@@ -3558,61 +4066,105 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   );
 
   /* ────────────────────── CHAT HISTORY SIDEBAR ────────────────────── */
+  // Outer motion.div animates the column width; inner content stays pinned
+  // at 280px so rows don't squish during open/close.
+  const CHAT_HISTORY_W = 280;
+  const handleNewChatFromSidebar = () => {
+    requestNewChat(() => toggleChatHistory());
+  };
   const chatHistoryPanel = (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {showChatHistory && (
-        <motion.div
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 280, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="h-full bg-white border-r border-border-light overflow-hidden shrink-0"
+        <motion.aside
+          aria-label="Chat history"
+          initial={{ width: 0 }}
+          animate={{ width: CHAT_HISTORY_W }}
+          exit={{ width: 0 }}
+          transition={{ type: 'spring', stiffness: 460, damping: 38, mass: 0.7 }}
+          className="h-full overflow-hidden shrink-0 border-r border-canvas-border bg-canvas-elevated"
         >
-          <div className="p-4 border-b border-border-light flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text">Chat History</h3>
-            <button onClick={toggleChatHistory} className="text-text-muted hover:text-text-secondary p-1 rounded-md hover:bg-brand-50 cursor-pointer">
-              <X size={16} />
-            </button>
-          </div>
-          <div className="p-3">
-            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-xs text-text-secondary font-medium hover:bg-brand-50 hover:text-text transition-colors cursor-pointer">
-              <Plus size={14} />
-              New Chat
-            </button>
-          </div>
-          <div className="overflow-y-auto flex-1" style={{ height: 'calc(100% - 150px)' }}>
-            {CHAT_HISTORY.map(chat => (
+          <div style={{ width: CHAT_HISTORY_W }} className="h-full flex flex-col">
+            {/* Header */}
+            <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-canvas-border">
+              <h3 className="text-[13px] font-semibold text-ink-900 tracking-tight">Chat history</h3>
               <button
-                key={chat.id}
-                className="w-full text-left px-4 py-3 border-b border-border-light hover:bg-brand-50 transition-colors group cursor-pointer"
-                onClick={() => loadChatById(chat.id)}
+                type="button"
+                onClick={toggleChatHistory}
+                aria-label="Close chat history"
+                title="Close (⌘.)"
+                className="size-7 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-md bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
-                    <MessageSquare size={12} className="text-text-muted" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-text truncate transition-colors">{chat.title}</div>
-                    <div className="text-[12px] text-text-muted truncate mt-0.5">{chat.preview}</div>
-                    <div className="text-[12px] text-text-muted/60 mt-1">{chat.timestamp}</div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-          {/* Slide-out is a quick switcher for the last 5; canonical browser is /recents. */}
-          {setView && (
-            <div className="border-t border-border-light p-3">
-              <button
-                onClick={() => { toggleChatHistory(); setView('recents'); }}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-text hover:bg-brand-50 transition-colors cursor-pointer"
-              >
-                Browse all in Recents
-                <ArrowRight size={12} />
+                <X size={15} />
               </button>
             </div>
-          )}
-        </motion.div>
+
+            {/* New chat */}
+            <div className="px-3 pt-3 pb-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleNewChatFromSidebar}
+                title="New chat (⌘⇧O)"
+                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <Plus size={14} strokeWidth={2.25} />
+                New chat
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+              {CHAT_HISTORY.map(chat => {
+                const isActive = activeChatHistoryId === chat.id;
+                return (
+                  <motion.button
+                    key={chat.id}
+                    type="button"
+                    onClick={() => loadChatById(chat.id)}
+                    aria-current={isActive ? 'true' : undefined}
+                    whileTap={{ scale: 0.985 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    className={`w-full text-left px-2.5 py-2.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      isActive
+                        ? 'bg-canvas-elevated border border-brand-300 shadow-[0_2px_4px_-1px_rgba(106,18,205,0.18),0_10px_24px_-8px_rgba(106,18,205,0.32)]'
+                        : 'border border-transparent hover:bg-brand-50/40'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className={`size-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                        isActive ? 'bg-brand-100 text-brand-700' : 'bg-brand-50/70 text-ink-500'
+                      }`}>
+                        <MessageSquare size={12} strokeWidth={2.25} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-[13px] truncate tracking-tight ${
+                          isActive ? 'font-semibold text-brand-800' : 'font-medium text-ink-900'
+                        }`}>
+                          {chat.title}
+                        </div>
+                        <div className="text-[11.5px] text-ink-500 truncate mt-0.5">{chat.preview}</div>
+                        <div className="text-[11px] text-ink-400 mt-1 tabular-nums">{chat.timestamp}</div>
+                      </div>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            {/* Slide-out is a quick switcher for the last 5; canonical browser is /recents. */}
+            {setView && (
+              <div className="border-t border-canvas-border p-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { toggleChatHistory(); setView('recents'); }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Browse all in Recents
+                  <ArrowRight size={12} strokeWidth={2.25} />
+                </button>
+              </div>
+            )}
+          </div>
+        </motion.aside>
       )}
     </AnimatePresence>
   );
@@ -3638,10 +4190,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           />
 
           <div className="relative z-10 flex justify-between px-5 py-3">
-            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer" aria-label="Chat History">
+            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
               <History size={18} />
             </button>
-            <button className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer" aria-label="New Chat">
+            <button onClick={() => requestNewChat()} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="New chat" title="New chat (⌘⇧O)">
               <Plus size={18} />
             </button>
           </div>
@@ -3788,7 +4340,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   onPaste={handleComposerPaste}
                   placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Message Ira…'}
                   aria-label="Message IRA"
-                  maxLength={MAX_INPUT_CHARS + 200}
                   className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
                   rows={1}
                 />
@@ -3832,10 +4383,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <button
                         type="button"
                         onClick={handleSend}
-                        disabled={overLimit}
-                        aria-label={overLimit ? 'Message too long' : 'Send message'}
-                        title={overLimit ? 'Message too long' : 'Send · Enter to send, Shift+Enter for new line'}
-                        className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-brand-200 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        aria-label="Send message"
+                        title="Send · Enter to send, Shift+Enter for new line"
+                        className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
                         <ArrowUp size={16} strokeWidth={2.25} />
                       </button>
@@ -3872,8 +4422,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         style={{ flex: '1 1 0%', minWidth: 0 }}
       >
         {/* Claude-style header — title + chevron on left (opens chat history),
-            separate icon buttons on the right (no merged chip background). */}
-        <header className="h-10 shrink-0 flex items-center justify-between px-4 sm:px-6">
+            separate icon buttons on the right (no merged chip background).
+            Height matches the chat-history sidebar header and the artifact
+            panel tab strip so the top chrome reads as one row. */}
+        <header className="h-12 shrink-0 flex items-center justify-between px-4 sm:px-6">
           {editingTitle ? (
             <input
               ref={titleInputRef}
@@ -3952,7 +4504,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               size="sm"
               iconOnly
               shape="md"
-              onClick={resetChat}
+              onClick={() => requestNewChat()}
               title="New chat"
               aria-label="New chat"
             >
@@ -4012,9 +4564,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           aria-atomic="false"
           aria-relevant="additions"
           aria-label="Chat conversation"
-          className="h-full overflow-y-auto [scrollbar-gutter:stable]"
+          className="h-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
         >
-          <div className={`max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-8 space-y-10 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
+          <div className={`max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-10 space-y-10 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
             <AnimatePresence initial={false}>
               {messages.map((msg, msgIdx) => (
                 <motion.div
@@ -4089,7 +4641,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         </div>
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
-                      <div className="w-full">
+                      // ~40px of breathing room directly below the loader.
+                      // Combined with the parent's pb-10 (40px), the active
+                      // shimmering line lands ~80px above the composer when
+                      // auto-scroll snaps to scrollHeight — comfortable
+                      // without floating the loader off the top.
+                      <div className="w-full" style={{ paddingBottom: 40 }}>
                         {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
                           <InlineAuditLoader
                             steps={LOADING_STEPS}
@@ -4147,12 +4704,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
                             All buttons share the same outline-default / pressed-linked
-                            visual; Save-as-workflow is the only primary CTA. The
-                            previous mix of brand-50 + violet-50 + red-600 hover
-                            spread across this row read as 3+ palettes; this row
-                            now sits firmly in the chat's send/receive two-tone. */}
-                        <div className="flex items-center gap-2 pt-3 border-t border-canvas-border">
-                          <ExportReportButton />
+                            visual; Save-as-workflow is the only primary CTA. Wraps
+                            to multi-row when the chat column narrows (e.g. with both
+                            side panels open) — each button keeps its single-line
+                            label instead of squeezing into a 2-line text block. */}
+                        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-canvas-border">
+                          <ExportReportButton messages={messages} upToMessageId={msg.id} chatTitle={currentChatTitle} />
                           {/* Dashboard button — pressed when one or more dashboards linked. */}
                           {(() => {
                             const dashLinks = msg.addedTo?.dashboards || [];
@@ -4452,7 +5009,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       disabled={atStart}
                                       aria-label="Previous version"
                                       title="Previous version"
-                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                                     >
                                       <ChevronLeft size={13} />
                                     </button>
@@ -4465,48 +5022,60 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       disabled={atEnd}
                                       aria-label="Next version"
                                       title="Next version"
-                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                      className="inline-flex items-center justify-center size-6 rounded text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                                     >
                                       <ChevronRight size={13} />
                                     </button>
                                   </div>
                                 );
                               })()}
-                              <button
-                                type="button"
-                                onClick={() => startEditingMessage(msg.id, msg.text)}
-                                aria-label="Edit message"
-                                title="Edit"
-                                className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
-                              >
-                                <Pencil size={13} />
-                              </button>
+                              <span className="relative group/edit">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingMessage(msg.id, msg.text)}
+                                  aria-label="Edit message"
+                                  className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/edit:opacity-100 transition-opacity z-10">
+                                  Edit
+                                </span>
+                              </span>
                               {/* Bookmark — persistent when starred (filled),
                                   hover-revealed otherwise. */}
-                              <button
-                                type="button"
-                                onClick={() => toggleBookmark(msg.id, msg.text)}
-                                aria-label={bookmarkedMsgIds.has(msg.id) ? 'Remove bookmark' : 'Bookmark message'}
-                                aria-pressed={bookmarkedMsgIds.has(msg.id)}
-                                title={bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
-                                className={`inline-flex items-center justify-center size-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                                  bookmarkedMsgIds.has(msg.id)
-                                    ? 'text-brand-700 hover:bg-brand-50'
-                                    : 'text-ink-400 hover:text-ink-800 hover:bg-brand-50 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100'
-                                }`}
-                              >
-                                {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
-                              </button>
+                              <span className="relative group/bookmark">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleBookmark(msg.id, msg.text)}
+                                  aria-label={bookmarkedMsgIds.has(msg.id) ? 'Remove bookmark' : 'Bookmark message'}
+                                  aria-pressed={bookmarkedMsgIds.has(msg.id)}
+                                  className={`inline-flex items-center justify-center size-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                                    bookmarkedMsgIds.has(msg.id)
+                                      ? 'text-brand-700 hover:bg-brand-50'
+                                      : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100'
+                                  }`}
+                                >
+                                  {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+                                </button>
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/bookmark:opacity-100 transition-opacity z-10">
+                                  {bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
+                                </span>
+                              </span>
                               {/* Copy — hover-revealed; flips to a check for ~1.5s. */}
-                              <button
-                                type="button"
-                                onClick={() => copyMessage(msg)}
-                                aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
-                                title={copiedMsgId === msg.id ? 'Copied' : 'Copy'}
-                                className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
-                              >
-                                {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
-                              </button>
+                              <span className="relative group/usercopy">
+                                <button
+                                  type="button"
+                                  onClick={() => copyMessage(msg)}
+                                  aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
+                                  className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100"
+                                >
+                                  {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                                </button>
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/usercopy:opacity-100 transition-opacity z-10">
+                                  {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
+                                </span>
+                              </span>
                               {/* Timestamp — sits at the far right, hover-only.
                                   Hovering it reveals the full date+time in a
                                   tooltip below (matches Claude's date-tooltip
@@ -4515,7 +5084,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 <span className="text-[11px] tabular-nums text-ink-400 cursor-default">
                                   {formatChatTime(msg.timestamp)}
                                 </span>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
                                   {msg.timestamp.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                 </span>
                               </span>
@@ -4565,18 +5134,18 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         ? 'opacity-100'
                         : 'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity';
                       return (
-                      <div className={`mt-2 -ml-2 flex items-center gap-0.5 ${visibilityClass}`}>
+                      <div className={`mt-1.5 flex items-center gap-1 ${visibilityClass}`}>
                         {/* Copy */}
                         <span className="relative group/copy">
                           <button
                             type="button"
                             onClick={() => copyMessage(msg)}
                             aria-label={copiedMsgId === msg.id ? 'Copied' : 'Copy message'}
-                            className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
-                            {copiedMsgId === msg.id ? <Check size={16} /> : <Copy size={16} />}
+                            {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                           </button>
-                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
                             {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
                           </span>
                         </span>
@@ -4588,15 +5157,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             onClick={() => setFeedback(msg.id, 'up')}
                             aria-label="Mark response as helpful"
                             aria-pressed={feedbackByMsgId[msg.id] === 'up'}
-                            className={`inline-flex items-center justify-center size-8 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                            className={`inline-flex items-center justify-center size-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                               feedbackByMsgId[msg.id] === 'up'
                                 ? 'text-brand-700 bg-brand-50'
-                                : 'text-ink-500 hover:text-ink-800 hover:bg-brand-50'
+                                : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'
                             }`}
                           >
-                            <ThumbsUp size={16} />
+                            <ThumbsUp size={13} />
                           </button>
-                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
                             Give positive feedback
                           </span>
                         </span>
@@ -4608,15 +5177,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             onClick={() => setFeedback(msg.id, 'down')}
                             aria-label="Mark response as unhelpful"
                             aria-pressed={feedbackByMsgId[msg.id] === 'down'}
-                            className={`inline-flex items-center justify-center size-8 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                            className={`inline-flex items-center justify-center size-7 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                               feedbackByMsgId[msg.id] === 'down'
                                 ? 'text-brand-700 bg-brand-50'
-                                : 'text-ink-500 hover:text-ink-800 hover:bg-brand-50'
+                                : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'
                             }`}
                           >
-                            <ThumbsDown size={16} />
+                            <ThumbsDown size={13} />
                           </button>
-                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
                             Give negative feedback
                           </span>
                         </span>
@@ -4628,11 +5197,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             onClick={() => retryFromMessage(msgIdx)}
                             disabled={isTyping}
                             aria-label="Retry response"
-                            className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
-                            <RotateCcw size={16} />
+                            <RotateCcw size={13} />
                           </button>
-                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
                             Retry
                           </span>
                         </span>
@@ -4651,38 +5220,69 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     )}
                     </div>
 
-                    {/* Follow-up suggestions — Claude-style chip row.
-                        Wrapping horizontal flex of small rounded pills,
-                        no heading, no category labels. Hover lifts the
-                        chip to brand-50 and tints the border to brand-200.
-                        In our theme: canvas-elevated fill + canvas-border
-                        at rest, brand-50 + brand-200 on hover. */}
+                    {/* Follow-up suggestions — wrapping horizontal flex of
+                        small rounded pills under a quiet "What next?" label.
+                        Hover lifts the chip to brand-50 and tints the border
+                        to brand-200. In our theme: canvas-elevated fill +
+                        canvas-border at rest, brand-50 + brand-200 on hover. */}
                     {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && (
-                      <motion.div
+                      <div
                         role="region"
-                        aria-label="Follow-up suggestions"
-                        initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: prefersReducedMotion ? 0 : 0.3, duration: prefersReducedMotion ? 0 : 0.2 }}
-                        className="mt-4 flex flex-wrap gap-2"
+                        aria-labelledby={`followups-heading-${msg.id}`}
+                        className="mt-3"
                       >
+                        <motion.h3
+                          key={`${msg.id}-followups-heading`}
+                          id={`followups-heading-${msg.id}`}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                          className="mb-2 text-[12px] font-medium tracking-normal text-ink-900"
+                        >
+                          What next?
+                        </motion.h3>
+                        <div className="flex flex-wrap gap-2">
                         {msg.followUps.map((q, i) => {
                           const isSelected = selectedFollowUpByMsgId[msg.id] === q;
                           return (
                             <motion.button
-                              key={i}
+                              key={`${msg.id}-followup-${i}`}
                               type="button"
                               onClick={() => {
                                 setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
                                 handleFollowUpClick(q);
                               }}
                               aria-pressed={isSelected}
-                              initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
-                              animate={{ opacity: 1, y: 0 }}
+                              // Mount cascade — runs every time the chip mounts.
+                              // NOT gated on prefersReducedMotion: the user
+                              // explicitly asked for the popup animation to
+                              // play on chat generation; the cascade is the
+                              // signal that "follow-up suggestions arrived".
+                              initial={{ opacity: 0, y: 12, scale: 0.9 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
                               transition={{
-                                delay: prefersReducedMotion ? 0 : 0.32 + i * 0.04,
-                                duration: prefersReducedMotion ? 0 : 0.3,
-                                ease: [0.16, 1, 0.3, 1],
+                                // Modern one-by-one popup cascade. Each chip
+                                // scales + rises over ~480ms with a 130ms
+                                // stagger so the eye can clearly track each
+                                // chip as it appears. Vercel/Linear expo-out
+                                // curve, no spring on entrance so it lands
+                                // clean (no wobble at rest).
+                                delay: 0.4 + i * 0.13,
+                                duration: 0.48,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                              whileHover={prefersReducedMotion ? undefined : {
+                                y: -1,
+                                scale: 1.012,
+                                // Featherweight — near-zero mass + very high
+                                // stiffness means the chip is at its hover
+                                // state almost instantly, like there's nothing
+                                // to move. Heavy damping kills any wobble.
+                                transition: { type: 'spring', stiffness: 700, damping: 32, mass: 0.12 },
+                              }}
+                              whileTap={prefersReducedMotion ? undefined : {
+                                scale: 0.985,
+                                transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
                               }}
                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                                 isSelected
@@ -4694,7 +5294,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             </motion.button>
                           );
                         })}
-                      </motion.div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -4810,19 +5411,33 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           )}
           {(
             <>
-              {/* Locked Workflow-mode pill — appears once Path 3 has flipped the
-                  thread. Non-clickable on purpose: PRD says toggle is irreversible
-                  per thread. To do a query again, user starts + New chat. */}
-              {lockedAsWorkflow && (
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold uppercase tracking-[0.06em] cursor-default select-none">
-                    <Lock size={11} /> Workflow mode
-                  </div>
-                  <span className="text-[12px] text-ink-500">
-                    Switched at save. Start a <button onClick={resetChat} className="underline decoration-ink-300 underline-offset-2 hover:text-brand-700 hover:decoration-brand-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm">new chat</button> for a query.
-                  </span>
-                </div>
-              )}
+              {/* Workflow-mode notice — Claude-style horizontal banner above
+                  the composer. Appears once Path 3 has flipped the thread,
+                  fades out automatically the moment the user starts typing
+                  (input.trim() becomes truthy). No dismiss button — the
+                  banner gets out of the way on its own. */}
+              <AnimatePresence initial={false}>
+                {lockedAsWorkflow && !lockedBannerDismissed && !input.trim() && (
+                  <motion.div
+                    key="locked-workflow-banner"
+                    initial={{ opacity: 0, y: 4, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: 4, height: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mb-2 flex items-center gap-2.5 px-1">
+                      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 uppercase tracking-[0.08em] shrink-0">
+                        <Lock size={11} strokeWidth={2.5} />
+                        Workflow mode
+                      </span>
+                      <span className="text-[12.5px] text-ink-500 flex-1 truncate">
+                        Switched at save. Start a new chat for a query.
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div
                 className="ai-border relative"
                 onDragEnter={handleDragEnter}
@@ -4893,7 +5508,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <button
                             type="button"
                             onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}
-                            className="text-ink-400 hover:text-ink-800 hover:bg-brand-50 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
+                            className="text-ink-400 hover:text-brand-700 hover:bg-brand-50 ml-0.5 p-0.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-full transition-colors"
                             aria-label={`Remove ${f.name}`}
                           ><X size={12} /></button>
                         </div>
@@ -4912,7 +5527,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onPaste={handleComposerPaste}
                     placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
                     aria-label="Message IRA"
-                    maxLength={MAX_INPUT_CHARS + 200}
                     className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
                   />
@@ -4935,22 +5549,33 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={buildWorkflowMode}
-                        aria-label="Build a workflow"
-                        title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
-                        onClick={() => setBuildWorkflowMode(v => !v)}
-                        className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          buildWorkflowMode
-                            ? 'text-brand-700 hover:bg-brand-50'
-                            : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
-                        }`}
-                      >
-                        {buildWorkflowMode ? 'Workflow' : 'Query'}
-                        <ChevronDown size={14} className="opacity-70" />
-                      </button>
+                      {/* Mode is locked for any started thread — query chats
+                          must go through Save-as-workflow, workflow chats
+                          can't switch back to query. Either way: in-thread
+                          toggle is read-only. The hero-composer version
+                          (empty state) stays toggleable. */}
+                      {(() => {
+                        const modeLocked = true;
+                        return (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={buildWorkflowMode}
+                            aria-label={lockedAsWorkflow ? 'Workflow mode (locked for this thread)' : 'Query mode (locked — use Save as workflow to convert)'}
+                            aria-disabled={modeLocked}
+                            title={
+                              lockedAsWorkflow
+                                ? 'Workflow mode — locked for this thread. Start a new chat for a query.'
+                                : 'Query mode — locked. Use Save as workflow to convert this chat.'
+                            }
+                            onClick={() => { /* locked; no-op */ }}
+                            className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium text-ink-400 cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <Lock size={11} strokeWidth={2.25} className="shrink-0" />
+                            {buildWorkflowMode ? 'Workflow' : 'Query'}
+                          </button>
+                        );
+                      })()}
 
                       {isTyping ? (
                         <button
@@ -4966,10 +5591,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <button
                           type="button"
                           onClick={handleSend}
-                          disabled={overLimit}
-                          aria-label={overLimit ? `Message too long` : 'Send message'}
-                          title={overLimit ? 'Message too long' : 'Send · Enter to send, Shift+Enter for new line'}
-                          className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-brand-200 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          aria-label="Send message"
+                          title="Send · Enter to send, Shift+Enter for new line"
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           <ArrowUp size={16} strokeWidth={2.25} />
                         </button>
@@ -5063,28 +5687,90 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   type="button"
                   onClick={cancelFeedback}
                   aria-label="Close"
-                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
                 >
                   <X size={14} />
                 </button>
               </div>
               {feedbackPopover.kind === 'down' && (
                 <div className="mb-3">
-                  <label className="block text-[11px] font-medium text-ink-500 uppercase tracking-[0.06em] mb-1.5">
+                  <label
+                    htmlFor="feedback-reason-trigger"
+                    className="block text-[11px] font-semibold text-ink-500 uppercase tracking-[0.08em] mb-1.5"
+                  >
                     What type of issue do you wish to report?
                   </label>
-                  <div className="relative">
-                    <select
-                      value={feedbackReason}
-                      onChange={(e) => setFeedbackReason(e.target.value)}
-                      className="w-full appearance-none bg-canvas border border-canvas-border rounded-lg px-3 pr-8 h-9 text-[13px] text-ink-800 outline-none focus:border-brand-300 transition-colors cursor-pointer"
+                  {/* Custom dropdown replacing the native <select> so the
+                      open panel matches the app theme (light surface, brand
+                      hover, rounded corners) instead of the OS-default dark
+                      popover. Click-outside / Escape close handled by the
+                      effect on feedbackReasonOpen. */}
+                  <div ref={feedbackReasonRef} className="relative">
+                    <button
+                      id="feedback-reason-trigger"
+                      type="button"
+                      onClick={() => setFeedbackReasonOpen(o => !o)}
+                      aria-haspopup="listbox"
+                      aria-expanded={feedbackReasonOpen}
+                      className={`w-full flex items-center justify-between gap-2 bg-canvas-elevated border rounded-lg px-3 h-10 text-[13px] text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        feedbackReasonOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
+                      }`}
                     >
-                      <option value="">Select an issue…</option>
-                      {FEEDBACK_REASONS.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                      <span className={feedbackReason ? 'text-ink-800 truncate' : 'text-ink-400 truncate'}>
+                        {feedbackReason || 'Select an issue…'}
+                      </span>
+                      <motion.span
+                        animate={{ rotate: feedbackReasonOpen ? 180 : 0 }}
+                        transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+                        className="inline-flex shrink-0"
+                      >
+                        <ChevronDown
+                          size={14}
+                          strokeWidth={2.25}
+                          className={feedbackReasonOpen ? 'text-brand-500' : 'text-ink-400'}
+                        />
+                      </motion.span>
+                    </button>
+                    <AnimatePresence>
+                      {feedbackReasonOpen && (
+                        <motion.div
+                          role="listbox"
+                          aria-labelledby="feedback-reason-trigger"
+                          initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                          style={{ transformOrigin: 'top center' }}
+                          className="absolute z-10 left-0 right-0 top-full mt-1.5 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_16px_36px_-16px_rgba(15,8,30,0.22),0_4px_10px_-4px_rgba(15,8,30,0.08)] overflow-hidden py-1 max-h-72 overflow-y-auto"
+                        >
+                          {FEEDBACK_REASONS.map((r) => {
+                            const isSelected = feedbackReason === r;
+                            return (
+                              <button
+                                key={r}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => {
+                                  setFeedbackReason(r);
+                                  setFeedbackReasonOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                                  isSelected
+                                    ? 'bg-brand-50 text-brand-800 font-medium'
+                                    : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
+                                }`}
+                              >
+                                <span className="flex-1 truncate">{r}</span>
+                                {isSelected && (
+                                  <Check size={13} strokeWidth={2.5} className="text-brand-600 shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
               )}
@@ -5094,22 +5780,95 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 autoFocus
                 rows={4}
                 placeholder={feedbackPopover.kind === 'up' ? 'Was it accurate? Well-explained? Saved you time?' : 'Describe what was wrong (optional)'}
-                className="w-full bg-canvas border border-canvas-border rounded-lg px-3 py-2.5 text-[13px] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-300 transition-colors resize-none"
+                className="no-focus-ring w-full bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-lg px-3 py-2.5 text-[13px] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors resize-none"
               />
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={cancelFeedback}
-                  className="inline-flex items-center h-8 px-3 rounded-md text-[13px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  className="inline-flex items-center h-8 px-3.5 rounded-md text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Send feedback
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* New-chat confirmation — appears when the user tries to start a
+          fresh chat while a generation is in flight. Guards against losing
+          the in-progress response by accident. */}
+      <AnimatePresence>
+        {newChatConfirmAfter && (
+          <motion.div
+            key="new-chat-confirm-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            onClick={() => setNewChatConfirmAfter(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 backdrop-blur-[2px]"
+          >
+            <motion.div
+              key="new-chat-confirm-modal"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="new-chat-confirm-title"
+              aria-describedby="new-chat-confirm-body"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { e.preventDefault(); setNewChatConfirmAfter(null); }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  newChatConfirmAfter?.();
+                  setNewChatConfirmAfter(null);
+                }
+              }}
+              className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+            >
+              <div className="flex items-start gap-3 mb-3">
+                <div className="size-9 rounded-lg bg-risk-50 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={16} className="text-risk-700" />
+                </div>
+                <div>
+                  <h2 id="new-chat-confirm-title" className="text-[15px] font-semibold text-ink-900 mb-1">
+                    Discard in-progress response?
+                  </h2>
+                  <p id="new-chat-confirm-body" className="text-[12.5px] text-ink-500 leading-relaxed">
+                    Ira is still generating. Starting a new chat will stop this response and clear the thread.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewChatConfirmAfter(null)}
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Keep generating
+                </button>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => {
+                    newChatConfirmAfter?.();
+                    setNewChatConfirmAfter(null);
+                  }}
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+                >
+                  Discard & start new
                 </button>
               </div>
             </motion.div>
@@ -5149,7 +5908,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   type="button"
                   onClick={() => setShowShortcutsModal(false)}
                   aria-label="Close"
-                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <X size={14} />
                 </button>

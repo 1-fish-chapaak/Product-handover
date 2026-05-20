@@ -107,7 +107,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       aria-pressed={pressed || undefined}
       className={[
-        'inline-flex items-center justify-center font-medium cursor-pointer',
+        'inline-flex items-center justify-center font-medium cursor-pointer whitespace-nowrap',
         'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
         'active:scale-[0.98]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',

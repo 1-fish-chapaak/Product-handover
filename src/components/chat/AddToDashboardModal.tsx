@@ -431,14 +431,14 @@ export function AddToDashboardModal({
                   ) : (
                     <>
                       {myFiltered.length > 0 && (
-                        <div role="group" aria-label="My dashboards">
-                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-1">My Dashboards</p>
+                        <div role="group" aria-label="My dashboards" className="space-y-2">
+                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-1 pb-0.5">My Dashboards</p>
                           {myFiltered.map(renderDashboardRow)}
                         </div>
                       )}
                       {sharedFiltered.length > 0 && (
-                        <div role="group" aria-label="Shared with me">
-                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-3">Shared with me</p>
+                        <div role="group" aria-label="Shared with me" className="space-y-2">
+                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-3 pb-0.5">Shared with me</p>
                           {sharedFiltered.map(renderDashboardRow)}
                         </div>
                       )}
@@ -551,7 +551,7 @@ export function AddToDashboardModal({
 
                 {/* KPI Cards */}
                 {resultData.kpis.length > 0 && (
-                  <div className="space-y-1.5" role="group" aria-label="KPI Cards">
+                  <div className="space-y-2" role="group" aria-label="KPI Cards">
                     <SectionHeader
                       title="KPI Cards"
                       count={selKpis.size}
@@ -577,7 +577,7 @@ export function AddToDashboardModal({
 
                 {/* Charts */}
                 {resultData.charts.length > 0 && (
-                  <div className="space-y-1.5" role="group" aria-label="Charts">
+                  <div className="space-y-2" role="group" aria-label="Charts">
                     <SectionHeader
                       title="Charts"
                       count={selCharts.size}
@@ -603,7 +603,7 @@ export function AddToDashboardModal({
 
                 {/* Results Table */}
                 {resultData.table.columns.length > 0 && (
-                  <div className="space-y-1.5" role="group" aria-label="Results Table">
+                  <div className="space-y-2" role="group" aria-label="Results Table">
                     <SectionHeader
                       title="Results Table"
                       count={selCols.size}

@@ -29,10 +29,11 @@ interface ArtifactPanelProps {
   onComposeInChat?: (draft: string) => void;
 }
 
+// Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
 const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] = [
-  { id: 'plan', label: 'Plan', icon: Sparkles, count: 7 },
+  { id: 'plan', label: 'Plan', icon: Sparkles, count: 5 },
   { id: 'code', label: 'Code', icon: FileCode },
-  { id: 'sources', label: 'Sources', icon: Database, count: 2 },
+  { id: 'sources', label: 'Sources', icon: Database, count: 5 },
   { id: 'output', label: 'Output', icon: LayoutDashboard },
 ];
 
@@ -580,7 +581,7 @@ function SourceCard({
           <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
             {columnsUsed.join(', ') || '(none)'}
           </span>
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               ref={pickBtnRef}
               type="button"
@@ -588,7 +589,7 @@ function SourceCard({
               aria-expanded={pickerOpen}
               aria-label={`Pick columns from ${source.name}`}
               title="Pick columns"
-              className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium text-ink-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <ListChecks size={11} strokeWidth={2.25} />
               Pick
@@ -598,23 +599,25 @@ function SourceCard({
               onClick={handleDescribeInChat}
               aria-label={`Describe column change for ${source.name} in chat`}
               title="Describe in chat"
-              className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium text-ink-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <MessageSquare size={11} strokeWidth={2.25} />
               Chat
             </button>
           </div>
 
-          {pickerOpen && (
-            <ColumnPicker
-              anchorRef={pickBtnRef}
-              sourceName={source.name}
-              available={available}
-              initialSelection={columnsUsed}
-              onApply={handleApplyColumns}
-              onClose={() => setPickerOpen(false)}
-            />
-          )}
+          <AnimatePresence>
+            {pickerOpen && (
+              <ColumnPicker
+                anchorRef={pickBtnRef}
+                sourceName={source.name}
+                available={available}
+                initialSelection={columnsUsed}
+                onApply={handleApplyColumns}
+                onClose={() => setPickerOpen(false)}
+              />
+            )}
+          </AnimatePresence>
         </div>
       )}
     </motion.div>
@@ -723,38 +726,59 @@ function ColumnPicker({
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[60]" onClick={onClose} aria-hidden />
+      <motion.div
+        className="fixed inset-0 z-[60]"
+        onClick={onClose}
+        aria-hidden
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.12, ease: 'linear' }}
+      />
       <motion.div
         role="dialog"
         aria-label={`Columns used from ${sourceName}`}
-        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+        initial={{ opacity: 0, y: -8, scale: 0.94 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        style={{ top: pos.top, left: pos.left, width: PICKER_W }}
+        exit={{ opacity: 0, y: -6, scale: 0.96 }}
+        transition={{
+          opacity: { duration: 0.14, ease: [0.16, 1, 0.3, 1] },
+          y:       { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 },
+          scale:   { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 },
+        }}
+        style={{ top: pos.top, left: pos.left, width: PICKER_W, transformOrigin: 'top right' }}
         className="fixed z-[61] rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_48px_-20px_rgba(15,8,30,0.28),0_4px_12px_-6px_rgba(15,8,30,0.08)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header — one tight line: source name + selected count + close.
-            Live change badge appears inline only when dirty. */}
-        <div className="flex items-center gap-2 px-4 h-11 border-b border-canvas-border">
-          <h4 className="flex-1 min-w-0 text-[13px] font-semibold text-ink-900 truncate" title={sourceName}>
-            {sourceName}
-          </h4>
-          <span className="text-[11px] tabular-nums text-ink-500 shrink-0">
-            <span className="text-ink-800 font-medium">{selected.size}</span>
+        {/* Header — tight: selected count + dirty badge + close.
+            Source name is implicit (user just clicked Pick on that card). */}
+        <div className="flex items-center gap-2 px-3.5 h-10 border-b border-canvas-border">
+          <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500">Columns</span>
+          <span className="inline-flex items-center h-[20px] px-1.5 rounded-full bg-paper-50 border border-canvas-border text-[11px] tabular-nums shrink-0">
+            <span className="text-ink-800 font-semibold">{selected.size}</span>
             <span className="text-ink-400">/{available.length}</span>
           </span>
-          {dirty && (
-            <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium shrink-0">
-              <span className="size-1 rounded-full bg-brand-500" aria-hidden />
-              {addCount + removeCount}
-            </span>
-          )}
+          <AnimatePresence>
+            {dirty && (
+              <motion.span
+                key="dirty-pill"
+                initial={{ opacity: 0, scale: 0.7, x: -4 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.7, x: -4 }}
+                transition={{ type: 'spring', stiffness: 560, damping: 26 }}
+                className="inline-flex items-center gap-1 px-1.5 h-[20px] rounded-full bg-brand-50 text-brand-700 text-[10.5px] font-medium shrink-0"
+              >
+                <span className="size-1.5 rounded-full bg-brand-500" aria-hidden />
+                {addCount + removeCount} change{addCount + removeCount === 1 ? '' : 's'}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          <div className="flex-1" />
           <button
             type="button"
             onClick={onClose}
             aria-label="Close picker"
-            className="size-7 -mr-1.5 inline-flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+            className="size-7 -mr-1 inline-flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
           >
             <X size={14} />
           </button>
@@ -763,15 +787,18 @@ function ColumnPicker({
         {/* Search — primary input. With 100+ columns this is the main nav,
             so it gets a roomy field and stays anchored at the top. */}
         <div className="px-3 py-2 border-b border-canvas-border">
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <div className="relative group/search">
+            <Search
+              size={13}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 group-focus-within/search:text-brand-500 transition-colors pointer-events-none"
+            />
             <input
               type="text"
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={`Search ${available.length} columns…`}
-              className="w-full pl-8 pr-8 h-8 text-[12.5px] text-ink-800 placeholder:text-ink-400 bg-paper-50 border border-canvas-border rounded-md outline-none focus:border-brand-300 focus:bg-canvas-elevated transition-colors"
+              className="no-focus-ring w-full pl-8 pr-8 h-9 text-[12.5px] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-md outline-none focus:border-brand-400 transition-colors"
             />
             {query ? (
               <button
@@ -845,26 +872,40 @@ function ColumnPicker({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-canvas-border px-3 py-2.5 bg-paper-50/50">
+        <div className="border-t border-canvas-border px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1.5 min-w-0">
-              {dirty ? (
-                <>
-                  {addCount > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-compliant-700 font-medium">
-                      <span>+{addCount}</span>
-                    </span>
-                  )}
-                  {removeCount > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-risk-700 font-medium">
-                      <span>−{removeCount}</span>
-                    </span>
-                  )}
-                  <span className="text-ink-400">to apply</span>
-                </>
-              ) : (
-                <span className="text-ink-400">No changes</span>
-              )}
+            <span className="text-[11px] tabular-nums flex items-center gap-1.5 min-w-0">
+              <AnimatePresence mode="wait" initial={false}>
+                {dirty ? (
+                  <motion.span
+                    key="dirty"
+                    initial={{ opacity: 0, y: 2 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -2 }}
+                    transition={{ duration: 0.14 }}
+                    className="inline-flex items-center gap-1.5"
+                  >
+                    {addCount > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-compliant-700 font-semibold">+{addCount}</span>
+                    )}
+                    {removeCount > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-risk-700 font-semibold">−{removeCount}</span>
+                    )}
+                    <span className="text-ink-400">to apply</span>
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="clean"
+                    initial={{ opacity: 0, y: 2 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -2 }}
+                    transition={{ duration: 0.14 }}
+                    className="text-ink-400"
+                  >
+                    No changes
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </span>
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -874,14 +915,16 @@ function ColumnPicker({
               >
                 Cancel
               </button>
-              <button
+              <motion.button
                 type="button"
                 onClick={() => onApply(Array.from(selected))}
                 disabled={!dirty || selected.size === 0}
-                className="h-7 px-3 text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-brand-200 disabled:text-white/70 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                whileTap={dirty && selected.size > 0 ? { scale: 0.96 } : undefined}
+                transition={{ type: 'spring', stiffness: 520, damping: 28 }}
+                className="h-7 px-3 text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Apply
-              </button>
+              </motion.button>
             </div>
           </div>
         </div>
@@ -904,7 +947,11 @@ function SectionHeading({
   action?: { label: string; onClick: () => void } | null;
 }) {
   return (
-    <div className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm border-b border-canvas-border/70 px-4 py-1.5 flex items-center gap-1.5">
+    <motion.div
+      layout="position"
+      transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.55 }}
+      className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm border-b border-canvas-border/70 px-4 py-1.5 flex items-center gap-1.5"
+    >
       <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</span>
       <span className="font-mono text-[10px] tabular-nums text-ink-400">
         {showTotal && totalCount !== undefined ? `${count}/${totalCount}` : count}
@@ -918,26 +965,28 @@ function SectionHeading({
           {action.label}
         </button>
       )}
-    </div>
+    </motion.div>
   );
 }
 
-// Individual checkbox row — fixed-height, with optional "changed" indicator
-// (small dot when the row's state differs from initial selection).
+// Individual checkbox row — animates between Selected and Available sections
+// via framer-motion's `layout` so toggling never causes a teleport.
 function ColumnRow({
   col, isChecked, isChanged, onToggle,
 }: { col: string; isChecked: boolean; isChanged: boolean; onToggle: () => void }) {
   return (
-    <button
+    <motion.button
+      layout="position"
+      transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.55 }}
       type="button"
       role="menuitemcheckbox"
       aria-checked={isChecked}
       onClick={onToggle}
-      className={`group/row w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50/40 ${
-        isChecked ? 'hover:bg-brand-50/60' : 'hover:bg-paper-50'
+      className={`group/row w-full flex items-center gap-2.5 px-4 py-1.5 text-left transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50/40 ${
+        isChecked ? 'hover:bg-brand-50/60' : 'hover:bg-paper-50/70'
       }`}
     >
-      <span className={`inline-flex items-center justify-center size-[18px] rounded-[5px] shrink-0 transition-all duration-150 ${
+      <span className={`inline-flex items-center justify-center size-[18px] rounded-[5px] shrink-0 transition-[background-color,border-color,box-shadow] duration-150 ${
         isChecked
           ? 'bg-brand-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
           : 'bg-canvas-elevated border border-ink-300 group-hover/row:border-ink-500'
@@ -945,7 +994,7 @@ function ColumnRow({
         <motion.span
           initial={false}
           animate={{ scale: isChecked ? 1 : 0, opacity: isChecked ? 1 : 0 }}
-          transition={{ type: 'spring', stiffness: 520, damping: 28 }}
+          transition={{ type: 'spring', stiffness: 540, damping: 26 }}
           className="inline-flex"
         >
           <Check size={12} strokeWidth={3} className="text-white" />
@@ -955,13 +1004,16 @@ function ColumnRow({
         {col}
       </span>
       {isChanged && (
-        <span
+        <motion.span
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 600, damping: 24 }}
           className={`size-1.5 rounded-full shrink-0 ${isChecked ? 'bg-compliant' : 'bg-risk'}`}
           aria-label={isChecked ? 'Will be added' : 'Will be removed'}
           title={isChecked ? 'Will be added on Apply' : 'Will be removed on Apply'}
         />
       )}
-    </button>
+    </motion.button>
   );
 }
 
@@ -1081,7 +1133,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
                 className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[13px] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                   isActive
                     ? 'text-brand-700 font-semibold'
-                    : 'text-ink-500 font-medium hover:text-ink-900 hover:bg-paper-50/70'
+                    : 'text-ink-500 font-medium hover:text-brand-700 hover:bg-brand-50'
                 }`}
               >
                 <motion.span
@@ -1092,7 +1144,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
                   <tab.icon
                     size={14}
                     strokeWidth={isActive ? 2.25 : 2}
-                    className={isActive ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-700 transition-colors'}
+                    className={isActive ? 'text-brand-600' : 'text-ink-400 group-hover:text-brand-600 transition-colors'}
                   />
                 </motion.span>
                 <span className={`leading-none tracking-tight ${isActive ? 'inline' : 'hidden @[360px]:inline'}`}>
@@ -1103,7 +1155,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
                     className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-mono tabular-nums leading-none transition-colors ${
                       isActive
                         ? 'bg-brand-100 text-brand-700'
-                        : 'bg-paper-100 text-ink-500 group-hover:bg-paper-200 group-hover:text-ink-700'
+                        : 'bg-paper-100 text-ink-500 group-hover:bg-brand-100 group-hover:text-brand-700'
                     }`}
                     aria-label={`${tab.count} items`}
                   >
@@ -1126,7 +1178,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
           onClick={onClose}
           aria-label="Close panel"
           title="Close panel"
-          className="size-8 mb-1 inline-flex items-center justify-center shrink-0 text-ink-400 hover:text-ink-900 rounded-md hover:bg-paper-100 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="size-8 mb-1 inline-flex items-center justify-center shrink-0 text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <X size={14} />
         </button>

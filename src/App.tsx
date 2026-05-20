@@ -147,32 +147,38 @@ export default function App() {
   const chatSplitContainerRef = useRef<HTMLDivElement>(null);
   const [viewLoading, setViewLoading] = useState(false);
 
-  // Chat ↔ artifact panel split percentage (only meaningful when both panes
-  // are visible). Persisted to localStorage so the user's resize choice
-  // survives reloads. Clamped to 35–75% to keep both sides usable.
-  const CHAT_SPLIT_KEY = 'chat-split-pct';
-  const [chatSplitPct, setChatSplitPct] = useState<number>(() => {
+  // Artifact panel width in pixels (only meaningful when both panes are
+  // visible). Persisted to localStorage so the user's resize choice survives
+  // reloads. Default 464px; clamped at drag time so neither pane collapses.
+  const ARTIFACT_PANEL_PX_KEY = 'artifact-panel-px';
+  const ARTIFACT_PANEL_DEFAULT_PX = 464;
+  const ARTIFACT_PANEL_MIN_PX = 360;
+  const CHAT_MIN_PX = 480;
+  const [artifactPanelPx, setArtifactPanelPx] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem(CHAT_SPLIT_KEY);
-      const n = raw ? parseFloat(raw) : 60;
-      return Number.isFinite(n) && n >= 35 && n <= 75 ? n : 60;
-    } catch { return 60; }
+      const raw = localStorage.getItem(ARTIFACT_PANEL_PX_KEY);
+      const n = raw ? parseFloat(raw) : ARTIFACT_PANEL_DEFAULT_PX;
+      return Number.isFinite(n) && n >= ARTIFACT_PANEL_MIN_PX ? n : ARTIFACT_PANEL_DEFAULT_PX;
+    } catch { return ARTIFACT_PANEL_DEFAULT_PX; }
   });
   useEffect(() => {
-    try { localStorage.setItem(CHAT_SPLIT_KEY, String(chatSplitPct)); } catch { /* ignore */ }
-  }, [chatSplitPct]);
+    try { localStorage.setItem(ARTIFACT_PANEL_PX_KEY, String(artifactPanelPx)); } catch { /* ignore */ }
+  }, [artifactPanelPx]);
 
   const startSplitDrag = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const containerW = chatSplitContainerRef.current?.offsetWidth ?? 1;
     const startX = e.clientX;
-    const startPct = chatSplitPct;
+    const startWidth = artifactPanelPx;
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'col-resize';
     const onMove = (ev: MouseEvent) => {
+      // Splitter sits to the left of the artifact panel — dragging right
+      // shrinks the panel.
       const delta = ev.clientX - startX;
-      const next = startPct + (delta / containerW) * 100;
-      setChatSplitPct(Math.max(35, Math.min(75, next)));
+      const maxPx = Math.max(ARTIFACT_PANEL_MIN_PX, containerW - CHAT_MIN_PX);
+      const next = Math.max(ARTIFACT_PANEL_MIN_PX, Math.min(maxPx, startWidth - delta));
+      setArtifactPanelPx(next);
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
@@ -182,7 +188,7 @@ export default function App() {
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [chatSplitPct]);
+  }, [artifactPanelPx]);
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
   const [controlDrawerData, setControlDrawerData] = useState<any>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
@@ -331,9 +337,7 @@ export default function App() {
           <div ref={chatSplitContainerRef} className="flex flex-1 h-full overflow-hidden">
             <div
               className="h-full min-w-0"
-              style={state.showArtifacts
-                ? { width: `${chatSplitPct}%`, flex: '0 0 auto' }
-                : { flex: '1 1 0%' }}
+              style={{ flex: '1 1 0%' }}
             ><ChatView
               showChatHistory={state.showChatHistory}
               toggleChatHistory={toggleChatHistory}
@@ -430,7 +434,7 @@ export default function App() {
             {state.showArtifacts && (
               <div
                 className="h-full min-w-0"
-                style={{ width: `${100 - chatSplitPct}%`, flex: '0 0 auto' }}
+                style={{ width: `${artifactPanelPx}px`, flex: '0 0 auto' }}
               >
                 {renderArtifactPanel()}
               </div>
