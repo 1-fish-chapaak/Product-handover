@@ -252,6 +252,14 @@ export function useAppState() {
     setState(prev => ({ ...prev, view: 'audit-execution' as View, selectedEngagementId: engagementId }));
   }, []);
 
+  const openEngagement = useCallback((engagementId: string) => {
+    setState(prev => ({ ...prev, view: 'engagement-overview' as View, selectedEngagementId: engagementId }));
+  }, []);
+
+  const openCaseManagement = useCallback((engagementId: string) => {
+    setState(prev => ({ ...prev, view: 'engagement-case-management' as View, selectedEngagementId: engagementId }));
+  }, []);
+
   // Modal controls
   const setShowExceptionModal = useCallback((show: boolean) => {
     setState(prev => ({ ...prev, showExceptionModal: show }));
@@ -487,6 +495,8 @@ export function useAppState() {
     enterWorkflowMode,
     openWorkflowExecutor,
     openAuditExecution,
+    openEngagement,
+    openCaseManagement,
     openChat,
     setSelectedChatId,
     openDashboard,

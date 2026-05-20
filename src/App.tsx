@@ -29,15 +29,24 @@ import PowerBIImportWizard from './components/modals/PowerBIImportWizard';
 import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningView from './components/audit/AuditPlanningView';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
+import EngagementsView from './components/audit/EngagementsView';
+import EngagementOverviewView from './components/audit/EngagementOverviewView';
+import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
+import MyQueueView from './components/audit/MyQueueView';
+import Vendor360View from './components/audit/Vendor360View';
+import EngagementCompareView from './components/audit/EngagementCompareView';
+import CaseManagementWorkspace from './components/audit/CaseManagementWorkspace';
 import ProgramsView from './components/audit/ProgramsView';
 // New pages
 import RACMView from './components/governance/RACMView';
+import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
 import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
+import PlatformUsageView from './components/admin/PlatformUsageView';
 import FindingsView from './components/execution/FindingsView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
@@ -87,6 +96,8 @@ export default function App() {
     setSelectedWorkflow,
     setSelectedBP,
     openAuditExecution,
+    openEngagement,
+    openCaseManagement,
     setShowExceptionModal,
     setShowEmailPreviewModal,
     setShowShareModal,
@@ -537,8 +548,57 @@ export default function App() {
           />
         );
 
+      case 'engagements':
+        return (
+          <EngagementsView
+            onOpenAuditPlanning={() => setView('audit-planning')}
+            onOpenEngagement={openEngagement}
+          />
+        );
+
+      case 'engagement-overview':
+        return (
+          <EngagementOverviewView
+            engagementId={state.selectedEngagementId ?? ''}
+            onBack={() => setView('engagements')}
+            onOpenExecution={(engId) => {
+              setEngagementBackView('audit-planning');
+              openAuditExecution(engId);
+              setView('engagement-detail' as any);
+            }}
+            onOpenCaseManagement={openCaseManagement}
+            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+          />
+        );
+
+      case 'engagement-case-management':
+        return (
+          <CaseManagementWorkspace
+            engagementId={state.selectedEngagementId ?? ''}
+            onBack={() => setView('engagement-overview')}
+          />
+        );
+
+      case 'my-queue':
+        return (
+          <MyQueueView
+            onOpenException={(engagementId) => openCaseManagement(engagementId)}
+          />
+        );
+
+      case 'closed-case-sampling':
+        return <ClosedCaseSamplingView onBack={() => setView('engagements')} />;
+
+      case 'vendor-360':
+        return <Vendor360View onBack={() => setView('engagements')} />;
+
+      case 'engagement-compare':
+        return <EngagementCompareView onBack={() => setView('engagements')} />;
+
       case 'audit-planning':
-        return <AuditPlanningPage onNavigateToExecution={(engId) => {
+        return <AuditPlanningPage
+          onOpenEngagements={() => setView('engagements')}
+          onNavigateToExecution={(engId) => {
           setEngagementBackView('audit-planning');
           openAuditExecution(engId);
           setView('engagement-detail' as any);
