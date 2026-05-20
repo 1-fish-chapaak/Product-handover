@@ -28,6 +28,7 @@ import AutomationCasesTab from './patterns/automation/AutomationCasesTab';
 import AutomationReportsTab from './patterns/automation/AutomationReportsTab';
 import AutomationActivityTrailTab from './patterns/automation/AutomationActivityTrailTab';
 import { WorkspaceOverview, PatternPlaceholderTab } from './components';
+import EngagementActivityTrailTab from './components/EngagementActivityTrailTab';
 import ComplianceControlScopeTab from './patterns/compliance/ComplianceControlScopeTab';
 import ComplianceRequestsPBCTab from './patterns/compliance/ComplianceRequestsPBCTab';
 import ComplianceSamplesEvidenceTab from './patterns/compliance/ComplianceSamplesEvidenceTab';
@@ -344,6 +345,17 @@ export default function PatternWorkspaceRenderer({ engagement, activeTabId, acti
         />
       );
     }
+  }
+
+  // Shared Activity Trail for Compliance and IA
+  if (activeTabId === 'activity-trail' && (complianceState || iaState)) {
+    return (
+      <EngagementActivityTrailTab
+        engagement={engagement}
+        complianceState={complianceState}
+        iaState={iaState}
+      />
+    );
   }
 
   return (

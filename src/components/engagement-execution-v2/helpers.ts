@@ -258,6 +258,7 @@ export interface StepAvailability {
   workingPaper: StepState;
   review: StepState;
   conclusion: StepState;
+  auditTrail: StepState;
 }
 
 const STATUS_ORDER: ControlExecStatus[] = [
@@ -311,6 +312,8 @@ export function deriveStepAvailability(ctrl: ExecutionControl): StepAvailability
       enabled: s === ControlExecStatus.CONCLUDED,
       reason: s !== ControlExecStatus.CONCLUDED ? 'Reviewer must approve before conclusion is set' : '',
     },
+
+    auditTrail: { enabled: true, reason: '' },
   };
 }
 

@@ -72,40 +72,37 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
       </div>
 
       <div>
-        <label className={labelCls}>Control Scope Source <span className="text-red-400">*</span></label>
-        <select value={config.controlScopeSource} onChange={e => update('controlScopeSource', e.target.value as ControlScopeSource)} className={selectCls}>
-          <option value={ControlScopeSource.RACM_VERSION}>RACM Version</option>
-          <option value={ControlScopeSource.SELECTED_CONTROLS}>Selected Controls</option>
-          <option value={ControlScopeSource.IMPORTED_CONTROLS}>Imported Controls</option>
-          <option value={ControlScopeSource.MANUAL_CONTROLS}>Manual Controls</option>
-        </select>
-      </div>
-
-      {config.controlScopeSource === ControlScopeSource.RACM_VERSION && (
-        <div>
-          <label className={labelCls}>RACM Version</label>
-          <select className={selectCls} value={config.racmVersionId || ''} onChange={e => update('racmVersionId', e.target.value)}>
-            <option value="">Select RACM version...</option>
-            <option value="racm-fy26-v1">FY26 P2P — Vendor Payment v1</option>
-            <option value="racm-fy26-v2">FY26 O2C — Revenue Cycle v1</option>
-          </select>
-        </div>
-      )}
-
-      {racmWarning && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
-          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-          <span>This framework requires RACM linkage for defensible compliance testing.</span>
-        </div>
-      )}
-
-      <div>
         <label className={labelCls}>Default Testing Input Method</label>
         <select value={config.defaultTestingInputMethod} onChange={e => update('defaultTestingInputMethod', e.target.value as TestingInputMethod)} className={selectCls}>
           <option value={TestingInputMethod.UPLOAD_SELECTED_SAMPLES}>Upload Selected Samples</option>
           <option value={TestingInputMethod.GENERATE_SAMPLES_FROM_POPULATION}>Generate Samples from Population</option>
           <option value={TestingInputMethod.TEST_FULL_POPULATION}>Test Full Population</option>
         </select>
+      </div>
+
+      {/* Upload RACM */}
+      <div className="rounded-lg border border-dashed border-primary/30 bg-primary/[0.03] p-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-text block">Upload RACM</span>
+            <span className="text-[10px] text-gray-400">Upload an Excel/CSV RACM file to link controls to this engagement.</span>
+          </div>
+          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
+            Choose File
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                update('racmVersionId', `uploaded-${file.name}`);
+                e.target.value = '';
+              }
+            }} />
+          </label>
+        </div>
+        {config.racmVersionId && (
+          <div className="mt-2 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+            <span>RACM linked: {config.racmVersionId.replace('uploaded-', '')}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-4">

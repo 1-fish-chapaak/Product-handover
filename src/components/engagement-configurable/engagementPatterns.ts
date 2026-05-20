@@ -49,6 +49,7 @@ const COMPLIANCE_CONTROL_TESTING: EngagementPatternDefinition = {
     { id: 'review', label: 'Review' },
     { id: 'conclusion', label: 'Conclusion' },
     { id: 'summary', label: 'Summary' },
+    { id: 'activity-trail', label: 'Activity Trail' },
   ],
   requiredOutputs: [
     'Working Paper',
@@ -85,6 +86,7 @@ const INTERNAL_AUDIT_ASSIGNMENT: EngagementPatternDefinition = {
     { id: 'working-paper', label: 'Working Paper' },
     { id: 'final-report', label: 'Final Report' },
     { id: 'action-plan', label: 'Action Plan' },
+    { id: 'activity-trail', label: 'Activity Trail' },
   ],
   requiredOutputs: [
     'Working Paper',

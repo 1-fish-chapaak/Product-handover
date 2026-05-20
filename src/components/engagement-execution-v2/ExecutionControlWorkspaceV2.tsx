@@ -9,7 +9,7 @@ import {
   X, ChevronRight, ChevronDown, Lock, Shield, FileText, AlertTriangle,
   CheckCircle2, Upload, FlaskConical, ClipboardCheck, Eye,
   Play, Layers, Settings, Workflow, Plus, Trash2, Database, Shuffle, Paperclip, Download,
-  Send, RotateCcw, Link2, Loader2, ArrowLeft, Info,
+  Send, RotateCcw, Link2, Loader2, ArrowLeft, Info, Clock,
 } from 'lucide-react';
 import type { ExecutionControl, Attribute, Assertion, WorkflowMapping, TestItem, AttributeResult, PopulationSnapshot, Evidence } from './types';
 import { ControlExecStatus, AttrResult, AttrSource, SampleResult, ExecutionMode, ReviewStatus, WorkingPaperStatus, AttributeType } from './types';
@@ -41,6 +41,7 @@ const EXECUTION_STEPS: StepDef[] = [
   { id: 'working-paper',  label: 'Working Paper',     icon: FileText,       availabilityKey: 'workingPaper' },
   { id: 'review',         label: 'Review',            icon: Eye,            availabilityKey: 'review' },
   { id: 'conclusion',     label: 'Conclusion',        icon: CheckCircle2,   availabilityKey: 'conclusion' },
+  { id: 'audit-trail',    label: 'Audit Trail',       icon: Clock,          availabilityKey: 'auditTrail' },
 ];
 
 function getStepsForType(_type: DerivedControlType): StepDef[] {
@@ -153,6 +154,8 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
           <ReviewStep ctrl={ctrl} onUpdateControl={onUpdateControl} onNavigate={setActiveStepId} />
         ) : activeStepId === 'conclusion' && activeAvailability.enabled ? (
           <ConclusionStep ctrl={ctrl} onNavigate={setActiveStepId} />
+        ) : activeStepId === 'audit-trail' ? (
+          <AuditTrailStep ctrl={ctrl} />
         ) : !activeAvailability.enabled ? (
           <LockedStep step={activeStep} reason={activeAvailability.reason} steps={steps} availability={availability} onNavigate={setActiveStepId} />
         ) : (
@@ -3879,6 +3882,49 @@ function PlaceholderStep({ step }: { step: StepDef }) {
       </div>
       <h4 className="text-[14px] font-semibold text-text mb-1">{step.label}</h4>
       <p className="text-[12px] text-text-muted max-w-sm">This step will be implemented in a subsequent prompt. The step is unlocked and ready for implementation.</p>
+    </div>
+  );
+}
+
+// ─── Audit Trail Step ────────────────────────────────────────────────────
+
+function AuditTrailStep({ ctrl }: { ctrl: ExecutionControl }) {
+  const events = [
+    { id: '1', time: 'Today', title: 'Control opened', subtitle: `${ctrl.name} opened for testing`, actor: ctrl.owner, type: 'config' as const },
+    ...(ctrl.execution.testItems.length > 0 ? [{ id: '2', time: 'Today', title: `${ctrl.execution.testItems.length} test items created`, subtitle: 'Samples generated from population', actor: ctrl.owner, type: 'run' as const }] : []),
+    ...ctrl.workflowMappings.map((wm, i) => ({ id: `wf-${i}`, time: 'Today', title: `Workflow linked: ${wm.workflowName}`, subtitle: `${wm.version} · ${wm.status} · ${wm.mappedAttributeIds.length} attributes`, actor: ctrl.owner, type: 'config' as const })),
+    ...ctrl.attributes.map((attr, i) => ({ id: `attr-${i}`, time: 'Today', title: `Attribute: ${attr.name}`, subtitle: `${attr.type} · ${attr.assertionName}${attr.workflowId ? ' · Workflow linked' : ''}`, actor: ctrl.owner, type: 'finding' as const })),
+    { id: 'status', time: 'Today', title: `Status: ${ctrl.execution.status.replace(/_/g, ' ')}`, subtitle: `Control ${ctrl.id}`, actor: 'System', type: 'review' as const },
+  ];
+
+  const ICON_MAP = { config: Settings, run: Play, finding: AlertTriangle, review: CheckCircle2 };
+  const BG_MAP = { config: 'bg-gray-200 text-gray-500', run: 'bg-purple-100 text-purple-600', finding: 'bg-amber-100 text-amber-600', review: 'bg-emerald-100 text-emerald-600' };
+  const BORDER_MAP = { config: 'border-l-gray-300', run: 'border-l-purple-300', finding: 'border-l-amber-400', review: 'border-l-emerald-400' };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h4 className="text-[13px] font-bold text-text mb-0.5">Audit Trail</h4>
+        <p className="text-[11px] text-text-muted">Activity log for this control's testing lifecycle.</p>
+      </div>
+      <div className="space-y-1">
+        {events.map(ev => {
+          const Icon = ICON_MAP[ev.type]; const bg = BG_MAP[ev.type]; const border = BORDER_MAP[ev.type];
+          return (
+            <div key={ev.id} className={`flex items-start gap-3 px-4 py-2.5 rounded-lg border-l-[3px] ${border} hover:bg-white transition-colors`}>
+              <div className={`w-7 h-7 rounded-full ${bg} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-semibold text-text">{ev.title}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">{ev.subtitle}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[10px] text-gray-300">{ev.time}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">{ev.actor}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
