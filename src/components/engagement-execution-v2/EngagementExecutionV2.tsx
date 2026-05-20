@@ -6,8 +6,9 @@ import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowLeft, Shield, Calendar, User, Clock, FileText, Search,
-  ChevronRight, ChevronDown, AlertTriangle,
+  ChevronRight, ChevronDown, AlertTriangle, X, ExternalLink, Upload,
 } from 'lucide-react';
+import RacmMappingWorkspace from '../audit/RacmMappingWorkspace';
 import type { EngagementExecution, ExecutionControl } from './types';
 import { MOCK_ENGAGEMENT_V2 } from './mockExecutionData';
 import {
@@ -26,12 +27,14 @@ interface Props {
   engagementId?: string;
   onBack: () => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
+  requestPbcEnabled?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder }: Props) {
+export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true }: Props) {
   const [engagement, setEngagement] = useState<EngagementExecution>(MOCK_ENGAGEMENT_V2);
+  const [showRacmModal, setShowRacmModal] = useState(false);
 
   const updateControl = (controlId: string, updater: (ctrl: ExecutionControl) => ExecutionControl) => {
     setEngagement(prev => ({
@@ -149,6 +152,32 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
           ))}
         </div>
 
+        {/* ═══ Linked RACM Snapshot ═══ */}
+        <div className="bg-white rounded-xl border border-border-light p-4 mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-2 rounded-lg bg-primary/10"><Shield size={16} className="text-primary" /></div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[13px] font-semibold text-text">Linked RACM Snapshot</span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">Locked</span>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                <span className="font-medium text-text">FY26 P2P — Vendor Payment</span>
+                <span className="text-gray-300">·</span>
+                <span>{engagement.framework}</span>
+                <span className="text-gray-300">·</span>
+                <span>{engagement.primaryProcess}</span>
+                <span className="text-gray-300">·</span>
+                <span>9 risks · {kpis.totalControls} controls</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={() => setShowRacmModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[11px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
+            <ExternalLink size={12} />Open RACM
+          </button>
+        </div>
+
         {/* ═══ Toolbar ═══ */}
         <div className="flex items-center gap-3 mb-4">
           <div className="relative w-[260px]">
@@ -218,10 +247,70 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             onUpdateControl={(updater) => updateControl(selectedControl.id, updater)}
             initialStepId={initialStepId}
             onLaunchWorkflowBuilder={onLaunchWorkflowBuilder}
+            requestPbcEnabled={requestPbcEnabled}
           />
         )}
 
       </div>
+
+      {/* ═══ RACM Modal ═══ */}
+      {showRacmModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-40" onClick={() => setShowRacmModal(false)} />
+          <div className="fixed inset-4 z-50 flex items-stretch justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl border border-border-light w-full max-w-[1200px] flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="shrink-0 px-6 py-4 border-b border-border-light">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-[16px] font-bold text-text">Linked RACM Snapshot</h2>
+                    <p className="text-[12px] text-text-muted mt-0.5">FY26 P2P — Vendor Payment · {engagement.framework} · {engagement.primaryProcess}</p>
+                  </div>
+                  <button onClick={() => setShowRacmModal(false)} className="w-8 h-8 rounded-full text-gray-400 hover:text-text hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors">
+                    <X size={16} />
+                  </button>
+                </div>
+                {/* Upload RACM */}
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-dashed border-primary/30 bg-primary/[0.03]">
+                  <Upload size={14} className="text-primary shrink-0" />
+                  <div className="flex-1">
+                    <span className="text-[11px] font-semibold text-text">Upload RACM</span>
+                    <span className="text-[10px] text-gray-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
+                  </div>
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+                    <Upload size={11} />Choose File
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        // Simulate RACM upload — in production this would parse and import
+                        alert(`RACM file "${file.name}" selected. This will be used as the linked RACM version for this engagement.`);
+                        e.target.value = '';
+                      }
+                    }} />
+                  </label>
+                </div>
+              </div>
+              {/* Modal Body — reuses RacmMappingWorkspace */}
+              <div className="flex-1 overflow-y-auto">
+                <RacmMappingWorkspace
+                  onBack={() => setShowRacmModal(false)}
+                  racmName="FY26 P2P — Vendor Payment"
+                  racmProcess="P2P"
+                  inline={true}
+                  showEditAction={true}
+                />
+              </div>
+              {/* Modal Footer */}
+              <div className="shrink-0 px-6 py-3 border-t border-border-light bg-gray-50/50 flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Changes to the source RACM may require refreshing the engagement snapshot before testing.</span>
+                <button onClick={() => setShowRacmModal(false)} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
