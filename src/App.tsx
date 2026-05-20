@@ -104,6 +104,7 @@ export default function App() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
     openWorkflowExecutor,
@@ -266,6 +267,7 @@ export default function App() {
         onAddToReport={() => openReportBuilder('new')}
         onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
         onOpenInKnowledgeHub={() => { setShowArtifacts(false); setView('knowledge-hub'); }}
+        onComposeInChat={(draft) => { setShowArtifacts(false); setChatComposerDraft(draft); }}
       />
     );
 
@@ -344,6 +346,8 @@ export default function App() {
               setQueryAssumptions={setQueryAssumptions}
               initialQuery={state.chatInitialQuery ?? undefined}
               onInitialQueryProcessed={() => setChatInitialQuery(null)}
+              composerDraft={state.chatComposerDraft}
+              onComposerDraftConsumed={() => setChatComposerDraft(null)}
               selectedChatId={state.selectedChatId}
               onChatLoaded={() => setSelectedChatId(null)}
               setView={setView}

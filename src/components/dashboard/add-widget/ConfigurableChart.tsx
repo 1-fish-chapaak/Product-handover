@@ -919,6 +919,10 @@ export interface ConfigurableChartProps {
   yAxis?: string;
   /** Show numeric value labels directly on data points. Default: false */
   showLabels?: boolean;
+  /** Pie-chart outer radius (Recharts SVG units or percent of container).
+   *  Default '58%' keeps the existing dashboard sizing; bigger surfaces
+   *  (e.g. the audit-result chart card) can pass '70%' to fill the card. */
+  pieOuterRadius?: string | number;
   /** Show the target line/series. Default: true */
   showTarget?: boolean;
   /** Base chart color. Default: brand purple #7C3AED */
@@ -985,6 +989,7 @@ export function ConfigurableChart({
   xAxis = "Month",
   yAxis = "Duplicate Count",
   showLabels = false,
+  pieOuterRadius = '58%',
   showTarget = true,
   color,
   seriesColors,
@@ -1770,7 +1775,7 @@ export function ConfigurableChart({
     );
 
     const renderLegend = ({ payload }: any) => (
-      <div className="flex flex-wrap gap-3 justify-center mt-2">
+      <div className="flex flex-nowrap gap-3 justify-center mt-2 overflow-x-auto whitespace-nowrap px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {payload.map((e: any, i: number) => {
           const entryColor = sliceColors[i] || e.color;
           const entryName = e.value;
@@ -1838,7 +1843,7 @@ export function ConfigurableChart({
                     data={[entry]}
                     cx={`${50 + offsetX}%`}
                     cy={`${45 + offsetY}%`}
-                    outerRadius="52%"
+                    outerRadius={pieOuterRadius}
                     startAngle={startAngle}
                     endAngle={endAngle}
                     labelLine={false}
@@ -1864,7 +1869,7 @@ export function ConfigurableChart({
                 data={rawPie}
                 cx="50%"
                 cy="45%"
-                outerRadius="58%"
+                outerRadius={pieOuterRadius}
                 labelLine={false}
                 label={showLabels ? renderLabel : false}
                 dataKey="value"

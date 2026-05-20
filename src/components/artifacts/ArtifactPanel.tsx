@@ -1,15 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronDown, FileCode,
   Database, BarChart3, Sparkles, Copy, Download,
   AlertTriangle, LayoutDashboard, Wand2, HelpCircle,
-  FileSpreadsheet, ExternalLink, RefreshCw, Check,
+  Check, Pencil, Search, ListChecks, MessageSquare,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import OutputConfigTab from './OutputConfigTab';
 import { useToast } from '../shared/Toast';
 import { KpiTile } from '../shared/KpiTile';
+import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -21,6 +23,10 @@ interface ArtifactPanelProps {
   /** Navigate to the Knowledge Hub (data sources) — invoked from the Open
    *  action on a Source card. Hooked from App to setView('data-sources'). */
   onOpenInKnowledgeHub?: (sourceName: string) => void;
+  /** Pre-fill the chat composer with a draft prompt and close the panel.
+   *  Used by the "Edit assumptions" action on the Plan tab so users adjust
+   *  the run via natural language instead of an inline editor. */
+  onComposeInChat?: (draft: string) => void;
 }
 
 const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] = [
@@ -125,10 +131,30 @@ function PlanStepNode({ status, index }: { status: PlanStepStatus; index: number
   );
 }
 
-function PlanTab({ steps = PLAN_STEPS, assumptions = PLAN_ASSUMPTIONS }: { steps?: PlanStep[]; assumptions?: PlanAssumption[] } = {}) {
+function PlanTab({
+  steps = PLAN_STEPS,
+  assumptions = PLAN_ASSUMPTIONS,
+  onComposeInChat,
+}: {
+  steps?: PlanStep[];
+  assumptions?: PlanAssumption[];
+  onComposeInChat?: (draft: string) => void;
+} = {}) {
   const { addToast } = useToast();
   const [planOpen, setPlanOpen] = useState(true);
   const [assumptionsOpen, setAssumptionsOpen] = useState(true);
+
+  // Compose the chat draft from the current assumption set so the user
+  // sees what they're editing and where to type their change. Falls back to
+  // a toast if the host didn't wire the chat composer.
+  const handleEditAssumptions = () => {
+    if (!onComposeInChat) {
+      addToast({ type: 'info', message: 'Edit via chat is not available in this view.' });
+      return;
+    }
+    const lines = assumptions.map(a => `• ${a.key}: ${a.value}`).join('\n');
+    onComposeInChat(`Update assumptions for this query — currently:\n${lines}\n\nWhat should change? `);
+  };
 
   const doneCount = steps.filter(s => s.status === 'done').length;
   const allDone = doneCount === steps.length;
@@ -156,9 +182,6 @@ function PlanTab({ steps = PLAN_STEPS, assumptions = PLAN_ASSUMPTIONS }: { steps
           </div>
           <div className="flex-1 min-w-0 text-left">
             <h3 className="text-[13.5px] font-semibold text-ink-900 leading-tight tracking-tight">Query Execution Plan</h3>
-            <p className="text-[11.5px] text-ink-500 mt-px leading-tight">
-              {steps.length} steps · {hasFailed ? 'failed' : hasRunning ? 'in progress' : allDone ? 'completed' : `${doneCount} done`}
-            </p>
           </div>
           <span
             className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10.5px] font-medium tabular-nums ${
@@ -167,7 +190,7 @@ function PlanTab({ steps = PLAN_STEPS, assumptions = PLAN_ASSUMPTIONS }: { steps
                   : allDone ? 'bg-compliant-50 text-compliant-700'
                     : 'bg-paper-100 text-ink-600'
             }`}
-            aria-label={`${doneCount} of ${steps.length} complete`}
+            aria-label={`${doneCount} of ${steps.length} steps ${hasFailed ? 'failed' : hasRunning ? 'in progress' : allDone ? 'completed' : 'done'}`}
           >
             <span className={`size-1.5 rounded-full ${
               hasFailed ? 'bg-risk' : hasRunning ? 'bg-brand-500' : allDone ? 'bg-compliant' : 'bg-ink-400'
@@ -246,12 +269,11 @@ function PlanTab({ steps = PLAN_STEPS, assumptions = PLAN_ASSUMPTIONS }: { steps
             <div className="flex items-center pr-3">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addToast({ type: 'info', message: 'Edit assumptions — opening modifier' });
-                }}
-                className="text-[11px] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded px-2 py-1"
+                onClick={(e) => { e.stopPropagation(); handleEditAssumptions(); }}
+                title="Edit assumptions in chat"
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
+                <Pencil size={11} strokeWidth={2.25} />
                 Edit
               </button>
               <button
@@ -288,12 +310,12 @@ function PlanTab({ steps = PLAN_STEPS, assumptions = PLAN_ASSUMPTIONS }: { steps
                   {assumptions.map((a) => (
                     <div
                       key={a.key}
-                      className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 px-2 py-1.5 rounded-md hover:bg-paper-50/70 transition-colors"
+                      className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md hover:bg-paper-50/70 transition-colors"
                     >
-                      <dt className="text-[11.5px] font-medium uppercase tracking-[0.04em] text-ink-400 truncate self-start pt-px">
+                      <dt className="text-[12.5px] font-medium text-ink-500 leading-[1.45] self-start">
                         {a.key}
                       </dt>
-                      <dd className="text-[12.5px] text-ink-800 leading-snug">{a.value}</dd>
+                      <dd className="text-[13px] text-ink-900 leading-[1.5]">{a.value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -397,222 +419,549 @@ ORDER BY
   );
 }
 
-function SourcesTab({ onOpenInKnowledgeHub }: { onOpenInKnowledgeHub?: (name: string) => void } = {}) {
-  const sources: {
-    name: string;
-    type: string;
-    records: string;
-    tables: string[];
-    syncedAt: string;
-    status: 'synced' | 'stale';
-    color: 'evidence' | 'mitigated';
-  }[] = [
-    {
-      name: 'SAP ERP: AP Module',
-      type: 'SQL Database',
-      records: '1.2M rows',
-      tables: ['risks', 'controls', 'risk_control_map'],
-      syncedAt: '2 min ago',
-      status: 'synced',
-      color: 'evidence',
-    },
-    {
-      name: 'Vendor Master Data',
-      type: 'CSV File',
-      records: '892 vendors',
-      tables: ['vendor_master.csv'],
-      syncedAt: 'Mar 20',
-      status: 'synced',
-      color: 'mitigated',
-    },
-  ];
+// IDs of Knowledge Hub sources that this query touched. In production this
+// list comes from the query payload (which sources the planner read from);
+// for the mock we hard-code the two sources the audit-result demo uses.
+// IDs of Knowledge Hub sources that this query touched. In production this
+// list comes from the query payload (which sources the planner read from).
+// For the mock we surface one example of every supported source kind —
+// databases, file formats (XLSX / CSV / PDF), API, cloud, session — so the
+// workspace panel demonstrates the full surface area of the Knowledge Hub
+// without listing 30 rows.
+// Per-query source binding: which Knowledge Hub source was read AND which
+// of its columns the query used. In production this list comes from the
+// query payload; for the mock we hard-code the audit-result demo set.
+interface QuerySource {
+  id: string;
+  columnsUsed: string[];
+}
+
+const QUERY_SOURCES: QuerySource[] = [
+  { id: 'db-05', columnsUsed: ['query_id', 'rows_scanned', 'duration_ms'] },
+  { id: 'f-01',  columnsUsed: ['Date', 'Region', 'Amount'] },
+  { id: 'f-03',  columnsUsed: ['Vendor', 'Invoice ID', 'Amount'] },
+  { id: 'f-05',  columnsUsed: ['Loan ID', 'Borrower', 'Principal'] },
+  { id: 'f-17',  columnsUsed: [
+    'Payment Date', 'Settlement number', 'Submitting Merchant ID', 'Terminal ID',
+    'Batch Number', 'Transaction Timestamp', 'Transaction Amount', 'Settlement Amount',
+    'MCC', 'Merchant Name (DBA)',
+  ] },
+];
+
+function SourcesTab({
+  onOpenInKnowledgeHub,
+  onComposeInChat,
+}: {
+  onOpenInKnowledgeHub?: (name: string) => void;
+  onComposeInChat?: (draft: string) => void;
+} = {}) {
+  const rows = QUERY_SOURCES
+    .map(q => {
+      const src = DATA_SOURCE_SEED.find(s => s.id === q.id);
+      return src ? { src, columnsUsed: q.columnsUsed } : null;
+    })
+    .filter((r): r is { src: DataSource; columnsUsed: string[] } => r !== null);
 
   return (
-    // Auto-fit grid: each card is ~min 320px wide and expands to share the
-    // available width equally. The panel resizes; this grid reflows from
-    // 1 to N columns without viewport breakpoints — fits the resizable
-    // workspace pane cleanly.
     <div
       className="grid gap-3 pt-4"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))' }}
+      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
     >
-      {sources.map((src, i) => (
-        <SourceCard key={i} index={i} {...src} onOpenInKnowledgeHub={onOpenInKnowledgeHub} />
+      {rows.map(({ src, columnsUsed }, i) => (
+        <SourceCard
+          key={src.id}
+          source={src}
+          columnsUsed={columnsUsed}
+          index={i}
+          onOpenInKnowledgeHub={onOpenInKnowledgeHub}
+          onComposeInChat={onComposeInChat}
+        />
       ))}
     </div>
   );
 }
 
+// Workspace source card — mirrors the Knowledge Hub card chrome but adds a
+// "Using N columns" footer that lists the columns this query actually read.
+// The Change action sends the user back to the chat composer with a prompt
+// to swap columns; the assistant validates against the source's available
+// columns and re-runs the query.
 function SourceCard({
-  name, type, records, tables, syncedAt, status, color, index, onOpenInKnowledgeHub,
+  source, columnsUsed, index, onOpenInKnowledgeHub, onComposeInChat,
 }: {
-  name: string;
-  type: string;
-  records: string;
-  tables: string[];
-  syncedAt: string;
-  status: 'synced' | 'stale';
-  color: 'evidence' | 'mitigated';
+  source: DataSource;
+  columnsUsed: string[];
   index: number;
   onOpenInKnowledgeHub?: (name: string) => void;
+  onComposeInChat?: (draft: string) => void;
 }) {
   const { addToast } = useToast();
-  const [expanded, setExpanded] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const isCsv = type.toLowerCase().includes('csv');
-  const TypeIcon = isCsv ? FileSpreadsheet : Database;
+  const { icon: Icon, tone } = TYPE_META[source.type];
+  const available = source.columns ?? [];
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const handleRefresh = () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    // Mock refresh — in production this would call the data source connector
-    setTimeout(() => {
-      setRefreshing(false);
-      addToast({ type: 'success', message: `${name} schema refreshed` });
-    }, 900);
-  };
-  // Open the source in the Knowledge Hub if the host wired a navigation
-  // handler; otherwise fall back to a toast (e.g. when the panel is used
-  // outside the main app shell).
   const handleOpen = () => {
-    if (onOpenInKnowledgeHub) {
-      onOpenInKnowledgeHub(name);
-    } else {
-      addToast({ type: 'info', message: `Opening ${name} in source viewer…` });
+    if (onOpenInKnowledgeHub) onOpenInKnowledgeHub(source.name);
+    else addToast({ type: 'info', message: `Opening ${source.name}…` });
+  };
+
+  // Picker path — staged selection → diff prompt routed through chat for
+  // the assistant to validate and re-run. Keeps the "AI owns the plan"
+  // contract while letting the user pick columns directly.
+  const handleApplyColumns = (nextColumns: string[]) => {
+    setPickerOpen(false);
+    if (!onComposeInChat) {
+      addToast({ type: 'info', message: 'Change via chat is not available in this view.' });
+      return;
     }
+    const added = nextColumns.filter(c => !columnsUsed.includes(c));
+    const removed = columnsUsed.filter(c => !nextColumns.includes(c));
+    if (added.length === 0 && removed.length === 0) return;
+    onComposeInChat(
+      `Update the columns read from ${source.name}.\n` +
+      (added.length ? `Add: ${added.join(', ')}\n` : '') +
+      (removed.length ? `Remove: ${removed.join(', ')}\n` : '') +
+      `\nResulting set (${nextColumns.length}): ${nextColumns.join(', ')}\n\n` +
+      `Re-run with this column set?`
+    );
   };
-  const handlePreview = () => {
-    addToast({ type: 'info', message: `Preview of ${name} loading…` });
+
+  // Chat path — drops the user directly in the composer with a free-form
+  // prompt listing what's used + what's available; the assistant decides
+  // what to change.
+  const handleDescribeInChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onComposeInChat) {
+      addToast({ type: 'info', message: 'Change via chat is not available in this view.' });
+      return;
+    }
+    onComposeInChat(
+      `Change columns used from ${source.name} — currently:\n` +
+      `Used: ${columnsUsed.join(', ') || '(none)'}\n` +
+      `Available: ${available.join(', ') || '(unknown)'}\n\n` +
+      `Which columns should change? `
+    );
   };
-  // Unified treatment across every source — same icon-tile tint, same hairline
-  // accent. The TypeIcon (Database vs FileSpreadsheet) is the only signal
-  // of source kind. `color` is accepted for backward compatibility with
-  // existing payloads but no longer drives styling.
-  void color;
-  const unitLabel = records.replace(/^\S+\s/, '');
-  const unitValue = records.replace(/\s.*$/, '');
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.05 + index * 0.05, duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-      className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-brand-200 hover:-translate-y-px hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]"
+      transition={{ delay: 0.04 + index * 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+      className="group w-full rounded-lg bg-canvas-elevated border border-canvas-border hover:border-brand-200 transition-colors"
     >
-      {/* Header */}
-      <div className="relative flex items-start gap-3 px-4 pt-3.5 pb-3">
-        <div className="size-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 ring-1 ring-inset ring-brand-100">
-          <TypeIcon size={15} className="text-brand-600" />
+      {/* Primary row — opens the source in Knowledge Hub */}
+      <button
+        type="button"
+        onClick={handleOpen}
+        className="w-full flex items-center gap-3 px-4 h-16 rounded-t-lg hover:bg-brand-50/30 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+        aria-label={`Open ${source.name} in Knowledge Hub`}
+      >
+        <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
+          <Icon size={16} />
         </div>
-        <div className="flex-1 min-w-0 pr-12">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-ink-900 truncate leading-snug" title={name}>{name}</h3>
-            <span
-              className="inline-flex items-center shrink-0"
-              aria-label={status === 'synced' ? 'Synced' : 'Stale'}
-              title={status === 'synced' ? 'Live · synced' : 'Stale · needs refresh'}
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900 truncate">{source.name}</div>
+          <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+            {source.subtype} · <span className="text-ink-400">{formatDate(source.createdAt)}</span>
+          </div>
+        </div>
+      </button>
+
+      {/* Columns footer — informational summary + Change button which opens
+          the column picker popover anchored to it. */}
+      {available.length > 0 && (
+        <div className="relative border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
+          <span className="text-[11px] text-ink-500 shrink-0">
+            Using <span className="font-mono tabular-nums text-ink-700">{columnsUsed.length}</span> of{' '}
+            <span className="font-mono tabular-nums text-ink-700">{available.length}</span>:
+          </span>
+          <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
+            {columnsUsed.join(', ') || '(none)'}
+          </span>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              ref={pickBtnRef}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o); }}
+              aria-expanded={pickerOpen}
+              aria-label={`Pick columns from ${source.name}`}
+              title="Pick columns"
+              className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium text-ink-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="relative inline-flex size-1.5">
-                <span className={`absolute inline-flex h-full w-full rounded-full ${status === 'synced' ? 'bg-brand-400/55' : 'bg-mitigated/55'} motion-safe:animate-ping`} />
-                <span className={`relative inline-flex size-1.5 rounded-full ${status === 'synced' ? 'bg-brand-500' : 'bg-mitigated'}`} />
-              </span>
-            </span>
+              <ListChecks size={11} strokeWidth={2.25} />
+              Pick
+            </button>
+            <button
+              type="button"
+              onClick={handleDescribeInChat}
+              aria-label={`Describe column change for ${source.name} in chat`}
+              title="Describe in chat"
+              className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium text-ink-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <MessageSquare size={11} strokeWidth={2.25} />
+              Chat
+            </button>
           </div>
-          <div className="mt-1 flex items-center gap-1.5 min-w-0 text-[10.5px] text-ink-500">
-            <span className="font-medium uppercase tracking-[0.06em] whitespace-nowrap">{type}</span>
-            <span className="size-0.5 rounded-full bg-ink-300 shrink-0" aria-hidden />
-            <span className="font-mono text-ink-400 tabular-nums truncate">{syncedAt}</span>
-          </div>
+
+          {pickerOpen && (
+            <ColumnPicker
+              anchorRef={pickBtnRef}
+              sourceName={source.name}
+              available={available}
+              initialSelection={columnsUsed}
+              onApply={handleApplyColumns}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
         </div>
-
-        {/* Action rail — absolutely positioned so it never steals title width */}
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5 rounded-md bg-canvas-elevated/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            aria-label={`Refresh ${name}`}
-            title={refreshing ? 'Refreshing…' : 'Refresh'}
-            className="size-7 inline-flex items-center justify-center rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            <RefreshCw size={12.5} className={refreshing ? 'motion-safe:animate-spin' : ''} />
-          </button>
-          <button
-            type="button"
-            onClick={handleOpen}
-            aria-label={`Open ${name}`}
-            title="Open source"
-            className="size-7 inline-flex items-center justify-center rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            <ExternalLink size={12.5} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setExpanded(p => !p)}
-            aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
-            aria-expanded={expanded}
-            className="size-7 inline-flex items-center justify-center rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            <ChevronDown size={13} className={`transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4">
-              {/* Records — featured metric */}
-              <div className="flex items-end justify-between gap-3 pb-3 border-b border-canvas-border/70">
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <span className="text-[22px] font-semibold text-ink-900 tabular-nums leading-none tracking-tight">
-                    {unitValue}
-                  </span>
-                  <span className="text-[12px] text-ink-500 truncate">{unitLabel}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePreview}
-                  className="text-[11px] font-medium text-ink-400 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
-                >
-                  Preview →
-                </button>
-              </div>
-
-              {/* Tables / files */}
-              <div className="pt-3">
-                <div className="flex items-baseline gap-1.5 mb-2">
-                  <span className="text-[10.5px] font-medium text-ink-500 uppercase tracking-[0.08em]">
-                    {isCsv ? 'Files' : 'Tables'}
-                  </span>
-                  <span className="font-mono text-[10.5px] text-ink-400 tabular-nums">· {tables.length}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {tables.map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => addToast({ type: 'info', message: `Inspecting ${t}…` })}
-                      title={`Inspect ${t}`}
-                      className="inline-flex items-center gap-1 text-[11.5px] font-mono px-2 py-[3px] rounded-md border border-canvas-border bg-paper-50 text-ink-700 hover:border-brand-200 hover:bg-brand-50/60 hover:text-brand-700 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      )}
     </motion.div>
+  );
+}
+
+// Column picker popover — anchored to the Change button on a SourceCard.
+// Shows every available column with a checkbox; checked columns are the
+// ones the query is currently using. Search filters in place. Apply hands
+// the new selection up to the parent (which routes through the chat for
+// the assistant to validate and re-run). Click-outside / Escape dismiss.
+function ColumnPicker({
+  anchorRef, sourceName, available, initialSelection, onApply, onClose,
+}: {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  sourceName: string;
+  available: string[];
+  initialSelection: string[];
+  onApply: (next: string[]) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelection));
+  // Position the popover via portal-mounted fixed coords so it escapes
+  // the workspace panel's overflow-hidden ancestor. Aligned to the right
+  // edge of the anchor button (where the user clicked); flipped to stay
+  // inside the viewport horizontally and vertically.
+  const PICKER_W = 340;
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const margin = 12;
+      let left = r.right - PICKER_W;
+      if (left < margin) left = margin;
+      if (left + PICKER_W + margin > window.innerWidth) left = window.innerWidth - PICKER_W - margin;
+      // Default: drop down below the button. If there isn't ~360px of room,
+      // flip above.
+      const estHeight = 380;
+      let top = r.bottom + 8;
+      if (top + estHeight > window.innerHeight && r.top > estHeight + 16) {
+        top = r.top - estHeight - 8;
+      }
+      setPos({ top, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchorRef]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const filtered = useMemo(
+    () => available.filter(c => c.toLowerCase().includes(query.toLowerCase())),
+    [available, query]
+  );
+  const dirty = useMemo(() => {
+    if (selected.size !== initialSelection.length) return true;
+    return initialSelection.some(c => !selected.has(c));
+  }, [selected, initialSelection]);
+
+  // Diff summary for the footer — shows the user what they're about to send.
+  const { addCount, removeCount } = useMemo(() => {
+    const initial = new Set(initialSelection);
+    let add = 0; let remove = 0;
+    selected.forEach(c => { if (!initial.has(c)) add++; });
+    initial.forEach(c => { if (!selected.has(c)) remove++; });
+    return { addCount: add, removeCount: remove };
+  }, [selected, initialSelection]);
+
+  const toggle = (col: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(col)) next.delete(col); else next.add(col);
+      return next;
+    });
+  };
+  const selectAll = () => setSelected(new Set(filtered.length ? filtered : available));
+  const clearAll = () => {
+    if (query) setSelected(prev => { const n = new Set(prev); filtered.forEach(c => n.delete(c)); return n; });
+    else setSelected(new Set());
+  };
+
+  if (!pos) return null;
+
+  // Group the filtered set into Selected (top) and Available (below) so the
+  // user sees their picks first; sort each section alphabetically for
+  // scannability. Stable order between renders keeps row layout from
+  // jumping while the user toggles.
+  const initial = new Set(initialSelection);
+  const grouped = {
+    selected: filtered.filter(c => selected.has(c)).sort((a, b) => a.localeCompare(b)),
+    rest:     filtered.filter(c => !selected.has(c)).sort((a, b) => a.localeCompare(b)),
+  };
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[60]" onClick={onClose} aria-hidden />
+      <motion.div
+        role="dialog"
+        aria-label={`Columns used from ${sourceName}`}
+        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        style={{ top: pos.top, left: pos.left, width: PICKER_W }}
+        className="fixed z-[61] rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_48px_-20px_rgba(15,8,30,0.28),0_4px_12px_-6px_rgba(15,8,30,0.08)] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header — one tight line: source name + selected count + close.
+            Live change badge appears inline only when dirty. */}
+        <div className="flex items-center gap-2 px-4 h-11 border-b border-canvas-border">
+          <h4 className="flex-1 min-w-0 text-[13px] font-semibold text-ink-900 truncate" title={sourceName}>
+            {sourceName}
+          </h4>
+          <span className="text-[11px] tabular-nums text-ink-500 shrink-0">
+            <span className="text-ink-800 font-medium">{selected.size}</span>
+            <span className="text-ink-400">/{available.length}</span>
+          </span>
+          {dirty && (
+            <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-full bg-brand-50 text-brand-700 text-[10px] font-medium shrink-0">
+              <span className="size-1 rounded-full bg-brand-500" aria-hidden />
+              {addCount + removeCount}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close picker"
+            className="size-7 -mr-1.5 inline-flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Search — primary input. With 100+ columns this is the main nav,
+            so it gets a roomy field and stays anchored at the top. */}
+        <div className="px-3 py-2 border-b border-canvas-border">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            <input
+              type="text"
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${available.length} columns…`}
+              className="w-full pl-8 pr-8 h-8 text-[12.5px] text-ink-800 placeholder:text-ink-400 bg-paper-50 border border-canvas-border rounded-md outline-none focus:border-brand-300 focus:bg-canvas-elevated transition-colors"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-5 text-ink-400 hover:text-ink-700 hover:bg-paper-100 rounded transition-colors cursor-pointer"
+              >
+                <X size={11} />
+              </button>
+            ) : (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-ink-300 pointer-events-none">{available.length}</span>
+            )}
+          </div>
+        </div>
+
+        {/* List — grouped: Selected on top, Available below. Section headings
+            stick on scroll so the user always knows which group they're in,
+            even at 100+ columns. */}
+        <div className="max-h-[320px] overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-8 text-[12px] text-ink-500 text-center">
+              <Search size={16} className="mx-auto mb-2 text-ink-300" />
+              No columns match "<span className="font-medium text-ink-700">{query}</span>"
+            </div>
+          ) : (
+            <>
+              {grouped.selected.length > 0 && (
+                <SectionHeading
+                  label="Selected"
+                  count={grouped.selected.length}
+                  totalCount={selected.size}
+                  showTotal={!!query}
+                  action={query ? null : { label: 'Clear', onClick: clearAll }}
+                />
+              )}
+              {grouped.selected.map(col => (
+                <ColumnRow
+                  key={col}
+                  col={col}
+                  isChecked={true}
+                  isChanged={!initial.has(col)}
+                  onToggle={() => toggle(col)}
+                />
+              ))}
+              {grouped.rest.length > 0 && (
+                <SectionHeading
+                  label="Available"
+                  count={grouped.rest.length}
+                  totalCount={available.length - selected.size}
+                  showTotal={!!query}
+                  action={{ label: 'Select all', onClick: selectAll }}
+                />
+              )}
+              {grouped.rest.map(col => (
+                <ColumnRow
+                  key={col}
+                  col={col}
+                  isChecked={false}
+                  isChanged={initial.has(col)}
+                  onToggle={() => toggle(col)}
+                />
+              ))}
+              {query && filtered.length < available.length && (
+                <div className="px-4 py-2 text-[11px] text-ink-400 text-center border-t border-canvas-border/70">
+                  Showing {filtered.length} of {available.length} · clear search to see all
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-canvas-border px-3 py-2.5 bg-paper-50/50">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1.5 min-w-0">
+              {dirty ? (
+                <>
+                  {addCount > 0 && (
+                    <span className="inline-flex items-center gap-0.5 text-compliant-700 font-medium">
+                      <span>+{addCount}</span>
+                    </span>
+                  )}
+                  {removeCount > 0 && (
+                    <span className="inline-flex items-center gap-0.5 text-risk-700 font-medium">
+                      <span>−{removeCount}</span>
+                    </span>
+                  )}
+                  <span className="text-ink-400">to apply</span>
+                </>
+              ) : (
+                <span className="text-ink-400">No changes</span>
+              )}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-7 px-2.5 text-[11.5px] font-medium text-ink-600 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onApply(Array.from(selected))}
+                disabled={!dirty || selected.size === 0}
+                className="h-7 px-3 text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-brand-200 disabled:text-white/70 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>,
+    document.body
+  );
+}
+
+// Section heading inside the column picker — sticky on scroll so the user
+// always sees which group they're in. Includes a count and an optional
+// action (e.g. "Select all" / "Clear") that scopes to this section.
+function SectionHeading({
+  label, count, totalCount, showTotal, action,
+}: {
+  label: string;
+  count: number;
+  totalCount?: number;
+  showTotal?: boolean;
+  action?: { label: string; onClick: () => void } | null;
+}) {
+  return (
+    <div className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm border-b border-canvas-border/70 px-4 py-1.5 flex items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</span>
+      <span className="font-mono text-[10px] tabular-nums text-ink-400">
+        {showTotal && totalCount !== undefined ? `${count}/${totalCount}` : count}
+      </span>
+      {action && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className="ml-auto h-5 px-1.5 text-[10.5px] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Individual checkbox row — fixed-height, with optional "changed" indicator
+// (small dot when the row's state differs from initial selection).
+function ColumnRow({
+  col, isChecked, isChanged, onToggle,
+}: { col: string; isChecked: boolean; isChanged: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={isChecked}
+      onClick={onToggle}
+      className={`group/row w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50/40 ${
+        isChecked ? 'hover:bg-brand-50/60' : 'hover:bg-paper-50'
+      }`}
+    >
+      <span className={`inline-flex items-center justify-center size-[18px] rounded-[5px] shrink-0 transition-all duration-150 ${
+        isChecked
+          ? 'bg-brand-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
+          : 'bg-canvas-elevated border border-ink-300 group-hover/row:border-ink-500'
+      }`}>
+        <motion.span
+          initial={false}
+          animate={{ scale: isChecked ? 1 : 0, opacity: isChecked ? 1 : 0 }}
+          transition={{ type: 'spring', stiffness: 520, damping: 28 }}
+          className="inline-flex"
+        >
+          <Check size={12} strokeWidth={3} className="text-white" />
+        </motion.span>
+      </span>
+      <span className={`text-[12.5px] truncate transition-colors flex-1 ${isChecked ? 'text-ink-900 font-medium' : 'text-ink-700'}`}>
+        {col}
+      </span>
+      {isChanged && (
+        <span
+          className={`size-1.5 rounded-full shrink-0 ${isChecked ? 'bg-compliant' : 'bg-risk'}`}
+          aria-label={isChecked ? 'Will be added' : 'Will be removed'}
+          title={isChecked ? 'Will be added on Apply' : 'Will be removed on Apply'}
+        />
+      )}
+    </button>
   );
 }
 
@@ -696,7 +1045,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <motion.div
@@ -794,9 +1143,9 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
           >
-            {activeTab === 'plan' && <PlanTab />}
+            {activeTab === 'plan' && <PlanTab onComposeInChat={onComposeInChat} />}
             {activeTab === 'code' && <CodeTab />}
-            {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} />}
+            {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
             {activeTab === 'output' && <OutputConfigTab />}
           </motion.div>
         </AnimatePresence>

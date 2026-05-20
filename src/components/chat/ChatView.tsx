@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import {
-  Send, Paperclip, Sparkles, History, X, FileText, PanelRightOpen, PanelRightClose,
+  Send, Paperclip, Sparkles, History, X, FileText, FileSpreadsheet, PanelRightOpen, PanelRightClose,
   Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
   Save, CheckCircle, Maximize2, Lock, Calendar,
@@ -88,7 +88,7 @@ const AUDIT_RESULT = {
   charts: [
     {
       id: 'confidence',
-      label: 'By confidence',
+      label: 'Findings by Confidence',
       // Single-hue (brand) ramp — opacity falls with the bucket. The eye
       // reads rank without learning a 4-color legend.
       data: [
@@ -100,7 +100,7 @@ const AUDIT_RESULT = {
     },
     {
       id: 'vendor',
-      label: 'By vendor',
+      label: 'Findings by Vendor',
       data: [
         { bucket: 'Acme Corp', count: 4, tone: 'bg-ink-800' },
         { bucket: 'Global Supplies', count: 2, tone: 'bg-ink-800/70' },
@@ -113,7 +113,7 @@ const AUDIT_RESULT = {
     // overflow handling under realistic enterprise data sizes.
     {
       id: 'monthly-high',
-      label: 'By month (high vol)',
+      label: 'Findings by Month',
       data: [
         { bucket: 'Jan 2026', count: 11_842, tone: 'bg-ink-800/70' },
         { bucket: 'Feb 2026', count: 9_405, tone: 'bg-ink-800/60' },
@@ -129,17 +129,69 @@ const AUDIT_RESULT = {
         { bucket: 'Dec 2026', count: 21_350, tone: 'bg-ink-800' },
       ],
     },
+    // Additional cuts of the same flagged-pair population. Together with the
+    // first three this brings the chart count to 7, which trips the picker
+    // from segmented control to dropdown (CHART_TAB_LIMIT = 4).
+    {
+      id: 'region',
+      label: 'Findings by Region',
+      data: [
+        { bucket: 'India',  count: 6, tone: 'bg-ink-800'    },
+        { bucket: 'UAE',    count: 4, tone: 'bg-ink-800/75' },
+        { bucket: 'EMEA',   count: 3, tone: 'bg-ink-800/60' },
+        { bucket: 'APAC',   count: 2, tone: 'bg-ink-800/45' },
+      ],
+    },
+    {
+      id: 'match-method',
+      label: 'Findings by Match Method',
+      data: [
+        { bucket: 'Exact + ±2d',  count: 5, tone: 'bg-ink-800'    },
+        { bucket: 'Fuzzy name',   count: 4, tone: 'bg-ink-800/75' },
+        { bucket: 'Exact amount', count: 4, tone: 'bg-ink-800/70' },
+        { bucket: 'Fuzzy + ±2d',  count: 2, tone: 'bg-ink-800/55' },
+      ],
+    },
+    {
+      id: 'status',
+      label: 'Status Distribution',
+      data: [
+        { bucket: 'Open',      count: 10, tone: 'bg-ink-800'    },
+        { bucket: 'In review', count: 3,  tone: 'bg-ink-800/65' },
+        { bucket: 'Resolved',  count: 2,  tone: 'bg-ink-800/45' },
+      ],
+    },
+    {
+      id: 'amount-band',
+      label: 'Findings by Amount Band',
+      data: [
+        { bucket: '< ₹50K',       count: 3, tone: 'bg-ink-800/50' },
+        { bucket: '₹50K – ₹1L',   count: 5, tone: 'bg-ink-800/70' },
+        { bucket: '₹1L – ₹2L',    count: 5, tone: 'bg-ink-800/85' },
+        { bucket: '> ₹2L',         count: 2, tone: 'bg-ink-800'    },
+      ],
+    },
   ],
   table: {
-    columns: ['Invoice A', 'Invoice B', 'Vendor', 'Amount', 'Match %'],
+    columns: ['Invoice A', 'Invoice B', 'Vendor', 'Amount', 'Date A', 'Date B', 'PO Ref', 'Match Method', 'Match %', 'Status'],
     rows: [
-      ['INV-2024-8821', 'INV-2024-8847', 'Acme Corp', '₹1,42,500', '96%'],
-      ['INV-2024-8910', 'INV-2024-9001', 'Acme Corp', '₹89,200', '94%'],
-      ['INV-2024-9112', 'INV-2024-9183', 'Global Supplies', '₹2,18,400', '92%'],
-      ['INV-2024-9245', 'INV-2024-9301', 'Acme Corp', '₹54,000', '91%'],
-      ['INV-2024-9377', 'INV-2024-9420', 'Global Supplies', '₹76,800', '90%'],
+      ['INV-2024-8821', 'INV-2024-8847', 'Acme Corp',          '₹1,42,500', '2026-01-12', '2026-01-18', 'PO-AC-44102', 'Exact + ±2d',    '96%', 'Open'],
+      ['INV-2024-8910', 'INV-2024-9001', 'Acme Corp',          '₹89,200',   '2026-02-03', '2026-02-09', 'PO-AC-44210', 'Fuzzy name',     '94%', 'Open'],
+      ['INV-2024-9112', 'INV-2024-9183', 'Global Supplies',    '₹2,18,400', '2026-02-15', '2026-02-22', 'PO-GS-12044', 'Exact amount',   '92%', 'Open'],
+      ['INV-2024-9245', 'INV-2024-9301', 'Acme Corp',          '₹54,000',   '2026-03-02', '2026-03-08', 'PO-AC-44318', 'Fuzzy + ±2d',    '91%', 'In review'],
+      ['INV-2024-9377', 'INV-2024-9420', 'Global Supplies',    '₹76,800',   '2026-03-11', '2026-03-15', 'PO-GS-12099', 'Exact + ±2d',    '90%', 'Open'],
+      ['INV-2024-9501', 'INV-2024-9544', 'TechParts Ltd',      '₹38,200',   '2026-03-22', '2026-03-29', 'PO-TP-08815', 'Fuzzy name',     '89%', 'Open'],
+      ['INV-2024-9612', 'INV-2024-9655', 'FastShip Logistics', '₹1,02,400', '2026-04-01', '2026-04-07', 'PO-FS-22041', 'Exact amount',   '88%', 'In review'],
+      ['INV-2024-9728', 'INV-2024-9760', 'Acme Corp',          '₹47,950',   '2026-04-09', '2026-04-14', 'PO-AC-44502', 'Fuzzy + ±2d',    '87%', 'Open'],
+      ['INV-2024-9841', 'INV-2024-9879', 'Global Supplies',    '₹1,68,300', '2026-04-15', '2026-04-21', 'PO-GS-12188', 'Exact + ±5d',    '86%', 'Open'],
+      ['INV-2024-9955', 'INV-2024-9998', 'TechParts Ltd',      '₹62,150',   '2026-04-22', '2026-04-28', 'PO-TP-08920', 'Fuzzy name',     '85%', 'In review'],
+      ['INV-2025-0042', 'INV-2025-0089', 'Acme Corp',          '₹1,21,400', '2026-05-04', '2026-05-09', 'PO-AC-44612', 'Exact amount',   '84%', 'Open'],
+      ['INV-2025-0155', 'INV-2025-0202', 'FastShip Logistics', '₹58,700',   '2026-05-12', '2026-05-18', 'PO-FS-22158', 'Fuzzy + ±2d',    '83%', 'Open'],
+      ['INV-2025-0287', 'INV-2025-0334', 'Global Supplies',    '₹2,04,800', '2026-05-21', '2026-05-26', 'PO-GS-12257', 'Exact + ±2d',    '82%', 'Resolved'],
+      ['INV-2025-0411', 'INV-2025-0456', 'Acme Corp',          '₹73,250',   '2026-06-02', '2026-06-07', 'PO-AC-44720', 'Fuzzy name',     '81%', 'Open'],
+      ['INV-2025-0533', 'INV-2025-0579', 'TechParts Ltd',      '₹49,800',   '2026-06-10', '2026-06-16', 'PO-TP-09042', 'Exact + ±5d',    '80%', 'Resolved'],
     ],
-    totalRows: 8,
+    totalRows: 15,
   },
 };
 
@@ -164,6 +216,10 @@ interface ChatViewProps {
   setQueryAssumptions?: (assumptions: string[]) => void;
   initialQuery?: string;
   onInitialQueryProcessed?: () => void;
+  /** Pre-fill text dropped into the composer (no auto-submit). Used by the
+   *  workspace panel's "Edit assumptions" affordance. */
+  composerDraft?: string | null;
+  onComposerDraftConsumed?: () => void;
   /** When set, ChatView loads CHAT_CONVERSATIONS[selectedChatId] on mount/change. */
   selectedChatId?: string | null;
   /** Called once the selected chat has been loaded so the parent can clear the id. */
@@ -281,18 +337,30 @@ function renderChart(chart: typeof AUDIT_RESULT.charts[number], variant: 'inline
   // ConfigurableChart understands. Palette inherits the brand purple
   // ramp so visuals are consistent across surfaces.
   const config: Record<string, { type: 'bar' | 'pie'; xAxis: string; showLegend: boolean }> = {
-    confidence: { type: 'bar', xAxis: 'Quarter', showLegend: false },
-    vendor: { type: 'pie', xAxis: 'Department', showLegend: true },
-    'monthly-high': { type: 'bar', xAxis: 'Month', showLegend: false },
+    confidence:     { type: 'bar', xAxis: 'Quarter',    showLegend: false },
+    vendor:         { type: 'pie', xAxis: 'Department', showLegend: true  },
+    'monthly-high': { type: 'bar', xAxis: 'Month',      showLegend: false },
+    region:         { type: 'pie', xAxis: 'Region',     showLegend: true  },
+    'match-method': { type: 'pie', xAxis: 'Method',     showLegend: true  },
+    status:         { type: 'bar', xAxis: 'Status',     showLegend: false },
+    'amount-band':  { type: 'bar', xAxis: 'Band',       showLegend: false },
   };
   const cfg = config[chart.id] ?? { type: 'bar' as const, xAxis: 'Quarter', showLegend: false };
+  // Pie charts in the audit-result card: legend on top + inline labels +
+  // bigger outer radius (75% vs the dashboard default 58%) so the circle
+  // fills this taller card instead of floating in whitespace. Bar charts
+  // already fill width naturally.
+  const isPie = cfg.type === 'pie';
   return (
-    <div style={variant === 'fullscreen' ? { width: '100%', height: '100%' } : { height: 300 }}>
+    <div style={{ width: '100%', height: '100%' }}>
       <ConfigurableChart
         type={cfg.type}
         xAxis={cfg.xAxis}
         showTarget={false}
         showLegend={cfg.showLegend}
+        legendPosition={isPie ? 'top' : 'bottom'}
+        showLabels={isPie}
+        pieOuterRadius={isPie ? '75%' : undefined}
       />
     </div>
   );
@@ -300,33 +368,62 @@ function renderChart(chart: typeof AUDIT_RESULT.charts[number], variant: 'inline
 
 // ─── ChartGroup with chip toggle + fullscreen ────────────────────────────────
 
+// Threshold for switching the chart selector from segmented control to
+// dropdown. Up to 4 charts → segmented (scannable). 5+ → dropdown so the
+// header never overflows.
+const CHART_TAB_LIMIT = 4;
+
+// Icon by chart id — keep in sync with the `config` map in renderChart so
+// the picker shows the right glyph for each chart's actual visual type.
+function chartIcon(id: string) {
+  if (id === 'vendor' || id === 'region' || id === 'match-method') return PieChart;
+  return BarChart3;
+}
+
 function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.charts; embedded?: boolean }) {
   const [activeId, setActiveId] = useState(charts[0].id);
   const [fullscreen, setFullscreen] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
   const active = charts.find(c => c.id === activeId) ?? charts[0];
+  const useDropdown = charts.length > CHART_TAB_LIMIT;
+
+  useEffect(() => {
+    if (!selectorOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const r = selectorRef.current;
+      if (r && !r.contains(e.target as Node)) setSelectorOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectorOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [selectorOpen]);
 
   return (
     <>
-      <div className={embedded
-        ? 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden'
-        : 'rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden'}>
+      <div className="group rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgba(15,8,30,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.16)]">
         {/* Header — Claude-style layout in our theme:
               LEFT  → series legend (color dot + active chart name).
               RIGHT → bordered segmented control switching between
                       datasets, each tab carrying a chart-type icon so
                       the user knows what they're picking before
-                      clicking. Expand sits at the far right. */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-canvas-border/60">
+                      clicking. Expand sits at the far right. Padding
+                      matches the table card (px-5 py-3.5). */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
             <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {charts.length > 1 && (
+            {charts.length > 1 && !useDropdown && (
               <div className="inline-flex items-center gap-1" role="tablist">
                 {charts.map(c => {
                   const isActive = c.id === activeId;
-                  const Icon = c.id === 'vendor' ? PieChart : BarChart3;
+                  const Icon = chartIcon(c.id);
                   return (
                     <button
                       key={c.id}
@@ -346,6 +443,52 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 })}
               </div>
             )}
+
+            {/* Dropdown variant — used when there are more than CHART_TAB_LIMIT
+                charts to keep the header from overflowing. */}
+            {charts.length > 1 && useDropdown && (
+              <div ref={selectorRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSelectorOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={selectorOpen}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-w-[220px]"
+                >
+                  {(() => { const I = chartIcon(active.id); return <I size={13} className="text-brand-600 shrink-0" />; })()}
+                  <span className="truncate">{active.label}</span>
+                  <ChevronDown size={12} className={`text-brand-600 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {selectorOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1 max-h-80 overflow-y-auto"
+                  >
+                    {charts.map(c => {
+                      const isActive = c.id === activeId;
+                      const Icon = chartIcon(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          role="menuitemradio"
+                          aria-checked={isActive}
+                          onClick={() => { setActiveId(c.id); setSelectorOpen(false); }}
+                          title={c.label}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left transition-colors cursor-pointer ${
+                            isActive ? 'bg-brand-50/60 text-brand-700 font-medium' : 'text-ink-800 hover:bg-paper-50'
+                          }`}
+                        >
+                          <Icon size={13} className={`shrink-0 ${isActive ? 'text-brand-600' : 'text-ink-500'}`} />
+                          <span className="flex-1 min-w-0 truncate">{c.label}</span>
+                          {isActive && <Check size={12} strokeWidth={3} className="text-brand-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={() => setFullscreen(true)}
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -356,7 +499,12 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
             </button>
           </div>
         </div>
-        <div className="p-3">{renderChart(active, 'inline')}</div>
+        {/* Body — total height matches the table card's body + footer
+            (390px body + 50px footer = 440px) so the two cards read as
+            identical pairs when stacked. Height bumped from 370 → 440 so
+            the pie chart's outer radius (58% of min(w,h)) grows from
+            ~215px to ~255px diameter — visibly larger circle. */}
+        <div className="px-5 py-4" style={{ height: 440 }}>{renderChart(active, 'inline')}</div>
       </div>
       <AnimatePresence>
         {fullscreen && (
@@ -457,81 +605,441 @@ function FullscreenChartModal({
 
 // ─── Results table preview ───────────────────────────────────────────────────
 
+// Number of preview rows shown inside the in-thread card. Tuned to fill
+// the 390px body (matching the chart card body 440 - 50 footer) at the
+// `py-2.5` row padding. Header (~34px) + 9 rows (~37px each) ≈ 367px →
+// ~23px of natural bottom padding without empty whitespace dominating
+// the card.
+const PREVIEW_ROW_COUNT = 9;
+
 function ResultsTable({
   columns, rows, totalRows, onOpen, onDownload,
 }: {
   columns: string[];
   rows: string[][];
   totalRows: number;
+  /** Caller can fire side-effects (toast) when the table is opened in a
+   *  new tab. The fullscreen / expand path is handled locally. */
   onOpen: () => void;
   onDownload: () => void;
 }) {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const openFullscreen = () => { setFullscreen(true); };
+
+  // Standalone HTML page built from the data, opened in a fresh tab. Cells
+  // are HTML-escaped so user data can never inject markup; the page styles
+  // match the in-app table for visual continuity.
+  const handleOpenInNewTab = () => {
+    const esc = (s: string) => s.replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+    ));
+    // Mirror the in-app card dimensions: same max-width (52.5rem), same
+    // rounded card chrome, same border + spacing tokens. Tab gets a clean
+    // centered card on the off-white canvas, identical to the embedded
+    // surface.
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flagged duplicate pairs · Auditify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light; --ink-900:#1a1124; --ink-800:#3a2f4a; --ink-700:#52456a; --ink-500:#7b6f8c; --ink-400:#9d92ab; --canvas-border:#ebe7f0; --canvas-elevated:#ffffff; --paper-50:#faf9fc; --brand-600:#6a12cd; --brand-50:#f4edff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: var(--ink-800); background: var(--paper-50); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: min(1280px, calc(100% - 48px)); margin: 32px auto; padding: 0; }
+  .card { background: var(--canvas-elevated); border: 1px solid var(--canvas-border); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,8,30,0.04); }
+  .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--canvas-border); }
+  .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--brand-600); flex: 0 0 8px; }
+  .title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-800); }
+  .meta { color: var(--ink-400); font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: rgba(245,243,248,0.6); text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--canvas-border); white-space: nowrap; }
+  thead th.num { text-align: left; }
+  tbody td { padding: 10px 16px; color: var(--ink-700); border-bottom: 1px solid rgba(235,231,240,0.6); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(244,237,255,0.45); }
+  .num { font-variant-numeric: tabular-nums; }
+  .card-footer { padding: 8px 16px; border-top: 1px solid var(--canvas-border); font-size: 11px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+</style></head><body>
+<div class="wrap">
+  <div class="card">
+    <div class="card-header">
+      <span class="dot" aria-hidden="true"></span>
+      <h1 class="title">Flagged duplicate pairs</h1>
+      <span class="meta">· ${totalRows}</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>${columns.map((c, j) => `<th class="${j >= 3 ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${r.map((c, j) => `<td class="${j >= 3 ? 'num' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="card-footer">Showing ${rows.length} of ${totalRows}</div>
+  </div>
+</div>
+</body></html>`;
+    // Use a programmatic anchor click with target="_blank" — this opens
+    // in a new tab even when window.open is rerouted to the same tab by
+    // popup blockers, browser settings, or extensions. The anchor must be
+    // attached to the DOM before .click() for Safari to honor the target.
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    onOpen();
+  };
+
+  // CSV file built from the visible rows on click. Same blob-download
+  // pattern as the SQL Copy/Download in the workspace panel — no server
+  // round-trip, no library, just real file output.
+  // Trigger a download from a Blob — used by both CSV and Excel paths.
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCsvDownload = () => {
+    const esc = (v: string) =>
+      /["\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    const csv = [columns, ...rows].map(r => r.map(esc).join(',')).join('\n');
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'flagged-duplicate-pairs.csv');
+    onDownload();
+  };
+
+  // Excel path — emits an HTML table with the .xls extension and the
+  // application/vnd.ms-excel MIME. Excel opens this natively as a workbook
+  // (the legacy "HTML spreadsheet" format), avoiding a heavy xlsx library
+  // for a mock that doesn't need real formula support.
+  const handleExcelDownload = () => {
+    const escHtml = (s: string) => s.replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+    ));
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Flagged duplicates</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body><table border="1">
+<thead><tr>${columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead>
+<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${escHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+</table></body></html>`;
+    triggerDownload(new Blob([html], { type: 'application/vnd.ms-excel' }), 'flagged-duplicate-pairs.xls');
+    onDownload();
+  };
+
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const root = downloadMenuRef.current;
+      if (root && !root.contains(e.target as Node)) setDownloadOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDownloadOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [downloadOpen]);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+
   return (
-    <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-      {/* Header — same Claude-style layout as the chart card:
-            LEFT  → legend dot + title.
-            RIGHT → bordered action buttons (Open / Download), then a
-                    plain Expand button at the far right. */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-canvas-border/60">
-        <div className="min-w-0 flex items-center gap-2">
-          <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-          <span className="text-[13px] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex items-center gap-1">
+    <>
+      <div className="group rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgba(15,8,30,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.16)]">
+        {/* Card header — title + actions. Padding bumped from py-3 → py-3.5
+            and px-4 → px-5 so the title sits in a proper card head, not a
+            tight strip. */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+            <span className="text-[13px] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
+            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="inline-flex items-center gap-1">
+              <button
+                onClick={handleOpenInNewTab}
+                title="Open in new tab"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <ExternalLink size={13} className="text-ink-400" />
+                <span>Open</span>
+              </button>
+              <div ref={downloadMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDownloadOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={downloadOpen}
+                  title="Download"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <Download size={13} className="text-ink-400" />
+                  <span>Download</span>
+                  <ChevronDown size={12} className={`text-ink-400 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {downloadOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setDownloadOpen(false); handleCsvDownload(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:bg-paper-50"
+                    >
+                      <FileText size={13} className="text-ink-500 shrink-0" />
+                      <span className="flex-1">CSV</span>
+                      <span className="text-[10.5px] font-mono text-ink-400">.csv</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setDownloadOpen(false); handleExcelDownload(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:bg-paper-50"
+                    >
+                      <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
+                      <span className="flex-1">Excel</span>
+                      <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
             <button
-              onClick={onOpen}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              onClick={openFullscreen}
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Expand to full view"
+              title="Expand to full view"
             >
-              <ExternalLink size={13} className="text-ink-400" />
-              <span>Open</span>
-            </button>
-            <button
-              onClick={onDownload}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            >
-              <Download size={13} className="text-ink-400" />
-              <span>CSV</span>
+              <Maximize2 size={14} />
             </button>
           </div>
-          <button
-            onClick={onOpen}
-            className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            aria-label="Open in new view"
-            title="Open in new view"
-          >
-            <Maximize2 size={14} />
-          </button>
         </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-canvas-border/60 bg-canvas/40">
-              {columns.map(c => (
-                <th key={c} className="text-left px-4 py-2.5 font-semibold text-ink-500 uppercase tracking-wide text-[11px]">{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/60 transition-colors">
-                {row.map((cell, j) => (
-                  <td key={j} className={`px-4 py-2.5 text-ink-700 ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+
+        {/* Body — fixed 390px height. Combined with the ~50px footer this
+            gives a total of 440px, identical to the chart card body so
+            both cards read as a matched pair. Horizontal scroll only for
+            the 10-column table; vertical overflow is clipped (no scrollbar).
+            Only the first PREVIEW_ROW_COUNT rows render — any additional
+            rows live in the fullscreen modal / new tab. */}
+        <div className="overflow-x-auto overflow-y-hidden" style={{ height: 390 }}>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-canvas-border/70 bg-paper-50/40">
+                {columns.map(c => (
+                  <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[10.5px] whitespace-nowrap">{c}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => (
+                <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors">
+                  {row.map((cell, j) => (
+                    <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer — visual progress + CTA. The progress bar gives the
+            5/8 ratio at a glance; the right-side pill is the action. */}
+        {(() => {
+          const visible = Math.min(PREVIEW_ROW_COUNT, rows.length);
+          const hidden = Math.max(0, totalRows - visible);
+          return (
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border/70 bg-paper-50/40">
+              <span className="text-[11px] text-ink-500 tabular-nums">
+                Showing <span className="font-medium text-ink-800">{visible}</span>
+                <span className="text-ink-400"> of {totalRows}</span>
+              </span>
+              {hidden > 0 && (
+                <button
+                  onClick={openFullscreen}
+                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+                >
+                  View all
+                  <ArrowRight size={11} strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
+          );
+        })()}
       </div>
-      {/* Footer — quiet "Preview · X of N" tally only. Actions live in the
-          header row to match the chart card's pattern. */}
-      <div className="flex items-center justify-end px-4 py-2 border-t border-canvas-border/60">
-        <span className="text-[11px] text-ink-500 tabular-nums">
-          Preview · {rows.length} of {totalRows}
-        </span>
-      </div>
-    </div>
+
+      <AnimatePresence>
+        {fullscreen && (
+          <FullscreenTableModal
+            title="Flagged duplicate pairs"
+            columns={columns}
+            rows={rows}
+            totalRows={totalRows}
+            onDownloadCsv={handleCsvDownload}
+            onDownloadExcel={handleExcelDownload}
+            onClose={() => setFullscreen(false)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+// Mirrors FullscreenChartModal — same dimensions and chrome, but renders
+// the full result table with all rows + a Download dropdown in the header.
+function FullscreenTableModal({
+  title, columns, rows, totalRows, onDownloadCsv, onDownloadExcel, onClose,
+}: {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  totalRows: number;
+  onDownloadCsv: () => void;
+  onDownloadExcel: () => void;
+  onClose: () => void;
+}) {
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const root = downloadMenuRef.current;
+      if (root && !root.contains(e.target as Node)) setDownloadOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [downloadOpen]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.2 }}
+        className="relative bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl flex flex-col overflow-hidden"
+        style={{ width: '96vw', height: '94vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
+          <div className="min-w-0 flex items-center gap-2">
+            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+            <span className="text-[13px] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div ref={downloadMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDownloadOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={downloadOpen}
+                title="Download"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <Download size={13} className="text-ink-400" />
+                <span>Download</span>
+                <ChevronDown size={12} className={`text-ink-400 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {downloadOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setDownloadOpen(false); onDownloadCsv(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+                  >
+                    <FileText size={13} className="text-ink-500 shrink-0" />
+                    <span className="flex-1">CSV</span>
+                    <span className="text-[10.5px] font-mono text-ink-400">.csv</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setDownloadOpen(false); onDownloadExcel(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
+                    <span className="flex-1">Excel</span>
+                    <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              aria-label="Close fullscreen"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Table body — full row set, sticky header */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 z-10 bg-canvas-elevated">
+              <tr className="border-b border-canvas-border/80 bg-paper-50/60">
+                {columns.map(c => (
+                  <th key={c} className="text-left px-5 py-3 font-semibold text-ink-500 uppercase tracking-wide text-[11px] whitespace-nowrap">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/60 transition-colors">
+                  {row.map((cell, j) => (
+                    <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer count */}
+        <div className="flex items-center justify-between px-5 py-2 border-t border-canvas-border/60 shrink-0">
+          <span className="text-[11px] text-ink-500 tabular-nums">
+            Showing <span className="font-medium text-ink-700">{rows.length}</span> of <span className="font-medium text-ink-700">{totalRows}</span>
+          </span>
+          <span className="text-[11px] text-ink-400">Press Esc to close</span>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -1373,7 +1881,160 @@ function InlineEditBubble({
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
+// ─── Export report button ───────────────────────────────────────────────────
+// Distinct from the per-table Download button on ResultsTable. Export bundles
+// the WHOLE audit result (KPIs + table + assumptions) into a deliverable:
+//   - PDF  → opens a print-ready page in a new tab and triggers the browser's
+//            Print → Save as PDF dialog.
+//   - XLSX → builds a single .xls workbook with a sheet for KPIs and a sheet
+//            for the flagged-duplicate table.
+// Single source of truth for "the full result", separate from per-artifact
+// downloads.
+
+function ExportReportButton() {
+  const { addToast } = useToast();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const r = rootRef.current;
+      if (r && !r.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const escHtml = (s: string) => s.replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+
+  // PDF — open a print-ready document, auto-trigger Print → user saves as PDF.
+  const handlePdf = () => {
+    const kpiRows = AUDIT_RESULT.kpis.map(k => `<tr><td>${escHtml(k.label)}</td><td class="num">${escHtml(k.value)}</td></tr>`).join('');
+    const tableHeader = `<tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr>`;
+    const tableBody = AUDIT_RESULT.table.rows.map(r =>
+      `<tr>${r.map((c, j) => `<td class="${j === 3 || j === 8 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
+    ).join('');
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Audit report · Flagged duplicate invoices</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif; color: #1a1124; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #7b6f8c; font-size: 11px; margin-bottom: 18px; }
+  h2 { font-size: 13px; margin: 22px 0 8px; color: #3a2f4a; text-transform: uppercase; letter-spacing: 0.04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  thead th { text-align: left; padding: 8px 10px; font-weight: 600; color: #7b6f8c; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; border-bottom: 1px solid #d8d3e0; background: #f8f6fb; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #ebe7f0; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .kpis td:first-child { color: #7b6f8c; }
+  .kpis td.num { font-weight: 600; }
+  .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #ebe7f0; color: #9d92ab; font-size: 10px; }
+</style></head><body>
+<h1>Flagged duplicate invoices</h1>
+<div class="sub">Audit report · generated ${new Date().toLocaleString()}</div>
+
+<h2>Summary</h2>
+<table class="kpis"><tbody>${kpiRows}</tbody></table>
+
+<h2>Flagged pairs · ${AUDIT_RESULT.table.totalRows} rows</h2>
+<table><thead>${tableHeader}</thead><tbody>${tableBody}</tbody></table>
+
+<div class="footer">Auditify · ${AUDIT_RESULT.kpis.length} KPIs · ${AUDIT_RESULT.table.totalRows} flagged pairs · ${AUDIT_RESULT.table.columns.length} columns per pair</div>
+<script>window.addEventListener('load', () => setTimeout(() => window.print(), 200));</script>
+</body></html>`;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+    addToast({ type: 'info', message: 'Report opened · use Print → Save as PDF.' });
+  };
+
+  // XLSX (legacy HTML-spreadsheet) — workbook with two sheets:
+  // "Summary" (KPIs) + "Flagged pairs" (full table).
+  const handleExcel = () => {
+    const kpiRowsHtml = AUDIT_RESULT.kpis.map(k => `<tr><td>${escHtml(k.label)}</td><td>${escHtml(k.value)}</td></tr>`).join('');
+    const tableHeader = `<tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr>`;
+    const tableBody = AUDIT_RESULT.table.rows.map(r => `<tr>${r.map(c => `<td>${escHtml(c)}</td>`).join('')}</tr>`).join('');
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+<x:ExcelWorksheet><x:Name>Summary</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+<x:ExcelWorksheet><x:Name>Flagged pairs</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+</head><body>
+<div>Summary</div>
+<table border="1"><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>${kpiRowsHtml}</tbody></table>
+<br/><br/>
+<div>Flagged pairs</div>
+<table border="1"><thead>${tableHeader}</thead><tbody>${tableBody}</tbody></table>
+</body></html>`;
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'audit-report.xls';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast({ type: 'success', message: 'Audit report downloaded as audit-report.xls' });
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        variant="outline"
+        size="md"
+        leftIcon={<Download size={14} />}
+        rightIcon={<ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}
+        onClick={() => setOpen(o => !o)}
+      >
+        Export report
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full mt-1 z-50 w-56 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); handlePdf(); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+          >
+            <FileText size={13} className="text-ink-500 shrink-0" />
+            <span className="flex-1">PDF report</span>
+            <span className="text-[10.5px] font-mono text-ink-400">.pdf</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); handleExcel(); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet size={13} className="text-ink-500 shrink-0" />
+            <span className="flex-1">Excel workbook</span>
+            <span className="text-[10.5px] font-mono text-ink-400">.xls</span>
+          </button>
+          <div className="border-t border-canvas-border/70 mt-1 pt-1 px-3 pb-1.5 text-[10.5px] text-ink-400">
+            Full audit result · KPIs + flagged pairs
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1430,27 +2091,113 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Track scroll INTENT, not position. The old logic flipped "scrolled up"
+  // any time `distanceFromBottom > 100`, which mis-fired during streaming —
+  // when assistant content grows, scrollTop stays put but scrollHeight
+  // grows, so distanceFromBottom grows, so the flag flipped to "scrolled
+  // up" → ResizeObserver stopped following → user saw half the chat.
+  //
+  // Now: the flag only flips TRUE when scrollTop actually decreases (user
+  // dragged upward), and flips back FALSE when scrollTop reaches near the
+  // bottom. Content growth doesn't change the flag.
+  const lastScrollTopRef = useRef(0);
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const threshold = 100;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const scrolledUp = distanceFromBottom > threshold;
-    isUserScrolledUp.current = scrolledUp;
-    // Mirror to React state so the floating "scroll-to-bottom" pill can render.
-    // Ref drives auto-scroll behavior (no re-render); state drives the pill.
-    setShowScrollToBottom(prev => prev === scrolledUp ? prev : scrolledUp);
+    const scrollTop = container.scrollTop;
+    const last = lastScrollTopRef.current;
+    lastScrollTopRef.current = scrollTop;
+
+    // User actively scrolled up
+    if (scrollTop < last - 5) {
+      isUserScrolledUp.current = true;
+    }
+    // User is back near the bottom — re-enable auto-follow
+    const distanceFromBottom = container.scrollHeight - scrollTop - container.clientHeight;
+    if (distanceFromBottom < 80) {
+      isUserScrolledUp.current = false;
+    }
+    setShowScrollToBottom(prev => prev === isUserScrolledUp.current ? prev : isUserScrolledUp.current);
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+  // Direct scrollTop assignment — guaranteed to land at absolute bottom,
+  // independent of element layout / sticky / padding quirks that can
+  // throw off scrollIntoView. Returns false if the container isn't ready.
+  const snapToBottom = useCallback((smooth: boolean = false) => {
+    const container = messagesContainerRef.current;
+    if (!container) return false;
+    if (smooth && !prefersReducedMotion) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    } else {
+      container.scrollTop = container.scrollHeight;
+    }
+    return true;
   }, [prefersReducedMotion]);
 
+  const scrollToBottom = useCallback(() => {
+    snapToBottom(true);
+  }, [snapToBottom]);
+
+  // Scroll-to-bottom policy:
+  //  • Continuous follow during generation — a ResizeObserver watches the
+  //    messages container's height. Every growth event snaps the viewport
+  //    to the bottom IF the user is already near the bottom.
+  //  • If the user scrolled up to re-read, we leave them alone.
+  //  • rAF-debounced so multiple height changes in the same frame coalesce
+  //    into one scroll.
   useEffect(() => {
-    if (!isUserScrolledUp.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    let rafId: number | null = null;
+    const followIfAtBottom = () => {
+      if (isUserScrolledUp.current) return;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+        rafId = null;
+      });
+    };
+    const ro = new ResizeObserver(followIfAtBottom);
+    ro.observe(container);
+    const inner = container.firstElementChild;
+    if (inner) ro.observe(inner);
+    return () => {
+      ro.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  // Boundary snaps + post-generation settle window. When isTyping flips to
+  // false, rich cards (action bar, follow-up chips, feedback row) often
+  // mount in subsequent ticks via state updates the ResizeObserver may
+  // catch a frame too late. We fire several extra snaps over ~400ms to
+  // guarantee the final bottom — including the very last follow-up chip —
+  // sits in view when the user is at the bottom.
+  const prevMsgCountRef = useRef(messages.length);
+  const prevTypingRef = useRef(isTyping);
+  useEffect(() => {
+    const prevCount = prevMsgCountRef.current;
+    const prevTyping = prevTypingRef.current;
+    prevMsgCountRef.current = messages.length;
+    prevTypingRef.current = isTyping;
+
+    const lastMsg = messages[messages.length - 1];
+    const userMessageJustAdded = messages.length > prevCount && lastMsg?.role === 'user';
+    const generationJustFinished = prevTyping && !isTyping;
+
+    if (!userMessageJustAdded && !generationJustFinished) return;
+    if (generationJustFinished && isUserScrolledUp.current) return;
+
+    snapToBottom(false);
+    if (generationJustFinished) {
+      // Re-snap over the next few frames so action bar + follow-ups +
+      // feedback row (which can render in delayed ticks) end up in view.
+      const t1 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 80);
+      const t2 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 200);
+      const t3 = setTimeout(() => { if (!isUserScrolledUp.current) snapToBottom(false); }, 450);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     }
-  }, [messages, isTyping, thinkingSteps, showClarificationCard, showProgressiveLoader, prefersReducedMotion]);
+  }, [messages, isTyping, snapToBottom]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -1468,6 +2215,27 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery]);
+
+  // Composer draft handoff — when another surface (e.g. the workspace
+  // panel's "Edit assumptions") seeds a prompt, drop it into the textarea,
+  // size the row, focus, and place the caret at the end so the user can
+  // immediately keep typing. Does NOT auto-submit.
+  useEffect(() => {
+    if (!composerDraft) return;
+    setInput(composerDraft);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 260) + 'px';
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      }
+    });
+    onComposerDraftConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerDraft]);
 
   // Clear all pending timers
   const clearTimers = () => {
@@ -3384,14 +4152,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             spread across this row read as 3+ palettes; this row
                             now sits firmly in the chat's send/receive two-tone. */}
                         <div className="flex items-center gap-2 pt-3 border-t border-canvas-border">
-                          <Button
-                            variant="outline"
-                            size="md"
-                            leftIcon={<Download size={14} />}
-                            onClick={() => addToast({ type: 'success', message: 'CSV download started.' })}
-                          >
-                            Export
-                          </Button>
+                          <ExportReportButton />
                           {/* Dashboard button — pressed when one or more dashboards linked. */}
                           {(() => {
                             const dashLinks = msg.addedTo?.dashboards || [];

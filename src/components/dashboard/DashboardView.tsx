@@ -4755,7 +4755,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     >
                       <KpiTile
                         label={displayTitle}
-                        value={kpi.value}
+                        value={String(kpi.value)}
                         index={i}
                         onClick={isEditing ? undefined : () => setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' })}
                         footer={!isEditing && override?.field ? (
