@@ -114,10 +114,10 @@ export default function ClarificationPanel({
           >
             <div className="flex items-center gap-1 text-[12px] text-ink-400 font-medium mb-2">
               <ChevronRight size={12} />
-              <span>Identified ambiguity, asking for inputs</span>
+              <span>Asking a few clarifying questions</span>
             </div>
-            <h2 className="text-[24px] font-semibold text-ink-800 leading-snug">
-              One quick check before I run — pick what fits, or type your own.
+            <h2 className="font-serif text-[26px] tracking-tight text-ink-900 leading-snug">
+              One quick check before I run. <span className="text-ink-500 italic">Pick what fits, or type your own.</span>
             </h2>
           </motion.div>
         </div>

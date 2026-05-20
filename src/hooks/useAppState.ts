@@ -107,6 +107,10 @@ export interface AppState {
   // Chat initial context (for workflow mode entry)
   chatInitialQuery: string | null;
   chatWorkflowContext: { templateId?: string; workflowId?: string } | null;
+  // Pre-fill text dropped into the chat composer (not auto-submitted). Used
+  // when another surface — e.g. the workspace panel's "Edit assumptions"
+  // action — wants to seed the textarea with a draft prompt.
+  chatComposerDraft: string | null;
   // Seed prompt handed off from chat → AI Concierge workflow builder.
   // Consumed once on the journey's first render, then cleared by the parent.
   workflowBuilderSeedPrompt: string | null;
@@ -185,6 +189,7 @@ const INITIAL_STATE: AppState = {
   workflowCanvasStage: 0,
   workflowType: null,
   chatInitialQuery: null,
+  chatComposerDraft: null,
   chatWorkflowContext: null,
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
@@ -303,6 +308,10 @@ export function useAppState() {
 
   const setChatInitialQuery = useCallback((query: string | null) => {
     setState(prev => ({ ...prev, chatInitialQuery: query }));
+  }, []);
+
+  const setChatComposerDraft = useCallback((draft: string | null) => {
+    setState(prev => ({ ...prev, chatComposerDraft: draft }));
   }, []);
 
   const openChat = useCallback((chatId: string | null) => {
@@ -502,6 +511,7 @@ export function useAppState() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
     openWorkflowExecutor,

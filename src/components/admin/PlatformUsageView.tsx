@@ -47,7 +47,7 @@ export default function PlatformUsageView(): JSX.Element {
           <div className="flex items-center gap-3 mb-1.5">
             <div className="p-2 rounded-lg bg-brand-50 text-brand-700"><TrendingUp size={18} /></div>
             <h1 className="text-[20px] font-bold text-text">Platform Usage</h1>
-            <span className="text-[10px] text-text-muted font-mono bg-canvas px-1.5 py-0.5 rounded">FY26 — to date</span>
+            <span className="text-[10px] text-text-muted font-mono bg-canvas px-1.5 py-0.5 rounded">FY26 · to date</span>
           </div>
           <p className="text-[12.5px] text-text-secondary ml-12">Aggregate signal on how much of the platform your org is using. Updated nightly.</p>
         </div>

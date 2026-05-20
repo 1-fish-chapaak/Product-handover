@@ -34,8 +34,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
-    const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts(prev => [...prev, { ...toast, id }]);
+    setToasts(prev => {
+      // Dedupe — if a visually identical toast is already on screen (same
+      // type + message), skip the new one. Prevents rapid-click spam like
+      // a stack of "Opening … in source viewer…" from one button.
+      if (prev.some(t => t.type === toast.type && t.message === toast.message)) {
+        return prev;
+      }
+      // Cap at 5 — keeps the bottom-right corner readable even when many
+      // distinct actions fire in quick succession.
+      const id = `toast-${Date.now()}-${Math.random()}`;
+      const next = [...prev, { ...toast, id }];
+      return next.length > 5 ? next.slice(next.length - 5) : next;
+    });
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -65,7 +76,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
   }, [toast.id, toast.type, onRemove]);
 
   const icons = {
-    success: <CheckCircle size={16} className="text-compliant" />,
+    success: <CheckCircle size={16} className="text-brand-600" />,
     info: <Info size={16} className="text-evidence" />,
     warning: <AlertTriangle size={16} className="text-mitigated-700" />,
     error: <AlertOctagon size={16} className="text-risk-700" />,

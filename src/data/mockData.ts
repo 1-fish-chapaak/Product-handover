@@ -17,12 +17,12 @@ export const SOPS = [
 
 // ─── RACMs ───
 export const RACMS = [
-  { id: "RACM-001", bpId: "p2p", name: "FY26 P2P — Vendor Payment", fw: "SOX", status: "active", owner: "Tushar Goel", lastRun: "Mar 18, 2026", sopId: "sop-001" },
-  { id: "RACM-002", bpId: "p2p", name: "FY26 P2P — Purchase Order", fw: "Internal", status: "draft", owner: "Deepak Bansal", lastRun: "Mar 5, 2026", sopId: "sop-002" },
-  { id: "RACM-003", bpId: "o2c", name: "FY26 O2C — Invoice Mgmt", fw: "Key Control", status: "active", owner: "Neha Joshi", lastRun: "Mar 20, 2026", sopId: "sop-003" },
-  { id: "RACM-004", bpId: "r2r", name: "FY26 R2R — Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Mar 15, 2026", sopId: "sop-004" },
-  { id: "RACM-005", bpId: "r2r", name: "FY26 R2R — GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Feb 28, 2026", sopId: "sop-005" },
-  { id: "RACM-006", bpId: "s2c", name: "FY26 S2C — Contract Review", fw: "Internal", status: "draft", owner: "Rohan Patel", lastRun: "—", sopId: null },
+  { id: "RACM-001", bpId: "p2p", name: "FY26 P2P · Vendor Payment", fw: "SOX", status: "active", owner: "Tushar Goel", lastRun: "Mar 18, 2026", sopId: "sop-001" },
+  { id: "RACM-002", bpId: "p2p", name: "FY26 P2P · Purchase Order", fw: "Internal", status: "draft", owner: "Deepak Bansal", lastRun: "Mar 5, 2026", sopId: "sop-002" },
+  { id: "RACM-003", bpId: "o2c", name: "FY26 O2C · Invoice Mgmt", fw: "Key Control", status: "active", owner: "Neha Joshi", lastRun: "Mar 20, 2026", sopId: "sop-003" },
+  { id: "RACM-004", bpId: "r2r", name: "FY26 R2R · Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Mar 15, 2026", sopId: "sop-004" },
+  { id: "RACM-005", bpId: "r2r", name: "FY26 R2R · GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Feb 28, 2026", sopId: "sop-005" },
+  { id: "RACM-006", bpId: "s2c", name: "FY26 S2C · Contract Review", fw: "Internal", status: "draft", owner: "Rohan Patel", lastRun: "Never", sopId: null },
 ];
 
 // ─── Risks ───
@@ -68,7 +68,7 @@ export const ENGAGEMENT_CONTROLS = [
   { id: "ec-004", engId: "eng-001", racm: "O2C Invoice Mgmt", risk: "Revenue recognition timing", control: "Revenue recognition compliance check", isKey: true, assignee: "Karan Mehta", wt: "in-progress", de: "not-started", oe: "not-started", evidence: 1 },
   { id: "ec-005", engId: "eng-001", racm: "O2C Invoice Mgmt", risk: "Credit limit breach", control: "Automated credit limit monitoring", isKey: false, assignee: "Sneha Desai", wt: "effective", de: "ineffective", oe: "not-started", evidence: 2 },
   { id: "ec-006", engId: "eng-001", racm: "R2R Financial Close", risk: "Incorrect period-end entries", control: "Journal entry management review", isKey: true, assignee: "Rohan Patel", wt: "effective", de: "effective", oe: "effective", evidence: 4 },
-  { id: "ec-007", engId: "eng-001", racm: "R2R Financial Close", risk: "GL balance discrepancy", control: "GL reconciliation — monthly auto", isKey: true, assignee: "Priya Singh", wt: "effective", de: "effective", oe: "in-progress", evidence: 2 },
+  { id: "ec-007", engId: "eng-001", racm: "R2R Financial Close", risk: "GL balance discrepancy", control: "GL reconciliation, monthly auto", isKey: true, assignee: "Priya Singh", wt: "effective", de: "effective", oe: "in-progress", evidence: 2 },
   { id: "ec-008", engId: "eng-001", racm: "P2P Vendor Payment", risk: "SOD violation in AP", control: "SOD violation detector real-time", isKey: false, assignee: "Tushar Goel", wt: "not-started", de: "not-started", oe: "not-started", evidence: 0 },
 ];
 
@@ -251,7 +251,7 @@ export const SHARED_REPORTS = [
 
 // ─── Data Sources ───
 export const DATA_SOURCES = [
-  { id: "ds-001", name: "SAP ERP — AP Module", type: "sql", status: "connected", lastSync: "Mar 20, 2026", records: "1.2M" },
+  { id: "ds-001", name: "SAP ERP: AP Module", type: "sql", status: "connected", lastSync: "Mar 20, 2026", records: "1.2M" },
   { id: "ds-002", name: "Invoice Archive 2026", type: "pdf", status: "connected", lastSync: "Mar 19, 2026", records: "4,521" },
   { id: "ds-003", name: "Vendor Master Data", type: "csv", status: "connected", lastSync: "Mar 20, 2026", records: "892" },
   { id: "ds-004", name: "GL Transaction History", type: "sql", status: "connected", lastSync: "Mar 18, 2026", records: "3.8M" },
@@ -271,9 +271,9 @@ export const CHAT_HISTORY = [
 export const CHAT_CONVERSATIONS: Record<string, Array<{ role: 'user' | 'assistant'; text: string }>> = {
   'ch-001': [
     { role: 'user', text: 'Show me all high-severity risks in P2P process' },
-    { role: 'assistant', text: '**P2P High-Severity Risks Found: 3**\n\nI\'ve analyzed your P2P risk register and identified 3 high-severity risks:\n\n• **RSK-001** — Unauthorized vendor payments processed without approval (3 controls mapped)\n• **RSK-002** — Duplicate invoices leading to overpayment (4 controls, 2 key)\n• **RSK-008** — Segregation of duties violation in AP (3 controls, 1 key)\n\nRSK-008 is the most concerning — the SOD violation detector control (CTR-006) remains untested.' },
+    { role: 'assistant', text: '**P2P High-Severity Risks Found: 3**\n\nI\'ve analyzed your P2P risk register and identified 3 high-severity risks:\n\n• **RSK-001**: Unauthorized vendor payments processed without approval (3 controls mapped)\n• **RSK-002**: Duplicate invoices leading to overpayment (4 controls, 2 key)\n• **RSK-008**: Segregation of duties violation in AP (3 controls, 1 key)\n\nRSK-008 is the most concerning; the SOD violation detector control (CTR-006) remains untested.' },
     { role: 'user', text: 'What controls cover RSK-008?' },
-    { role: 'assistant', text: '**Controls for RSK-008 (SOD Violation):**\n\n1. **CTR-004** — Privileged Access Review (quarterly) → Status: **Ineffective** ⚠️\n2. **CTR-006** — SOD Violation Detector Real-time → Status: **Not Tested**\n3. **CTR-002** — Dual Approval for Payments > 10L → Status: **Effective** ✓\n\n**Recommendation:** Prioritize testing CTR-006 and remediating CTR-004. The privileged access review failed because scope was limited to AP module only — expand to include all financial modules.' },
+    { role: 'assistant', text: '**Controls for RSK-008 (SOD Violation):**\n\n1. **CTR-004**: Privileged Access Review (quarterly) → Status: **Ineffective** ⚠️\n2. **CTR-006**: SOD Violation Detector Real-time → Status: **Not Tested**\n3. **CTR-002**: Dual Approval for Payments > 10L → Status: **Effective** ✓\n\n**Recommendation:** Prioritize testing CTR-006 and remediating CTR-004. The privileged access review failed because scope was limited to AP module only. Expand to include all financial modules.' },
   ],
   'ch-002': [
     { role: 'user', text: 'Build a workflow to detect duplicate invoices across all vendors' },
@@ -281,15 +281,15 @@ export const CHAT_CONVERSATIONS: Record<string, Array<{ role: 'user' | 'assistan
   ],
   'ch-003': [
     { role: 'user', text: 'What\'s the current SOX compliance status?' },
-    { role: 'assistant', text: '**FY26 SOX Audit — Status Overview**\n\n📊 **Overall Progress: 58%** (14 of 24 controls tested)\n\n• **Effective:** 11 controls (79%)\n• **Ineffective:** 1 control (CTR-004 — Privileged Access Review)\n• **Not Tested:** 10 controls remaining\n• **Deficiencies Found:** 2 (1 Significant Deficiency, 1 Material Weakness)\n\n⚠️ **Critical Items:**\n- DEF-002 (Material Weakness): Journal entry approval override used 7 times without documentation — due Mar 31\n- 10 controls still pending testing before quarter-end\n\n**Recommendation:** Focus testing resources on remaining P2P and S2C controls. The Mar 31 deadline for DEF-002 remediation is at risk.' },
+    { role: 'assistant', text: '**FY26 SOX Audit: Status Overview**\n\n📊 **Overall Progress: 58%** (14 of 24 controls tested)\n\n• **Effective:** 11 controls (79%)\n• **Ineffective:** 1 control (CTR-004, Privileged Access Review)\n• **Not Tested:** 10 controls remaining\n• **Deficiencies Found:** 2 (1 Significant Deficiency, 1 Material Weakness)\n\n⚠️ **Critical Items:**\n- DEF-002 (Material Weakness): Journal entry approval override used 7 times without documentation. Due Mar 31.\n- 10 controls still pending testing before quarter-end\n\n**Recommendation:** Focus testing resources on remaining P2P and S2C controls. The Mar 31 deadline for DEF-002 remediation is at risk.' },
   ],
   'ch-004': [
     { role: 'user', text: 'Which controls are marked ineffective?' },
-    { role: 'assistant', text: '**Ineffective Controls Report**\n\n1 control is currently marked ineffective:\n\n🔴 **CTR-004 — Privileged Access Review**\n- Risk: RSK-008 (SOD Violation in AP)\n- Engagement: FY26 SOX Audit\n- Assignee: Tushar Goel\n- Issue: Quarterly review scope limited to AP module; did not cover AR and GL modules\n- Deficiency: DEF-003 (Control Deficiency) — Resolved Feb 28, 2026\n\n**Additionally, 2 controls are Not Tested:**\n- CTR-006 — SOD Violation Detector (assigned to Tushar Goel)\n- 1 control in O2C process (PO dual sign-off pending)\n\n**Action:** Schedule CTR-006 testing this week to maintain SOX timeline.' },
+    { role: 'assistant', text: '**Ineffective Controls Report**\n\n1 control is currently marked ineffective:\n\n🔴 **CTR-004: Privileged Access Review**\n- Risk: RSK-008 (SOD Violation in AP)\n- Engagement: FY26 SOX Audit\n- Assignee: Tushar Goel\n- Issue: Quarterly review scope limited to AP module; did not cover AR and GL modules\n- Deficiency: DEF-003 (Control Deficiency), resolved Feb 28, 2026\n\n**Additionally, 2 controls are Not Tested:**\n- CTR-006: SOD Violation Detector (assigned to Tushar Goel)\n- 1 control in O2C process (PO dual sign-off pending)\n\n**Action:** Schedule CTR-006 testing this week to maintain SOX timeline.' },
   ],
   'ch-005': [
     { role: 'user', text: 'Run the journal entry anomaly detector and show me the results' },
-    { role: 'assistant', text: '**Journal Entry Anomaly Detector — Results**\n\nScanned 3.8M GL transactions from R2R process.\n\n📊 **Summary:**\n- Records Analyzed: 3,847,231\n- Anomalies Detected: 23\n- Critical Anomalies: 3\n- Processing Time: 1.8s\n\n🔴 **Critical Findings:**\n1. 7 journal entries with approval overrides in Dec 2025 (linked to DEF-002)\n2. Unusual round-number entries totaling ₹4.2Cr posted at month-end\n3. 2 entries posted by user with revoked access (access not properly terminated)\n\n**Impact Score: 88/100**\nThis is a high-impact finding. Recommend immediate review of the 3 critical anomalies and escalation to the audit committee.' },
+    { role: 'assistant', text: '**Journal Entry Anomaly Detector: Results**\n\nScanned 3.8M GL transactions from R2R process.\n\n📊 **Summary:**\n- Records Analyzed: 3,847,231\n- Anomalies Detected: 23\n- Critical Anomalies: 3\n- Processing Time: 1.8s\n\n🔴 **Critical Findings:**\n1. 7 journal entries with approval overrides in Dec 2025 (linked to DEF-002)\n2. Unusual round-number entries totaling ₹4.2Cr posted at month-end\n3. 2 entries posted by user with revoked access (access not properly terminated)\n\n**Impact Score: 88/100**\nThis is a high-impact finding. Recommend immediate review of the 3 critical anomalies and escalation to the audit committee.' },
   ],
 };
 
@@ -299,7 +299,7 @@ export const EXCEPTION_DATA = [
   { id: 'EXC-002', invoiceNo: 'INV-2026-4533', vendor: 'Global Supplies Ltd', amount: 128750, matchScore: 92, originalInvoice: 'INV-2026-2987', status: 'unassigned' as const, assignee: null as string | null, actionTaken: null as string | null, riskOwner: null as string | null, notificationSent: false },
   { id: 'EXC-003', invoiceNo: 'INV-2026-4558', vendor: 'TechVendor Inc', amount: 67400, matchScore: 88, originalInvoice: 'INV-2026-3241', status: 'assigned' as const, assignee: 'Tushar Goel', actionTaken: null as string | null, riskOwner: 'ro-001', notificationSent: true },
   { id: 'EXC-004', invoiceNo: 'INV-2026-4571', vendor: 'Acme Corp', amount: 23100, matchScore: 94, originalInvoice: 'INV-2026-3455', status: 'in-progress' as const, assignee: 'Deepak Bansal', actionTaken: 'Under investigation', riskOwner: 'ro-002', notificationSent: true },
-  { id: 'EXC-005', invoiceNo: 'INV-2026-4589', vendor: 'Pinnacle Services', amount: 89600, matchScore: 78, originalInvoice: 'INV-2026-3012', status: 'resolved' as const, assignee: 'Neha Joshi', actionTaken: 'Confirmed duplicate — payment blocked', riskOwner: 'ro-003', notificationSent: true },
+  { id: 'EXC-005', invoiceNo: 'INV-2026-4589', vendor: 'Pinnacle Services', amount: 89600, matchScore: 78, originalInvoice: 'INV-2026-3012', status: 'resolved' as const, assignee: 'Neha Joshi', actionTaken: 'Confirmed duplicate; payment blocked', riskOwner: 'ro-003', notificationSent: true },
   { id: 'EXC-006', invoiceNo: 'INV-2026-4602', vendor: 'Atlas Manufacturing', amount: 156300, matchScore: 85, originalInvoice: 'INV-2026-2876', status: 'unassigned' as const, assignee: null as string | null, actionTaken: null as string | null, riskOwner: null as string | null, notificationSent: false },
   { id: 'EXC-007', invoiceNo: 'INV-2026-4618', vendor: 'Global Supplies Ltd', amount: 34500, matchScore: 91, originalInvoice: 'INV-2026-3189', status: 'unassigned' as const, assignee: null as string | null, actionTaken: null as string | null, riskOwner: null as string | null, notificationSent: false },
   { id: 'EXC-008', invoiceNo: 'INV-2026-4635', vendor: 'TechVendor Inc', amount: 71800, matchScore: 82, originalInvoice: 'INV-2026-3367', status: 'notified' as const, assignee: 'Karan Mehta', actionTaken: null as string | null, riskOwner: 'ro-004', notificationSent: true },
@@ -316,8 +316,8 @@ export const RISK_OWNERS = [
 
 // ─── Action Taken Data ───
 export const ACTION_TAKEN_DATA = [
-  { exceptionId: 'EXC-005', action: 'Investigated invoice trail — confirmed duplicate submission by vendor', actionBy: 'Neha Joshi', actionDate: 'Mar 22, 2026', resolution: 'Payment blocked, vendor notified' },
-  { exceptionId: 'EXC-004', action: 'Cross-referenced with PO and GRN records', actionBy: 'Deepak Bansal', actionDate: 'Mar 23, 2026', resolution: 'Under review — awaiting vendor response' },
+  { exceptionId: 'EXC-005', action: 'Investigated invoice trail; confirmed duplicate submission by vendor', actionBy: 'Neha Joshi', actionDate: 'Mar 22, 2026', resolution: 'Payment blocked, vendor notified' },
+  { exceptionId: 'EXC-004', action: 'Cross-referenced with PO and GRN records', actionBy: 'Deepak Bansal', actionDate: 'Mar 23, 2026', resolution: 'Under review; awaiting vendor response' },
   { exceptionId: 'EXC-003', action: 'Verified against historical payment records', actionBy: 'Tushar Goel', actionDate: 'Mar 21, 2026', resolution: 'Escalated to vendor management' },
   { exceptionId: 'EXC-008', action: 'Initial review completed', actionBy: 'Karan Mehta', actionDate: 'Mar 24, 2026', resolution: 'Pending detailed analysis' },
 ];
@@ -391,16 +391,16 @@ export const GRC_EXCEPTIONS: GrcException[] = [
   { id: 'EXC008', riskCategory: 'Compliance',        severity: 'High',   status: 'Open',         classification: 'Business as Usual',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '4 days ago',                       title: 'Missing Security Log Retention on Payment Processing System',         assignedTo: PERSON.SR },
   { id: 'EXC009', riskCategory: 'Operational Risk',  severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '5 days ago',                       title: 'Inadequate Access Review for Terminated Contractors',                 assignedTo: PERSON.RK },
   { id: 'EXC010', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'System Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '12 days ago',  bulkId: 'ACT005', title: 'Duplicate Payments to 3 Vendors (Oct-Nov)',                           assignedTo: PERSON.AS },
-  { id: 'EXC011', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'False Positive',           classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '6 days ago',                       title: 'Service Account API Key Usage — policy-exempt accounts',              assignedTo: PERSON.SR },
+  { id: 'EXC011', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'False Positive',           classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '6 days ago',                       title: 'Service Account API Key Usage: policy-exempt accounts',              assignedTo: PERSON.SR },
   { id: 'EXC012', riskCategory: 'Data Privacy',      severity: 'High',   status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Rejected',   lastUpdated: '1 day ago',   bulkId: 'ACT006', title: 'Customer Data Shared with Unauthorized Third-Party',                  assignedTo: PERSON.RK },
   { id: 'EXC013', riskCategory: 'Compliance',        severity: 'Low',    status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '20 days ago', flags: ['Bulk'], bulkId: 'ACT003', title: 'CAB Approval Bypassed for Production Change',                         assignedTo: PERSON.RK },
-  { id: 'EXC014', riskCategory: 'Access Control',    severity: 'Medium', status: 'Open',         classification: 'Design Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '8 days ago',  flags: ['Bulk'], bulkId: 'ACT003', title: 'Change Management System — CAB approval not enforced',                assignedTo: PERSON.SR },
+  { id: 'EXC014', riskCategory: 'Access Control',    severity: 'Medium', status: 'Open',         classification: 'Design Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '8 days ago',  flags: ['Bulk'], bulkId: 'ACT003', title: 'Change Management System: CAB approval not enforced',                assignedTo: PERSON.SR },
 ];
 
 export const GRC_BULK_ACTIONS: Record<string, GrcBulkAction> = {
-  'ACT001': { id: 'ACT001', caseIds: ['EXC003', 'EXC004'],           title: 'MFA enforcement — executive accounts' },
+  'ACT001': { id: 'ACT001', caseIds: ['EXC003', 'EXC004'],           title: 'MFA enforcement · executive accounts' },
   'ACT002': { id: 'ACT002', caseIds: ['EXC001', 'EXC005'],           title: 'Legacy access & SLA remediation bundle' },
-  'ACT003': { id: 'ACT003', caseIds: ['EXC013', 'EXC014'],           title: 'CAB approval enforcement — change mgmt' },
+  'ACT003': { id: 'ACT003', caseIds: ['EXC013', 'EXC014'],           title: 'CAB approval enforcement · change mgmt' },
   'ACT004': { id: 'ACT004', caseIds: ['EXC006'],                     title: 'Q3 trading reconciliation fix' },
   'ACT005': { id: 'ACT005', caseIds: ['EXC010'],                     title: 'Vendor duplicate payment recovery' },
   'ACT006': { id: 'ACT006', caseIds: ['EXC012'],                     title: 'Third-party data share review' },
@@ -412,7 +412,7 @@ const DEFAULT_ACTIVITY: GrcActivityEntry[] = [
     author: 'Priya Mehta',
     role: 'Auditor',
     timestamp: '21 Apr 2026, 18:00',
-    message: 'Accepted action — marked Under Review pending implementation verification',
+    message: 'Accepted action. Marked Under Review pending implementation verification',
     comment: 'Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30.',
   },
   {
@@ -450,7 +450,7 @@ export const GRC_CASE_DETAILS: Record<string, GrcCaseDetail> = {
   'EXC001': {
     classificationJustification:
       '"The VPN endpoint was intentionally kept active for legacy integrations, but lacked proper access controls. This is a design gap that requires immediate remediation."',
-    actionTitle: 'Access Control Remediation — legacy VPN endpoint',
+    actionTitle: 'Access Control Remediation · legacy VPN endpoint',
     actionDueDate: 'Due 30 Apr 2026',
     actionDescription:
       'Decommissioned the legacy VPN endpoint and routed remaining integrations through the corporate SSO gateway. MFA enforced, audit logs shipped to Splunk, and evidence captured in the remediation workbook.',
@@ -490,7 +490,7 @@ export const GRC_CASE_DETAILS: Record<string, GrcCaseDetail> = {
   'EXC008': {
     classificationJustification:
       '"Control operated as designed; the observed variance is within tolerance. No remediation required."',
-    actionTitle: 'No action required — documented rationale',
+    actionTitle: 'No action required · documented rationale',
     actionDueDate: 'Due 28 Apr 2026',
     actionDescription:
       'Auditor requested confirmation that variance is within tolerance. Evidence pack attached.',
@@ -499,7 +499,7 @@ export const GRC_CASE_DETAILS: Record<string, GrcCaseDetail> = {
   },
   'EXC012': {
     classificationJustification:
-      '"Endpoint isolation policy was not enforced on the engineering ring — system-level gap in the MDM baseline."',
+      '"Endpoint isolation policy was not enforced on the engineering ring; system-level gap in the MDM baseline."',
     actionTitle: 'Endpoint Isolation Baseline Rollout',
     actionDueDate: 'Due 20 May 2026',
     actionDescription:
@@ -592,13 +592,13 @@ export const ACTION_HUB_SUMMARY = {
 };
 
 export const ACTION_HUB_TIMELINE: ActionHubEvent[] = [
-  { id: 'ev-01', date: '23 Apr 2026', time: '19:06', relative: '29 minutes ago', actor: 'Priya Mehta', role: 'Auditor',    message: 'Case accepted — marked as Partially Implemented',                 exceptionId: 'EXC003' },
+  { id: 'ev-01', date: '23 Apr 2026', time: '19:06', relative: '29 minutes ago', actor: 'Priya Mehta', role: 'Auditor',    message: 'Case accepted. Marked as Partially Implemented',                  exceptionId: 'EXC003' },
 
   { id: 'ev-02', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'System',      role: 'System',     message: 'Case reopened after auditor rejection',                            exceptionId: 'EXC012' },
-  { id: 'ev-03', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'Priya Mehta', role: 'Auditor',    message: 'Rejected — Discrepancy raised',                                    exceptionId: 'EXC012', comment: '"The submitted action does not adequately address the regulatory notification requirement under GDPR Article 33."' },
+  { id: 'ev-03', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'Priya Mehta', role: 'Auditor',    message: 'Rejected. Discrepancy raised',                                     exceptionId: 'EXC012', comment: '"The submitted action does not adequately address the regulatory notification requirement under GDPR Article 33."' },
   { id: 'ev-04', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'Arun Singh',  role: 'Risk Owner', message: 'Classified as Design Deficiency',                                  exceptionId: 'EXC014', comment: '"Change management system does not enforce CAB approval before production deployments."' },
 
-  { id: 'ev-05', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Priya Mehta', role: 'Auditor',    message: 'Accepted action — marked Under Review pending implementation verification', exceptionId: 'EXC001', comment: '"Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30."' },
+  { id: 'ev-05', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Priya Mehta', role: 'Auditor',    message: 'Accepted action. Marked Under Review pending implementation verification', exceptionId: 'EXC001', comment: '"Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30."' },
   { id: 'ev-06', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Sunita Rao',  role: 'Risk Owner', message: 'Classified as Procedural Non-Compliance',                          exceptionId: 'EXC005', comment: '"The DSR process lacks automation and escalation rules."' },
   { id: 'ev-07', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 72% confidence',                exceptionId: 'EXC013' },
 
@@ -635,13 +635,13 @@ export const ACTION_HUB_TIMELINE: ActionHubEvent[] = [
   { id: 'ev-28', date: '08 Apr 2026', time: '18:00', relative: '15 days ago',   actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 78% confidence',                exceptionId: 'EXC006' },
   { id: 'ev-29', date: '08 Apr 2026', time: '18:00', relative: '15 days ago',   actor: 'Ravi Kumar',  role: 'Risk Owner', message: 'Classified as Design Deficiency',                                  exceptionId: 'EXC006', comment: '"Quarterly vendor review was skipped; design-level remediation scheduled."' },
 
-  { id: 'ev-30', date: '06 Apr 2026', time: '18:00', relative: '17 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case — resolution verified',                                exceptionId: 'EXC006' },
+  { id: 'ev-30', date: '06 Apr 2026', time: '18:00', relative: '17 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case. Resolution verified',                                 exceptionId: 'EXC006' },
   { id: 'ev-31', date: '06 Apr 2026', time: '18:00', relative: '17 days ago',   actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 92% confidence',                exceptionId: 'EXC011' },
 
-  { id: 'ev-32', date: '04 Apr 2026', time: '18:00', relative: '19 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case — no further action required',                         exceptionId: 'EXC010' },
+  { id: 'ev-32', date: '04 Apr 2026', time: '18:00', relative: '19 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case. No further action required',                          exceptionId: 'EXC010' },
   { id: 'ev-33', date: '04 Apr 2026', time: '18:00', relative: '19 days ago',   actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 77% confidence',                exceptionId: 'EXC013' },
 
-  { id: 'ev-34', date: '02 Apr 2026', time: '18:00', relative: '21 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case — resolution verified',                                exceptionId: 'EXC013' },
+  { id: 'ev-34', date: '02 Apr 2026', time: '18:00', relative: '21 days ago',   actor: 'Priya Mehta', role: 'Auditor',    message: 'Closed case. Resolution verified',                                 exceptionId: 'EXC013' },
   { id: 'ev-35', date: '02 Apr 2026', time: '18:00', relative: '21 days ago',   actor: 'System',      role: 'System',     message: 'Case auto-assigned to risk owner queue',                           exceptionId: 'EXC002' },
   { id: 'ev-36', date: '02 Apr 2026', time: '18:00', relative: '21 days ago',   actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 83% confidence',                exceptionId: 'EXC007' },
 
@@ -692,28 +692,28 @@ export const POWER_BI_DASHBOARDS = [
 export const CLARIFICATION_STEPS = [
   {
     stage: 1,
-    question: "I'll analyze your invoice data for duplicates. First — what date range should I cover?",
+    question: "I'll analyze your invoice data for duplicates across the connected source. First, what date range should I cover for this run?",
     options: ['Last 30 days', 'Last 90 days', 'Full FY26', 'Custom range'],
     fillPercent: 25,
     category: 'Intent',
   },
   {
     stage: 2,
-    question: 'What tolerance threshold for amount matching? Some duplicates may have slight variations.',
+    question: 'What tolerance threshold should I apply to amount matching? Some duplicate invoices may have slight rounding or currency variations.',
     options: ['Exact match only', '± 1% tolerance', '± 5% tolerance'],
     fillPercent: 50,
     category: 'Data',
   },
   {
     stage: 3,
-    question: 'Which vendor scope should I analyze?',
+    question: 'Which vendor scope should I analyze for this duplicate-detection run across the AP module?',
     options: ['All vendors', 'Top 50 by spend', 'Flagged vendors only', 'Specific vendor'],
     fillPercent: 75,
     category: 'Logic',
   },
   {
     stage: 4,
-    question: 'What matching logic should I use to detect duplicates?',
+    question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],
     fillPercent: 100,
     category: 'Ready',
@@ -724,8 +724,8 @@ export const CLARIFICATION_STEPS = [
 export const WORKFLOW_CLARIFICATION_STEPS = [
   {
     stage: 1,
-    question: "I'll build this workflow for you. First — which data source should I connect to?",
-    options: ['SAP ERP — AP Module', 'CSV / Excel Upload', 'Multiple Sources (SAP + CSV)', 'Custom Database'],
+    question: "I'll build this workflow for you. First, which data source should I connect to?",
+    options: ['SAP ERP: AP Module', 'CSV / Excel Upload', 'Multiple Sources (SAP + CSV)', 'Custom Database'],
     fillPercent: 20,
     category: 'Data Source',
     canvasSection: 'overview',
@@ -757,7 +757,7 @@ export const WORKFLOW_CLARIFICATION_STEPS = [
   {
     stage: 5,
     question: 'Here\'s the AI-recommended output screen for your workflow. Should I finalize this layout?',
-    options: ['Looks great — finalize', 'Switch to dashboard layout', 'Switch to chat-based layout', 'Customize further'],
+    options: ['Looks great, finalize', 'Switch to dashboard layout', 'Switch to chat-based layout', 'Customize further'],
     fillPercent: 100,
     category: 'Output Layout',
     canvasSection: 'preview',
@@ -815,8 +815,8 @@ export const DASHBOARD_WIDGETS = [
   { id: "dw-004", type: "kpi", title: "Workflow Runs (MTD)", value: 156, change: "+23", trend: "up" },
   { id: "dw-005", type: "donut", title: "Risk by Severity", data: { critical: 2, high: 5, medium: 3, low: 2 } },
   { id: "dw-006", type: "bar", title: "Control Effectiveness", data: { effective: 11, ineffective: 1, "not-tested": 2 } },
-  { id: "dw-007", type: "progress", title: "Audit Progress — FY26 SOX", value: 58 },
-  { id: "dw-008", type: "list", title: "Recent Workflow Runs", items: ["Duplicate Invoice Detector — 2h ago", "Vendor Master Monitor — 4h ago", "Journal Entry Anomaly — 1d ago"] },
+  { id: "dw-007", type: "progress", title: "Audit Progress · FY26 SOX", value: 58 },
+  { id: "dw-008", type: "list", title: "Recent Workflow Runs", items: ["Duplicate Invoice Detector · 2h ago", "Vendor Master Monitor · 4h ago", "Journal Entry Anomaly · 1d ago"] },
 ];
 
 // ─── SOP Process Flows ───
@@ -843,7 +843,7 @@ export const SOP_FLOWS: Record<string, Array<{ id: string; label: string; type: 
     { id: 's6', label: 'Vendor selection\nfrom approved\nvendor list (AVL)', type: 'process', next: ['s8'] },
     { id: 's7', label: 'Override\napproved?', type: 'decision', next: ['s4', 's9'] },
     { id: 's8', label: 'PO dispatched\nto vendor via EDI', type: 'process', next: ['s10'] },
-    { id: 's9', label: 'PR rejected —\nrequestor notified', type: 'end' },
+    { id: 's9', label: 'PR rejected.\nRequestor notified', type: 'end' },
     { id: 's10', label: 'GRN created on\ngoods receipt', type: 'end' },
   ],
   'sop-003': [ // Invoice Management SOP - O2C
@@ -889,7 +889,7 @@ export const SOP_AI_RECOMMENDATIONS: Record<string, Array<{ type: 'improve' | 'a
   'sop-001': [
     { type: 'add', text: 'Add automated vendor bank account verification step before payment release', impact: 'high' },
     { type: 'improve', text: 'Reduce three-way match tolerance from 5% to 2% for vendors with prior duplicates', impact: 'high' },
-    { type: 'update', text: 'Update escalation matrix — current approval threshold (10L) has not been revised since FY24', impact: 'medium' },
+    { type: 'update', text: 'Update escalation matrix: current approval threshold (10L) has not been revised since FY24', impact: 'medium' },
   ],
   'sop-002': [
     { type: 'add', text: 'Include segregation of duties check between PO creator and approver', impact: 'high' },
@@ -900,7 +900,7 @@ export const SOP_AI_RECOMMENDATIONS: Record<string, Array<{ type: 'improve' | 'a
     { type: 'add', text: 'Add dispute resolution workflow for rejected invoices', impact: 'medium' },
   ],
   'sop-004': [
-    { type: 'remove', text: 'Remove manual reconciliation step — automated sub-ledger reconciliation covers 98% of cases', impact: 'medium' },
+    { type: 'remove', text: 'Remove manual reconciliation step: automated sub-ledger reconciliation covers 98% of cases', impact: 'medium' },
     { type: 'update', text: 'Revise close timeline from T+5 to T+3 days per new corporate directive', impact: 'high' },
   ],
   'sop-005': [
@@ -957,7 +957,7 @@ export const WORKFLOW_TYPE_CONFIGS: Record<WorkflowTypeId, WorkflowTypeConfig> =
     description: 'Detect duplicate invoices across vendor payments',
     color: '#6a12cd',
     inputSources: [
-      { id: 'invoices', name: 'Invoice Data', type: 'SAP ERP — AP Module', format: 'SQL', fields: ['Invoice Number', 'Vendor ID', 'Amount', 'Date', 'PO Reference'], frozen: false, frozenDate: null, records: null },
+      { id: 'invoices', name: 'Invoice Data', type: 'SAP ERP: AP Module', format: 'SQL', fields: ['Invoice Number', 'Vendor ID', 'Amount', 'Date', 'PO Reference'], frozen: false, frozenDate: null, records: null },
       { id: 'history', name: 'Historical Invoices', type: 'Invoice Archive', format: 'CSV', fields: ['Invoice Number', 'Vendor', 'Amount', 'Payment Date', 'Status'], frozen: false, frozenDate: null, records: null },
       { id: 'master', name: 'Vendor Master Data', type: 'System Reference', format: 'SQL', fields: ['Vendor ID', 'Name', 'Bank Account', 'Payment Terms', 'Status'], frozen: true, frozenDate: 'Mar 20, 2026', records: '892 vendors' },
     ],

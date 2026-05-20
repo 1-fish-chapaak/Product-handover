@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  MessageSquare, Workflow, Star, Search, Plus, Clock, X,
+  MessageSquare, Workflow, Star, Search, Plus, Clock, X, Bookmark,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { CHAT_HISTORY, WORKFLOWS } from '../../data/mockData';
@@ -9,6 +9,9 @@ import {
   DateFilterPicker, dateInFilter, isDateFilterActive, dateFilterLabel,
   DEFAULT_DATE_FILTER, type DateFilter,
 } from '../shared/DateFilterPicker';
+import {
+  readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
+} from '../../utils/bookmarkedMessages';
 
 interface Props {
   setView: (v: View) => void;
@@ -190,6 +193,26 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
     });
   };
 
+  // Bookmarked chat messages — saved from ChatView's hover-action row.
+  // Live in their own localStorage key and rehydrate on the cross-component
+  // `chat-bookmarks-updated` event so toggling from chat reflects immediately.
+  const [bookmarks, setBookmarks] = useState<BookmarkedMessage[]>(() => readBookmarkedMessages());
+  useEffect(() => {
+    const rehydrate = () => setBookmarks(readBookmarkedMessages());
+    window.addEventListener('chat-bookmarks-updated', rehydrate);
+    window.addEventListener('storage', rehydrate);
+    return () => {
+      window.removeEventListener('chat-bookmarks-updated', rehydrate);
+      window.removeEventListener('storage', rehydrate);
+    };
+  }, []);
+  const removeBookmark = (msgId: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = bookmarks.filter(b => b.msgId !== msgId);
+    setBookmarks(next);
+    writeBookmarkedMessages(next);
+  };
+
   const chatRows = useMemo(buildChatRows, []);
   const workflowRows = useMemo(buildWorkflowRunRows, []);
 
@@ -199,16 +222,25 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
   const filteredChats = chatRows.filter(c => matchesText(c.title) && matchesDate(c.ts));
   const filteredWorkflows = workflowRows.filter(w => matchesText(w.wfName) && matchesDate(w.ts));
 
-  const favouriteEntries = [
-    ...chatRows.filter(c => favourites.has(c.id) && matchesText(c.title) && matchesDate(c.ts)).map(c => ({ kind: 'chat' as const, row: c })),
-    ...workflowRows.filter(w => favourites.has(w.id) && matchesText(w.wfName) && matchesDate(w.ts)).map(w => ({ kind: 'workflow' as const, row: w })),
-  ].sort((a, b) => b.row.ts.getTime() - a.row.ts.getTime());
+  type FavEntry =
+    | { kind: 'chat'; ts: Date; row: ChatRow }
+    | { kind: 'workflow'; ts: Date; row: WorkflowRunRow }
+    | { kind: 'bookmark'; ts: Date; row: BookmarkedMessage };
+  const favouriteEntries: FavEntry[] = [
+    ...chatRows.filter(c => favourites.has(c.id) && matchesText(c.title) && matchesDate(c.ts))
+      .map<FavEntry>(c => ({ kind: 'chat', ts: c.ts, row: c })),
+    ...workflowRows.filter(w => favourites.has(w.id) && matchesText(w.wfName) && matchesDate(w.ts))
+      .map<FavEntry>(w => ({ kind: 'workflow', ts: w.ts, row: w })),
+    ...bookmarks.filter(b => matchesText(b.text) && matchesDate(new Date(b.timestamp)))
+      .map<FavEntry>(b => ({ kind: 'bookmark', ts: new Date(b.timestamp), row: b })),
+  ].sort((a, b) => b.ts.getTime() - a.ts.getTime());
 
   // Counts for the active-filters bar.
   const dateActive = isDateFilterActive(dateFilter);
   const dateLabel = dateFilterLabel(dateFilter);
   const isFiltered = search.trim() !== '' || dateActive;
-  const tabTotal = tab === 'chats' ? chatRows.length : tab === 'workflows' ? workflowRows.length : favourites.size;
+  const totalFavourites = favourites.size + bookmarks.length;
+  const tabTotal = tab === 'chats' ? chatRows.length : tab === 'workflows' ? workflowRows.length : totalFavourites;
   const tabVisible = tab === 'chats' ? filteredChats.length : tab === 'workflows' ? filteredWorkflows.length : favouriteEntries.length;
   const clearAllFilters = () => { setSearch(''); setDateFilter(DEFAULT_DATE_FILTER); };
 
@@ -252,7 +284,7 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
             {TABS.map(t => {
               const Icon = t.icon;
               const isActive = tab === t.id;
-              const count = t.id === 'favourites' ? favourites.size : t.id === 'chats' ? chatRows.length : workflowRows.length;
+              const count = t.id === 'favourites' ? totalFavourites : t.id === 'chats' ? chatRows.length : workflowRows.length;
               return (
                 <button
                   key={t.id}
@@ -428,7 +460,7 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
                   <div className="text-center py-16">
                     <Star size={28} className="mx-auto text-ink-400 mb-3" />
                     <p className="text-[14px] text-ink-500 mb-1">No favourites yet.</p>
-                    <p className="text-[12px] text-ink-400">Hover any chat or workflow run and click the star to pin it here.</p>
+                    <p className="text-[12px] text-ink-400">Hover any chat or workflow run and click the star, or bookmark a message inside a chat to pin it here.</p>
                   </div>
                 )
               )}
@@ -436,7 +468,7 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
                 if (e.kind === 'chat') {
                   return (
                     <RecentRow
-                      key={e.row.id}
+                      key={`chat-${e.row.id}`}
                       icon={MessageSquare}
                       title={e.row.title}
                       ts={e.row.ts}
@@ -446,22 +478,33 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
                     />
                   );
                 }
-                const tone = STATUS_TONE[e.row.status];
+                if (e.kind === 'workflow') {
+                  const tone = STATUS_TONE[e.row.status];
+                  return (
+                    <RecentRow
+                      key={`wf-${e.row.id}`}
+                      icon={Workflow}
+                      title={e.row.wfName}
+                      meta={`${e.row.rows.toLocaleString()} rows`}
+                      trailing={
+                        <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[12px] font-medium whitespace-nowrap ${tone.cls}`}>
+                          {tone.label}
+                        </span>
+                      }
+                      ts={e.row.ts}
+                      onClick={() => openWorkflowExecutor(e.row.wfId)}
+                      fav={true}
+                      onToggleFav={toggleFav(e.row.id)}
+                    />
+                  );
+                }
+                // kind === 'bookmark' — a saved chat message.
                 return (
-                  <RecentRow
-                    key={e.row.id}
-                    icon={Workflow}
-                    title={e.row.wfName}
-                    meta={`${e.row.rows.toLocaleString()} rows`}
-                    trailing={
-                      <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[12px] font-medium whitespace-nowrap ${tone.cls}`}>
-                        {tone.label}
-                      </span>
-                    }
-                    ts={e.row.ts}
-                    onClick={() => openWorkflowExecutor(e.row.wfId)}
-                    fav={true}
-                    onToggleFav={toggleFav(e.row.id)}
+                  <BookmarkRow
+                    key={`bm-${e.row.msgId}`}
+                    bookmark={e.row}
+                    onOpen={() => e.row.chatId && openChat(e.row.chatId)}
+                    onRemove={removeBookmark(e.row.msgId)}
                   />
                 );
               })}
@@ -475,6 +518,48 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Bookmark row — saved chat message ──────────────────────────────────────
+// Distinct from the chat/workflow rows: the message text is the title (it's
+// the atom the user chose to keep), and the chat title sits as a secondary
+// "in …" label. Trailing control is a single Remove (×) because there's no
+// "open the exact message" route — clicking the row opens its chat.
+
+function BookmarkRow({
+  bookmark, onOpen, onRemove,
+}: {
+  bookmark: BookmarkedMessage;
+  onOpen: () => void;
+  onRemove: (e: React.MouseEvent) => void;
+}) {
+  const ts = new Date(bookmark.timestamp);
+  const titleSnippet = bookmark.text.length > 90
+    ? bookmark.text.slice(0, 87).trimEnd() + '…'
+    : bookmark.text;
+  return (
+    <button
+      onClick={onOpen}
+      disabled={!bookmark.chatId}
+      className="group w-full flex items-center gap-3 px-4 h-12 text-left rounded-md hover:bg-brand-50/50 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
+    >
+      <Bookmark size={14} className="text-mitigated-700 fill-mitigated-700 shrink-0" />
+      <div className="flex-1 min-w-0 flex items-baseline gap-3">
+        <span className="text-[14px] text-ink-800 truncate">{titleSnippet}</span>
+        <span className="text-[12px] text-ink-500 truncate hidden md:inline">in &ldquo;{bookmark.chatTitle}&rdquo;</span>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="p-1 rounded-md text-ink-400 hover:text-ink-700 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+        aria-label="Remove bookmark"
+        title="Remove bookmark"
+      >
+        <X size={13} />
+      </button>
+      <span className="text-[12px] text-ink-500 tabular-nums w-20 text-right shrink-0">{formatRelative(ts.toISOString())}</span>
+    </button>
   );
 }
 

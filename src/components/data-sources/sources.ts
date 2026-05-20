@@ -14,6 +14,10 @@ export interface DataSource {
   /** Sub-detail shown under the name (file format, db engine, api method, cloud provider, etc.) */
   subtype: string;
   createdAt: string; // ISO date
+  /** Available columns this source exposes. For databases the full schema
+   *  lives in DB_SCHEMAS keyed by id; this flat list is the file equivalent
+   *  (and the fallback surface for non-DB sources). */
+  columns?: string[];
 }
 
 export const TODAY = new Date('2026-04-23');
@@ -26,11 +30,14 @@ const dayOffset = (n: number): string => {
 
 export const SEED: DataSource[] = [
   // ── Files (manual uploads) ──
-  { id: 'f-01', name: 'AI_Fare Audit',                         type: 'file', subtype: 'XLSX · 12.4 MB', createdAt: dayOffset(0) },
+  { id: 'f-01', name: 'AI_Fare Audit',                         type: 'file', subtype: 'XLSX · 12.4 MB', createdAt: dayOffset(0),
+    columns: ['Date', 'Region', 'Route', 'Airline', 'Fare Type', 'Amount', 'Variance'] },
   { id: 'f-02', name: 'PWC Status',                            type: 'file', subtype: 'PDF · 2.1 MB',   createdAt: dayOffset(0) },
-  { id: 'f-03', name: 'Emaar Extraction',                      type: 'file', subtype: 'CSV · 4.8 MB',   createdAt: dayOffset(3) },
+  { id: 'f-03', name: 'Emaar Extraction',                      type: 'file', subtype: 'CSV · 4.8 MB',   createdAt: dayOffset(3),
+    columns: ['Vendor', 'Invoice ID', 'Invoice Date', 'Amount', 'Status', 'Description'] },
   { id: 'f-04', name: 'Emaar Payment Extraction',              type: 'file', subtype: 'XLSX · 6.2 MB',  createdAt: dayOffset(3) },
-  { id: 'f-05', name: 'Loan Details Extraction',               type: 'file', subtype: 'PDF · 8.7 MB',   createdAt: dayOffset(3) },
+  { id: 'f-05', name: 'Loan Details Extraction',               type: 'file', subtype: 'PDF · 8.7 MB',   createdAt: dayOffset(3),
+    columns: ['Loan ID', 'Borrower', 'Principal', 'Interest Rate', 'Term Months', 'Status'] },
   { id: 'f-06', name: 'Import Remittance — Bank Demo',         type: 'file', subtype: 'CSV · 1.4 MB',   createdAt: dayOffset(3) },
   { id: 'f-07', name: 'Media Demo',                            type: 'file', subtype: 'XLSX · 9.1 MB',  createdAt: dayOffset(6) },
   { id: 'f-08', name: 'Demo Invoice Data 1604',                type: 'file', subtype: 'CSV · 3.3 MB',   createdAt: dayOffset(7) },
@@ -42,12 +49,34 @@ export const SEED: DataSource[] = [
   { id: 'f-14', name: 'NSE Position Limits Monitoring',        type: 'file', subtype: 'CSV · 1.8 MB',   createdAt: dayOffset(11) },
   { id: 'f-15', name: 'NSE Penalty on Shortfall Margin',       type: 'file', subtype: 'XLSX · 3.5 MB',  createdAt: dayOffset(11) },
   { id: 'f-16', name: 'Air India HR KPI — Bills vs Reimbursement', type: 'file', subtype: 'XLSX · 6.0 MB', createdAt: dayOffset(13) },
+  // Long-column fixture — used to exercise the column-picker's scroll,
+  // sticky section headings, and search at scale (60+ columns).
+  { id: 'f-17', name: 'AMEX Settlement Statement', type: 'file', subtype: 'CSV · 24.6 MB', createdAt: dayOffset(1),
+    columns: [
+      'Current Date', 'Payment Date', 'Settlement number', 'Submission / Transaction Reference Number',
+      'Record Type', 'Submitting Merchant ID', 'Submission SE Name', 'Terminal ID', 'Batch Number',
+      'Submission SE Branch No', 'Transaction Timestamp', 'Authorisation Code', 'Authorisation Date',
+      'Card Number (Masked)', 'Card Product', 'Card Type', 'Issuer Country', 'Issuer Bank',
+      'Transaction Amount', 'Transaction Currency', 'Settlement Amount', 'Settlement Currency',
+      'Exchange Rate', 'Interchange Fee', 'Assessment Fee', 'Processing Fee', 'Net Amount',
+      'MCC', 'Merchant Name (DBA)', 'Merchant Legal Name', 'Merchant Tax ID', 'Merchant Address Line 1',
+      'Merchant Address Line 2', 'Merchant City', 'Merchant State', 'Merchant Postal Code',
+      'Merchant Country', 'Merchant Phone', 'Merchant Email', 'Acquiring Bank', 'Acquiring BIN',
+      'Acquiring Reference Number', 'Capture Method', 'POS Entry Mode', 'POS Condition Code',
+      'Cardholder Name', 'Cardholder Email', 'Cardholder IP Address', 'AVS Response',
+      'CVV Response', '3DS Status', 'Risk Score', 'Fraud Flag', 'Chargeback Indicator',
+      'Chargeback Reason Code', 'Dispute Reference', 'Refund Indicator', 'Refund Amount',
+      'Refund Date', 'Original Authorisation ID', 'Reversal Indicator', 'Funding Status',
+      'Funding Date', 'Hold Indicator', 'Hold Release Date',
+    ] },
 
   // ── Databases ──
-  { id: 'db-01', name: 'SAP ERP — AP Module',     type: 'database', subtype: 'Oracle · 1.2M rows', createdAt: dayOffset(0) },
-  { id: 'db-02', name: 'Vendor Master',           type: 'database', subtype: 'PostgreSQL · 892 rows', createdAt: dayOffset(2) },
+  { id: 'db-01', name: 'SAP ERP: AP Module',      type: 'database', subtype: 'Oracle · 1.2M rows',    createdAt: dayOffset(0) },
+  { id: 'db-02', name: 'Vendor Master Data',      type: 'database', subtype: 'PostgreSQL · 892 rows', createdAt: dayOffset(2) },
   { id: 'db-03', name: 'GL Transaction History',  type: 'database', subtype: 'Snowflake · 3.8M rows', createdAt: dayOffset(5) },
   { id: 'db-04', name: 'Workday HRIS',            type: 'database', subtype: 'PostgreSQL · 234 rows', createdAt: dayOffset(10) },
+  { id: 'db-05', name: 'Amazon Athena connection', type: 'database', subtype: 'Athena · ap-south-1',  createdAt: '2026-05-05',
+    columns: ['query_id', 'query_text', 'rows_scanned', 'bytes_scanned', 'duration_ms', 'status'] },
 
   // ── APIs ──
   { id: 'api-01', name: 'Workday Access Events',         type: 'api', subtype: 'REST · OAuth2',     createdAt: dayOffset(2) },

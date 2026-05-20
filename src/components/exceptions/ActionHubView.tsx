@@ -74,7 +74,7 @@ const PRESETS: Record<string, { title: string; subtitle: string; ids: string[] |
   // Implementation outcomes
   implImplemented:     { title: 'Implemented',           subtitle: 'Action approved and fully implemented',          ids: (ex) => deriveImplementation(ex) === 'Implemented' },
   implPartial:         { title: 'Partially Implemented', subtitle: 'Action approved but only partially in place',    ids: (ex) => deriveImplementation(ex) === 'Partially Implemented' },
-  implDiscrepancy:     { title: 'Discrepancy',           subtitle: 'Action rejected — case reopened at Risk Owner',  ids: (ex) => deriveImplementation(ex) === 'Discrepancy' },
+  implDiscrepancy:     { title: 'Discrepancy',           subtitle: 'Action rejected; case reopened at Risk Owner',   ids: (ex) => deriveImplementation(ex) === 'Discrepancy' },
 };
 
 function resolvePreset(key: string): DrillPreset | null {
