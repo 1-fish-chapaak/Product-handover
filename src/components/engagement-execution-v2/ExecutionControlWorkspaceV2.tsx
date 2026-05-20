@@ -9,7 +9,7 @@ import {
   X, ChevronRight, ChevronDown, Lock, Shield, FileText, AlertTriangle,
   CheckCircle2, Upload, FlaskConical, ClipboardCheck, Eye,
   Play, Layers, Settings, Workflow, Plus, Trash2, Database, Shuffle, Paperclip, Download,
-  Send, RotateCcw, Link2, Loader2, ArrowLeft,
+  Send, RotateCcw, Link2, Loader2, ArrowLeft, Info,
 } from 'lucide-react';
 import type { ExecutionControl, Attribute, Assertion, WorkflowMapping, TestItem, AttributeResult, PopulationSnapshot, Evidence } from './types';
 import { ControlExecStatus, AttrResult, AttrSource, SampleResult, ExecutionMode, ReviewStatus, WorkingPaperStatus, AttributeType } from './types';
@@ -54,12 +54,13 @@ interface Props {
   onClose: () => void;
   onUpdateControl: (updater: (ctrl: ExecutionControl) => ExecutionControl) => void;
   initialStepId?: string | null;
+  onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   requestPbcEnabled?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateControl, initialStepId, requestPbcEnabled = true }: Props) {
+export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateControl, initialStepId, onLaunchWorkflowBuilder, requestPbcEnabled = true }: Props) {
   const controlType = deriveControlType(ctrl);
   const coverage = deriveWorkflowCoverage(ctrl);
   const nextAction = deriveNextAction(ctrl);
@@ -214,7 +215,7 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
     const id = `attr-${Date.now()}`;
     const newAttr: Attribute = {
       id, name: attrName.trim(), description: attrDesc, assertionId: asr.id, assertionName: asr.name,
-      type: attrType as any, required: attrRequired, requiredEvidenceTypes: attrEvTypes, workflowId: attrWfId || undefined,
+      type: attrType as any, scope: 'SAMPLE_BASED' as const, required: attrRequired, requiredEvidenceTypes: attrEvTypes, workflowId: attrWfId || undefined,
     };
     onUpdateControl(prev => {
       const updated = { ...prev, attributes: [...prev.attributes, newAttr] };
@@ -265,31 +266,71 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
     setNewWfName(''); setNewWfVersion('v1.0'); setNewWfType('AUTOMATED'); setNewWfAttrIds(new Set()); setShowAddWorkflow(false);
   };
 
+  const totalAttrs = ctrl.attributes.length;
+  const automatedAttrs = ctrl.attributes.filter(a => a.type === 'AUTOMATED').length;
+  const requiredAttrs = ctrl.attributes.filter(a => a.required).length;
+  const mappedAttrs = ctrl.attributes.filter(a => a.workflowId).length;
+
   return (
     <div className="space-y-5">
-      {/* Description */}
-      <div>
-        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Description</h4>
-        <p className="text-[12px] text-text leading-relaxed">{ctrl.description}</p>
+      {/* ═══ Control Summary Card ═══ */}
+      <div className="rounded-xl border border-border-light bg-white p-5">
+        <div className="flex items-start gap-5">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-mono text-gray-400">{ctrl.id}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${ctrl.importanceClass === 'KEY' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{ctrl.importanceClass === 'KEY' ? 'Key Control' : 'Non-Key'}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${ctrl.natureClass === 'PREVENTIVE' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>{ctrl.natureClass.charAt(0) + ctrl.natureClass.slice(1).toLowerCase()}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${controlType === 'Automated' ? 'bg-emerald-50 text-emerald-700' : controlType === 'Hybrid' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{controlType.charAt(0) + controlType.slice(1).toLowerCase()}</span>
+            </div>
+            <p className="text-[12px] text-text-secondary leading-relaxed mb-3">{ctrl.description}</p>
+            <div className="flex items-center gap-4 text-[11px]">
+              <span className="text-gray-400">Process: <span className="text-text font-medium">{ctrl.process}</span></span>
+              <span className="text-gray-400">Owner: <span className="text-text font-medium">{ctrl.owner}</span></span>
+            </div>
+          </div>
+          {/* Next Action */}
+          <div className="shrink-0 rounded-lg border border-primary/15 bg-primary/5 p-3 text-center min-w-[140px]">
+            <span className="text-[9px] text-primary/60 font-medium uppercase tracking-wider block mb-0.5">Next Step</span>
+            <span className="text-[12px] font-semibold text-primary block mb-2">{nextAction}</span>
+            <button onClick={() => onNavigate(deriveNextStepId(nextAction))}
+              className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[10px] font-semibold cursor-pointer transition-colors w-full">
+              Go <ChevronRight size={10} className="inline" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Metadata grid */}
-      <div className="grid grid-cols-4 gap-3 text-[11px]">
-        <div><span className="text-gray-400 block text-[10px]">Process</span><span className="text-text font-medium">{ctrl.process}</span></div>
-        <div><span className="text-gray-400 block text-[10px]">Owner</span><span className="text-text font-medium">{ctrl.owner}</span></div>
-        <div><span className="text-gray-400 block text-[10px]">Importance</span><span className="text-text font-medium">{ctrl.importanceClass === 'KEY' ? 'Key' : 'Non-Key'}</span></div>
-        <div><span className="text-gray-400 block text-[10px]">Nature</span><span className="text-text font-medium">{ctrl.natureClass.charAt(0) + ctrl.natureClass.slice(1).toLowerCase()}</span></div>
+      {/* ═══ Testing Structure Summary ═══ */}
+      <div className="grid grid-cols-5 gap-2">
+        {[
+          { label: 'Assertions', value: ctrl.assertions.length, color: 'text-text' },
+          { label: 'Attributes', value: totalAttrs, color: 'text-text' },
+          { label: 'Linked Workflows', value: coverage.linkedWorkflowCount, color: coverage.linkedWorkflowCount > 0 ? 'text-emerald-600' : 'text-amber-600' },
+          { label: 'Mapped to Workflow', value: `${mappedAttrs}/${totalAttrs}`, color: mappedAttrs === totalAttrs && totalAttrs > 0 ? 'text-emerald-600' : 'text-amber-600' },
+          { label: 'Automated', value: `${automatedAttrs}/${totalAttrs}`, color: automatedAttrs > 0 ? 'text-emerald-600' : 'text-gray-400' },
+        ].map(s => (
+          <div key={s.label} className="rounded-lg border border-border-light bg-white p-2.5 text-center">
+            <div className={`text-[16px] font-bold tabular-nums ${s.color}`}>{s.value}</div>
+            <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ Explanation Strip ═══ */}
+      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/40 border border-blue-100/50 text-[10px] text-blue-600">
+        <Info size={11} className="shrink-0 mt-0.5" />
+        <span>Assertions define what this control proves. Attributes are the testable checks. Workflows automate or support the attribute testing.</span>
       </div>
 
       {/* ═══ Assertions & Attributes ═══ */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <div>
-            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assertions & Attributes ({ctrl.attributes.length})</h4>
-            <p className="text-[9px] text-gray-400 mt-0.5">Assertions group audit intent. Attributes are the testable steps mapped to workflows.</p>
-          </div>
+          <h4 className="text-[12px] font-bold text-text flex items-center gap-1.5">
+            <Shield size={12} className="text-primary" />Assertions & Attributes
+          </h4>
           <button onClick={() => setShowAddAssertion(true)}
-            className="px-2 py-1 rounded-lg text-[9px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer flex items-center gap-1"><Plus size={9} />Add Assertion</button>
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={10} />Add Assertion</button>
         </div>
 
         {/* Add Assertion Inline Form */}
@@ -310,13 +351,15 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
         {/* Assertion Groups */}
         <div className="space-y-3">
           {assertionGroups.map(group => (
-            <div key={group.assertion.id} className="rounded-lg border border-border-light overflow-hidden">
-              <div className="px-3 py-1.5 bg-surface-2/40 border-b border-border-light flex items-center justify-between">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                  <Shield size={10} className="text-primary" />{group.assertion.name} ({group.attrs.length})
-                </span>
+            <div key={group.assertion.id} className="rounded-xl border border-border-light overflow-hidden">
+              <div className="px-4 py-2.5 bg-surface-2/30 border-b border-border-light flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center"><Shield size={11} className="text-primary" /></div>
+                  <span className="text-[11px] font-bold text-text">{group.assertion.name}</span>
+                  <span className="text-[10px] text-gray-400">{group.attrs.length} attribute{group.attrs.length !== 1 ? 's' : ''}</span>
+                </div>
                 <button onClick={() => { setAddAttrAssertionId(group.assertion.id); setAttrName(''); setAttrDesc(''); setAttrType('MANUAL'); setAttrRequired(true); setAttrEvTypes([]); setAttrWfId(''); }}
-                  className="text-[8px] font-semibold text-primary hover:underline cursor-pointer">+ Add Attribute</button>
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={9} />Add Attribute</button>
               </div>
               <div className="divide-y divide-border-light/50">
                 {group.attrs.length === 0 && (
@@ -326,25 +369,28 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
                   const wm = ctrl.workflowMappings.find(w => w.mappedAttributeIds.includes(attr.id));
                   const isLinking = linkAttrId === attr.id;
                   return (
-                    <div key={attr.id} className="px-3 py-2">
+                    <div key={attr.id} className="px-4 py-2.5">
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
-                          <span className="text-[11px] font-medium text-text block">{attr.name}</span>
-                          <span className="text-[10px] text-gray-500 block mt-0.5">{attr.description}</span>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-[12px] font-medium text-text">{attr.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${attr.type === 'AUTOMATED' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                              {attr.type === 'AUTOMATED' ? 'Automated' : 'Manual'}
+                            </span>
+                          </div>
+                          {attr.description && <p className="text-[10px] text-gray-500 mb-1">{attr.description}</p>}
                           {wm ? (
-                            <span className="text-[9px] text-emerald-600 flex items-center gap-0.5 mt-0.5"><Workflow size={8} />{wm.workflowName}</span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-[10px] text-emerald-700 font-medium">
+                              <Workflow size={10} className="shrink-0" />Linked: {wm.workflowName} <span className="text-emerald-500">{wm.version}</span>
+                            </span>
                           ) : (
-                            <span className="text-[9px] text-amber-600 mt-0.5 inline-block">Unmapped</span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-[10px] text-amber-700 font-medium">
+                              <AlertTriangle size={9} className="shrink-0" />No workflow linked
+                            </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {attr.type === 'AUTOMATED' ? 'Auto' : 'Manual'}
-                          </span>
-                          {attr.required && <span className="text-[8px] font-bold text-red-400">REQ</span>}
-                          <button onClick={() => { setLinkAttrId(attr.id); setLinkWfId(attr.workflowId || ''); }}
-                            className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 cursor-pointer" title="Link Workflow"><Link2 size={10} /></button>
-                        </div>
+                        <button onClick={() => { setLinkAttrId(attr.id); setLinkWfId(attr.workflowId || ''); }}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors shrink-0" title="Link Workflow"><Link2 size={10} />{wm ? 'Change' : 'Link'}</button>
                       </div>
                       {/* Inline Link Workflow */}
                       {isLinking && (
@@ -406,9 +452,11 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
       {/* ═══ Linked Workflows ═══ */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Linked Workflows ({coverage.linkedWorkflowCount})</h4>
+          <h4 className="text-[12px] font-bold text-text flex items-center gap-1.5">
+            <Workflow size={12} className="text-primary" />Linked Workflows ({coverage.linkedWorkflowCount})
+          </h4>
           <button onClick={() => setShowAddWorkflow(true)}
-            className="px-2 py-1 rounded-lg text-[9px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer flex items-center gap-1"><Plus size={9} />Add Workflow</button>
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={10} />Add Workflow</button>
         </div>
 
         {/* Add Workflow Form */}
@@ -475,15 +523,11 @@ function OverviewStep({ ctrl, controlType, coverage, nextAction, onNavigate, onU
         )}
       </div>
 
-      {/* Next Action Card */}
-      <div className="rounded-lg border border-primary/15 bg-primary/5 p-4 flex items-center justify-between">
-        <div>
-          <span className="text-[10px] text-primary/70 font-medium uppercase tracking-wider block">Next Step</span>
-          <span className="text-[13px] font-semibold text-primary">{nextAction}</span>
-        </div>
+      {/* Bottom Next Action */}
+      <div className="flex items-center justify-end">
         <button onClick={() => onNavigate(deriveNextStepId(nextAction))}
-          className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1">
-          {nextAction}<ChevronRight size={10} />
+          className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+          {nextAction} <ChevronRight size={12} />
         </button>
       </div>
     </div>
@@ -2768,8 +2812,9 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
           </div>
         </Section>
 
-        {/* 4. Test Attribute Legend */}
-        <Section num={4} title="Test Attribute Legend">
+        {/* 4. Attribute-Level Testing Summary */}
+        <Section num={4} title="Attribute-Level Testing Summary">
+          <p className="text-[9px] text-gray-400 mb-3">Testing was performed sample-wise. This summary shows how each required attribute performed across all tested samples.</p>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[10px]">
               <thead><tr className="border-b border-border-light bg-surface-2/30">
@@ -2777,24 +2822,49 @@ function WorkingPaperStep({ ctrl, controlType, onNavigate }: {
                 <th className="px-2 py-1.5 text-left text-[8px] font-semibold text-gray-400 uppercase">Assertion</th>
                 <th className="px-2 py-1.5 text-left text-[8px] font-semibold text-gray-400 uppercase">Attribute</th>
                 <th className="px-2 py-1.5 text-left text-[8px] font-semibold text-gray-400 uppercase">Workflow</th>
-                <th className="px-2 py-1.5 text-left text-[8px] font-semibold text-gray-400 uppercase w-16">Type</th>
+                <th className="px-2 py-1.5 text-center text-[8px] font-semibold text-gray-400 uppercase">Samples Tested</th>
+                <th className="px-2 py-1.5 text-center text-[8px] font-semibold text-gray-400 uppercase">Passed</th>
+                <th className="px-2 py-1.5 text-center text-[8px] font-semibold text-gray-400 uppercase">Failed</th>
+                <th className="px-2 py-1.5 text-center text-[8px] font-semibold text-gray-400 uppercase">Pass Rate</th>
                 <th className="px-2 py-1.5 text-left text-[8px] font-semibold text-gray-400 uppercase">Evidence Req</th>
+                <th className="px-2 py-1.5 text-center text-[8px] font-semibold text-gray-400 uppercase">Status</th>
               </tr></thead>
               <tbody>
                 {attrLegend.map(l => {
                   const evReq = l.attr.type === 'AUTOMATED' ? 'System + User' : 'User Evidence';
+                  // Derive per-attribute pass/fail across all samples
+                  const totalSamples = items.length;
+                  let passed = 0;
+                  let failed = 0;
+                  let tested = 0;
+                  items.forEach(ti => {
+                    const ar = ti.attributeResults.find(r => r.attributeId === l.attr.id);
+                    if (ar && ar.result !== 'NOT_TESTED') {
+                      tested++;
+                      if (ar.result === 'PASS') passed++;
+                      if (ar.result === 'FAIL') failed++;
+                    }
+                  });
+                  const passRate = tested > 0 ? Math.round((passed / tested) * 100) : 0;
+                  const status = tested < totalSamples ? 'Incomplete' : failed > 0 ? 'Exception Noted' : 'Passed';
                   return (
                     <tr key={l.attr.id} className="border-b border-border-light/50">
                       <td className="px-2 py-1.5 font-bold text-primary">{l.code}</td>
                       <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[8px] font-bold">{l.attr.assertionName}</span></td>
                       <td className="px-2 py-1.5 text-text">{l.attr.name}</td>
                       <td className="px-2 py-1.5 text-gray-500">{l.workflowName} {l.workflowVersion}</td>
-                      <td className="px-2 py-1.5">
-                        <span className={`px-1 py-0.5 rounded text-[7px] font-bold ${l.attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {l.attr.type === 'AUTOMATED' ? 'Auto' : 'Manual'}
-                        </span>
-                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-text">{tested}/{totalSamples}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-emerald-600 font-medium">{passed}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-red-600 font-medium">{failed}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums text-text font-medium">{tested > 0 ? `${passRate}%` : '—'}</td>
                       <td className="px-2 py-1.5 text-gray-500 text-[9px]">{evReq}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-bold ${
+                          status === 'Passed' ? 'bg-emerald-50 text-emerald-700' :
+                          status === 'Exception Noted' ? 'bg-amber-50 text-amber-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{status}</span>
+                      </td>
                     </tr>
                   );
                 })}

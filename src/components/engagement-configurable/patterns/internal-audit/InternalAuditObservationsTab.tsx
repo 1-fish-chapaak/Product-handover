@@ -234,7 +234,6 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
               </td>
               <td className="px-3 py-2 text-center text-[9px] text-gray-500">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? 'Analysis' : 'Manual'}</td>
               <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${SEVERITY_CLS[obs.severity]}`}>{obs.severity}</span></td>
-              <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${SEVERITY_CLS[obs.riskRating]}`}>{obs.riskRating}</span></td>
               <td className="px-3 py-2 text-gray-500">{obs.processOwner || '—'}</td>
               <td className="px-3 py-2 text-center text-[10px] font-mono text-gray-500">{obs.targetRemediationDate || '—'}</td>
               <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[8px] font-bold ${STATUS_CLS[obs.status]}`}>{obs.status === 'READY_FOR_DISCUSSION' ? 'Ready' : obs.status.replace(/_/g, ' ')}</span></td>
@@ -255,7 +254,6 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             <th className="px-3 py-1.5 text-left">Observation</th>
             <th className="px-3 py-1.5 text-center">Source</th>
             <th className="px-3 py-1.5 text-center">Severity</th>
-            <th className="px-3 py-1.5 text-center">Risk</th>
             <th className="px-3 py-1.5 text-left">Owner</th>
             <th className="px-3 py-1.5 text-center">Target</th>
             <th className="px-3 py-1.5 text-center">Status</th>

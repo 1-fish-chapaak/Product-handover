@@ -105,8 +105,6 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
           <option value={TestingInputMethod.UPLOAD_SELECTED_SAMPLES}>Upload Selected Samples</option>
           <option value={TestingInputMethod.GENERATE_SAMPLES_FROM_POPULATION}>Generate Samples from Population</option>
           <option value={TestingInputMethod.TEST_FULL_POPULATION}>Test Full Population</option>
-          <option value={TestingInputMethod.DOCUMENT_BASED_TESTING}>Document-Based Testing</option>
-          <option value={TestingInputMethod.NO_SAMPLE_BASED_TESTING}>No Sample-Based Testing</option>
         </select>
       </div>
 

@@ -104,6 +104,8 @@ interface Props {
   inline?: boolean;
   /** When true, hides workflow attributes throughout (used in IA where attributes are not needed) */
   hideAttributes?: boolean;
+  /** When true, replaces Validate CTA with Edit RACM in inline mode */
+  showEditAction?: boolean;
 }
 
 // ─── Seed Data ──────────────────────────────────────────────────────────────
@@ -210,7 +212,7 @@ const BP_DOTS: Record<string, string> = { P2P: '#6a12cd', O2C: '#0284c7', R2R: '
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, racmName, racmProcess, isEmpty: isEmptyRacm, inline, hideAttributes }: Props) {
+export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, racmName, racmProcess, isEmpty: isEmptyRacm, inline, hideAttributes, showEditAction }: Props) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [risks, setRisks] = useState<RiskItem[]>([]);
@@ -503,7 +505,9 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {racmComputed.status === 'Active' ? (
+            {showEditAction ? (
+              <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-[11px] font-semibold"><Eye size={11} />Edit RACM</span>
+            ) : racmComputed.status === 'Active' ? (
               <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-semibold"><CheckCircle2 size={12} />Validated</span>
             ) : racmComputed.readiness === 'Ready' ? (
               <button onClick={() => setShowValidateModal(true)}
