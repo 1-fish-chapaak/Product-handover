@@ -20,7 +20,7 @@ import type { CommonDetails } from './components';
 import AutomationPortfolioView from './AutomationPortfolioView';
 import ComplianceEngagementView from './ComplianceEngagementView';
 import InternalAuditAssignmentView from './InternalAuditAssignmentView';
-import EngagementLibraryView from './EngagementLibraryView';
+import EngagementLibraryView, { type LibraryEngagement } from './EngagementLibraryView';
 import EngagementExecutionV2 from '../engagement-execution-v2/EngagementExecutionV2';
 
 // ─── Step definitions ─────────────────────────────────────────────────────
@@ -105,6 +105,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
   const [openedFromPortfolio, setOpenedFromPortfolio] = useState(false);
   const [openedFromComplianceView, setOpenedFromComplianceView] = useState(false);
   const [openedFromIAView, setOpenedFromIAView] = useState(false);
+  const [openedFromLibrary, setOpenedFromLibrary] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
 
   // When pattern changes, reset config to defaults
@@ -222,6 +223,15 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
   // ── Back from workspace ────────────────────────────────────────────────
 
   const handleBackToWizard = () => {
+    // If opened from unified library, always go back to library (hub)
+    if (openedFromLibrary) {
+      setCreatedEngagement(null);
+      setOpenedFromLibrary(false);
+      setOpenedFromComplianceView(false);
+      setOpenedFromIAView(false);
+      setOpenedFromPortfolio(false);
+      return;
+    }
     if (openedFromPortfolio) {
       setCreatedEngagement(null);
       setOpenedFromPortfolio(false);
@@ -280,19 +290,48 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
 
   // ── Hub: unified Engagement Library ────────────────────────────────────
 
+  // Build ConfigurableEngagement from library row and open workspace directly
+  const handleOpenFromLibrary = (libEng: LibraryEngagement) => {
+    const patternType = libEng.type === 'Compliance' ? EPT.COMPLIANCE_CONTROL_TESTING
+      : libEng.type === 'Internal Audit' ? EPT.INTERNAL_AUDIT_ASSIGNMENT
+      : EPT.WORKFLOW_AUTOMATION_PROJECT;
+
+    const eng: ConfigurableEngagement = {
+      id: libEng.id,
+      name: libEng.name,
+      patternType,
+      displayLabel: libEng.typeLabel,
+      description: libEng.description,
+      owner: libEng.owner,
+      reviewer: libEng.reviewer,
+      businessProcess: libEng.process,
+      entityOrLocation: libEng.entity,
+      status: EngagementStatus.IN_PROGRESS,
+      stage: libEng.status,
+      config: patternType === EPT.COMPLIANCE_CONTROL_TESTING
+        ? { patternType: EPT.COMPLIANCE_CONTROL_TESTING, framework: ComplianceFramework.SOX_ICFR, auditType: 'Financial Internal Control', auditPeriodStart: '', auditPeriodEnd: '', controlScopeSource: ControlScopeSource.RACM_VERSION, defaultTestingInputMethod: TestingInputMethod.UPLOAD_SELECTED_SAMPLES, allowControlLevelOverride: true, reviewerRequired: true, requestPbcEnabled: true }
+        : patternType === EPT.INTERNAL_AUDIT_ASSIGNMENT
+        ? { patternType: EPT.INTERNAL_AUDIT_ASSIGNMENT, scopeLevel: 'PROCESS' as any, businessProcessId: libEng.process, subProcessId: '', auditPeriodStart: '', auditPeriodEnd: '', sopIds: [], racmVersionId: '', checklistId: '', processOwner: libEng.owner, idrEnabled: true, announcementRequired: true, finalReportRequired: true, actionTrackingEnabled: true }
+        : { patternType: EPT.WORKFLOW_AUTOMATION_PROJECT, inputType: 'HYBRID' as any, automationSetupMode: 'SELECT_EXISTING_WORKFLOW' as any, outputTypes: ['REPORT' as any, 'CASE_MANAGEMENT' as any], reportRequired: true, reviewRequired: false, caseCreationEnabled: true, runType: 'AD_HOC' as any, frequency: '' as any },
+      outputs: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setOpenedFromLibrary(true);
+    if (patternType === EPT.COMPLIANCE_CONTROL_TESTING) {
+      handleOpenFromComplianceView(eng);
+    } else if (patternType === EPT.INTERNAL_AUDIT_ASSIGNMENT) {
+      handleOpenFromIAView(eng);
+    } else {
+      handleOpenFromPortfolio(eng);
+    }
+  };
+
   const renderHub = () => (
     <EngagementLibraryView
-      onOpenEngagement={(id, type) => {
-        if (type === 'Compliance') {
-          setShowComplianceView(true);
-        } else if (type === 'Internal Audit') {
-          setShowIAView(true);
-        } else if (type === 'Automation') {
-          setShowPortfolio(true);
-        }
-      }}
+      onOpenEngagement={handleOpenFromLibrary}
       onPlanEngagement={() => {
-        // Open wizard modal at pattern selection (step 0)
         setCurrentStep(0);
         setShowWizardModal(true);
       }}
@@ -318,7 +357,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
       const isAutomation = createdEngagement.patternType === EPT.WORKFLOW_AUTOMATION_PROJECT;
       const isCompliance = createdEngagement.patternType === EPT.COMPLIANCE_CONTROL_TESTING;
       const isIA = createdEngagement.patternType === EPT.INTERNAL_AUDIT_ASSIGNMENT;
-      const backLabel = openedFromPortfolio || isAutomation ? 'Back to Automation Projects' : isCompliance ? 'Back to Engagement View' : openedFromIAView || isIA ? 'Back to IA Assignments' : undefined;
+      const backLabel = openedFromLibrary ? 'Back to Engagement Library' : openedFromPortfolio || isAutomation ? 'Back to Automation Projects' : isCompliance ? 'Back to Engagement View' : openedFromIAView || isIA ? 'Back to IA Assignments' : undefined;
       return (
         <div>
           <div className="flex items-start gap-2 px-4 py-2.5 mb-4 rounded-lg bg-blue-50 border border-blue-200 text-[11px] text-blue-700">

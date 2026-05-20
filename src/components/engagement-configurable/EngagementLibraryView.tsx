@@ -50,8 +50,10 @@ const TYPE_COLORS: Record<string, string> = { 'Compliance': 'text-primary', 'Int
 const TYPE_BG: Record<string, string> = { 'Compliance': 'bg-primary/10', 'Internal Audit': 'bg-purple-100', 'Automation': 'bg-emerald-100' };
 const TYPE_BADGE: Record<string, string> = { 'Compliance': 'bg-primary/10 text-primary', 'Internal Audit': 'bg-purple-50 text-purple-700', 'Automation': 'bg-emerald-50 text-emerald-700' };
 
+export type { LibraryEngagement, EngagementType };
+
 interface Props {
-  onOpenEngagement: (id: string, type: EngagementType) => void;
+  onOpenEngagement: (engagement: LibraryEngagement) => void;
   onPlanEngagement: () => void;
 }
 
@@ -139,7 +141,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ delay: i * 0.02 }}
-                    onClick={() => onOpenEngagement(eng.id, eng.type)}
+                    onClick={() => onOpenEngagement(eng)}
                     className="border-b border-border-light/50 hover:bg-primary/[0.02] cursor-pointer transition-colors group"
                   >
                     <td className="px-4 py-3">
