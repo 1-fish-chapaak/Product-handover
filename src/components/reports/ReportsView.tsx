@@ -22,6 +22,7 @@ import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
 import ReportBuilder from './ReportBuilder';
+import { BulkAuditVariantView } from './BulkAuditVariants';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -53,10 +54,33 @@ type AttachedQuery = {
   attachedBy: string;
 };
 
+// Shared shape used by Bulk Audit reports. A workflow result is the bulk-run
+// counterpart of a saved query — same place in the report, different content.
+export type WorkflowResult = {
+  id: string;
+  workflowId: string;        // display id, e.g. "P2P-001"
+  name: string;
+  businessProcess?: string;
+  severity: 'High' | 'Medium' | 'Low';
+  riskOwner?: string;        // optional — empty until the user fills it in
+  findings: string[];
+  observations: string[];
+  outputTable?: {
+    columns: string[];
+    rows: (string | number)[][];
+  };
+};
+
+// Four design treatments for the bulk audit report detail page, exposed as
+// side-by-side demos in My Reports so we can compare against the default.
+export type BulkAuditAestheticVariant = 'editorial' | 'forensic' | 'minimal' | 'architectural';
+
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isEmpty?: boolean;
   attachedQueries?: AttachedQuery[];
   description?: string;
+  workflowResults?: WorkflowResult[];
+  aestheticVariant?: BulkAuditAestheticVariant;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
@@ -158,6 +182,9 @@ interface ReportsViewProps {
   onOpenQuery?: (query: { id: string; title: string }) => void;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onAddCustomTemplate?: (template: typeof REPORT_TEMPLATES[number]) => void;
+  /** When set, ReportsView opens that report in the full detail view. Cleared by the parent after consumption. */
+  focusReportId?: string | null;
+  onFocusReportConsumed?: () => void;
 }
 
 function TemplateCarousel({ children }: { children: React.ReactNode }) {
@@ -2772,6 +2799,307 @@ function ObservationCard({
   );
 }
 
+// Bulk-audit counterpart of QueryCard. Same chrome (border-y, hover lift,
+// motion stagger, meta row with primary id, generate-cases gate) but the body
+// is workflow-shaped: severity, optional risk owner, findings, observations,
+// and an output data table from the run.
+function WorkflowResultCard({
+  workflow,
+  index,
+  casesPhase,
+  onCasesPhaseChange,
+  onUpdateRiskOwner,
+  onDelete,
+}: {
+  workflow: WorkflowResult;
+  index: number;
+  casesPhase: CasesPhase;
+  onCasesPhaseChange: (phase: CasesPhase) => void;
+  onUpdateRiskOwner?: (owner: string) => void;
+  onDelete?: () => void;
+}) {
+  const { addToast } = useToast();
+  const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerDraft, setOwnerDraft] = useState(workflow.riskOwner ?? '');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const baseDelay = index * 0.08;
+
+  const severityStyle = workflow.severity === 'High'
+    ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
+    : workflow.severity === 'Medium'
+      ? { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' }
+      : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (ev: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(ev.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const commitOwner = () => {
+    const trimmed = ownerDraft.trim();
+    onUpdateRiskOwner?.(trimmed);
+    setEditingOwner(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      whileHover={{ y: -2 }}
+      style={{
+        boxShadow: hovered
+          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
+          : '0 0 0 rgba(0,0,0,0)',
+        transition: 'box-shadow 220ms ease',
+      }}
+      className="relative border-y border-border-light bg-white overflow-hidden"
+    >
+      <div className="px-6 py-5">
+        {/* Meta row */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
+          className="flex items-center justify-between mb-4 gap-4"
+        >
+          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+            <span className="font-bold text-primary uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
+            {workflow.businessProcess && (
+              <>
+                <span className="w-px h-3 bg-border-light shrink-0" />
+                <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">{workflow.businessProcess}</span>
+              </>
+            )}
+            <span className="w-px h-3 bg-border-light shrink-0" />
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
+              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <GenerateCasesGate queryId={workflow.id} phase={casesPhase} onPhaseChange={onCasesPhaseChange} />
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(o => !o)}
+                title="More options"
+                aria-label="More options"
+                className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+              >
+                <MoreVertical size={15} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigator.clipboard?.writeText(workflow.workflowId);
+                      addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
+                    }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                  >
+                    <Copy size={13} />
+                    Copy Workflow ID
+                  </button>
+                  {onDelete && (
+                    <>
+                      <div className="my-1 border-t border-border-light" />
+                      <button
+                        onClick={() => { setMenuOpen(false); onDelete(); }}
+                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Title row: workflow name + inline risk owner */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
+          className="mb-5"
+        >
+          <h3 className="text-[15px] font-semibold text-text leading-[1.5] mb-2">
+            {workflow.name}
+          </h3>
+
+          {/* Risk owner — inline editable. Filled state renders as initials chip + name; empty state stays understated. */}
+          <div className="flex items-center gap-2 text-[12px]">
+            <span className="text-text-muted">Risk owner</span>
+            {editingOwner ? (
+              <input
+                autoFocus
+                value={ownerDraft}
+                onChange={(e) => setOwnerDraft(e.target.value)}
+                onBlur={commitOwner}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitOwner();
+                  if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
+                }}
+                placeholder="e.g., Priya Mehta"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
+              />
+            ) : workflow.riskOwner ? (
+              <button
+                onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-primary-xlight transition-colors cursor-pointer"
+              >
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold tabular-nums">
+                  {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+                <span className="text-text font-medium">{workflow.riskOwner}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => { setOwnerDraft(''); setEditingOwner(true); }}
+                className="text-text-muted hover:text-primary transition-colors cursor-pointer"
+              >
+                Unassigned · <span className="underline">assign</span>
+              </button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Findings + Observations */}
+        <div className="space-y-6 pt-1">
+          {[
+            { title: 'Findings', items: workflow.findings, emptyCopy: 'No findings recorded for this workflow yet.' },
+            { title: 'Observations', items: workflow.observations, emptyCopy: 'No observations recorded for this workflow yet.' },
+          ].map(section => (
+            <div key={section.title}>
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+                <span>{section.title}</span>
+                {section.items.length > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                    {section.items.length}
+                  </span>
+                )}
+              </h4>
+              {section.items.length === 0 ? (
+                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {section.items.map((item, i) => (
+                    <motion.li
+                      key={i}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: baseDelay + 0.4 + i * 0.05, duration: 0.3 }}
+                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
+                    >
+                      <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
+                      {item}
+                    </motion.li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+
+          {/* Output table */}
+          {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
+            <div>
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+                <span>Output</span>
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                  {workflow.outputTable.rows.length}
+                </span>
+              </h4>
+              <div className="border border-border-light rounded-xl overflow-hidden">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr className="bg-paper-50/70">
+                      {workflow.outputTable.columns.map((col, ci) => (
+                        <th
+                          key={col}
+                          className={`px-3 py-2 text-[10.5px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workflow.outputTable.rows.map((row, ri) => (
+                      <tr
+                        key={ri}
+                        className="hover:bg-primary-xlight/30 transition-colors"
+                      >
+                        {row.map((cell, ci) => {
+                          const cellStr = String(cell);
+                          const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
+                          const isLast = ci === row.length - 1;
+                          const isId = ci === 0;
+                          return (
+                            <td
+                              key={ci}
+                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[12px] text-text-secondary tabular-nums' : ''}`}
+                            >
+                              {isSeverity ? (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold ${
+                                    cellStr === 'High'
+                                      ? 'bg-risk-50 text-risk-700'
+                                      : cellStr === 'Medium'
+                                        ? 'bg-high-50 text-high-700'
+                                        : 'bg-compliant-50 text-compliant-700'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      cellStr === 'High'
+                                        ? 'bg-risk-500'
+                                        : cellStr === 'Medium'
+                                          ? 'bg-high-500'
+                                          : 'bg-compliant-500'
+                                    }`}
+                                  />
+                                  {cellStr}
+                                </span>
+                              ) : (
+                                cell
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[11px] text-text-muted">
+                  <span>{workflow.outputTable.rows.length} {workflow.outputTable.rows.length === 1 ? 'record' : 'records'}</span>
+                  <button
+                    onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
+                    className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                  >
+                    <Download size={11} />
+                    Download CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function DraggableQuerySection({
   section,
   index,
@@ -3543,14 +3871,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ? TEMPLATE_QUERIES[appliedTemplate.id]
     : DEFAULT_QUERIES;
 
-  const activeStats = appliedTemplate && TEMPLATE_STATS[appliedTemplate.id]
-    ? TEMPLATE_STATS[appliedTemplate.id]
-    : [
-        { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
-        { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
-        { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
-        { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+  const activeStats = (() => {
+    if (appliedTemplate && TEMPLATE_STATS[appliedTemplate.id]) return TEMPLATE_STATS[appliedTemplate.id];
+    if (report.tag === 'Bulk Audit' && (report.workflowResults?.length ?? 0) > 0) {
+      const wr = report.workflowResults!;
+      const totalRecords = wr.reduce((sum, w) => sum + (w.outputTable?.rows.length ?? 0), 0);
+      const highCount = wr.filter(w => w.severity === 'High').length;
+      const mediumCount = wr.filter(w => w.severity === 'Medium').length;
+      return [
+        { label: 'Workflows Run', value: String(wr.length), icon: Layers, color: 'text-brand-700 bg-brand-50' },
+        { label: 'Records Flagged', value: String(totalRecords), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+        { label: 'High Severity', value: String(highCount), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+        { label: 'Medium Severity', value: String(mediumCount), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
       ];
+    }
+    return [
+      { label: 'Total Exceptions', value: '187', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+      { label: 'Closed', value: '38', icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+      { label: 'High Risk', value: '12', icon: Shield, color: 'text-risk-700 bg-risk-50' },
+      { label: 'Report Health', value: '78%', icon: TrendingUp, color: 'text-evidence-700 bg-evidence-50' },
+    ];
+  })();
 
   // Sections — reorderable / add / remove
   type SectionItem =
@@ -3558,6 +3899,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     | { id: string; kind: 'summary'; title: string; content: string }
     | { id: string; kind: 'stats'; title: string }
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
+    | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
     | { id: string; kind: 'note'; title: string; content: string }
     | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
 
@@ -3571,21 +3913,42 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     attachmentHidden?: boolean;
   };
 
-  const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => [
-    { id: 'sec-cover', kind: 'cover', title: 'Cover' },
-    {
-      id: 'sec-summary',
-      kind: 'summary',
-      title: 'Executive Summary',
-      content: 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.',
-    },
-    ...queries.map(q => ({
-      id: `sec-query-${q.id}`,
-      kind: 'query' as const,
-      title: `Query · ${q.id}`,
-      query: q,
-    })),
-  ];
+  const isBulkAudit = report.tag === 'Bulk Audit';
+  const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+
+  const buildInitialSections = (queries: typeof DEFAULT_QUERIES): SectionItem[] => {
+    const head: SectionItem[] = [
+      { id: 'sec-cover', kind: 'cover', title: 'Cover' },
+      {
+        id: 'sec-summary',
+        kind: 'summary',
+        title: 'Executive Summary',
+        content: isBulkAudit
+          ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
+          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.',
+      },
+    ];
+    if (isBulkAudit) {
+      return [
+        ...head,
+        ...reportWorkflows.map(w => ({
+          id: `sec-workflow-${w.id}`,
+          kind: 'workflow' as const,
+          title: `Workflow · ${w.workflowId}`,
+          workflow: w,
+        })),
+      ];
+    }
+    return [
+      ...head,
+      ...queries.map(q => ({
+        id: `sec-query-${q.id}`,
+        kind: 'query' as const,
+        title: `Query · ${q.id}`,
+        query: q,
+      })),
+    ];
+  };
 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
@@ -3596,7 +3959,16 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appliedTemplateId]);
+  }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
+
+  // Update one workflow's risk owner across both state and the parent report.
+  const updateWorkflowRiskOwner = (workflowId: string, owner: string) => {
+    setSections(prev => prev.map(s =>
+      s.kind === 'workflow' && s.workflow.id === workflowId
+        ? { ...s, workflow: { ...s.workflow, riskOwner: owner || undefined } }
+        : s
+    ));
+  };
 
   const removeSection = (id: string) => {
     setSections(prev => prev.filter(s => s.id !== id));
@@ -3933,6 +4305,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
+                    {report.tag && (
+                      <span
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        style={{
+                          borderRadius: '8px',
+                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                        }}
+                      >
+                        {report.tag}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => setAddQueryOpen(true)}
@@ -4071,6 +4455,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                    {report.tag && (
+                      <span
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        style={{
+                          borderRadius: '8px',
+                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                        }}
+                      >
+                        {report.tag}
+                      </span>
+                    )}
                     <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                       {appliedTemplate.name}
                     </span>
@@ -4235,7 +4631,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 <span className="text-white/30 mx-0.5">|</span>
                                 <span className="text-white/70">{report.generatedAt}</span>
                                 <span className="text-white/30 mx-0.5">|</span>
-                                <span className="text-white/70">{sections.filter(s => s.kind === 'query').length} {sections.filter(s => s.kind === 'query').length === 1 ? 'query' : 'queries'}</span>
+                                {(() => {
+                                  if (isBulkAudit) {
+                                    const n = sections.filter(s => s.kind === 'workflow').length;
+                                    return <span className="text-white/70">{n} {n === 1 ? 'workflow' : 'workflows'}</span>;
+                                  }
+                                  const n = sections.filter(s => s.kind === 'query').length;
+                                  return <span className="text-white/70">{n} {n === 1 ? 'query' : 'queries'}</span>;
+                                })()}
+                                {report.tag && (
+                                  <span
+                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                                    style={{
+                                      borderRadius: '8px',
+                                      background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                                      color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                                    }}
+                                  >
+                                    {report.tag}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
@@ -4320,6 +4735,21 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         casesPhase={casesPhases[section.query.id] ?? 'idle'}
                         onCasesPhaseChange={(p) => setCasesPhase(section.query.id, p)}
                       />
+                    );
+                  }
+
+                  if (section.kind === 'workflow') {
+                    return (
+                      <Reorder.Item {...sectionProps}>
+                        <WorkflowResultCard
+                          workflow={section.workflow}
+                          index={i}
+                          casesPhase={casesPhases[section.workflow.id] ?? 'idle'}
+                          onCasesPhaseChange={(p) => setCasesPhase(section.workflow.id, p)}
+                          onUpdateRiskOwner={(owner) => updateWorkflowRiskOwner(section.workflow.id, owner)}
+                          onDelete={() => removeSection(section.id)}
+                        />
+                      </Reorder.Item>
                     );
                   }
 
@@ -4528,6 +4958,8 @@ export default function ReportsView({
   onOpenQuery,
   customTemplates: customTemplatesProp,
   onAddCustomTemplate,
+  focusReportId,
+  onFocusReportConsumed,
 }: ReportsViewProps = {}) {
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
@@ -4550,7 +4982,7 @@ export default function ReportsView({
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
   };
-  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v3';
+  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v6';
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
@@ -4564,6 +4996,30 @@ export default function ReportsView({
   useEffect(() => {
     try { localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports)); } catch { /* ignore */ }
   }, [generatedReports]);
+
+  // Hot-receive new reports generated by a Bulk Run (BulkRunProgress dispatches
+  // this when its run completes). Prepend so it appears at the top of My Reports.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<GeneratedReport>).detail;
+      if (!detail || !detail.id) return;
+      setGeneratedReports(prev => (prev.some(r => r.id === detail.id) ? prev : [detail, ...prev]));
+    };
+    window.addEventListener('irame:bulk-report-created', handler);
+    return () => window.removeEventListener('irame:bulk-report-created', handler);
+  }, []);
+
+  // Toast "Open report" click flows through App.tsx, which sets focusReportId.
+  // When it changes, jump into the full-page view of that report.
+  useEffect(() => {
+    if (!focusReportId) return;
+    const report = generatedReports.find(r => r.id === focusReportId);
+    if (report) {
+      setActiveTab('my-reports');
+      setViewingReport(report);
+      onFocusReportConsumed?.();
+    }
+  }, [focusReportId, generatedReports, onFocusReportConsumed]);
 
   const addQueryToReport = (reportId: string, query: AttachedQuery) => {
     setGeneratedReports(prev => prev.map(r =>
@@ -4672,6 +5128,17 @@ export default function ReportsView({
 
 
   if (viewingReport) {
+    // All Bulk Audit reports now render as Editorial (chosen treatment) unless
+    // an explicit aestheticVariant overrides it. Internal Audit reports keep
+    // the default ReportView.
+    if (viewingReport.aestheticVariant || viewingReport.tag === 'Bulk Audit') {
+      return (
+        <BulkAuditVariantView
+          report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
+          onBack={() => setViewingReport(null)}
+        />
+      );
+    }
     return (
       <ReportView
         report={viewingReport}
