@@ -63,6 +63,7 @@ import NotificationDrawer from './components/notifications/NotificationDrawer';
 import { createNotification, type PlatformNotification } from './data/notifications';
 // V3 Configurable Engagement — dev-only preview (not wired to main flow)
 import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
+import EngagementFinalModule from './components/engagement-final/EngagementFinalModule';
 
 const LAUNCHED_FROM_REPORT =
   typeof window !== 'undefined' &&
@@ -815,6 +816,13 @@ export default function App() {
         return (
           <div className="px-8 py-6 h-full overflow-y-auto">
             <ConfigurableEngagementWizard onNavigateToView={setView} />
+          </div>
+        );
+
+      case 'engagement-final':
+        return (
+          <div className="px-8 py-6 h-full overflow-y-auto">
+            <EngagementFinalModule />
           </div>
         );
 

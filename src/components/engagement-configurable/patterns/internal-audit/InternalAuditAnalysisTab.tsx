@@ -139,6 +139,12 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
 
   return (
     <div className="space-y-4">
+      {/* Header */}
+      <div>
+        <h3 className="text-[15px] font-bold text-text mb-0.5">Analysis</h3>
+        <p className="text-[12px] text-text-muted">Review workflow findings and promote valid findings to audit observations.</p>
+      </div>
+
       {/* ── Control-wise Workflow Findings (from Controls tab execution) ── */}
       {(() => {
         const controlRuns = analysisState.runs.filter(r => r.status === 'COMPLETED' && r.runType === 'WORKFLOW' && r.linkedScopeLabel);

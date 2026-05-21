@@ -363,10 +363,6 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
       const backLabel = openedFromLibrary ? 'Back to Engagement Library' : openedFromPortfolio || isAutomation ? 'Back to Automation Projects' : isCompliance ? 'Back to Engagement View' : openedFromIAView || isIA ? 'Back to IA Assignments' : undefined;
       return (
         <div>
-          <div className="flex items-start gap-2 px-4 py-2.5 mb-4 rounded-lg bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
-            <Info size={13} className="shrink-0 mt-0.5" />
-            <span>{openedFromPortfolio ? 'Viewing automation project from portfolio. State is local and not persisted.' : 'Draft created locally. This workspace is dev-only and not persisted. Changes will be lost on page refresh.'}</span>
-          </div>
           <ConfigurableEngagementWorkspace
             engagement={createdEngagement}
             onBack={handleBackToWizard}

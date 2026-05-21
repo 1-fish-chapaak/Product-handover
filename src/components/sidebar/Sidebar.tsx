@@ -328,6 +328,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management'} expanded={isExpanded} onClick={() => setView('engagements')} />
           <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />
           <NavItem icon={GitCompare} label="Engagement Config" active={view === 'engagement-config'} expanded={isExpanded} onClick={() => setView('engagement-config')} />
+          <NavItem icon={ClipboardCheck} label="Engagement Final" active={view === 'engagement-final'} expanded={isExpanded} onClick={() => setView('engagement-final')} />
 
           {/* ── GLOBAL ── */}
           <Divider label="Global" expanded={isExpanded} />

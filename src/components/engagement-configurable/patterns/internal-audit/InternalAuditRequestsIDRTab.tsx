@@ -219,13 +219,13 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
         <button onClick={() => {
           const showRacm = scope.sopIds.length > 0 || scope.racmVersionIds.length > 0;
           const showControls = showRacm || scope.checklistIds.length > 0;
-          onNavigateTab?.(showRacm ? 'ia-racm' : showControls ? 'ia-controls' : 'observations');
+          onNavigateTab?.(showRacm ? 'ia-racm' : showControls ? 'ia-controls' : 'analysis');
         }} disabled={!canProceed}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           {(() => {
             const showRacm = scope.sopIds.length > 0 || scope.racmVersionIds.length > 0;
             const showControls = showRacm || scope.checklistIds.length > 0;
-            return showRacm ? 'Continue to RACM' : showControls ? 'Continue to Controls' : 'Continue to Observations';
+            return showRacm ? 'Continue to RACM' : showControls ? 'Continue to Controls' : 'Continue to Analysis';
           })()}
           <ChevronRight size={11} />
         </button>

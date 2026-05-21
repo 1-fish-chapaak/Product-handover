@@ -112,7 +112,13 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
           <div className="rounded-lg border border-border-light p-4 space-y-3">
             <h4 className="text-[11px] font-bold text-text">Primary Scope</h4>
             <div>
-              <label className={labelCls}>Business Process <span className="text-red-400">*</span></label>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls + ' mb-0'}>Business Process <span className="text-red-400">*</span></label>
+                <button onClick={() => alert('Create Business Process — will be connected to Process Hub.')}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">
+                  <Plus size={9} />Create Business Process
+                </button>
+              </div>
               <select value={scope.businessProcessId} onChange={e => onUpdateScope({ ...scope, businessProcessId: e.target.value, subProcessIds: [], activityIds: [] })} className={selectCls}>
                 <option value="">Select business process...</option>
                 {BUSINESS_PROCESSES.map(bp => <option key={bp.id} value={bp.id}>{bp.code} — {bp.name}</option>)}

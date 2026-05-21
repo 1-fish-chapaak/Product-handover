@@ -324,7 +324,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
             <CheckCircle2 size={13} />
             <span><span className="font-semibold">{analysisState.runs.length} workflow run{analysisState.runs.length !== 1 ? 's' : ''}</span> completed. {analysisState.runs.flatMap(r => r.exceptions).length} potential finding{analysisState.runs.flatMap(r => r.exceptions).length !== 1 ? 's' : ''} generated.</span>
           </div>
-          <button onClick={() => onNavigateTab?.('observations')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 cursor-pointer transition-colors">
+          <button onClick={() => onNavigateTab?.('analysis')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 cursor-pointer transition-colors">
             View in Analysis <ChevronRight size={10} />
           </button>
         </div>
@@ -469,7 +469,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
 
       {/* Continue to Analysis */}
       <div className="flex items-center gap-3">
-        <button onClick={() => onNavigateTab?.('observations')}
+        <button onClick={() => onNavigateTab?.('analysis')}
           className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
           Continue to Analysis <ChevronRight size={12} />
         </button>

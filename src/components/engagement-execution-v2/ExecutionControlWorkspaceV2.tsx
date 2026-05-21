@@ -1826,6 +1826,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
   const [running, setRunning] = useState(false);
   const [retestMode, setRetestMode] = useState<'select' | 'evidence' | null>(null);
   const [retestIds, setRetestIds] = useState<Set<string>>(new Set());
+  const [showAllPreview, setShowAllPreview] = useState(false);
   const [retestCompletedIds, setRetestCompletedIds] = useState<Set<string>>(new Set());
 
   if (items.length === 0) {
@@ -2094,20 +2095,100 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
         )}
       </div>
 
-      {/* Bulk Upload + Helper */}
-      <div className="flex items-center justify-between -mt-1">
-        <p className="text-[10px] text-gray-400 flex-1">Upload a folder or multiple evidence files. The system will auto-match files to samples and attributes based on file names.</p>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={handleBulkFolderUpload}
-            className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors flex items-center gap-1.5">
-            <Upload size={11} />Upload Evidence Folder
-          </button>
-          <button onClick={handleBulkMultiFileSelect}
-            className="px-2 py-1.5 rounded-lg text-[9px] font-medium text-gray-500 hover:text-primary hover:bg-primary/5 cursor-pointer transition-colors">
-            or select files
-          </button>
+      {/* Sample-wise Testing Preview */}
+      {ctrl.attributes.length > 0 && (
+        <div className="rounded-xl border border-border-light bg-white p-4 space-y-3">
+          {/* Quick actions at top of preview */}
+          <div className="flex items-center justify-between">
+            <h4 className="text-[12px] font-bold text-text mb-0">Sample-wise Testing Preview</h4>
+            <div className="flex items-center gap-1.5">
+              <button onClick={handleBulkFolderUpload}
+                className="px-2.5 py-1 rounded-lg text-[9px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors flex items-center gap-1">
+                <Upload size={10} />Upload Evidence
+              </button>
+              {autoAttrs.length > 0 && (
+                <button onClick={() => { setRunning(true); setTimeout(() => { runAutomatedChecks(); setRunning(false); }, 7000); }}
+                  className="px-2.5 py-1 rounded-lg text-[9px] font-semibold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer transition-colors flex items-center gap-1">
+                  <Play size={10} />Run Checks
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] text-text-muted">Rows are samples. Columns are required attributes. Each cell shows the testing status for that sample + attribute.</p>
+            <p className="text-[10px] text-primary font-medium mt-1 tabular-nums">{items.length} sample{items.length !== 1 ? 's' : ''} × {ctrl.attributes.length} required attribute{ctrl.attributes.length !== 1 ? 's' : ''} = {progress.totalAttributeChecks} total checks</p>
+          </div>
+
+          {/* Matrix table */}
+          <div className="overflow-x-auto">
+            <table className="text-[10px] w-full border-collapse">
+              <thead>
+                <tr className="bg-surface-2/30">
+                  <th className="text-left px-3 py-2 text-[9px] font-semibold text-gray-400 uppercase tracking-wider border-b border-border-light">Sample</th>
+                  {ctrl.attributes.map((attr, ai) => (
+                    <th key={attr.id} className="px-2 py-2 text-center border-b border-border-light" title={attr.name}>
+                      <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">Attribute {String.fromCharCode(65 + ai)}</span>
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center text-[9px] font-semibold text-gray-400 uppercase tracking-wider border-b border-border-light">Sample Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(showAllPreview ? items : items.slice(0, 3)).map(ti => {
+                  const sampleDone = ti.attributeResults.every(ar => ar.result !== 'NOT_TESTED');
+                  const sampleFailed = ti.attributeResults.some(ar => ar.result === 'FAIL');
+                  return (
+                    <tr key={ti.id} className="border-b border-border-light/30 hover:bg-surface-2/10">
+                      <td className="px-3 py-2">
+                        <span className="text-[10px] font-semibold text-text">{ti.referenceId || ti.id}</span>
+                        {ti.description && <span className="text-[9px] text-gray-400 block mt-0.5 truncate max-w-[140px]">{ti.description}</span>}
+                      </td>
+                      {ti.attributeResults.map(ar => {
+                        const bg = ar.result === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ar.result === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : ar.evidenceIds.length > 0 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-400 border-gray-200';
+                        const label = ar.result === 'PASS' ? 'Passed' : ar.result === 'FAIL' ? 'Failed' : ar.evidenceIds.length > 0 ? 'Evidence Ready' : 'Not Tested';
+                        return (
+                          <td key={ar.attributeId} className="px-2 py-2 text-center">
+                            <span className={`inline-flex items-center justify-center px-1.5 h-5 rounded-full border text-[8px] font-semibold ${bg}`}>{label}</span>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center justify-center px-2 h-5 rounded-full text-[8px] font-bold ${sampleDone ? (sampleFailed ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200') : 'bg-gray-50 text-gray-400 border border-gray-200'}`}>
+                          {sampleDone ? (sampleFailed ? 'Failed' : 'Passed') : 'Pending'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {items.length > 3 && !showAllPreview && (
+              <button onClick={() => setShowAllPreview(true)} className="text-[9px] text-primary font-semibold mt-1.5 px-3 cursor-pointer hover:underline">
+                +{items.length - 3} more sample{items.length - 3 !== 1 ? 's' : ''} — show all
+              </button>
+            )}
+            {items.length > 3 && showAllPreview && (
+              <button onClick={() => setShowAllPreview(false)} className="text-[9px] text-gray-400 font-semibold mt-1.5 px-3 cursor-pointer hover:underline">
+                Show fewer
+              </button>
+            )}
+          </div>
+
+          {/* Attribute Legend */}
+          <div className="pt-2 border-t border-border-light/30">
+            <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Attributes</span>
+            <div className="space-y-1">
+              {ctrl.attributes.map((attr, ai) => (
+                <div key={attr.id} className="flex items-center gap-2 text-[10px]">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary text-[9px] font-bold shrink-0">{String.fromCharCode(65 + ai)}</span>
+                  <span className="text-text">{attr.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
 
       {/* Bulk Upload Review Panel */}
       {bulkMappings && (
@@ -2204,66 +2285,23 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
         </div>
       )}
 
-      {/* Evidence Readiness + Run Automated Checks */}
-      {(() => {
-        const evMatrix = deriveEvidenceMatrixReadiness(ctrl);
-        return (
-          <>
-            {/* Evidence readiness progress */}
-            {evMatrix.totalRequiredSlots > 0 && (
-              <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${evMatrix.isReady ? 'border-emerald-200/50 bg-emerald-50/20' : 'border-amber-200/50 bg-amber-50/20'}`}>
-                <div className="flex items-center gap-2">
-                  {evMatrix.isReady ? <CheckCircle2 size={13} className="text-emerald-600 shrink-0" /> : <AlertTriangle size={13} className="text-amber-600 shrink-0" />}
-                  <span className={`text-[11px] font-medium ${evMatrix.isReady ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    Evidence attached: {evMatrix.completedSlots} / {evMatrix.totalRequiredSlots}
-                  </span>
-                  {!evMatrix.isReady && <span className="text-[10px] text-amber-600">({evMatrix.missingSlots} missing)</span>}
-                </div>
-              </div>
-            )}
-
-            {/* Run Automated Checks */}
-            {running && (
-              <div className="rounded-xl border-2 border-blue-200/50 bg-blue-50/20 p-6 text-center">
-                <Loader2 size={28} className="mx-auto text-blue-600 animate-spin mb-3" />
-                <h5 className="text-[14px] font-bold text-blue-800 mb-1">Running Automated Checks...</h5>
-                <p className="text-[11px] text-blue-600">Executing workflows on {items.length} samples × {autoAttrs.length} automated attributes</p>
-                <div className="mt-3 h-1.5 bg-blue-100 rounded-full overflow-hidden max-w-xs mx-auto">
-                  <div className="h-full rounded-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
-                </div>
-              </div>
-            )}
-
-            {!running && autoAttrs.length > 0 && hasUntested && (
-              <div className={`flex items-center justify-between rounded-lg border px-4 py-3 ${evMatrix.isReady ? 'border-blue-200/50 bg-blue-50/20' : 'border-gray-200/50 bg-gray-50/30'}`}>
-                <div>
-                  <span className={`text-[12px] font-semibold ${evMatrix.isReady ? 'text-blue-800' : 'text-gray-500'}`}>
-                    {autoAttrs.length} automated attribute{autoAttrs.length !== 1 ? 's' : ''} ready
-                  </span>
-                  {!evMatrix.isReady && evMatrix.totalRequiredSlots > 0 && (
-                    <span className="text-[10px] text-gray-400 block mt-0.5">Upload evidence for all required sample attributes before running automated checks.</span>
-                  )}
-                </div>
-                <button onClick={() => {
-                    setRunning(true);
-                    setTimeout(() => { runAutomatedChecks(); setRunning(false); }, 7000);
-                  }}
-                  disabled={!evMatrix.isReady && evMatrix.totalRequiredSlots > 0}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300">
-                  <Play size={13} />Run Automated Checks
-                </button>
-              </div>
-            )}
-
-            {!running && autoAttrs.length > 0 && !hasUntested && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200/50 bg-emerald-50/20 px-4 py-2.5">
-                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                <span className="text-[11px] text-emerald-700">All automated checks completed across {items.length} test items.</span>
-              </div>
-            )}
-          </>
-        );
-      })()}
+      {/* Running Automated Checks loader */}
+      {running && (
+        <div className="rounded-xl border-2 border-blue-200/50 bg-blue-50/20 p-6 text-center">
+          <Loader2 size={28} className="mx-auto text-blue-600 animate-spin mb-3" />
+          <h5 className="text-[14px] font-bold text-blue-800 mb-1">Running Automated Checks...</h5>
+          <p className="text-[11px] text-blue-600">Executing workflows on {items.length} samples × {autoAttrs.length} automated attributes</p>
+          <div className="mt-3 h-1.5 bg-blue-100 rounded-full overflow-hidden max-w-xs mx-auto">
+            <div className="h-full rounded-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
+          </div>
+        </div>
+      )}
+      {!running && autoAttrs.length > 0 && !hasUntested && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200/50 bg-emerald-50/20 px-4 py-2.5">
+          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+          <span className="text-[11px] text-emerald-700">All automated checks completed across {items.length} test items.</span>
+        </div>
+      )}
 
       {/* Per-Sample Testing */}
       <div className="space-y-2">

@@ -42,7 +42,7 @@ const PATTERN_META: Record<string, {
   [EPT.WORKFLOW_AUTOMATION_PROJECT]: {
     purpose: 'Workflow-driven automation project for running workflows, reviewing exceptions, managing cases, reports, and activity tracking.',
     bestFor: ['Continuous monitoring', 'Reconciliation automation', 'Duplicate invoice detection', 'Exception detection & MIS reporting'],
-    cta: 'Open Automation Projects',
+    cta: 'Start Automation Project',
     accent: 'text-emerald-600',
     accentBg: 'bg-emerald-50/50',
     accentBorder: 'border-emerald-200/60 hover:border-emerald-300',

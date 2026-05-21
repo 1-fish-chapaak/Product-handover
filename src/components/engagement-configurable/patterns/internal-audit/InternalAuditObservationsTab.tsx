@@ -60,8 +60,10 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
   );
 
   const activeObs = observationsState.observations.filter(o => o.status !== 'DROPPED');
-  const canConfirmNoObs = activeObs.length === 0 && !observationsState.noObservationsConfirmed;
-  const canProceedToDiscussion = observationsState.observations.some(o => o.status === 'READY_FOR_DISCUSSION') || observationsState.noObservationsConfirmed;
+  // If observations were promoted after "no obs" was confirmed, override the confirmed state
+  const effectiveNoObsConfirmed = observationsState.noObservationsConfirmed && activeObs.length === 0;
+  const canConfirmNoObs = activeObs.length === 0 && !effectiveNoObsConfirmed;
+  const canProceedToDiscussion = observationsState.observations.some(o => o.status === 'READY_FOR_DISCUSSION') || (effectiveNoObsConfirmed && activeObs.length === 0);
 
   const convertPotObs = (po: PotentialObservation) => {
     const obs: InternalAuditObservation = {
@@ -352,13 +354,13 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
           </button>
         </div>
       )}
-      {observationsState.noObservationsConfirmed && (
+      {effectiveNoObsConfirmed && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700">
           <CheckCircle2 size={13} className="shrink-0 mt-0.5" />
           <span>No observations noted — confirmed by {observationsState.noObservationsConfirmedBy} on {observationsState.noObservationsConfirmedAt}.</span>
         </div>
       )}
-      {activeObs.length > 0 && !observationsState.noObservationsConfirmed && (
+      {activeObs.length > 0 && !effectiveNoObsConfirmed && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[10px] text-gray-500">
           <Info size={11} className="shrink-0 mt-0.5" />
           <span>Cannot confirm "No observations" while active observations exist.</span>
@@ -374,8 +376,8 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
         <div className="space-y-1">
           {[
             { label: 'Potential observations reviewed', ok: unconvertedPotObs.length === 0 },
-            { label: 'Observations created or no-obs confirmed', ok: observationsState.observations.length > 0 || observationsState.noObservationsConfirmed },
-            { label: 'Observations marked ready for discussion', ok: observationsState.observations.some(o => o.status === 'READY_FOR_DISCUSSION') || observationsState.noObservationsConfirmed },
+            { label: 'Observations created or no-obs confirmed', ok: observationsState.observations.length > 0 || effectiveNoObsConfirmed },
+            { label: 'Observations marked ready for discussion', ok: observationsState.observations.some(o => o.status === 'READY_FOR_DISCUSSION') || effectiveNoObsConfirmed },
             { label: 'Process owners assigned', ok: activeObs.length === 0 || activeObs.every(o => o.processOwner.trim().length > 0) },
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[10px]">

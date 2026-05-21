@@ -80,6 +80,7 @@ const INTERNAL_AUDIT_ASSIGNMENT: EngagementPatternDefinition = {
     { id: 'requests-idr', label: 'Requests / IDR' },
     { id: 'ia-racm', label: 'RACM' },
     { id: 'ia-controls', label: 'Controls' },
+    { id: 'analysis', label: 'Analysis & Findings' },
     { id: 'observations', label: 'Observations' },
     { id: 'discussion', label: 'Discussion' },
     { id: 'working-paper', label: 'Working Paper' },

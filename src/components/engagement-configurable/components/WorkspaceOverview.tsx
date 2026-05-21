@@ -359,7 +359,7 @@ function DashboardHeader({ engagement, schedule }: { engagement: ConfigurableEng
           {schedule.frequency && <span className="text-[11px] text-ink-400 font-medium">{schedule.frequency}</span>}
         </div>
       </div>
-      <p className="text-[10px] text-ink-300 mt-2">Dashboard appears because Dashboard output is selected and this project is configured for recurring monitoring.</p>
+      <p className="text-[10px] text-ink-300 mt-2">Dashboard is populated from workflow runs and scheduled executions.</p>
     </div>
   );
 }
@@ -558,29 +558,36 @@ export default function WorkspaceOverview({ engagement, automationState, onNavig
   if (engagement.patternType === EngagementPatternType.WORKFLOW_AUTOMATION_PROJECT && automationState) {
     const cfg = engagement.config as AutomationProjectConfig;
     const hasDashboardOutput = cfg.outputTypes.includes('DASHBOARD');
-    const isRecurring = cfg.runType === 'RECURRING';
+    const hasRunData = automationState.runs.runs.some(r => r.status === 'COMPLETED');
+    const hasScheduledRuns = automationState.schedule.status === 'ACTIVE' || automationState.schedule.status === 'PAUSED';
+    const dashboardEnabled = hasDashboardOutput && (hasRunData || hasScheduledRuns);
 
-    if (hasDashboardOutput && isRecurring) {
+    if (dashboardEnabled) {
       return <ContinuousMonitoringDashboard engagement={engagement} state={automationState} onNavigateTab={onNavigateTab} />;
     }
-    if (hasDashboardOutput && !isRecurring) {
+    if (hasDashboardOutput && !hasRunData && !hasScheduledRuns) {
       return (
         <div className="space-y-4">
           <StandardOverview engagement={engagement} />
-          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-evidence-50 border border-evidence-200 text-[11px] text-evidence-700">
-            <Activity size={12} className="shrink-0 mt-0.5" />
-            <span>Dashboard output is selected. Set run type to <strong>Recurring</strong> and configure a schedule to enable continuous monitoring.</span>
+          <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
+            <div className="flex items-start gap-2">
+              <Activity size={12} className="shrink-0 mt-0.5" />
+              <span>Run or schedule workflows to populate the monitoring dashboard.</span>
+            </div>
+            {onNavigateTab && (
+              <button onClick={() => onNavigateTab('workflows')} className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[10px] font-semibold cursor-pointer transition-colors shrink-0">Go to Workflows</button>
+            )}
           </div>
         </div>
       );
     }
-    if (isRecurring && !hasDashboardOutput) {
+    if (!hasDashboardOutput) {
       return (
         <div className="space-y-4">
           <StandardOverview engagement={engagement} />
-          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-evidence-50 border border-evidence-200 text-[11px] text-evidence-700">
-            <Activity size={12} className="shrink-0 mt-0.5" />
-            <span>This project is configured for recurring runs. Add <strong>Dashboard</strong> as an output type to enable continuous monitoring view.</span>
+          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-gray-50 border border-border-light text-[10px] text-gray-500">
+            <Activity size={11} className="shrink-0 mt-0.5" />
+            <span>Dashboard output was not selected for this project.</span>
           </div>
         </div>
       );

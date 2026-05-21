@@ -66,6 +66,8 @@ export type View =
   | 'manage-exceptions'
   // Chat trash
   | 'chat-trash'
+  // Engagement Final
+  | 'engagement-final'
   // Dev-only preview routes
   | 'dev-configurable-engagement-v3'
   // Platform

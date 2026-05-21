@@ -45,7 +45,8 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
   }, [readyObsIds]);
 
   const summary = deriveDiscussionSummary(discussionState);
-  const noObsConfirmed = observationsState.noObservationsConfirmed;
+  const activeObs = observationsState.observations.filter(o => o.status !== 'DROPPED');
+  const noObsConfirmed = observationsState.noObservationsConfirmed && activeObs.length === 0;
   const allReadyForReport = discussionState.items.length > 0 && discussionState.items.every(i => i.status === 'READY_FOR_REPORT');
   const canProceed = (allReadyForReport || discussionState.noObsDiscussionConfirmed || (noObsConfirmed && discussionState.items.length === 0));
 
