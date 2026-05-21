@@ -84,7 +84,7 @@ function deriveControls(scope: InternalAuditScopeState): ControlItem[] {
         sourceName: racm.name,
         process: racmId === 'racm-p2p' || racmId === 'racm-ap' ? 'Procure to Pay' : 'Order to Cash',
         type: rc.workflows.length > 0 ? 'Automated' : 'Manual',
-        status: rc.workflows.length > 0 ? 'Ready' : 'Needs Review',
+        status: 'Ready',
         workflows: rc.workflows,
       });
     }
@@ -153,7 +153,7 @@ function deriveControls(scope: InternalAuditScopeState): ControlItem[] {
         source: 'SOP', sourceName: sop.name,
         process: processLabel,
         type: dc.type,
-        status: dc.workflows.length > 0 ? 'Ready' : 'Needs Review',
+        status: 'Ready',
         workflows: dc.workflows,
       });
     }
@@ -324,7 +324,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
             <CheckCircle2 size={13} />
             <span><span className="font-semibold">{analysisState.runs.length} workflow run{analysisState.runs.length !== 1 ? 's' : ''}</span> completed. {analysisState.runs.flatMap(r => r.exceptions).length} potential finding{analysisState.runs.flatMap(r => r.exceptions).length !== 1 ? 's' : ''} generated.</span>
           </div>
-          <button onClick={() => onNavigateTab?.('analysis')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 cursor-pointer transition-colors">
+          <button onClick={() => onNavigateTab?.('observations')} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 cursor-pointer transition-colors">
             View in Analysis <ChevronRight size={10} />
           </button>
         </div>
@@ -368,8 +368,8 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
               <div key={ctrl.id} className={i > 0 ? 'border-t border-border-light' : ''}>
                 {/* Control row */}
                 <div
-                  onClick={() => toggleExpand(ctrl.id)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5' : isControlSelected ? 'bg-primary/[0.03]' : 'hover:bg-surface-2/30'}`}
+                  onClick={() => wfCount > 0 && toggleExpand(ctrl.id)}
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${wfCount > 0 ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-primary/5' : isControlSelected ? 'bg-primary/[0.03]' : wfCount > 0 ? 'hover:bg-surface-2/30' : ''}`}
                 >
                   {wfCount > 0 && (
                     <input type="checkbox" checked={isControlSelected} onChange={(e) => { e.stopPropagation(); toggleControlSelect(ctrl.id); }}
@@ -377,7 +377,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                       className="w-3.5 h-3.5 rounded border-gray-300 accent-[#6a12cd] cursor-pointer shrink-0" />
                   )}
                   {wfCount === 0 && <div className="w-3.5 shrink-0" />}
-                  {isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
+                  {wfCount > 0 ? (isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />) : <div className="w-3.5 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-semibold text-text">{ctrl.name}</span>
@@ -395,15 +395,10 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                   </div>
                 </div>
 
-                {/* Expanded: linked workflows with selection */}
-                {isExpanded && (
+                {/* Expanded: linked workflows with selection (only for controls with workflows) */}
+                {isExpanded && wfCount > 0 && (
                   <div className="border-t border-border-light bg-surface-2/10 px-5 py-4 space-y-3">
-                    {wfCount === 0 ? (
-                      <div className="flex items-start gap-2 px-3 py-3 rounded-lg bg-amber-50/30 border border-amber-100 text-[11px] text-amber-700">
-                        <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                        <span>No workflows linked to this control. Link or create workflows from the RACM tab before running analysis.</span>
-                      </div>
-                    ) : (
+                    {(
                       <>
                         {/* Selection toolbar */}
                         <div className="flex items-center justify-between">
@@ -474,7 +469,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
 
       {/* Continue to Analysis */}
       <div className="flex items-center gap-3">
-        <button onClick={() => onNavigateTab?.('analysis')}
+        <button onClick={() => onNavigateTab?.('observations')}
           className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
           Continue to Analysis <ChevronRight size={12} />
         </button>
