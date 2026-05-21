@@ -28,11 +28,12 @@ interface Props {
   onBack: () => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   requestPbcEnabled?: boolean;
+  generateFromPopulation?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true }: Props) {
+export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true, generateFromPopulation = false }: Props) {
   const [engagement, setEngagement] = useState<EngagementExecution>(MOCK_ENGAGEMENT_V2);
   const [showRacmModal, setShowRacmModal] = useState(false);
 
@@ -248,6 +249,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             initialStepId={initialStepId}
             onLaunchWorkflowBuilder={onLaunchWorkflowBuilder}
             requestPbcEnabled={requestPbcEnabled}
+            generateFromPopulation={generateFromPopulation}
           />
         )}
 

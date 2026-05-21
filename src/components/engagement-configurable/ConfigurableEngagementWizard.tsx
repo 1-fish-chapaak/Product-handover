@@ -350,6 +350,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
           engagementId={createdEngagement.id}
           onBack={handleBackToWizard}
           requestPbcEnabled={complianceConfig?.requestPbcEnabled ?? true}
+          generateFromPopulation={complianceConfig?.defaultTestingInputMethod === 'GENERATE_SAMPLES_FROM_POPULATION'}
         />
       );
     }

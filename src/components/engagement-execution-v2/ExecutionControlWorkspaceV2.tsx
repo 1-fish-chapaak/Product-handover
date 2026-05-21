@@ -57,11 +57,13 @@ interface Props {
   initialStepId?: string | null;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   requestPbcEnabled?: boolean;
+  /** When true, Samples tab becomes "Configure Samples" with population upload + sampling config */
+  generateFromPopulation?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateControl, initialStepId, onLaunchWorkflowBuilder, requestPbcEnabled = true }: Props) {
+export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateControl, initialStepId, onLaunchWorkflowBuilder, requestPbcEnabled = true, generateFromPopulation = false }: Props) {
   const controlType = deriveControlType(ctrl);
   const coverage = deriveWorkflowCoverage(ctrl);
   const nextAction = deriveNextAction(ctrl);
@@ -71,7 +73,8 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
   const conclusionDisplay = ctrl.execution.conclusion.value ? CONCLUSION_DISPLAY[ctrl.execution.conclusion.value] : null;
 
   const allSteps = getStepsForType(controlType);
-  const steps = requestPbcEnabled ? allSteps : allSteps.filter(s => s.id !== 'request-pbc');
+  const steps = (requestPbcEnabled ? allSteps : allSteps.filter(s => s.id !== 'request-pbc'))
+    .map(s => s.id === 'samples' && generateFromPopulation ? { ...s, label: 'Configure Samples' } : s);
   const [activeStepId, setActiveStepId] = useState(initialStepId || 'overview');
 
   // Sync when parent changes initialStepId (e.g., clicking a different action button)
@@ -144,6 +147,8 @@ export default function ExecutionControlWorkspaceV2({ ctrl, onClose, onUpdateCon
           <OverviewStep ctrl={ctrl} controlType={controlType} coverage={coverage} nextAction={nextAction} onNavigate={setActiveStepId} onUpdateControl={onUpdateControl} />
         ) : activeStepId === 'request-pbc' && activeAvailability.enabled ? (
           <RequestPBCStep ctrl={ctrl} onNavigate={setActiveStepId} />
+        ) : activeStepId === 'samples' && activeAvailability.enabled && generateFromPopulation ? (
+          <ConfigureSamplesStep ctrl={ctrl} onUpdateControl={onUpdateControl} onNavigate={setActiveStepId} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />
         ) : activeStepId === 'samples' && activeAvailability.enabled ? (
           <UnifiedSamplesStep ctrl={ctrl} controlType={controlType} onUpdateControl={onUpdateControl} onNavigate={setActiveStepId} />
         ) : activeStepId === 'attr-testing' && activeAvailability.enabled ? (
@@ -3925,6 +3930,233 @@ function AuditTrailStep({ ctrl }: { ctrl: ExecutionControl }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ─── Configure Samples Step (Generate from Population) ───────────────────
+
+type SampleMethod = 'Random' | 'Statistical' | 'Column-filter' | 'Workflow';
+
+function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkflowBuilder }: {
+  ctrl: ExecutionControl;
+  onUpdateControl: (updater: (ctrl: ExecutionControl) => ExecutionControl) => void;
+  onNavigate: (stepId: string) => void;
+  onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
+}) {
+  const [populationUploaded, setPopulationUploaded] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [populationFile, setPopulationFile] = useState('');
+  const [populationRows, setPopulationRows] = useState(0);
+  const [method, setMethod] = useState<SampleMethod>('Random');
+  const [sampleSize, setSampleSize] = useState(25);
+  const [filterDesc, setFilterDesc] = useState('');
+  const [samplesReady, setSamplesReady] = useState(false);
+  const [sampleCount, setSampleCount] = useState(0);
+
+  const sampleBasedCount = ctrl.attributes.length || 3;
+
+  const handleUpload = () => {
+    setProcessing(true);
+    setPopulationFile(`population_${ctrl.id.toLowerCase()}_FY26.xlsx`);
+    setTimeout(() => {
+      setProcessing(false);
+      setPopulationUploaded(true);
+      setPopulationRows(487);
+    }, 5000);
+  };
+
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = () => {
+    setGenerating(true);
+    const count = Math.min(sampleSize, populationRows);
+    setTimeout(() => {
+      setSampleCount(count);
+      setSamplesReady(true);
+      setGenerating(false);
+      // Create test items on the control so Attribute Testing can use them
+      onUpdateControl(prev => ({
+        ...prev,
+        execution: {
+          ...prev.execution,
+          testItems: Array.from({ length: count }, (_, i) => ({
+            id: `S${String(i + 1).padStart(3, '0')}`,
+            referenceId: `POP-${String(Math.floor(Math.random() * populationRows) + 1).padStart(4, '0')}`,
+            description: `Sample ${i + 1} from ${method} sampling`,
+            sourceRow: Math.floor(Math.random() * populationRows) + 1,
+            evidence: [],
+            attributeResults: prev.attributes.map(attr => ({
+              attributeId: attr.id,
+              result: 'NOT_TESTED' as any,
+              source: 'MANUAL' as any,
+              evidenceIds: [],
+              notes: '',
+              testedAt: null,
+              testedBy: null,
+            })),
+            sampleResult: 'PENDING' as any,
+          })),
+          status: prev.execution.status === 'NOT_STARTED' ? 'TEST_ITEMS_READY' as any : prev.execution.status,
+        },
+      }));
+    }, 5000);
+  };
+
+  const fieldCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+
+  const METHODS: { id: SampleMethod; label: string; sub: string }[] = [
+    { id: 'Random', label: 'Random', sub: 'Uniform random draw' },
+    { id: 'Statistical', label: 'Statistical', sub: 'Stratified / confidence-based' },
+    { id: 'Column-filter', label: 'Column-filter', sub: 'WHERE col = ...' },
+    { id: 'Workflow', label: 'Workflow', sub: 'Custom workflow' },
+  ];
+
+  // Stage 1: Upload Population
+  if (!populationUploaded && !processing) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h4 className="text-[13px] font-bold text-text mb-0.5">Upload Population</h4>
+          <p className="text-[11px] text-text-muted">Upload the full population file for this control before generating samples.</p>
+        </div>
+        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] p-8 text-center space-y-4">
+          <Upload size={32} className="text-primary/40 mx-auto" />
+          <div>
+            <p className="text-[13px] font-semibold text-text mb-1">Upload Population File</p>
+            <p className="text-[11px] text-text-muted">Supported: XLSX, CSV</p>
+          </div>
+          <label className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+            <Upload size={13} />Upload Population File
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUpload} />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  // Processing state
+  if (processing) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h4 className="text-[13px] font-bold text-text mb-0.5">Upload Population</h4>
+          <p className="text-[11px] text-text-muted">Processing your population file...</p>
+        </div>
+        <div className="rounded-xl border border-border-light bg-white p-12 text-center space-y-4">
+          <Loader2 size={32} className="text-primary mx-auto animate-spin" />
+          <p className="text-[13px] font-semibold text-text">Processing population file…</p>
+          <p className="text-[11px] text-text-muted">Analyzing rows, validating schema, and preparing for sampling.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Stage 2: Configure Sampling
+  return (
+    <div className="space-y-5">
+      {/* Population summary */}
+      <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700">
+        <CheckCircle2 size={14} />
+        <div>
+          <span className="font-semibold">Population uploaded:</span> {populationFile} · {populationRows.toLocaleString()} rows
+        </div>
+        <label className="ml-auto text-[10px] font-semibold text-primary cursor-pointer hover:underline">
+          Replace
+          <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={() => { setPopulationUploaded(false); setSamplesReady(false); handleUpload(); }} />
+        </label>
+      </div>
+
+      {/* Configure sampling */}
+      <div className="rounded-xl border border-border-light bg-white p-5 space-y-4">
+        <div>
+          <h4 className="text-[13px] font-bold text-text mb-0.5">Configure sampling</h4>
+          <p className="text-[11px] text-text-muted">One sample set shared across {sampleBasedCount} sample-based attributes.</p>
+        </div>
+
+        {/* Method cards */}
+        <div className="grid grid-cols-4 gap-2">
+          {METHODS.map(m => (
+            <button key={m.id} onClick={() => setMethod(m.id)}
+              className={`rounded-xl border-2 p-3 text-left cursor-pointer transition-all ${
+                method === m.id ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border-light hover:border-primary/30'
+              }`}>
+              <span className="text-[12px] font-semibold text-text block">{m.label}</span>
+              <span className="text-[10px] text-gray-400 mt-0.5 block">{m.sub}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Sample size + method-specific options */}
+        <div className="space-y-3">
+          {method !== 'Workflow' && (
+            <div>
+              <label className="text-[11px] font-semibold text-text-muted block mb-1">Sample Size</label>
+              <input type="number" value={sampleSize} onChange={e => { setSampleSize(Math.max(1, Math.min(5000, Number(e.target.value)))); setSamplesReady(false); }}
+                className={fieldCls + ' max-w-[200px]'} min={1} max={5000} />
+            </div>
+          )}
+
+          {method === 'Column-filter' && (
+            <div>
+              <label className="text-[11px] font-semibold text-text-muted block mb-1">Filter</label>
+              <input value={filterDesc} onChange={e => setFilterDesc(e.target.value)}
+                placeholder="e.g. amount > 100000 AND status = 'OPEN'" className={fieldCls} />
+            </div>
+          )}
+
+          {method === 'Statistical' && (
+            <p className="text-[10px] text-gray-400 italic">Statistical sampling configuration can be expanded later.</p>
+          )}
+
+          {method === 'Workflow' && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold text-text-muted block">Sample Size</label>
+              <input type="number" value={sampleSize} disabled className={fieldCls + ' max-w-[200px] opacity-50 cursor-not-allowed'} />
+              <p className="text-[10px] text-gray-400">Sample size is determined by the workflow.</p>
+              <button onClick={() => onLaunchWorkflowBuilder?.(`Build a sampling workflow for control ${ctrl.id} (${ctrl.name}). The workflow should select a deterministic sample list from the uploaded population (${populationRows} rows).`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[11px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
+                <Workflow size={12} />Build sampling workflow
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Generate CTA */}
+        {method !== 'Workflow' && !generating && (
+          <button onClick={handleGenerate}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+            <Play size={12} />Generate Samples
+          </button>
+        )}
+
+        {/* Generating loader */}
+        {generating && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/20">
+            <Loader2 size={16} className="text-primary animate-spin" />
+            <div>
+              <span className="text-[12px] font-semibold text-text block">Generating samples…</span>
+              <span className="text-[10px] text-text-muted">Drawing {sampleSize} samples using {method} method from {populationRows.toLocaleString()} rows.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Samples ready */}
+        {samplesReady && !generating && (
+          <div className="flex items-center gap-2 text-[11px] text-emerald-700">
+            <CheckCircle2 size={13} />
+            <span className="font-semibold">{sampleCount} samples ready</span>
+          </div>
+        )}
+      </div>
+
+      {/* Continue */}
+      {samplesReady && (
+        <button onClick={() => onNavigate('attr-testing')}
+          className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+          Continue to Attribute Testing <ChevronRight size={12} />
+        </button>
+      )}
     </div>
   );
 }
