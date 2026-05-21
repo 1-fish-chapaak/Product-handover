@@ -211,12 +211,14 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
       })),
     };
     setCreatedEngagement(eng);
+    setOpenedFromLibrary(true);
     // For compliance engagements, route to EngagementExecutionV2 (controls table workspace)
     if (eng.patternType === EPT.COMPLIANCE_CONTROL_TESTING) {
       setOpenedFromComplianceView(true);
     }
     setShowWizardModal(false);
     setShowComplianceView(false);
+    setShowIAView(false);
     setShowPortfolio(false);
   };
 
