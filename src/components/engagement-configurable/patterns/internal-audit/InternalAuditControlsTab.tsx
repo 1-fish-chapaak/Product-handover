@@ -476,6 +476,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
           selectedWorkflows={selectedLibraryWorkflows}
           onClose={() => { setShowBulkModal(false); }}
           onContinue={() => handleBulkRunComplete()}
+          defaultAuditName={engagement.name}
         />
       )}
     </div>

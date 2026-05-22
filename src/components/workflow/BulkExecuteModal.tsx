@@ -298,6 +298,7 @@ export function BulkExecuteModal({
   selectedWorkflows,
   onClose,
   onContinue,
+  defaultAuditName,
 }: {
   selectedWorkflows: LibraryWorkflow[];
   onClose: () => void;
@@ -309,11 +310,12 @@ export function BulkExecuteModal({
     runTime: string;
     retry: Retry;
   }) => void;
+  defaultAuditName?: string;
 }) {
   const { addToast } = useToast();
   const { startBulkRun } = useBulkRunProgress();
   const [modalDeselected, setModalDeselected] = useState<Set<string>>(new Set());
-  const [auditName, setAuditName] = useState('Q3-P2P');
+  const [auditName, setAuditName] = useState(defaultAuditName || 'Q3-P2P');
   const [auditDescription, setAuditDescription] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('Daily');
   const [triggerOn, setTriggerOn] = useState<Trigger>('Schedule');
