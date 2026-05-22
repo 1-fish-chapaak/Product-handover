@@ -15,13 +15,16 @@ import {
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
-import { QUERY_GRAPHS, type QueryGraph } from '../../data/queryGraphs';
+import { QUERY_GRAPHS, QUERY_TABLES, type QueryGraph, type QueryTable } from '../../data/queryGraphs';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { SectionHeader, Checkbox, KpiPreviewRow, TablePreviewRow } from '../chat/WidgetPickerParts';
+import { setAll, toggleIn } from '../chat/widgetPickerHelpers';
 import { StatusBadge } from '../shared/StatusBadge';
 import SmartTable from '../shared/SmartTable';
-import { useToast } from '../shared/Toast';
+import { useToast, type ToastType } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
 import { KpiCountUp } from '../shared/KpiTile';
+import { renderAssistantText } from '../shared/AssistantMarkdown';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
@@ -1265,7 +1268,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
 }
 
 // ─── Query Card Component ───
-type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; chartData: number[] };
+type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
 function parseNumeric(v: string): number {
   const match = String(v).match(/-?\d[\d,.]*/);
@@ -1285,6 +1288,22 @@ function computeQueryKpis(query: QueryShape) {
     { label: 'Closed',           value: closed.toLocaleString(), icon: CheckCircle2,  color: 'text-compliant-700 bg-compliant-50' },
     { label: 'Check Health',     value: `${healthPct}%`,         icon: TrendingUp,    color: 'text-evidence-700 bg-evidence-50' },
   ];
+}
+
+// Simulated report download — shows a 'loading' toast that resolves to a
+// 'success' toast after a short "preparing" delay. No real file is produced
+// (the prototype's report exports are all mock).
+function startReportDownload(
+  addToast: (t: { type: ToastType; message: string }) => string,
+  updateToast: (id: string, patch: { type: ToastType; message: string }) => void,
+  reportName: string,
+  ext = 'pdf',
+) {
+  const file = `${reportName}.${ext}`;
+  const id = addToast({ type: 'loading', message: `Preparing ${file}…` });
+  window.setTimeout(() => {
+    updateToast(id, { type: 'success', message: `${file} downloaded.` });
+  }, 1800);
 }
 
 /**
@@ -1524,10 +1543,13 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [graphModalOpen, setGraphModalOpen] = useState(false);
-  const [attachedGraphId, setAttachedGraphId] = useState<string | null>(null);
+  const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const availableGraphs = QUERY_GRAPHS[query.id] ?? [];
-  const attachedGraph = availableGraphs.find(g => g.id === attachedGraphId) ?? null;
+  const queryTable = QUERY_TABLES[query.id];
+  const queryKpis = computeQueryKpis(query);
+  const [selectedKpis, setSelectedKpis] = useState<Set<string>>(() => new Set(queryKpis.map(k => k.label)));
+  const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
+  const [tableAttached, setTableAttached] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
@@ -1629,22 +1651,11 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
                     Open Query
                   </button>
                   <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      navigator.clipboard?.writeText(query.id);
-                      addToast({ type: 'success', message: `Copied ${query.id}` });
-                    }}
+                    onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
                     className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                   >
-                    <Copy size={13} />
-                    Copy Card ID
-                  </button>
-                  <button
-                    onClick={() => { setMenuOpen(false); setGraphModalOpen(true); }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <BarChart3 size={13} />
-                    Add Graph
+                    <LayoutGrid size={13} />
+                    Add Widgets
                   </button>
                   <button
                     onClick={() => setMenuOpen(false)}
@@ -1659,7 +1670,7 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
                     className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
                   >
                     <Trash2 size={13} />
-                    Delete
+                    Delete Query
                   </button>
                 </div>
               )}
@@ -1677,11 +1688,11 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
           {query.title}
         </motion.h3>
 
-        {/* KPI strip — appears once cases are ready, count-up animated to mirror
-            the chat's KPI tiles. No placeholder while generating: the toggle
-            itself already carries the in-flight state. */}
-        {casesPhase === 'ready' ? (() => {
-          const kpis = computeQueryKpis(query);
+        {/* KPI strip — driven by the "Add Widgets" modal selection. Count-up
+            animated to mirror the chat's KPI tiles; renders as soon as KPIs are
+            selected, the same way an attached chart does. */}
+        {(() => {
+          const kpis = queryKpis.filter(k => selectedKpis.has(k.label));
           if (kpis.length === 0) return null;
           return (
             <div className="grid grid-cols-4 gap-3 mb-5">
@@ -1704,11 +1715,12 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
               ))}
             </div>
           );
-        })() : null}
+        })()}
 
-        {/* Attached graph (selected from Add Graph modal) */}
-        {attachedGraph && (
+        {/* Attached charts — selected via the "Add Widgets" modal */}
+        {availableGraphs.filter(g => selectedCharts.has(g.id)).map(g => (
           <motion.div
+            key={g.id}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
@@ -1717,10 +1729,10 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                 <BarChart3 size={12} />
-                {attachedGraph.title}
+                {g.title}
               </div>
               <button
-                onClick={() => setAttachedGraphId(null)}
+                onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
                 title="Remove graph"
                 aria-label="Remove graph"
                 className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -1730,56 +1742,77 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
             </div>
             <div className="h-[200px]">
               <ConfigurableChart
-                type={attachedGraph.type}
-                xAxis={attachedGraph.xAxis}
-                yAxis={attachedGraph.yAxis}
-                color={attachedGraph.color ?? '#6a12cd'}
+                type={g.type}
+                xAxis={g.xAxis}
+                yAxis={g.yAxis}
+                color={g.color ?? '#6a12cd'}
                 showTarget={false}
                 showLegend
               />
             </div>
           </motion.div>
+        ))}
+
+        {/* Attached results table — selected via the "Add Widgets" modal */}
+        {tableAttached && queryTable && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+                <LayoutGrid size={12} />
+                Results Table
+              </div>
+              <button
+                onClick={() => setTableAttached(false)}
+                title="Remove table"
+                aria-label="Remove table"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border-light">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-paper-50">
+                    {queryTable.columns.map(c => (
+                      <th
+                        key={c}
+                        className="px-3 py-2 text-left text-[10.5px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
+                      >
+                        {c}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {queryTable.rows.map((row, ri) => (
+                    <tr key={ri} className="border-b border-border-light last:border-b-0">
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-3 py-2 text-[12px] text-text-secondary whitespace-nowrap">
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
         )}
 
-        {/* Summary */}
-        <motion.p
+        {/* Answer — rendered in the chat's rich markdown format (shared renderer) */}
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: baseDelay + 0.6, duration: 0.4 }}
-          className="text-[13px] text-text-secondary leading-relaxed mb-4"
         >
-          {query.summary}
-        </motion.p>
-
-        {/* Findings & observations (always visible) */}
-        <div className="space-y-6 pt-2">
-          {[
-            { title: 'Findings', items: query.findings, emptyCopy: 'No findings recorded for this query yet.' },
-            { title: 'Observations', items: query.observations, emptyCopy: 'No observations recorded for this query yet.' },
-          ].map(section => (
-            <div key={section.title}>
-              <h4 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">{section.title}</h4>
-              {section.items.length === 0 ? (
-                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {section.items.map((item, i) => (
-                    <motion.li
-                      key={i}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: baseDelay + 0.7 + i * 0.05, duration: 0.3 }}
-                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
-                    >
-                      <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
-                      {item}
-                    </motion.li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
+          {renderAssistantText(query.answer)}
+        </motion.div>
       </div>
 
       {drawerTab && createPortal(
@@ -1807,18 +1840,24 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
         }}
       />
 
-      {graphModalOpen && createPortal(
-        <AddGraphModal
+      {widgetModalOpen && createPortal(
+        <QueryWidgetModal
           queryId={query.id}
           queryTitle={query.title}
-          graphs={availableGraphs}
-          attachedGraphId={attachedGraphId}
-          onSelect={(id) => {
-            setAttachedGraphId(id);
-            setGraphModalOpen(false);
-            addToast({ type: 'success', message: 'Graph added to query card.' });
+          kpis={queryKpis}
+          charts={availableGraphs}
+          table={queryTable}
+          initialKpis={selectedKpis}
+          initialCharts={selectedCharts}
+          initialTable={tableAttached}
+          onConfirm={(sel) => {
+            setSelectedKpis(sel.kpis);
+            setSelectedCharts(sel.charts);
+            setTableAttached(sel.table);
+            setWidgetModalOpen(false);
+            addToast({ type: 'success', message: 'Query card updated.' });
           }}
-          onClose={() => setGraphModalOpen(false)}
+          onClose={() => setWidgetModalOpen(false)}
         />,
         document.body,
       )}
@@ -1826,20 +1865,31 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
   );
 }
 
-// ─── "Add Graph" modal — pick from query's available chat-session graphs ───
-function AddGraphModal({
+// ─── "Choose What to Include" modal — multi-select KPIs, charts & table ───
+// Mirrors the chat's Add-to-Report section picker so a query card is built
+// from the same surface. Selection-driven: re-opening shows the current card
+// state, and confirming applies it.
+function QueryWidgetModal({
   queryId,
   queryTitle,
-  graphs,
-  attachedGraphId,
-  onSelect,
+  kpis,
+  charts,
+  table,
+  initialKpis,
+  initialCharts,
+  initialTable,
+  onConfirm,
   onClose,
 }: {
   queryId: string;
   queryTitle: string;
-  graphs: QueryGraph[];
-  attachedGraphId: string | null;
-  onSelect: (id: string) => void;
+  kpis: { label: string; value: string }[];
+  charts: QueryGraph[];
+  table?: QueryTable;
+  initialKpis: Set<string>;
+  initialCharts: Set<string>;
+  initialTable: boolean;
+  onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; table: boolean }) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -1848,7 +1898,25 @@ function AddGraphModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const [pickedId, setPickedId] = useState<string | null>(attachedGraphId);
+  const [selKpis, setSelKpis] = useState<Set<string>>(() => new Set(initialKpis));
+  const [selCharts, setSelCharts] = useState<Set<string>>(() => new Set(initialCharts));
+  const [selTable, setSelTable] = useState(initialTable);
+  const [collapsed, setCollapsed] = useState({ kpis: false, charts: false, table: false });
+
+  const hasTable = !!table && table.columns.length > 0;
+  const totalSelected = selKpis.size + selCharts.size + (selTable ? 1 : 0);
+  const totalItems = kpis.length + charts.length + (hasTable ? 1 : 0);
+
+  const selectAll = () => {
+    setAll(kpis.map(k => k.label), true, setSelKpis);
+    setAll(charts.map(c => c.id), true, setSelCharts);
+    if (hasTable) setSelTable(true);
+  };
+  const clearAll = () => {
+    setSelKpis(new Set());
+    setSelCharts(new Set());
+    setSelTable(false);
+  };
 
   return (
     <AnimatePresence>
@@ -1868,80 +1936,181 @@ function AddGraphModal({
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
-          aria-labelledby="add-graph-title"
+          aria-labelledby="query-widget-title"
           className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
         >
+          {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
-            <div>
-              <h3 id="add-graph-title" className="text-[16px] font-bold text-text tracking-tight">
-                Add Graph
-              </h3>
-              <p className="text-[12.5px] text-text-secondary mt-1">
-                <span className="font-mono text-[11px] text-primary">{queryId}</span>
-                <span className="mx-1.5 text-text-muted">·</span>
-                {queryTitle}
-              </p>
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-[10px] bg-primary-xlight flex items-center justify-center shrink-0">
+                <FileText size={16} className="text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="query-widget-title" className="text-[16px] font-bold text-text tracking-tight">
+                  Choose What to Include
+                </h3>
+                <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">
+                  <span className="font-mono text-[11px] text-primary">{queryId}</span>
+                  <span className="mx-1.5 text-text-muted">·</span>
+                  {queryTitle}
+                </p>
+              </div>
             </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
             >
               <X size={17} />
             </button>
           </div>
 
+          {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {graphs.length === 0 ? (
+            {totalItems === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mb-3">
                   <BarChart3 size={20} className="text-text-muted" />
                 </div>
-                <p className="text-[13px] font-semibold text-text mb-1">No graphs available for this query yet</p>
+                <p className="text-[13px] font-semibold text-text mb-1">Nothing to add for this query yet</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {graphs.map((g) => {
-                  const isPicked = pickedId === g.id;
-                  return (
+              <div className="space-y-5">
+                {/* Selection summary + all/none */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] text-text-muted" aria-live="polite">
+                    {totalSelected === 0
+                      ? 'Select what to show on the card.'
+                      : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
+                  </p>
+                  <div className="flex items-center gap-3">
                     <button
-                      key={g.id}
-                      onClick={() => setPickedId(g.id)}
-                      className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none ${
-                        isPicked
-                          ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
-                          : 'border-border-light hover:border-primary/40'
-                      }`}
+                      type="button"
+                      onClick={selectAll}
+                      className="text-[11.5px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span
-                          className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${
-                            isPicked
-                              ? 'bg-primary border-primary text-white'
-                              : 'bg-white border-border-light text-transparent'
-                          }`}
-                        >
-                          <Check size={12} />
-                        </span>
-                        <span className="text-[12.5px] font-semibold text-text">{g.title}</span>
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearAll}
+                      className="text-[11.5px] font-semibold text-text-muted hover:text-text cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* KPI Cards */}
+                {kpis.length > 0 && (
+                  <div className="space-y-1.5" role="group" aria-label="KPI Cards">
+                    <SectionHeader
+                      title="KPI Cards"
+                      count={selKpis.size}
+                      total={kpis.length}
+                      collapsed={collapsed.kpis}
+                      onToggle={() => setCollapsed(c => ({ ...c, kpis: !c.kpis }))}
+                      onToggleAll={(all) => setAll(kpis.map(k => k.label), all, setSelKpis)}
+                      accent="brand"
+                    />
+                    {!collapsed.kpis && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                        {kpis.map(k => (
+                          <KpiPreviewRow
+                            key={k.label}
+                            kpi={{ label: k.label, value: k.value, color: 'text-ink-900' }}
+                            checked={selKpis.has(k.label)}
+                            onChange={() => toggleIn(selKpis, k.label, setSelKpis)}
+                            accent="brand"
+                          />
+                        ))}
                       </div>
-                      <div className="h-[160px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
-                        <ConfigurableChart
-                          type={g.type}
-                          xAxis={g.xAxis}
-                          yAxis={g.yAxis}
-                          color={g.color ?? '#6a12cd'}
-                          showTarget={false}
-                          showLegend={false}
+                    )}
+                  </div>
+                )}
+
+                {/* Charts */}
+                {charts.length > 0 && (
+                  <div className="space-y-1.5" role="group" aria-label="Charts">
+                    <SectionHeader
+                      title="Charts"
+                      count={selCharts.size}
+                      total={charts.length}
+                      collapsed={collapsed.charts}
+                      onToggle={() => setCollapsed(c => ({ ...c, charts: !c.charts }))}
+                      onToggleAll={(all) => setAll(charts.map(c => c.id), all, setSelCharts)}
+                      accent="brand"
+                    />
+                    {!collapsed.charts && (
+                      <div className="grid grid-cols-2 gap-3 pl-1">
+                        {charts.map(g => {
+                          const on = selCharts.has(g.id);
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={on}
+                              aria-label={g.title}
+                              onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
+                              className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                                on
+                                  ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
+                                  : 'border-border-light hover:border-primary/40'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <Checkbox checked={on} accent="brand" />
+                                <span className="text-[12.5px] font-semibold text-text truncate">{g.title}</span>
+                              </div>
+                              <div className="h-[150px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
+                                <ConfigurableChart
+                                  type={g.type}
+                                  xAxis={g.xAxis}
+                                  yAxis={g.yAxis}
+                                  color={g.color ?? '#6a12cd'}
+                                  showTarget={false}
+                                  showLegend={false}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Results Table */}
+                {hasTable && (
+                  <div className="space-y-1.5" role="group" aria-label="Results Table">
+                    <SectionHeader
+                      title="Results Table"
+                      count={selTable ? 1 : 0}
+                      total={1}
+                      collapsed={collapsed.table}
+                      onToggle={() => setCollapsed(c => ({ ...c, table: !c.table }))}
+                      onToggleAll={(all) => setSelTable(all)}
+                      accent="brand"
+                    />
+                    {!collapsed.table && (
+                      <div className="pl-1">
+                        <TablePreviewRow
+                          columns={table!.columns}
+                          sampleRows={table!.rows}
+                          checked={selTable}
+                          onChange={() => setSelTable(v => !v)}
+                          accent="brand"
                         />
                       </div>
-                    </button>
-                  );
-                })}
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
+          {/* Footer */}
           <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-light bg-paper-50/40">
             <button
               onClick={onClose}
@@ -1950,11 +2119,11 @@ function AddGraphModal({
               Cancel
             </button>
             <button
-              onClick={() => pickedId && onSelect(pickedId)}
-              disabled={!pickedId}
-              className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
             >
-              Add Graph
+              <FileText size={13} />
+              Add to Card
             </button>
           </div>
         </motion.div>
@@ -3585,7 +3754,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
-  const { addToast } = useToast();
+  const { addToast, updateToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -4218,7 +4387,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   ].map(({ label, ext }) => (
                     <button
                       key={ext}
-                      onClick={() => { addToast({ type: 'success', message: `Downloading ${report.name}.${ext}...` }); setShowDownloadDropdown(false); }}
+                      onClick={() => { startReportDownload(addToast, updateToast, report.name, ext); setShowDownloadDropdown(false); }}
                       className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
                     >
                       {label}
@@ -5037,7 +5206,7 @@ export default function ReportsView({
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportTemplate, setNewReportTemplate] = useState('');
   const [newReportTemplatePrefilled, setNewReportTemplatePrefilled] = useState(false);
-  const { addToast } = useToast();
+  const { addToast, updateToast } = useToast();
 
   const openNewReportModal = () => {
     setNewReportName('');
@@ -5107,6 +5276,7 @@ export default function ReportsView({
         <BulkAuditVariantView
           report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
           onBack={() => setViewingReport(null)}
+          onShare={onShare ? () => onShare(viewingReport.id) : undefined}
         />
       );
     }
@@ -5251,7 +5421,7 @@ export default function ReportsView({
               { key: 'status', label: 'Status', width: '100px', render: (item) => <StatusBadge status={String(item.status)} /> },
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1">
-                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
@@ -5321,7 +5491,7 @@ export default function ReportsView({
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center justify-center shrink-0" style={{ width: '42px', height: '42px', background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}><FileText size={20} style={{ color: '#6a12cd' }} /></div>
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'success', message: `Downloading ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
                         <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Share"><Share2 size={15} /></button>
                         <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="hover:text-risk transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Delete"><Trash2 size={15} /></button>
                       </div>
@@ -5386,7 +5556,7 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1">
-                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
@@ -5448,7 +5618,7 @@ export default function ReportsView({
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center justify-center shrink-0" style={{ width: '42px', height: '42px', background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}><FileText size={20} style={{ color: '#6a12cd' }} /></div>
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'success', message: `Downloading ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
                       <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Share"><Share2 size={15} /></button>
                     </div>
                   </div>
