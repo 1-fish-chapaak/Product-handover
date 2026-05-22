@@ -477,6 +477,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
           onClose={() => { setShowBulkModal(false); }}
           onContinue={() => handleBulkRunComplete()}
           defaultAuditName={engagement.name}
+          defaultAuditDescription={engagement.description}
         />
       )}
     </div>
