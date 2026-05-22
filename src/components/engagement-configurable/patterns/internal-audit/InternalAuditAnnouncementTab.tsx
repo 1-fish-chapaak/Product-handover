@@ -28,13 +28,14 @@ interface Props {
   announcement: InternalAuditAnnouncementState;
   onUpdateAnnouncement: (ann: InternalAuditAnnouncementState) => void;
   onNavigateTab?: (tabId: string) => void;
+  hideTimeline?: boolean;
 }
 
 function now(): string {
   return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function InternalAuditAnnouncementTab({ engagement, scope, announcement, onUpdateAnnouncement, onNavigateTab }: Props) {
+export default function InternalAuditAnnouncementTab({ engagement, scope, announcement, onUpdateAnnouncement, onNavigateTab, hideTimeline }: Props) {
   const cfg = engagement.config as InternalAuditConfig;
   const scopeReadiness = deriveIAScopeReadiness(scope, engagement, cfg);
   const { canSend, missing } = deriveAnnouncementReadiness(announcement);
@@ -172,15 +173,17 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
           </div>
 
           {/* Timeline */}
-          <div className="rounded-lg border border-border-light p-4 space-y-3">
-            <h4 className="text-[11px] font-bold text-text">Timeline</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={labelCls}>Announcement Date</label><input type="date" value={announcement.announcementDate} onChange={e => update('announcementDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-              <div><label className={labelCls}>Response Due</label><input type="date" value={announcement.responseDueDate} onChange={e => update('responseDueDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-              <div><label className={labelCls}>Expected Start</label><input type="date" value={announcement.expectedStartDate} onChange={e => update('expectedStartDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-              <div><label className={labelCls}>Expected End</label><input type="date" value={announcement.expectedEndDate} onChange={e => update('expectedEndDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+          {!hideTimeline && (
+            <div className="rounded-lg border border-border-light p-4 space-y-3">
+              <h4 className="text-[11px] font-bold text-text">Timeline</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={labelCls}>Announcement Date</label><input type="date" value={announcement.announcementDate} onChange={e => update('announcementDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Response Due</label><input type="date" value={announcement.responseDueDate} onChange={e => update('responseDueDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Expected Start</label><input type="date" value={announcement.expectedStartDate} onChange={e => update('expectedStartDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Expected End</label><input type="date" value={announcement.expectedEndDate} onChange={e => update('expectedEndDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Subject + Body */}
           <div className="rounded-lg border border-border-light p-4 space-y-3">
@@ -237,10 +240,12 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
                 <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
                 <span>Acknowledged by {announcement.acknowledgedBy} on {announcement.acknowledgedAt}.</span>
               </div>
-              <button onClick={() => onNavigateTab?.('requests-idr')}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
-                Continue to Requests / IDR <ChevronRight size={11} />
-              </button>
+              {!hideTimeline && (
+                <button onClick={() => onNavigateTab?.('requests-idr')}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+                  Continue to Requests / IDR <ChevronRight size={11} />
+                </button>
+              )}
             </div>
           )}
         </div>

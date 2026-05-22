@@ -26,11 +26,13 @@ interface Props {
   onUpdateCases: (state: AutomationCasesState) => void;
   onUpdateRunException?: (runId: string, exId: string, status: ExceptionStatus, triageData?: Record<string, unknown>) => void;
   onNavigateTab?: (tabId: string) => void;
+  /** Skip the CASE_MANAGEMENT output-type check (for IA engagements that always have case management). */
+  skipOutputCheck?: boolean;
 }
 
-export default function AutomationCasesTab({ engagement, runsState, casesState, onUpdateCases, onUpdateRunException, onNavigateTab }: Props) {
+export default function AutomationCasesTab({ engagement, runsState, casesState, onUpdateCases, onUpdateRunException, onNavigateTab, skipOutputCheck }: Props) {
   const cfg = engagement.config as AutomationProjectConfig;
-  const hasCaseMgmt = cfg.outputTypes.includes('CASE_MANAGEMENT');
+  const hasCaseMgmt = skipOutputCheck || cfg.outputTypes?.includes('CASE_MANAGEMENT');
   const completedRuns = runsState.runs.filter(r => r.status === 'COMPLETED');
   const allExceptions = completedRuns.flatMap(r => r.exceptions);
   const [role, setRole] = useState<ExceptionRole>('auditor');

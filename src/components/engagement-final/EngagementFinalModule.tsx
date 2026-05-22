@@ -25,7 +25,8 @@ import AutomationWorkflowsTab from '../engagement-configurable/patterns/automati
 import AutomationCasesTab from '../engagement-configurable/patterns/automation/AutomationCasesTab';
 import type { AutomationProjectWorkspaceState } from '../engagement-configurable/patterns/automation/automationInputData';
 import type { AutomationSetupState } from '../engagement-configurable/patterns/automation/automationSetupData';
-import type { AutomationRunsState, ExceptionStatus as AutoExceptionStatus } from '../engagement-configurable/patterns/automation/automationRunsData';
+import type { AutomationRunsState, AutomationRun, ExceptionStatus as AutoExceptionStatus } from '../engagement-configurable/patterns/automation/automationRunsData';
+import type { AnalysisRun } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
 import type { AutomationOutputReviewState } from '../engagement-configurable/patterns/automation/automationOutputReviewData';
 import type { AutomationCasesState } from '../engagement-configurable/patterns/automation/automationCasesData';
 import type { AutomationReportsState } from '../engagement-configurable/patterns/automation/automationReportsData';
@@ -212,6 +213,26 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
   }, []);
   const handleUpdateAnalysis = useCallback((state: InternalAuditAnalysisState) => setAnalysisState(state), []);
 
+  // Merge workflow runs + control analysis runs into a single AutomationRunsState for the Exception Management tab
+  const mergedRunsState: AutomationRunsState = useMemo(() => {
+    const analysisAsAutomation: AutomationRun[] = analysisState.runs
+      .filter(r => r.status === 'COMPLETED' && r.exceptions.length > 0)
+      .map((ar: AnalysisRun) => ({
+        id: ar.id, runName: ar.title, runType: 'WORKFLOW' as const, sourceSetupMode: 'CONTROL_EXECUTION',
+        workflowName: ar.workflowName, inputSourceIds: ar.inputFiles,
+        status: 'COMPLETED' as const, startedAt: ar.startedAt, completedAt: ar.completedAt,
+        runBy: ar.runBy, summary: ar.summary, processedRecords: 0, exceptionCount: ar.exceptions.length, outputCount: 0,
+        outputs: [], logs: [],
+        exceptions: ar.exceptions.map(e => ({
+          id: e.id, severity: e.severity, title: e.title, description: e.description,
+          sourceRecord: e.source, sourceFile: e.linkedFile,
+          category: 'POLICY_VIOLATION' as const, status: (e.status === 'CONVERTED_TO_OBSERVATION' ? 'REVIEWED' : e.status) as AutoExceptionStatus,
+          sourceWorkflowId: ar.id, sourceWorkflowName: ar.workflowName,
+        })),
+      }));
+    return { runs: [...automationState.runs.runs, ...analysisAsAutomation] };
+  }, [automationState.runs.runs, analysisState.runs]);
+
   const visibleTabs = useMemo(() => getVisibleTabs(scope), [scope]);
   const activeTabDef = visibleTabs.find(t => t.id === activeTab) || visibleTabs[0];
 
@@ -384,11 +405,12 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       {activeTab === 'exceptions' && (
         <AutomationCasesTab
           engagement={engagement}
-          runsState={automationState.runs}
+          runsState={mergedRunsState}
           casesState={automationState.cases}
           onUpdateCases={handleUpdateCases}
           onUpdateRunException={handleUpdateRunException}
           onNavigateTab={setActiveTab}
+          skipOutputCheck
         />
       )}
 
@@ -500,6 +522,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
                     // 'requests-idr' from the Acknowledge → Continue action: close modal
                     setShowAnnouncementModal(false);
                   }}
+                  hideTimeline
                 />
               </div>
             </motion.div>
