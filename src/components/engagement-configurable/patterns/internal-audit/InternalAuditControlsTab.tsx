@@ -413,14 +413,6 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                               <span className="text-[10px] text-primary font-semibold">{selectedCount} selected</span>
                             )}
                           </div>
-                          <button
-                            onClick={() => { setBulkMode('workflow'); setShowBulkModal(true); }}
-                            disabled={selectedCount === 0}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <Play size={11} />
-                            {selectedCount <= 1 ? 'Execute Workflow' : `Execute ${selectedCount} Workflows`}
-                          </button>
                         </div>
 
                         {/* Workflow cards */}
