@@ -9,9 +9,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield } from 'lucide-react';
+import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import { useToast } from '../shared/Toast';
+import { KpiCountUp } from '../shared/KpiTile';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import type { WorkflowResult } from './ReportsView';
 
@@ -234,7 +235,7 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
   return (
     <div className="mx-auto px-8 pt-2 pb-24 max-w-[1100px]">
       {/* Cover — rounded top only so the white body below attaches cleanly */}
-      <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
+      <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
         <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
           <FloatingLines
             enabledWaves={['top', 'middle']}
@@ -300,11 +301,19 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
 
       {/* Editorial body — white card attached to the header (no gap) */}
       <article className="bg-white border-x border-b border-border-light rounded-b-2xl px-8 py-8">
-        <EditorialSummary workflows={workflows} totals={totals} />
+        <EditorialContents workflows={workflows} />
 
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
-        <EditorialWorkflowStatus workflows={workflows} auditDate={report.generatedAt} />
+        <div id="bulk-exec-summary" className="scroll-mt-6">
+          <EditorialSummary workflows={workflows} totals={totals} />
+        </div>
+
+        <hr className="my-10 border-0 border-t border-ink-900/15" />
+
+        <div id="bulk-workflow-status" className="scroll-mt-6">
+          <EditorialWorkflowStatus workflows={workflows} auditDate={report.generatedAt} />
+        </div>
 
         <hr className="mt-10 mb-4 border-0 border-t border-ink-900/15" />
 
@@ -331,12 +340,72 @@ function workflowStatus(w: WorkflowResult): 'pass' | 'fail' {
   return w.severity === 'Low' ? 'pass' : 'fail';
 }
 
+// Read-only table of contents for the editorial bulk-audit report. Lists the
+// report's sections and smooth-scrolls to each on click. Anchors live on
+// #bulk-exec-summary, #bulk-workflow-status, and #workflow-chapter-${id}
+// (the per-chapter anchor EditorialChapter already renders).
+function EditorialContents({ workflows }: { workflows: WorkflowResult[] }) {
+  const entries = [
+    { id: 'bulk-exec-summary', label: 'Executive Summary' },
+    ...(workflows.length > 0 ? [{ id: 'bulk-workflow-status', label: 'Workflow Status' }] : []),
+    ...workflows.map(w => ({ id: `workflow-chapter-${w.id}`, label: `${w.workflowId} · ${w.name}` })),
+  ];
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-6">
+        <List size={16} className="text-primary" />
+        <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+      </div>
+      <ol className="list-none p-0 m-0 space-y-0.5">
+        {entries.map((e, i) => (
+          <li key={e.id}>
+            <button
+              type="button"
+              onClick={() => document.getElementById(e.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="flex items-center gap-2 w-full py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors text-left cursor-pointer"
+            >
+              <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+              <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{e.label}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function EditorialSummary({ workflows, totals }: { workflows: WorkflowResult[]; totals: Totals }) {
   const passed = workflows.filter(w => workflowStatus(w) === 'pass');
   const failed = workflows.filter(w => workflowStatus(w) === 'fail');
 
+  const stats = [
+    { label: 'Workflows Run', value: String(totals.workflows), icon: Layers, color: 'text-brand-700 bg-brand-50' },
+    { label: 'Records Flagged', value: String(totals.records), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+    { label: 'High Severity', value: String(totals.high), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+    { label: 'Medium Severity', value: String(totals.medium), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
+  ];
+
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-3 pb-5 border-b border-ink-900/15">
+        {stats.map((stat, si) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
+            className="flex items-center gap-3"
+          >
+            <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+            <div>
+              <div className="text-xl font-bold text-text leading-none mb-1">
+                <KpiCountUp value={stat.value} delay={120 + si * 80} />
+              </div>
+              <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
       <p className="text-[15.5px] leading-[1.75] text-text">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
         <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
