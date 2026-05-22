@@ -629,7 +629,7 @@ function categorize(t: ActivityType): EventCategory {
   return 'Other';
 }
 
-function ActionTrailTab({ eng }: { eng: Engagement }) {
+export function ActionTrailTab({ eng }: { eng: Engagement }) {
   const allEvents = ENGAGEMENT_ACTIVITY[eng.id] || [];
 
   const [workflowFilter, setWorkflowFilter] = useState<string>('All');

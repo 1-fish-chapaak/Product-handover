@@ -22,7 +22,7 @@ import RACMTab from '../audit/RACMTab';
 import ControlsTab from '../audit/ControlsTab';
 import EvidenceTab from '../audit/EvidenceTab';
 import WorkingPaperTab from '../audit/WorkingPaperTab';
-import { HealthOverviewTab } from '../audit/EngagementOverviewView';
+import { HealthOverviewTab, ActionTrailTab } from '../audit/EngagementOverviewView';
 import type { Engagement as RACMEngagement } from '../../data/engagements';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -976,30 +976,7 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       )}
 
       {activeTab === 'trail' && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Clock size={14} className="text-primary" />Action Trail</h3>
-            <div className="text-[11px] text-text-muted mb-4">Engagement activity and audit trail events.</div>
-            <div className="space-y-3">
-              {[
-                { time: 'Today', title: 'Engagement opened', subtitle: card.name },
-                ...(card.status !== 'Planned' ? [
-                  { time: 'Today', title: 'RACM configured', subtitle: `${complianceEngagement.process} Compliance RACM linked` },
-                  { time: 'Today', title: 'Control testing started', subtitle: `${complianceEngagement.controls} controls in scope` },
-                ] : []),
-                ...(card.exceptions > 0 ? [
-                  { time: 'Today', title: `${card.exceptions} deficiency/deficiencies found`, subtitle: 'Pending review and remediation' },
-                ] : []),
-              ].map((evt, idx) => (
-                <div key={idx} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-surface-2/30">
-                  <div className="p-1.5 rounded-lg bg-primary/10 mt-0.5"><CheckCircle2 size={10} className="text-primary" /></div>
-                  <div className="flex-1"><div className="text-[12px] font-semibold text-text">{evt.title}</div><div className="text-[10px] text-text-muted">{evt.subtitle}</div></div>
-                  <span className="text-[10px] text-gray-400 shrink-0">{evt.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ActionTrailTab eng={complianceEngagement} />
       )}
     </div>
   );
