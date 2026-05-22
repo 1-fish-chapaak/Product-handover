@@ -129,6 +129,20 @@ export const ENGAGEMENT_EXCEPTIONS: EngagementException[] = [
     title: 'Emergency PO raised without retrospective approval',
     severity: 'Low', status: 'Resolved', opened: '15d ago', assignee: 'Tushar Goel', classification: 'False Positive' },
 
+  // ─── Engagement Final — AP Duplicate Invoice Monitor (ef-auto-001) ──────────
+  { id: 'ex-6001', ref: 'EX-6001', engagementId: 'ef-auto-001', workflowId: 'wf2', workflowName: 'Duplicate Invoice Detector',
+    title: 'Duplicate invoice posted — vendor V-5501', detail: 'Invoice INV-2026-9120 matches INV-2026-9089 on PAN/amount/date.',
+    severity: 'High', status: 'Open', opened: '3h ago', assignee: 'Priya Singh', amount: '₹3,18,000' },
+  { id: 'ex-6002', ref: 'EX-6002', engagementId: 'ef-auto-001', workflowId: 'wf2', workflowName: 'Duplicate Invoice Detector',
+    title: 'Invoice amount exceeds PO ceiling by 22%', detail: 'PO-2026-4478 ceiling ₹1,80,000 but invoice amount ₹2,19,600.',
+    severity: 'Medium', status: 'Triaging', opened: '1d ago', assignee: 'Karan Mehta', amount: '₹2,19,600', classification: 'Process Gap' },
+  { id: 'ex-6003', ref: 'EX-6003', engagementId: 'ef-auto-001', workflowId: 'wf4', workflowName: 'Vendor Master Change Monitor',
+    title: 'Vendor bank account changed without dual authorization', detail: 'Vendor V-3302 bank details updated by single AP clerk.',
+    severity: 'Critical', status: 'Open', opened: '6h ago', assignee: 'Priya Singh' },
+  { id: 'ex-6004', ref: 'EX-6004', engagementId: 'ef-auto-001', workflowId: 'wf4', workflowName: 'Vendor Master Change Monitor',
+    title: 'Vendor address change without supporting documentation',
+    severity: 'Low', status: 'Resolved', opened: '5d ago', assignee: 'Karan Mehta', classification: 'False Positive' },
+
   // ─── Compliance — P2P SOX Audit (eng-1) ────────────────────────────────────
   { id: 'ex-1245', ref: 'EX-1245', engagementId: 'eng-1', workflowId: 'wf2', workflowName: 'Duplicate Invoice Detector',
     title: 'Duplicate invoice in SOX testing sample',

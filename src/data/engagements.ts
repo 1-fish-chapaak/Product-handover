@@ -101,6 +101,13 @@ export const ENGAGEMENTS: Engagement[] = [
     health: 91, openIssues: 6, lastActivity: '3d ago', nextScheduled: 'Weekly batch in 2d',
   },
   {
+    id: 'ef-auto-001', code: 'EF-AUTO-001', name: 'AP Duplicate Invoice Monitor',
+    description: 'Continuous monitoring for duplicate AP invoice posting — daily scan against vendor, amount, invoice number, and date.',
+    type: 'Automation', subtype: 'CCM', process: 'P2P', framework: 'Internal Policy', owner: 'Priya Singh',
+    status: 'Active', periodStart: 'Oct 2025', periodEnd: 'Mar 2026', controls: 4,
+    health: 88, openIssues: 4, lastActivity: '3h ago', nextScheduled: 'in 8h',
+  },
+  {
     id: 'ef-001', code: 'EF-001', name: 'P2P Internal Audit Review',
     description: 'Internal audit of Procure to Pay process covering duplicate invoices, PO approvals, and vendor master changes.',
     type: 'Internal Audit', process: 'P2P', framework: 'Internal Policy', owner: 'Karan Mehta',

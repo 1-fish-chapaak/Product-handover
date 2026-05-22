@@ -1,4 +1,4 @@
-// ─── Engagement Final — Internal Audit Prototype ─────────────────────────
+// ─── Engagement Final — Internal Audit + Automation Prototype ──────────────
 // Programs → Engagement Final. Reuses existing IA Scope, Automation Workflows/Cases,
 // Business Process RACM, and shared Activity Trail components.
 
@@ -37,15 +37,18 @@ import type { AutomationInputDataState } from '../engagement-configurable/patter
 // ─── Mock Data ──────────────────────────────────────────────────────────
 
 interface IAEngagementCard {
-  id: string; name: string; process: string; entity: string; owner: string; reviewer: string;
+  id: string; name: string; type: 'Internal Audit' | 'Automation'; process: string; entity: string; owner: string; reviewer: string;
   status: string; statusTone: string; period: string; exceptions: number; nextAction: string;
 }
 
 const MOCK_IA_ENGAGEMENTS: IAEngagementCard[] = [
-  { id: 'ef-001', name: 'P2P Internal Audit Review', process: 'Procure to Pay', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Sneha Desai', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 5, nextAction: 'Run Workflows' },
-  { id: 'ef-002', name: 'Vendor Onboarding Audit', process: 'Vendor Management', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Karan Mehta', status: 'Scope Defined', statusTone: 'bg-blue-50 text-blue-700', period: 'Feb 2026 – Jul 2026', exceptions: 0, nextAction: 'Select Controls' },
-  { id: 'ef-003', name: 'Branch Operations Audit', process: 'Operations', entity: 'Branch — Mumbai', owner: 'Deepak Bansal', reviewer: 'Karan Mehta', status: 'Exception Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Oct 2025 – Mar 2026', exceptions: 7, nextAction: 'Review Exceptions' },
-  { id: 'ef-004', name: 'Inventory Management Review', process: 'Inventory', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Rohan Patel', status: 'Report Pending', statusTone: 'bg-purple-50 text-purple-700', period: 'Mar 2026 – Aug 2026', exceptions: 4, nextAction: 'Generate Report' },
+  { id: 'ef-001', name: 'P2P Internal Audit Review', type: 'Internal Audit', process: 'Procure to Pay', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Sneha Desai', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 5, nextAction: 'Run Workflows' },
+  { id: 'ef-002', name: 'Vendor Onboarding Audit', type: 'Internal Audit', process: 'Vendor Management', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Karan Mehta', status: 'Scope Defined', statusTone: 'bg-blue-50 text-blue-700', period: 'Feb 2026 – Jul 2026', exceptions: 0, nextAction: 'Select Controls' },
+  { id: 'ef-003', name: 'Branch Operations Audit', type: 'Internal Audit', process: 'Operations', entity: 'Branch — Mumbai', owner: 'Deepak Bansal', reviewer: 'Karan Mehta', status: 'Exception Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Oct 2025 – Mar 2026', exceptions: 7, nextAction: 'Review Exceptions' },
+  { id: 'ef-004', name: 'Inventory Management Review', type: 'Internal Audit', process: 'Inventory', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Rohan Patel', status: 'Report Pending', statusTone: 'bg-purple-50 text-purple-700', period: 'Mar 2026 – Aug 2026', exceptions: 4, nextAction: 'Generate Report' },
+  { id: 'ef-auto-001', name: 'AP Duplicate Invoice Monitor', type: 'Automation', process: 'Procure to Pay', entity: 'Corporate', owner: 'Priya Singh', reviewer: 'Karan Mehta', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Oct 2025 – Mar 2026', exceptions: 4, nextAction: 'Monitor' },
+  { id: 'ef-auto-002', name: 'Vendor Master Change Monitor', type: 'Automation', process: 'Procure to Pay', entity: 'Corporate', owner: 'Sneha Desai', reviewer: 'Tushar Goel', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Jan 2026 – Jun 2026', exceptions: 2, nextAction: 'Review Exceptions' },
+  { id: 'ef-auto-003', name: 'PO Approval Threshold Scanner', type: 'Automation', process: 'Procure to Pay', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Deepak Bansal', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Mar 2026 – Aug 2026', exceptions: 3, nextAction: 'Configure Workflow' },
 ];
 
 function buildEngagement(card: IAEngagementCard): ConfigurableEngagement {
@@ -65,10 +68,101 @@ function buildEngagement(card: IAEngagementCard): ConfigurableEngagement {
   };
 }
 
+function buildAutomationEngagement(card: IAEngagementCard): ConfigurableEngagement {
+  return {
+    id: card.id, name: card.name,
+    patternType: EngagementPatternType.AUTOMATION_PROJECT,
+    displayLabel: 'Automation', description: `Continuous monitoring of ${card.process} process.`,
+    owner: card.owner, reviewer: card.reviewer, businessProcess: card.process, entityOrLocation: card.entity,
+    status: EngagementStatus.IN_PROGRESS, stage: card.status,
+    config: {
+      patternType: EngagementPatternType.AUTOMATION_PROJECT,
+    } as any,
+    outputs: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+}
+
+// ─── Toast Component ───────────────────────────────────────────────────
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const timer = setTimeout(onClose, 2500);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl bg-gray-900 text-white text-[12px] font-medium shadow-lg"
+    >
+      {message}
+    </motion.div>
+  );
+}
+
+// ─── Type Picker Modal ─────────────────────────────────────────────────
+
+function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: (type: 'Internal Audit' | 'Automation') => void }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+          <div>
+            <h2 className="text-[15px] font-bold text-text">New Engagement</h2>
+            <p className="text-[11px] text-text-muted mt-0.5">Choose the engagement type to get started.</p>
+          </div>
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        {/* Cards */}
+        <div className="p-6 grid grid-cols-2 gap-4">
+          <button
+            onClick={() => onSelect('Internal Audit')}
+            className="text-left p-4 rounded-xl border border-border-light hover:border-purple-300 hover:bg-purple-50/30 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
+              <ClipboardCheck size={18} className="text-purple-600" />
+            </div>
+            <div className="text-[13px] font-bold text-text group-hover:text-purple-700 transition-colors">Internal Audit</div>
+            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">Multi-stage audit: scope, RACM, controls, workflows, exceptions, and reporting.</p>
+          </button>
+          <button
+            onClick={() => onSelect('Automation')}
+            className="text-left p-4 rounded-xl border border-border-light hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center mb-3">
+              <Workflow size={18} className="text-emerald-600" />
+            </div>
+            <div className="text-[13px] font-bold text-text group-hover:text-emerald-700 transition-colors">Automation</div>
+            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">Continuous monitoring: configure workflows, detect exceptions, and manage cases.</p>
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Landing Page ───────────────────────────────────────────────────────
 
 function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) => void }) {
   const [search, setSearch] = useState('');
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
   const filtered = MOCK_IA_ENGAGEMENTS.filter(e => !search.trim() || e.name.toLowerCase().includes(search.toLowerCase()) || e.owner.toLowerCase().includes(search.toLowerCase()) || e.process.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -76,10 +170,10 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-bold text-text">Engagement Final</h1>
-          <p className="text-sm text-text-secondary mt-1">Manage and execute internal audit engagements from scope to workflow execution, exception management, reporting, and audit trail.</p>
+          <p className="text-sm text-text-secondary mt-1">Manage and execute audit engagements — internal audits, automation monitoring, and exception management.</p>
         </div>
-        <button className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
-          <Plus size={14} />Plan Internal Audit Engagement
+        <button onClick={() => setShowTypePicker(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
+          <Plus size={14} />New Engagement
         </button>
       </div>
 
@@ -94,6 +188,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
           <thead>
             <tr className="border-b border-border-light bg-surface-2/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
               <th className="px-4 py-2.5 text-left">Engagement</th>
+              <th className="px-4 py-2.5 text-center w-[100px]">Type</th>
               <th className="px-4 py-2.5 text-left w-[120px]">Process</th>
               <th className="px-4 py-2.5 text-left w-[100px]">Entity</th>
               <th className="px-4 py-2.5 text-left w-[110px]">Owner</th>
@@ -104,27 +199,57 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
             </tr>
           </thead>
           <tbody>
-            {filtered.map((eng, i) => (
-              <motion.tr key={eng.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                onClick={() => onOpen(eng)} className="border-b border-border-light/50 hover:bg-primary/[0.02] cursor-pointer transition-colors group">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center shrink-0"><ClipboardCheck size={16} className="text-purple-600" /></div>
-                    <div><div className="text-[13px] font-semibold text-text group-hover:text-primary transition-colors">{eng.name}</div></div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-text-muted">{eng.process}</td>
-                <td className="px-4 py-3 text-text-muted">{eng.entity}</td>
-                <td className="px-4 py-3"><div className="text-text font-medium">{eng.owner}</div><div className="text-[10px] text-gray-400">{eng.reviewer}</div></td>
-                <td className="px-4 py-3 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${eng.statusTone}`}>{eng.status}</span></td>
-                <td className="px-4 py-3 text-center"><span className={`font-semibold tabular-nums ${eng.exceptions > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{eng.exceptions}</span></td>
-                <td className="px-4 py-3 text-text-muted text-[11px]"><span className="flex items-center gap-1"><Calendar size={10} />{eng.period}</span></td>
-                <td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 text-purple-700 text-[10px] font-semibold">{eng.nextAction}</span></td>
-              </motion.tr>
-            ))}
+            {filtered.map((eng, i) => {
+              const isAutomation = eng.type === 'Automation';
+              return (
+                <motion.tr key={eng.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                  onClick={() => onOpen(eng)} className="border-b border-border-light/50 hover:bg-primary/[0.02] cursor-pointer transition-colors group">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-lg ${isAutomation ? 'bg-emerald-100' : 'bg-purple-100'} flex items-center justify-center shrink-0`}>
+                        {isAutomation
+                          ? <Workflow size={16} className="text-emerald-600" />
+                          : <ClipboardCheck size={16} className="text-purple-600" />}
+                      </div>
+                      <div><div className="text-[13px] font-semibold text-text group-hover:text-primary transition-colors">{eng.name}</div></div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${isAutomation ? 'bg-emerald-50 text-emerald-700' : 'bg-purple-50 text-purple-700'}`}>
+                      {isAutomation ? 'Automation' : 'Internal Audit'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">{eng.process}</td>
+                  <td className="px-4 py-3 text-text-muted">{eng.entity}</td>
+                  <td className="px-4 py-3"><div className="text-text font-medium">{eng.owner}</div><div className="text-[10px] text-gray-400">{eng.reviewer}</div></td>
+                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${eng.statusTone}`}>{eng.status}</span></td>
+                  <td className="px-4 py-3 text-center"><span className={`font-semibold tabular-nums ${eng.exceptions > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{eng.exceptions}</span></td>
+                  <td className="px-4 py-3 text-text-muted text-[11px]"><span className="flex items-center gap-1"><Calendar size={10} />{eng.period}</span></td>
+                  <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold ${isAutomation ? 'bg-emerald-50 text-emerald-700' : 'bg-purple-50 text-purple-700'}`}>{eng.nextAction}</span></td>
+                </motion.tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* Type Picker Modal */}
+      <AnimatePresence>
+        {showTypePicker && (
+          <TypePickerModal
+            onClose={() => setShowTypePicker(false)}
+            onSelect={(type) => {
+              setShowTypePicker(false);
+              setToast(`${type} engagement creation coming soon`);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -157,7 +282,206 @@ function getVisibleTabs(scope: InternalAuditScopeState): TabDef[] {
   });
 }
 
-// ─── Workspace ──────────────────────────────────────────────────────────
+const AUTOMATION_TABS: TabDef[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'workflows', label: 'Workflows' },
+  { id: 'exceptions', label: 'Exception Management' },
+  { id: 'trail', label: 'Action Trail' },
+];
+
+// ─── Automation Final Workspace ────────────────────────────────────────
+
+function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; onBack: () => void }) {
+  const engagement = useMemo(() => buildAutomationEngagement(card), [card]);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // Automation state
+  const [automationState, setAutomationState] = useState<AutomationProjectWorkspaceState>({
+    inputData: { dataSources: [], selectedSourceIds: [], inputNotes: '', proceedWithoutData: false },
+    setup: { setupMode: 'SELECT_EXISTING_WORKFLOW' as any, selectedWorkflowId: '', selectedWorkflowName: '', selectedWorkflowIds: [], selectedWorkflowNames: [], draftWorkflow: null, qaSetup: null, createdWorkflows: [], setupStatus: 'NOT_CONFIGURED' as any, setupNotes: '', history: [] },
+    runs: { runs: [] },
+    outputReview: { reviewedOutputIds: [], approvedOutputIds: [], rejectedOutputIds: [], outputComments: {}, reviewNotes: '', history: [] },
+    cases: { cases: [], linkedExceptionIds: [], caseNotes: '' },
+    reports: { reports: [], reportNotes: '' },
+    schedule: { status: 'NOT_CONFIGURED' as any, frequency: '', startDate: '', endDate: '', runTime: '09:00', timezone: 'IST (UTC+5:30)', selectedWorkflowId: '', selectedInputSourceIds: [], notificationRecipients: '', failureNotificationRecipients: '', autoCreateCases: false, autoGenerateReport: false, lastRunAt: null, nextRunAt: null, scheduleNotes: '', history: [] },
+  });
+
+  const handleUpdateRuns = useCallback((runs: AutomationRunsState) => {
+    setAutomationState(prev => ({ ...prev, runs }));
+  }, []);
+  const handleUpdateSetup = useCallback((setup: AutomationSetupState) => {
+    setAutomationState(prev => ({ ...prev, setup }));
+  }, []);
+  const handleUpdateInputData = useCallback((inputData: AutomationInputDataState) => {
+    setAutomationState(prev => ({ ...prev, inputData }));
+  }, []);
+  const handleUpdateCases = useCallback((cases: AutomationCasesState) => {
+    setAutomationState(prev => ({ ...prev, cases }));
+  }, []);
+  const handleUpdateRunException = useCallback((runId: string, exId: string, status: AutoExceptionStatus, triageData?: Record<string, unknown>) => {
+    setAutomationState(prev => ({
+      ...prev,
+      runs: { runs: prev.runs.runs.map(r => r.id === runId ? { ...r, exceptions: r.exceptions.map(e => e.id === exId ? { ...e, status, ...triageData } : e) } : r) },
+    }));
+  }, []);
+
+  const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
+  const totalExceptions = completedRuns.flatMap(r => r.exceptions).length;
+
+  // Build an Engagement object for HealthOverviewTab
+  const overviewEngagement = useMemo<RACMEngagement>(() => ({
+    id: card.id,
+    code: card.id.toUpperCase(),
+    name: card.name,
+    description: `Continuous monitoring of ${card.process} process.`,
+    type: 'Automation',
+    subtype: 'CCM',
+    process: (card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : 'P2P') as RACMEngagement['process'],
+    framework: 'Internal Policy',
+    owner: card.owner,
+    status: 'Active',
+    periodStart: card.period.split(' – ')[0] || '',
+    periodEnd: card.period.split(' – ')[1] || '',
+    controls: 4,
+    health: totalExceptions > 0 ? Math.max(40, 100 - totalExceptions * 5) : 88,
+    openIssues: totalExceptions || card.exceptions,
+    lastActivity: completedRuns.length > 0 ? 'Today' : '3h ago',
+    nextScheduled: 'in 8h',
+  }), [card, totalExceptions, completedRuns.length]);
+
+  // Action trail events
+  const trailEvents = useMemo(() => {
+    const events: { id: string; time: string; title: string; subtitle: string; type: string }[] = [];
+    events.push({ id: '1', time: 'Today', title: 'Engagement opened', subtitle: card.name, type: 'config' });
+    events.push({ id: '2', time: 'Today', title: 'Automation configured', subtitle: `Process: ${card.process}`, type: 'config' });
+    for (const run of automationState.runs.runs.filter(r => r.status === 'COMPLETED')) {
+      events.push({ id: `run-${run.id}`, time: 'Today', title: `Workflow run completed: ${run.workflowNames?.join(', ') || run.workflowName}`, subtitle: `${run.exceptionCount} exceptions · ${run.processedRecords} records`, type: 'run' });
+    }
+    if (automationState.cases.cases.length > 0) {
+      events.push({ id: 'cases', time: 'Today', title: `${automationState.cases.cases.length} case(s) created`, subtitle: 'Exception management in progress', type: 'case' });
+    }
+    return events;
+  }, [card, automationState.runs.runs, automationState.cases.cases.length]);
+
+  return (
+    <div className="space-y-0">
+      {/* Back */}
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
+        <ArrowLeft size={14} />Back to Engagement Final Library
+      </button>
+
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-border-light p-4 mb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100"><Workflow size={18} className="text-emerald-600" /></div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-[15px] font-bold text-text">{card.name}</h2>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${card.statusTone}`}>{card.status}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">Automation</span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-bold">CCM</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 mt-1">
+                <span>Owner: {card.owner}</span>
+                <span>Reviewer: {card.reviewer}</span>
+                <span>Process: {card.process}</span>
+                <span>Entity: {card.entity}</span>
+                <span>Period: {card.period}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-border-light mb-4">
+        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
+          {AUTOMATION_TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
+              }`}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'overview' && (
+        <HealthOverviewTab
+          eng={overviewEngagement}
+          onDrillToExceptions={() => setActiveTab('exceptions')}
+          onConfigureWorkflow={() => setActiveTab('workflows')}
+          hideWorkflowConfig
+        />
+      )}
+
+      {activeTab === 'workflows' && (
+        <AutomationWorkflowsTab
+          engagement={engagement}
+          inputData={automationState.inputData}
+          setup={automationState.setup}
+          runsState={automationState.runs}
+          onUpdateSetup={handleUpdateSetup}
+          onUpdateRuns={handleUpdateRuns}
+          onUpdateInputData={handleUpdateInputData}
+          onNavigateTab={setActiveTab}
+        />
+      )}
+
+      {activeTab === 'exceptions' && (
+        <AutomationCasesTab
+          engagement={engagement}
+          runsState={automationState.runs}
+          casesState={automationState.cases}
+          onUpdateCases={handleUpdateCases}
+          onUpdateRunException={handleUpdateRunException}
+          onNavigateTab={setActiveTab}
+          skipOutputCheck
+        />
+      )}
+
+      {activeTab === 'trail' && (
+        <div className="space-y-0">
+          <div className="flex items-center gap-4 pb-4 border-b border-border-light">
+            <div className="text-[11px] text-gray-400">{trailEvents.length} event{trailEvents.length !== 1 ? 's' : ''}</div>
+          </div>
+          {trailEvents.length === 0 ? (
+            <div className="py-16 text-center"><Clock size={32} className="text-gray-200 mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No Activity Yet</p></div>
+          ) : (
+            <div className="pt-2 space-y-1">
+              {trailEvents.map(ev => {
+                const ICONS: Record<string, { icon: React.ElementType; bg: string; color: string; border: string }> = {
+                  config: { icon: Workflow, bg: 'bg-gray-200', color: 'text-gray-500', border: 'border-l-gray-300' },
+                  run: { icon: Workflow, bg: 'bg-emerald-100', color: 'text-emerald-600', border: 'border-l-emerald-300' },
+                  case: { icon: AlertTriangle, bg: 'bg-amber-100', color: 'text-amber-600', border: 'border-l-amber-300' },
+                };
+                const cfg = ICONS[ev.type] || ICONS.config;
+                const Icon = cfg.icon;
+                return (
+                  <div key={ev.id} className={`flex items-start gap-3 px-4 py-2.5 rounded-lg border-l-[3px] ${cfg.border} hover:bg-white transition-colors`}>
+                    <div className={`w-7 h-7 rounded-full ${cfg.bg} ${cfg.color} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-text">{ev.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{ev.subtitle}</div>
+                    </div>
+                    <div className="text-[10px] text-gray-300 shrink-0">{ev.time}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── IA Workspace ──────────────────────────────────────────────────────
 
 function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card: IAEngagementCard; onBack: () => void; onOpenRacmFullEditor?: (ctx: { racmId: string; racmName: string; processLabel: string }) => void }) {
   const engagement = useMemo(() => buildEngagement(card), [card]);
@@ -469,7 +793,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
         </div>
       )}
 
-      {/* ═══ Announcement Modal ═══ */}
+      {/* Announcement Modal */}
       <AnimatePresence>
         {showAnnouncementModal && (
           <>
@@ -529,6 +853,9 @@ export default function EngagementFinalModule({ onOpenRacmFullEditor }: ModulePr
   const [selectedCard, setSelectedCard] = useState<IAEngagementCard | null>(null);
 
   if (selectedCard) {
+    if (selectedCard.type === 'Automation') {
+      return <AutomationFinalWorkspace card={selectedCard} onBack={() => setSelectedCard(null)} />;
+    }
     return <EngagementFinalWorkspace card={selectedCard} onBack={() => setSelectedCard(null)} onOpenRacmFullEditor={onOpenRacmFullEditor} />;
   }
 
