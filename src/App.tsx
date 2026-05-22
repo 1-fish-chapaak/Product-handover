@@ -197,7 +197,7 @@ export default function App() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' };
   const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
@@ -822,7 +822,7 @@ export default function App() {
       case 'engagement-final':
         return (
           <div className="px-8 py-6 h-full overflow-y-auto">
-            <EngagementFinalModule />
+            <EngagementFinalModule onOpenRacmFullEditor={(ctx) => openRacmFullEditor({ ...ctx, backView: 'engagement-final' })} />
           </div>
         );
 

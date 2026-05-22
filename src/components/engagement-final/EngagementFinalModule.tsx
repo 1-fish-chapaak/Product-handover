@@ -18,7 +18,6 @@ import { DEFAULT_IA_SCOPE, type InternalAuditScopeState } from '../engagement-co
 import InternalAuditAnnouncementTab from '../engagement-configurable/patterns/internal-audit/InternalAuditAnnouncementTab';
 import { DEFAULT_ANNOUNCEMENT, type InternalAuditAnnouncementState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnnouncementData';
 import RACMTab from '../audit/RACMTab';
-import RacmMappingWorkspace from '../audit/RacmMappingWorkspace';
 import type { Engagement as RACMEngagement } from '../../data/engagements';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -158,7 +157,7 @@ function getVisibleTabs(scope: InternalAuditScopeState): TabDef[] {
 
 // ─── Workspace ──────────────────────────────────────────────────────────
 
-function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; onBack: () => void }) {
+function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card: IAEngagementCard; onBack: () => void; onOpenRacmFullEditor?: (ctx: { racmId: string; racmName: string; processLabel: string }) => void }) {
   const engagement = useMemo(() => buildEngagement(card), [card]);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -169,8 +168,6 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
   const [announcement, setAnnouncement] = useState<InternalAuditAnnouncementState>({ ...DEFAULT_ANNOUNCEMENT });
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
 
-  // RACM full-page editor modal (triggered from "Open in editor" in RACMTab)
-  const [showRacmEditorModal, setShowRacmEditorModal] = useState(false);
 
   // Intercept Scope tab navigation — 'announcement' opens the modal instead
   const handleScopeNavigate = useCallback((tabId: string) => {
@@ -354,7 +351,11 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       )}
 
       {activeTab === 'racm' && (
-        <RACMTab engagement={racmEngagement} onOpenFullEditor={() => setShowRacmEditorModal(true)} />
+        <RACMTab engagement={racmEngagement} onOpenFullEditor={onOpenRacmFullEditor ? () => onOpenRacmFullEditor({
+          racmId: 'racm-procurement-fy26',
+          racmName: `${racmEngagement.process} Internal Audit RACM`,
+          processLabel: racmEngagement.process,
+        }) : undefined} />
       )}
 
       {activeTab === 'controls' && (
@@ -506,58 +507,21 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
         )}
       </AnimatePresence>
 
-      {/* ═══ RACM Full Editor Modal ═══ */}
-      <AnimatePresence>
-        {showRacmEditorModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50"
-              onClick={() => setShowRacmEditorModal(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97, y: 12 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="fixed inset-4 md:inset-6 z-50 flex flex-col bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden"
-            >
-              {/* Modal header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
-                <div>
-                  <h2 className="text-[15px] font-bold text-text">RACM Editor</h2>
-                  <p className="text-[11px] text-text-muted mt-0.5">{racmEngagement.name} · {racmEngagement.process}</p>
-                </div>
-                <button onClick={() => setShowRacmEditorModal(false)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              {/* Modal body */}
-              <div className="flex-1 overflow-y-auto">
-                <RacmMappingWorkspace
-                  onBack={() => setShowRacmEditorModal(false)}
-                  racmName={`FY26 ${racmEngagement.process} — ${card.process}`}
-                  racmProcess={racmEngagement.process}
-                  inline={true}
-                  showEditAction={true}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
 // ─── Main Module Export ──────────────────────────────────────────────────
 
-export default function EngagementFinalModule() {
+interface ModuleProps {
+  onOpenRacmFullEditor?: (ctx: { racmId: string; racmName: string; processLabel: string }) => void;
+}
+
+export default function EngagementFinalModule({ onOpenRacmFullEditor }: ModuleProps) {
   const [selectedCard, setSelectedCard] = useState<IAEngagementCard | null>(null);
 
   if (selectedCard) {
-    return <EngagementFinalWorkspace card={selectedCard} onBack={() => setSelectedCard(null)} />;
+    return <EngagementFinalWorkspace card={selectedCard} onBack={() => setSelectedCard(null)} onOpenRacmFullEditor={onOpenRacmFullEditor} />;
   }
 
   return <EngagementFinalLanding onOpen={setSelectedCard} />;
