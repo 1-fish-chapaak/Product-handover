@@ -114,6 +114,13 @@ export const ENGAGEMENTS: Engagement[] = [
     status: 'In Progress', periodStart: 'Jan 2026', periodEnd: 'Jun 2026', controls: 8,
     health: 68, openIssues: 5, lastActivity: '2h ago', nextScheduled: 'Pending review',
   },
+  {
+    id: 'ef-comp-001', code: 'EF-COMP-001', name: 'P2P SOX Control Testing',
+    description: 'SOX ICFR compliance control testing for Procure-to-Pay — RACM, controls, sampling, evidence, attribute testing, and working paper.',
+    type: 'Compliance', process: 'P2P', framework: 'SOX ICFR', owner: 'Tushar Goel',
+    status: 'Active', periodStart: 'Jan 2026', periodEnd: 'Jun 2026', controls: 24,
+    health: 76, openIssues: 3, lastActivity: 'Today', nextScheduled: 'Continue Testing',
+  },
 ];
 
 export const PROCESS_COLORS: Record<ProcessCode, string> = {

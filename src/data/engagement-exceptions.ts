@@ -143,6 +143,17 @@ export const ENGAGEMENT_EXCEPTIONS: EngagementException[] = [
     title: 'Vendor address change without supporting documentation',
     severity: 'Low', status: 'Resolved', opened: '5d ago', assignee: 'Karan Mehta', classification: 'False Positive' },
 
+  // ─── Engagement Final — P2P SOX Control Testing (ef-comp-001) ──────────────
+  { id: 'ex-7001', ref: 'EX-7001', engagementId: 'ef-comp-001', workflowId: 'wf2', workflowName: 'Duplicate Invoice Detector',
+    title: 'Three-way match failure — PO/GRN/Invoice mismatch in sample', detail: 'Control C-P2P-003 sample item 4: invoice amount ₹3,42,000 vs GRN ₹2,98,000.',
+    severity: 'High', status: 'Open', opened: '2d ago', assignee: 'Tushar Goel', classification: 'Control Deficiency' },
+  { id: 'ex-7002', ref: 'EX-7002', engagementId: 'ef-comp-001', workflowId: 'wf3', workflowName: 'PO Approval Threshold Scan',
+    title: 'Approval matrix not followed — PO approved below required authority level',
+    severity: 'High', status: 'Triaging', opened: '5d ago', assignee: 'Tushar Goel' },
+  { id: 'ex-7003', ref: 'EX-7003', engagementId: 'ef-comp-001', workflowId: 'wf4', workflowName: 'Vendor Master Change Monitor',
+    title: 'Vendor master change log incomplete — missing reviewer sign-off',
+    severity: 'Medium', status: 'Open', opened: '3d ago', assignee: 'Sneha Desai', classification: 'Process Gap' },
+
   // ─── Compliance — P2P SOX Audit (eng-1) ────────────────────────────────────
   { id: 'ex-1245', ref: 'EX-1245', engagementId: 'eng-1', workflowId: 'wf2', workflowName: 'Duplicate Invoice Detector',
     title: 'Duplicate invoice in SOX testing sample',
