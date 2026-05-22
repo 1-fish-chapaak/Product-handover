@@ -103,7 +103,7 @@ export const ENGAGEMENTS: Engagement[] = [
   {
     id: 'ef-001', code: 'EF-001', name: 'P2P Internal Audit Review',
     description: 'Internal audit of Procure to Pay process covering duplicate invoices, PO approvals, and vendor master changes.',
-    type: 'Internal Audit', subtype: 'IA Assignment', process: 'P2P', framework: 'Internal Policy', owner: 'Karan Mehta',
+    type: 'Internal Audit', process: 'P2P', framework: 'Internal Policy', owner: 'Karan Mehta',
     status: 'In Progress', periodStart: 'Jan 2026', periodEnd: 'Jun 2026', controls: 8,
     health: 68, openIssues: 5, lastActivity: '2h ago', nextScheduled: 'Pending review',
   },
