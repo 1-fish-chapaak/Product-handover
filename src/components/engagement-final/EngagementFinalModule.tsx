@@ -385,7 +385,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
           scope={scope}
           analysisState={analysisState}
           onUpdateAnalysis={handleUpdateAnalysis}
-          onNavigateTab={setActiveTab}
+          onNavigateTab={(tabId) => setActiveTab(tabId === 'analysis' ? 'exceptions' : tabId)}
         />
       )}
 
