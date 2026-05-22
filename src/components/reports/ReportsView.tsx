@@ -21,6 +21,7 @@ import { StatusBadge } from '../shared/StatusBadge';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
+import { KpiCountUp } from '../shared/KpiTile';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
@@ -1520,7 +1521,6 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, comments = [], onAddComment, casesPhase, onCasesPhaseChange, title }: { query: QueryShape; index: number; onManageExceptions?: () => void; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; casesPhase: CasesPhase; onCasesPhaseChange: (phase: CasesPhase) => void; title?: string }) {
   const { addToast } = useToast();
-  const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1553,16 +1553,7 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      whileHover={{ y: -2 }}
-      style={{
-        boxShadow: hovered
-          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
-          : '0 0 0 rgba(0,0,0,0)',
-        transition: 'box-shadow 220ms ease',
-      }}
-      className="relative border-y border-border-light bg-white overflow-hidden"
+      className="relative border-x border-b border-border-light bg-white overflow-hidden"
     >
 
       <div className="px-6 py-5">
@@ -1686,45 +1677,34 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
           {query.title}
         </motion.h3>
 
-        {/* KPI strip — populated only after cases generate; placeholder otherwise so users know why metrics are missing */}
+        {/* KPI strip — appears once cases are ready, count-up animated to mirror
+            the chat's KPI tiles. No placeholder while generating: the toggle
+            itself already carries the in-flight state. */}
         {casesPhase === 'ready' ? (() => {
           const kpis = computeQueryKpis(query);
-          if (kpis.length === 0) {
-            return (
-              <div className="border border-dashed border-border-light rounded-xl px-4 py-5 mb-5 text-center">
-                <p className="text-[12px] text-text-muted">No metrics available for this query yet.</p>
-              </div>
-            );
-          }
+          if (kpis.length === 0) return null;
           return (
             <div className="grid grid-cols-4 gap-3 mb-5">
-              {kpis.map((k) => (
-                <div
+              {kpis.map((k, ki) => (
+                <motion.div
                   key={k.label}
+                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + ki * 0.08 }}
                   className="bg-canvas-elevated border border-border-light rounded-xl p-4 flex items-center gap-3"
                 >
                   <div className={`p-2 rounded-lg ${k.color}`}><k.icon size={16} /></div>
                   <div>
-                    <div className="text-xl font-bold text-text tabular-nums">{k.value}</div>
+                    <div className="text-xl font-bold text-text tabular-nums">
+                      <KpiCountUp value={k.value} delay={120 + ki * 80} />
+                    </div>
                     <div className="text-[10px] text-text-muted tracking-wide">{k.label}</div>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           );
-        })() : casesPhase === 'generating' ? (
-          <div className="border border-dashed border-border-light rounded-xl px-4 py-5 mb-5 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-paper-50 flex items-center justify-center shrink-0">
-              <Loader2 size={15} className="text-primary animate-spin" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-semibold text-text">Generating cases…</p>
-              <p className="text-[11.5px] text-text-muted leading-snug">
-                Cases are being created — KPIs will appear here in a moment.
-              </p>
-            </div>
-          </div>
-        ) : null}
+        })() : null}
 
         {/* Attached graph (selected from Add Graph modal) */}
         {attachedGraph && (
@@ -2651,23 +2631,24 @@ function ObservationActionsMenu({
   );
 }
 
-// Visual twin of QueryCard — same motion timing, hover lift, shadow, type scale.
-// Renders an observation as a continuous-report card so it sits naturally beside
-// QueryCards without looking like a different control.
+// Visual twin of QueryCard — same motion timing and type scale. Renders an
+// observation as a flush continuous-sheet block when `attached` (the default,
+// sitting beside QueryCards) or as a standalone bordered card otherwise.
 function ObservationCard({
   obs,
   index,
   onEdit,
   onToggleAttachment,
   onDelete,
+  attached = true,
 }: {
   obs: { id: string; obsId: string; title: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
   index: number;
   onEdit: () => void;
   onToggleAttachment: () => void;
   onDelete: () => void;
+  attached?: boolean;
 }) {
-  const [hovered, setHovered] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const baseDelay = index * 0.08;
 
@@ -2690,16 +2671,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      whileHover={{ y: -2 }}
-      style={{
-        boxShadow: hovered
-          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
-          : '0 0 0 rgba(0,0,0,0)',
-        transition: 'box-shadow 220ms ease',
-      }}
-      className="relative border-y border-border-light bg-white overflow-hidden"
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-2xl'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -2799,7 +2771,7 @@ function ObservationCard({
   );
 }
 
-// Bulk-audit counterpart of QueryCard. Same chrome (border-y, hover lift,
+// Bulk-audit counterpart of QueryCard. Same chrome (continuous-sheet block,
 // motion stagger, meta row with primary id, generate-cases gate) but the body
 // is workflow-shaped: severity, optional risk owner, findings, observations,
 // and an output data table from the run.
@@ -2819,7 +2791,6 @@ function WorkflowResultCard({
   onDelete?: () => void;
 }) {
   const { addToast } = useToast();
-  const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingOwner, setEditingOwner] = useState(false);
   const [ownerDraft, setOwnerDraft] = useState(workflow.riskOwner ?? '');
@@ -2852,16 +2823,7 @@ function WorkflowResultCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      whileHover={{ y: -2 }}
-      style={{
-        boxShadow: hovered
-          ? '0 6px 20px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -2px rgba(15, 23, 42, 0.04)'
-          : '0 0 0 rgba(0,0,0,0)',
-        transition: 'box-shadow 220ms ease',
-      }}
-      className="relative border-y border-border-light bg-white overflow-hidden"
+      className="relative border-x border-b border-border-light bg-white overflow-hidden"
     >
       <div className="px-6 py-5">
         {/* Meta row */}
@@ -4123,7 +4085,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     if (nonCoverSections.length === 0) return null;
     return (
       <div className="border-x border-b border-border-light bg-white p-6">
-        <div className="flex items-center justify-between gap-3 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-2">
             <List size={16} className="text-primary" />
             <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
@@ -4292,7 +4254,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         {report.isEmpty ? (
           <>
             {/* Empty-state Cover — same chrome, simpler body */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
+            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="relative z-10 px-8 py-7">
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 {reportTemplate && (
@@ -4431,7 +4393,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         ) : appliedTemplate ? (
           <>
             {/* Report Cover */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
+            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                 <FloatingLines
                   enabledWaves={['top', 'middle']}
@@ -4495,7 +4457,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             {/* Contents — read-only list of template-defined sections */}
             {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
               <div className="border border-border-light rounded-2xl bg-white p-6 mb-5">
-                <div className="flex items-center justify-between gap-3 mb-8">
+                <div className="flex items-center justify-between gap-3 mb-6">
                   <div className="flex items-center gap-2">
                     <List size={16} className="text-primary" />
                     <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
@@ -4577,6 +4539,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <ObservationCard
                       obs={o}
                       index={i}
+                      attached={false}
                       onEdit={() => openEditObservation(o)}
                       onToggleAttachment={() => toggleObservationAttachment(o.id)}
                       onDelete={() => setSectionPendingDelete(o as unknown as SectionItem)}
@@ -4590,7 +4553,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0">
+              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-2xl">
                 {sections.map((section, i) => {
                   const sectionProps = {
                     key: section.id,
@@ -4608,7 +4571,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   if (section.kind === 'cover') {
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
-                        <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
+                        <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
                           <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                             <FloatingLines
                               enabledWaves={['top', 'middle']}
@@ -4681,19 +4644,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     return (
                       <Reorder.Item {...sectionProps}>
                         <div className="border-x border-b border-border-light bg-white p-6">
-                          <div className="flex items-center gap-2 mb-8">
+                          <div className="flex items-center gap-2 mb-6">
                             <FileText size={16} className="text-primary" />
                             <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
                           </div>
                           <div className="grid grid-cols-4 gap-3 pb-5 border-b border-border-light mb-5">
-                            {activeStats.map(stat => (
-                              <div key={stat.label} className="flex items-center gap-3">
+                            {activeStats.map((stat, si) => (
+                              <motion.div
+                                key={stat.label}
+                                initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
+                                className="flex items-center gap-3"
+                              >
                                 <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
                                 <div>
-                                  <div className="text-xl font-bold text-text leading-none mb-1">{stat.value}</div>
+                                  <div className="text-xl font-bold text-text leading-none mb-1">
+                                    <KpiCountUp value={stat.value} delay={120 + si * 80} />
+                                  </div>
                                   <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
                                 </div>
-                              </div>
+                              </motion.div>
                             ))}
                           </div>
                           <p className="text-[13px] text-text-secondary leading-relaxed">{section.content}</p>
