@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, ClipboardCheck, Plus, Search, Calendar, Users, ChevronRight,
   Shield, Workflow, AlertTriangle, FileText, CheckCircle2, Clock, Eye,
-  BarChart3, Info, X,
+  X,
 } from 'lucide-react';
 
 // Reused components
@@ -18,6 +18,7 @@ import { DEFAULT_IA_SCOPE, type InternalAuditScopeState } from '../engagement-co
 import InternalAuditAnnouncementTab from '../engagement-configurable/patterns/internal-audit/InternalAuditAnnouncementTab';
 import { DEFAULT_ANNOUNCEMENT, type InternalAuditAnnouncementState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnnouncementData';
 import RACMTab from '../audit/RACMTab';
+import { HealthOverviewTab } from '../audit/EngagementOverviewView';
 import type { Engagement as RACMEngagement } from '../../data/engagements';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -252,7 +253,8 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
   const totalExceptions = completedRuns.flatMap(r => r.exceptions).length;
 
-  // Build an Engagement object compatible with RACMTab from Programs → Engagements
+  // Build an Engagement object compatible with RACMTab + HealthOverviewTab
+  const dynamicExceptionCount = totalExceptions + analysisState.runs.flatMap(r => r.exceptions).length;
   const racmEngagement = useMemo<RACMEngagement>(() => ({
     id: card.id,
     code: card.id.toUpperCase(),
@@ -265,12 +267,12 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
     status: 'Active',
     periodStart: card.period.split(' – ')[0] || '',
     periodEnd: card.period.split(' – ')[1] || '',
-    controls: 0,
-    health: 75,
-    openIssues: card.exceptions,
-    lastActivity: 'Today',
+    controls: scope.checklistIds.length + scope.racmVersionIds.length + scope.sopIds.length,
+    health: dynamicExceptionCount > 0 ? Math.max(40, 100 - dynamicExceptionCount * 5) : 85,
+    openIssues: dynamicExceptionCount || card.exceptions,
+    lastActivity: completedRuns.length > 0 ? 'Today' : '—',
     nextScheduled: '—',
-  }), [card]);
+  }), [card, scope.checklistIds.length, scope.racmVersionIds.length, scope.sopIds.length, dynamicExceptionCount, completedRuns.length]);
 
   return (
     <div className="space-y-0">
@@ -321,29 +323,11 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <h3 className="text-[13px] font-bold text-text mb-2">Objective</h3>
-            <p className="text-[12px] text-text-secondary leading-relaxed">{engagement.description}</p>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            {[
-              { label: 'Workflows Run', value: completedRuns.length, icon: Workflow, color: 'text-primary' },
-              { label: 'Exceptions', value: totalExceptions, icon: AlertTriangle, color: totalExceptions > 0 ? 'text-amber-600' : 'text-gray-400' },
-              { label: 'Cases', value: automationState.cases.cases.length, icon: Shield, color: 'text-purple-600' },
-              { label: 'Status', value: card.status, icon: CheckCircle2, color: 'text-emerald-600' },
-            ].map(s => (
-              <div key={s.label} className="rounded-xl border border-border-light bg-white p-4 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-surface-2"><s.icon size={16} className={s.color} /></div>
-                <div><div className={`text-[16px] font-bold ${s.color}`}>{s.value}</div><div className="text-[10px] text-gray-400">{s.label}</div></div>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/40 border border-blue-100/50 text-[10px] text-blue-600">
-            <Info size={11} className="shrink-0 mt-0.5" />
-            <span>Start by defining the Scope to configure RACM, Controls, and Workflows for this audit.</span>
-          </div>
-        </div>
+        <HealthOverviewTab
+          eng={racmEngagement}
+          onDrillToExceptions={() => setActiveTab('exceptions')}
+          onConfigureWorkflow={() => setActiveTab('workflows')}
+        />
       )}
 
       {activeTab === 'scope' && (

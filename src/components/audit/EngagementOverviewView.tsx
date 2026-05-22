@@ -865,7 +865,7 @@ function heatmapCellCls(count: number): string {
   return 'bg-risk-100 border-risk-100/80';
 }
 
-function HealthOverviewTab({
+export function HealthOverviewTab({
   eng,
   onDrillToExceptions,
   onConfigureWorkflow,
