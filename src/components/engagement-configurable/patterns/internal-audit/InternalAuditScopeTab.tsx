@@ -3,11 +3,11 @@
 
 import React, { useState } from 'react';
 import {
-  CheckCircle2, AlertCircle, ChevronRight, FileText, Workflow, ClipboardCheck, Info, Plus, X,
+  CheckCircle2, AlertCircle, ChevronRight, FileText, ClipboardCheck, Info, Plus, X,
 } from 'lucide-react';
 import type { ConfigurableEngagement, InternalAuditConfig } from '../../configurableEngagementTypes';
 import {
-  BUSINESS_PROCESSES, SOPS, RACMS, CHECKLISTS, WORKFLOWS, SCOPE_LEVEL_LABELS,
+  BUSINESS_PROCESSES, SOPS, RACMS, CHECKLISTS, SCOPE_LEVEL_LABELS,
   deriveIAScopeReadiness,
   type InternalAuditScopeState,
 } from './internalAuditScopeData';
@@ -45,7 +45,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
   const update = <K extends keyof InternalAuditScopeState>(field: K, value: InternalAuditScopeState[K]) =>
     onUpdateScope({ ...scope, [field]: value });
 
-  const toggleMulti = (field: 'subProcessIds' | 'activityIds' | 'sopIds' | 'racmVersionIds' | 'checklistIds' | 'selectedWorkflowIds', id: string) => {
+  const toggleMulti = (field: 'subProcessIds' | 'activityIds' | 'sopIds' | 'racmVersionIds' | 'checklistIds', id: string) => {
     const current = scope[field] as string[];
     update(field, current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
   };
@@ -239,20 +239,6 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 ))}
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={labelCls + ' mb-0'}>Workflows <span className="text-[9px] text-gray-400 font-normal ml-1">Optional — for analysis</span></label>
-                <button onClick={() => alert('Add/Link Workflow will be connected later.')} className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold text-primary hover:bg-primary/10 cursor-pointer transition-colors"><Plus size={9} />Add Workflow</button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {WORKFLOWS.map(w => (
-                  <button key={w.id} onClick={() => toggleMulti('selectedWorkflowIds', w.id)}
-                    className={`px-2 py-1 rounded text-[10px] font-medium cursor-pointer transition-colors flex items-center gap-1 ${scope.selectedWorkflowIds.includes(w.id) ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-gray-100 text-gray-500 border border-transparent hover:bg-gray-200'}`}>
-                    <Workflow size={9} />{w.name} <span className="text-[8px] text-gray-400">{w.type}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Scope Narrative */}
@@ -309,9 +295,6 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
               )}
               {scope.racmVersionIds.length > 0 && (
                 <div className="flex items-start gap-2"><span className="text-gray-400 w-20 shrink-0">RACM:</span><div className="flex flex-wrap gap-1">{scope.racmVersionIds.map(id => { const r = RACMS.find(x => x.id === id); return r ? <span key={id} className={chipCls}>{r.name}</span> : null; })}</div></div>
-              )}
-              {scope.selectedWorkflowIds.length > 0 && (
-                <div className="flex items-start gap-2"><span className="text-gray-400 w-20 shrink-0">Workflows:</span><div className="flex flex-wrap gap-1">{scope.selectedWorkflowIds.map(id => { const w = WORKFLOWS.find(x => x.id === id); return w ? <span key={id} className={chipCls}>{w.name}</span> : null; })}</div></div>
               )}
               {scope.inScopeItems && <div className="flex items-start gap-2"><span className="text-gray-400 w-20 shrink-0">In Scope:</span><span className="text-text">{scope.inScopeItems}</span></div>}
               {scope.outOfScopeItems && <div className="flex items-start gap-2"><span className="text-gray-400 w-20 shrink-0">Out Scope:</span><span className="text-text">{scope.outOfScopeItems}</span></div>}

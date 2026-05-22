@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, ClipboardCheck, Plus, Search, Calendar, Users, ChevronRight,
   Shield, Workflow, AlertTriangle, FileText, CheckCircle2, Clock, Eye,
-  BarChart3, Info,
+  BarChart3, Info, X,
 } from 'lucide-react';
 
 // Reused components
@@ -15,6 +15,8 @@ import type { ConfigurableEngagement, InternalAuditConfig } from '../engagement-
 import { EngagementPatternType, EngagementStatus, AuditScopeLevel } from '../engagement-configurable/configurableEngagementTypes';
 import InternalAuditScopeTab from '../engagement-configurable/patterns/internal-audit/InternalAuditScopeTab';
 import { DEFAULT_IA_SCOPE, type InternalAuditScopeState } from '../engagement-configurable/patterns/internal-audit/internalAuditScopeData';
+import InternalAuditAnnouncementTab from '../engagement-configurable/patterns/internal-audit/InternalAuditAnnouncementTab';
+import { DEFAULT_ANNOUNCEMENT, type InternalAuditAnnouncementState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnnouncementData';
 import RacmMappingWorkspace from '../audit/RacmMappingWorkspace';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -161,6 +163,19 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
   // IA Scope state
   const [scope, setScope] = useState<InternalAuditScopeState>({ ...DEFAULT_IA_SCOPE });
 
+  // IA Announcement state + modal
+  const [announcement, setAnnouncement] = useState<InternalAuditAnnouncementState>({ ...DEFAULT_ANNOUNCEMENT });
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+
+  // Intercept Scope tab navigation — 'announcement' opens the modal instead
+  const handleScopeNavigate = useCallback((tabId: string) => {
+    if (tabId === 'announcement') {
+      setShowAnnouncementModal(true);
+    } else {
+      setActiveTab(tabId);
+    }
+  }, []);
+
   // IA Analysis state (for Controls tab)
   const [analysisState, setAnalysisState] = useState<InternalAuditAnalysisState>({ runs: [], potentialObservations: [] });
 
@@ -289,23 +304,46 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       )}
 
       {activeTab === 'scope' && (
-        <InternalAuditScopeTab
-          engagement={engagement}
-          scope={scope}
-          onUpdateScope={setScope}
-          onNavigateTab={setActiveTab}
-        />
+        <div className="space-y-0">
+          {announcement.status !== 'DRAFT' && (
+            <div className="mb-3 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                announcement.status === 'SENT' || announcement.status === 'ACKNOWLEDGED' ? 'bg-emerald-50 text-emerald-700' :
+                announcement.status === 'READY_TO_SEND' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'
+              }`}>
+                <CheckCircle2 size={9} />
+                {announcement.status === 'ACKNOWLEDGED' ? 'Announcement Acknowledged' :
+                 announcement.status === 'SENT' ? 'Announcement Sent' :
+                 announcement.status === 'READY_TO_SEND' ? 'Announcement Ready' : 'Announcement Drafted'}
+              </span>
+              <button onClick={() => setShowAnnouncementModal(true)} className="text-[10px] text-primary hover:underline cursor-pointer font-medium">View / Edit</button>
+            </div>
+          )}
+          <InternalAuditScopeTab
+            engagement={engagement}
+            scope={scope}
+            onUpdateScope={setScope}
+            onNavigateTab={handleScopeNavigate}
+          />
+        </div>
       )}
 
       {activeTab === 'racm' && (
-        <div className="rounded-xl border border-border-light overflow-hidden">
-          <RacmMappingWorkspace
-            onBack={() => {}}
-            racmName="Linked RACM"
-            racmProcess={card.process === 'Procure to Pay' ? 'P2P' : 'O2C'}
-            inline={true}
-            hideAttributes={true}
-          />
+        <div className="space-y-3">
+          {/* RACM context banner */}
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/60 border border-blue-100 text-[11px] text-blue-600">
+            <Info size={12} className="shrink-0 mt-0.5" />
+            <span>Full RACM risk-control mapping for this audit. Expand risks to view mapped controls, link workflows, manage attributes, and review readiness.</span>
+          </div>
+          <div className="rounded-xl border border-border-light overflow-hidden">
+            <RacmMappingWorkspace
+              onBack={() => {}}
+              racmName={scope.racmVersionIds.length > 0 ? 'FY26 P2P — Vendor Payment' : scope.sopIds.length > 0 ? 'SOP-Derived RACM' : 'Internal Audit RACM'}
+              racmProcess={card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : 'P2P'}
+              inline={true}
+              showEditAction={true}
+            />
+          </div>
         </div>
       )}
 
@@ -412,6 +450,51 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
           )}
         </div>
       )}
+
+      {/* ═══ Announcement Modal ═══ */}
+      <AnimatePresence>
+        {showAnnouncementModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50"
+              onClick={() => setShowAnnouncementModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 12 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="fixed inset-4 md:inset-8 lg:inset-y-8 lg:inset-x-16 z-50 flex flex-col bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+                <div>
+                  <h2 className="text-[15px] font-bold text-text">Audit Announcement</h2>
+                  <p className="text-[11px] text-text-muted mt-0.5">Review the announcement before sharing it with process owners.</p>
+                </div>
+                <button onClick={() => setShowAnnouncementModal(false)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              {/* Modal body — scrollable */}
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <InternalAuditAnnouncementTab
+                  engagement={engagement}
+                  scope={scope}
+                  announcement={announcement}
+                  onUpdateAnnouncement={setAnnouncement}
+                  onNavigateTab={(tabId) => {
+                    // 'requests-idr' from the Acknowledge → Continue action: close modal
+                    setShowAnnouncementModal(false);
+                  }}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
