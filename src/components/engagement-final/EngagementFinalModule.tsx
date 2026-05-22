@@ -229,6 +229,14 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
   const totalExceptions = completedRuns.flatMap(r => r.exceptions).length;
 
+  // RACM display — context-aware naming matching Programs → Engagements style
+  const racmDisplayProcess = card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : card.process === 'Vendor Management' ? 'VM' : 'P2P';
+  const racmDisplayName = scope.racmVersionIds.length > 0
+    ? `FY26 ${racmDisplayProcess} — ${card.process}`
+    : scope.sopIds.length > 0
+    ? `SOP-Derived RACM — ${card.process}`
+    : `${card.process} Internal Audit RACM`;
+
   return (
     <div className="space-y-0">
       {/* Back */}
@@ -329,21 +337,54 @@ function EngagementFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       )}
 
       {activeTab === 'racm' && (
-        <div className="space-y-3">
-          {/* RACM context banner */}
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/60 border border-blue-100 text-[11px] text-blue-600">
-            <Info size={12} className="shrink-0 mt-0.5" />
-            <span>Full RACM risk-control mapping for this audit. Expand risks to view mapped controls, link workflows, manage attributes, and review readiness.</span>
+        <div className="space-y-4">
+          {/* Linked RACM Snapshot header — matches Programs → Engagements P2P SOX Audit */}
+          <div className="bg-white rounded-xl border border-border-light p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-2 rounded-lg bg-primary/10"><Shield size={16} className="text-primary" /></div>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[13px] font-semibold text-text">Linked RACM Snapshot</span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">Active</span>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                  <span className="font-medium text-text">{racmDisplayName}</span>
+                  <span className="text-gray-300">·</span>
+                  <span>{racmDisplayProcess}</span>
+                  <span className="text-gray-300">·</span>
+                  <span>{card.process}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="rounded-xl border border-border-light overflow-hidden">
-            <RacmMappingWorkspace
-              onBack={() => {}}
-              racmName={scope.racmVersionIds.length > 0 ? 'FY26 P2P — Vendor Payment' : scope.sopIds.length > 0 ? 'SOP-Derived RACM' : 'Internal Audit RACM'}
-              racmProcess={card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : 'P2P'}
-              inline={true}
-              showEditAction={true}
-            />
+
+          {/* Upload RACM — matching Engagement Execution V2 */}
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-dashed border-primary/30 bg-primary/[0.03]">
+            <FileText size={14} className="text-primary shrink-0" />
+            <div className="flex-1">
+              <span className="text-[11px] font-semibold text-text">Upload RACM</span>
+              <span className="text-[10px] text-gray-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
+            </div>
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+              <FileText size={11} />Choose File
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  alert(`RACM file "${file.name}" selected. This will be used as the linked RACM version for this engagement.`);
+                  e.target.value = '';
+                }
+              }} />
+            </label>
           </div>
+
+          {/* Full RacmMappingWorkspace — same as Programs → Engagements P2P SOX Audit */}
+          <RacmMappingWorkspace
+            onBack={() => setActiveTab('scope')}
+            racmName={racmDisplayName}
+            racmProcess={racmDisplayProcess}
+            inline={true}
+            showEditAction={true}
+          />
         </div>
       )}
 
