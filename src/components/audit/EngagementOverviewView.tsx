@@ -869,10 +869,12 @@ export function HealthOverviewTab({
   eng,
   onDrillToExceptions,
   onConfigureWorkflow,
+  hideWorkflowConfig,
 }: {
   eng: Engagement;
   onDrillToExceptions: (filter: { severity?: Severity; workflowId?: string; status?: EngagementException['status'] }) => void;
   onConfigureWorkflow: (workflowId: string) => void;
+  hideWorkflowConfig?: boolean;
 }) {
   // ─── Type-aware copy + funnel stages ────────────────────────────────────
   const isAutomation = eng.type === 'Automation';
@@ -1352,7 +1354,7 @@ export function HealthOverviewTab({
       </div>
 
       {/* ─── Workflow Configuration list ─── */}
-      <div className="glass-card rounded-xl p-5">
+      {!hideWorkflowConfig && <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-[13px] font-semibold text-text">{labels.workflowConfigHeader}</h3>
@@ -1412,7 +1414,7 @@ export function HealthOverviewTab({
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* ─── Engagement at a glance + recent activity (kept) ─── */}
       <div className="grid grid-cols-2 gap-4">

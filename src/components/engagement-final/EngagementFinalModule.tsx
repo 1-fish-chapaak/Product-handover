@@ -327,6 +327,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
           eng={racmEngagement}
           onDrillToExceptions={() => setActiveTab('exceptions')}
           onConfigureWorkflow={() => setActiveTab('workflows')}
+          hideWorkflowConfig
         />
       )}
 
