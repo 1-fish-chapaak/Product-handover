@@ -107,6 +107,159 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   );
 }
 
+// ─── Automation Creation Modal ─────────────────────────────────────────
+
+const AUTOMATION_CATEGORIES = [
+  'Continuous Monitoring',
+  'Reconciliation Automation',
+  'Exception Detection',
+  'MIS / Reporting Automation',
+  'Ad-hoc Workflow Automation',
+] as const;
+
+const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[12.5px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const fieldLabelCls = 'text-[11.5px] font-semibold text-text-muted block mb-1.5';
+
+function AutomationCreateModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (card: IAEngagementCard) => void;
+}) {
+  const [name, setName] = useState('');
+  const [objective, setObjective] = useState('');
+  const [owner, setOwner] = useState('');
+  const [process, setProcess] = useState('');
+  const [entity, setEntity] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [category, setCategory] = useState('');
+  const [validation, setValidation] = useState('');
+
+  const handleCreate = () => {
+    if (!name.trim()) { setValidation('Project name is required.'); return; }
+    if (!objective.trim()) { setValidation('Objective is required.'); return; }
+    if (!owner.trim()) { setValidation('Project owner is required.'); return; }
+    const card: IAEngagementCard = {
+      id: `ef-auto-new-${Date.now()}`,
+      name: name.trim(),
+      type: 'Automation',
+      process: process || 'Procure to Pay',
+      entity: entity || 'Corporate',
+      owner: owner.trim(),
+      reviewer: '—',
+      status: 'Draft',
+      statusTone: 'bg-gray-100 text-gray-600',
+      period: startDate && endDate ? `${startDate} – ${endDate}` : '—',
+      exceptions: 0,
+      nextAction: 'Configure Workflows',
+    };
+    onCreate(card);
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50" onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[540px] bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <Workflow size={16} className="text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-text">Create Automation Project</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">Workflows, files, schedules, and exceptions can be configured inside the workspace.</p>
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <div>
+            <label className={fieldLabelCls}>Project Name <span className="text-red-400">*</span></label>
+            <input value={name} onChange={e => { setName(e.target.value); setValidation(''); }} placeholder="e.g. AP Duplicate Invoice Monitor" className={fieldCls} />
+          </div>
+          <div>
+            <label className={fieldLabelCls}>Objective / Description <span className="text-red-400">*</span></label>
+            <textarea value={objective} onChange={e => { setObjective(e.target.value); setValidation(''); }} rows={2}
+              placeholder="What will this automation monitor or detect?" className={fieldCls + ' resize-none'} />
+          </div>
+          <div>
+            <label className={fieldLabelCls}>Project Owner <span className="text-red-400">*</span></label>
+            <input value={owner} onChange={e => { setOwner(e.target.value); setValidation(''); }} placeholder="e.g. Priya Singh" className={fieldCls} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={fieldLabelCls}>Business Process</label>
+              <select value={process} onChange={e => setProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
+                <option value="">Select...</option>
+                <option value="Procure to Pay">Procure to Pay</option>
+                <option value="Order to Cash">Order to Cash</option>
+                <option value="Record to Report">Record to Report</option>
+                <option value="IT General Controls">IT General Controls</option>
+              </select>
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Entity / Location</label>
+              <input value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Corporate" className={fieldCls} />
+            </div>
+          </div>
+
+          <div>
+            <label className={fieldLabelCls}>Automation Category</label>
+            <select value={category} onChange={e => setCategory(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
+              <option value="">Select category...</option>
+              {AUTOMATION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={fieldLabelCls}>Planned Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Planned End Date</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 border border-emerald-100/60 text-[10.5px] text-emerald-700 leading-relaxed">
+            <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
+            <span>You can add workflows and configure runs after creation.</span>
+          </div>
+
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleCreate}
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            Create Project
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Type Picker Modal ─────────────────────────────────────────────────
 
 function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: (type: 'Internal Audit' | 'Automation' | 'Compliance') => void }) {
@@ -178,6 +331,7 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
 function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) => void }) {
   const [search, setSearch] = useState('');
   const [showTypePicker, setShowTypePicker] = useState(false);
+  const [showAutoCreate, setShowAutoCreate] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const filtered = MOCK_IA_ENGAGEMENTS.filter(e => !search.trim() || e.name.toLowerCase().includes(search.toLowerCase()) || e.owner.toLowerCase().includes(search.toLowerCase()) || e.process.toLowerCase().includes(search.toLowerCase()));
@@ -262,7 +416,24 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
             onClose={() => setShowTypePicker(false)}
             onSelect={(type) => {
               setShowTypePicker(false);
-              setToast(`${type} engagement creation coming soon`);
+              if (type === 'Automation') {
+                setShowAutoCreate(true);
+              } else {
+                setToast(`${type} engagement creation coming soon`);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Automation Creation Modal */}
+      <AnimatePresence>
+        {showAutoCreate && (
+          <AutomationCreateModal
+            onClose={() => setShowAutoCreate(false)}
+            onCreate={(card) => {
+              setShowAutoCreate(false);
+              onOpen(card);
             }}
           />
         )}
