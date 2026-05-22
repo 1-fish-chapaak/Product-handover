@@ -141,7 +141,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'workflows', label: 'Workflows' },
   { id: 'exceptions', label: 'Exception Management' },
   { id: 'report', label: 'Audit Report' },
-  { id: 'trail', label: 'Audit Trail' },
+  { id: 'trail', label: 'Action Trail' },
 ];
 
 function getVisibleTabs(scope: InternalAuditScopeState): TabDef[] {
