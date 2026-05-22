@@ -41,28 +41,55 @@ import type { AutomationInputDataState } from '../engagement-configurable/patter
 // ─── Mock Data ──────────────────────────────────────────────────────────
 
 interface IAEngagementCard {
-  id: string; name: string; type: 'Internal Audit' | 'Automation' | 'Compliance'; process: string; entity: string; owner: string; reviewer: string;
-  status: string; statusTone: string; period: string; exceptions: number; nextAction: string;
+  id: string; code: string; name: string; description: string;
+  type: 'Internal Audit' | 'Automation' | 'Compliance'; process: string; entity: string;
+  owner: string; reviewer: string; framework: string;
+  status: string; statusTone: string; period: string;
+  exceptions: number; health: number; nextAction: string;
+  lastActivity: string;
+}
+
+const STATUS_CLS: Record<string, string> = {
+  Active: 'bg-compliant-50 text-compliant-700', 'In Progress': 'bg-evidence-50 text-evidence-700',
+  'In Fieldwork': 'bg-evidence-50 text-evidence-700', 'Scope Defined': 'bg-brand-50 text-brand-700',
+  'Exception Review': 'bg-mitigated-50 text-mitigated-700', 'Pending Review': 'bg-mitigated-50 text-mitigated-700',
+  'Report Pending': 'bg-brand-50 text-brand-700', Planned: 'bg-brand-50 text-brand-700',
+  Draft: 'bg-draft-50 text-draft-700', Closed: 'bg-gray-100 text-gray-600', Review: 'bg-mitigated-50 text-mitigated-700',
+};
+const STATUS_DOT: Record<string, string> = {
+  Active: 'bg-compliant', 'In Progress': 'bg-evidence-600', 'In Fieldwork': 'bg-evidence-600',
+  'Scope Defined': 'bg-brand-500', 'Exception Review': 'bg-mitigated-600', 'Pending Review': 'bg-mitigated-600',
+  'Report Pending': 'bg-brand-500', Planned: 'bg-brand-500', Draft: 'bg-gray-400', Closed: 'bg-gray-400', Review: 'bg-mitigated-600',
+};
+const TYPE_CLS: Record<string, string> = {
+  Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
+  'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
+  Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+};
+function healthTier(pct: number) {
+  if (pct >= 85) return { bar: 'bg-compliant', text: 'text-compliant-700' };
+  if (pct >= 65) return { bar: 'bg-mitigated-500', text: 'text-mitigated-700' };
+  return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
 const MOCK_IA_ENGAGEMENTS: IAEngagementCard[] = [
-  { id: 'ef-001', name: 'P2P Internal Audit Review', type: 'Internal Audit', process: 'Procure to Pay', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Sneha Desai', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 5, nextAction: 'Run Workflows' },
-  { id: 'ef-002', name: 'Vendor Onboarding Audit', type: 'Internal Audit', process: 'Vendor Management', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Karan Mehta', status: 'Scope Defined', statusTone: 'bg-blue-50 text-blue-700', period: 'Feb 2026 – Jul 2026', exceptions: 0, nextAction: 'Select Controls' },
-  { id: 'ef-003', name: 'Branch Operations Audit', type: 'Internal Audit', process: 'Operations', entity: 'Branch — Mumbai', owner: 'Deepak Bansal', reviewer: 'Karan Mehta', status: 'Exception Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Oct 2025 – Mar 2026', exceptions: 7, nextAction: 'Review Exceptions' },
-  { id: 'ef-004', name: 'Inventory Management Review', type: 'Internal Audit', process: 'Inventory', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Rohan Patel', status: 'Report Pending', statusTone: 'bg-purple-50 text-purple-700', period: 'Mar 2026 – Aug 2026', exceptions: 4, nextAction: 'Generate Report' },
-  { id: 'ef-auto-001', name: 'AP Duplicate Invoice Monitor', type: 'Automation', process: 'Procure to Pay', entity: 'Corporate', owner: 'Priya Singh', reviewer: 'Karan Mehta', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Oct 2025 – Mar 2026', exceptions: 4, nextAction: 'Monitor' },
-  { id: 'ef-auto-002', name: 'Vendor Master Change Monitor', type: 'Automation', process: 'Procure to Pay', entity: 'Corporate', owner: 'Sneha Desai', reviewer: 'Tushar Goel', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Jan 2026 – Jun 2026', exceptions: 2, nextAction: 'Review Exceptions' },
-  { id: 'ef-auto-003', name: 'PO Approval Threshold Scanner', type: 'Automation', process: 'Procure to Pay', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Deepak Bansal', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Mar 2026 – Aug 2026', exceptions: 3, nextAction: 'Configure Workflow' },
-  { id: 'ef-comp-001', name: 'P2P SOX Control Testing', type: 'Compliance', process: 'Procure to Pay', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Audit Lead', status: 'In Fieldwork', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 3, nextAction: 'Continue Testing' },
-  { id: 'ef-comp-002', name: 'O2C IFC Control Testing', type: 'Compliance', process: 'Order to Cash', entity: 'Corporate', owner: 'Neha Joshi', reviewer: 'SOX Manager', status: 'Pending Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Jan 2026 – Jun 2026', exceptions: 1, nextAction: 'Review Controls' },
-  { id: 'ef-comp-003', name: 'R2R ICFR Control Testing', type: 'Compliance', process: 'Record to Report', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Finance Controller', status: 'Planned', statusTone: 'bg-blue-50 text-blue-700', period: 'Apr 2026 – Sep 2026', exceptions: 0, nextAction: 'Start Testing' },
+  { id: 'ef-001', code: 'EF-001', name: 'P2P Internal Audit Review', description: 'Internal audit of Procure to Pay — duplicate invoices, PO approvals, vendor master changes, and payment authorization.', type: 'Internal Audit', process: 'P2P', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Sneha Desai', framework: 'Internal Policy', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 5, health: 68, nextAction: 'Run Workflows', lastActivity: '2h ago' },
+  { id: 'ef-002', code: 'EF-002', name: 'Vendor Onboarding Audit', description: 'Operational audit of vendor onboarding process — qualification, KYC, sanctions screening, and risk scoring.', type: 'Internal Audit', process: 'P2P', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Karan Mehta', framework: 'Internal Policy', status: 'Planned', statusTone: 'bg-blue-50 text-blue-700', period: 'Feb 2026 – Jul 2026', exceptions: 0, health: 0, nextAction: 'Define Scope', lastActivity: 'Not started' },
+  { id: 'ef-003', code: 'EF-003', name: 'Branch Operations Audit', description: 'Audit of branch-level operational controls — cash handling, inventory, and daily reconciliation.', type: 'Internal Audit', process: 'P2P', entity: 'Branch — Mumbai', owner: 'Deepak Bansal', reviewer: 'Karan Mehta', framework: 'Internal Policy', status: 'Exception Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Oct 2025 – Mar 2026', exceptions: 7, health: 52, nextAction: 'Review Exceptions', lastActivity: '1d ago' },
+  { id: 'ef-004', code: 'EF-004', name: 'Inventory Management Review', description: 'Internal audit of plant inventory — cycle counts, stock valuation, and write-off authorization.', type: 'Internal Audit', process: 'P2P', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Rohan Patel', framework: 'Internal Policy', status: 'Report Pending', statusTone: 'bg-purple-50 text-purple-700', period: 'Mar 2026 – Aug 2026', exceptions: 4, health: 71, nextAction: 'Generate Report', lastActivity: '3d ago' },
+  { id: 'ef-auto-001', code: 'EF-A-001', name: 'AP Duplicate Invoice Monitor', description: 'Continuous monitoring for duplicate AP invoice posting — daily scan against vendor, amount, invoice number, and date.', type: 'Automation', process: 'P2P', entity: 'Corporate', owner: 'Priya Singh', reviewer: 'Karan Mehta', framework: 'Internal Policy', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Oct 2025 – Mar 2026', exceptions: 4, health: 88, nextAction: 'in 8h', lastActivity: '3h ago' },
+  { id: 'ef-auto-002', code: 'EF-A-002', name: 'Vendor Master Change Monitor', description: 'Monitors vendor master data changes — bank account, address, and contact updates requiring dual authorization.', type: 'Automation', process: 'P2P', entity: 'Corporate', owner: 'Sneha Desai', reviewer: 'Tushar Goel', framework: 'Internal Policy', status: 'Active', statusTone: 'bg-emerald-50 text-emerald-700', period: 'Jan 2026 – Jun 2026', exceptions: 2, health: 92, nextAction: 'in 6h', lastActivity: '1h ago' },
+  { id: 'ef-auto-003', code: 'EF-A-003', name: 'PO Approval Threshold Scanner', description: 'Scans purchase orders against approval matrix — flags threshold breaches and split-PO patterns.', type: 'Automation', process: 'P2P', entity: 'Plant — Pune', owner: 'Neha Joshi', reviewer: 'Deepak Bansal', framework: 'Internal Policy', status: 'In Progress', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Mar 2026 – Aug 2026', exceptions: 3, health: 78, nextAction: 'Configure', lastActivity: '6h ago' },
+  { id: 'ef-comp-001', code: 'EF-C-001', name: 'P2P SOX Control Testing', description: 'SOX ICFR testing of Procure-to-Pay controls — vendor master, PO approval, three-way match, payment release.', type: 'Compliance', process: 'P2P', entity: 'Corporate', owner: 'Tushar Goel', reviewer: 'Audit Lead', framework: 'SOX ICFR', status: 'In Fieldwork', statusTone: 'bg-evidence-50 text-evidence-700', period: 'Jan 2026 – Jun 2026', exceptions: 3, health: 76, nextAction: 'Continue Testing', lastActivity: 'Today' },
+  { id: 'ef-comp-002', code: 'EF-C-002', name: 'O2C IFC Control Testing', description: 'IFC assessment for Order-to-Cash — credit limits, invoicing, revenue recognition cutoffs.', type: 'Compliance', process: 'O2C', entity: 'Corporate', owner: 'Neha Joshi', reviewer: 'SOX Manager', framework: 'IFC', status: 'Pending Review', statusTone: 'bg-amber-50 text-amber-700', period: 'Jan 2026 – Jun 2026', exceptions: 1, health: 89, nextAction: 'Review Controls', lastActivity: '6h ago' },
+  { id: 'ef-comp-003', code: 'EF-C-003', name: 'R2R ICFR Control Testing', description: 'ICFR testing for Record-to-Report — journal entries, reconciliation, and financial close.', type: 'Compliance', process: 'R2R', entity: 'Corporate', owner: 'Karan Mehta', reviewer: 'Finance Controller', framework: 'ICFR', status: 'Planned', statusTone: 'bg-blue-50 text-blue-700', period: 'Apr 2026 – Sep 2026', exceptions: 0, health: 0, nextAction: 'Start Testing', lastActivity: 'Not started' },
 ];
 
 function buildEngagement(card: IAEngagementCard): ConfigurableEngagement {
   return {
     id: card.id, name: card.name,
     patternType: EngagementPatternType.INTERNAL_AUDIT_ASSIGNMENT,
-    displayLabel: 'Audit Assignment', description: `Internal audit of ${card.process} process.`,
+    displayLabel: 'Audit Assignment', description: card.description,
     owner: card.owner, reviewer: card.reviewer, businessProcess: card.process, entityOrLocation: card.entity,
     status: EngagementStatus.IN_PROGRESS, stage: card.status,
     config: {
@@ -79,7 +106,7 @@ function buildAutomationEngagement(card: IAEngagementCard): ConfigurableEngageme
   return {
     id: card.id, name: card.name,
     patternType: EngagementPatternType.AUTOMATION_PROJECT,
-    displayLabel: 'Automation', description: `Continuous monitoring of ${card.process} process.`,
+    displayLabel: 'Automation', description: card.description,
     owner: card.owner, reviewer: card.reviewer, businessProcess: card.process, entityOrLocation: card.entity,
     status: EngagementStatus.IN_PROGRESS, stage: card.status,
     config: {
@@ -140,17 +167,22 @@ function AutomationCreateModal({ onClose, onCreate }: {
     if (!owner.trim()) { setValidation('Project owner is required.'); return; }
     const card: IAEngagementCard = {
       id: `ef-auto-new-${Date.now()}`,
+      code: `EF-A-${Date.now().toString().slice(-3)}`,
       name: name.trim(),
+      description: objective.trim(),
       type: 'Automation',
-      process: process || 'Procure to Pay',
+      process: process || 'P2P',
       entity: entity || 'Corporate',
       owner: owner.trim(),
       reviewer: '—',
+      framework: 'Internal Policy',
       status: 'Draft',
       statusTone: 'bg-gray-100 text-gray-600',
       period: startDate && endDate ? `${startDate} – ${endDate}` : '—',
       exceptions: 0,
+      health: 0,
       nextAction: 'Configure Workflows',
+      lastActivity: 'Just created',
     };
     onCreate(card);
   };
@@ -330,83 +362,179 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
 
 function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) => void }) {
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [processFilter, setProcessFilter] = useState('All');
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showAutoCreate, setShowAutoCreate] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const filtered = MOCK_IA_ENGAGEMENTS.filter(e => !search.trim() || e.name.toLowerCase().includes(search.toLowerCase()) || e.owner.toLowerCase().includes(search.toLowerCase()) || e.process.toLowerCase().includes(search.toLowerCase()));
+  const filtered = MOCK_IA_ENGAGEMENTS.filter(e => {
+    if (typeFilter !== 'All' && e.type !== typeFilter) return false;
+    if (statusFilter !== 'All' && e.status !== statusFilter) return false;
+    if (processFilter !== 'All' && e.process !== processFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return e.name.toLowerCase().includes(q) || e.owner.toLowerCase().includes(q) || e.process.toLowerCase().includes(q) || e.code.toLowerCase().includes(q) || e.framework.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const allStatuses = [...new Set(MOCK_IA_ENGAGEMENTS.map(e => e.status))];
+  const allProcesses = [...new Set(MOCK_IA_ENGAGEMENTS.map(e => e.process))];
+
+  const activityLabel = (eng: IAEngagementCard) => {
+    if (eng.type === 'Automation') return { last: 'Last run', next: 'Next run' };
+    if (eng.type === 'Compliance') return { last: 'Last tested', next: 'Next milestone' };
+    return { last: 'Last activity', next: 'Next milestone' };
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-bold text-text">Engagement Final</h1>
-          <p className="text-sm text-text-secondary mt-1">Manage and execute audit engagements — internal audits, automation monitoring, compliance control testing, and exception management.</p>
+          <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
+          <h1 className="font-display text-[28px] font-bold text-text tracking-tight">Engagement Final</h1>
+          <p className="text-[13px] text-text-secondary mt-1.5">Browse all engagements — compliance audits, internal audits, and automation programs.</p>
         </div>
         <button onClick={() => setShowTypePicker(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
           <Plus size={14} />New Engagement
         </button>
       </div>
 
-      <div className="relative max-w-md">
+      {/* Search */}
+      <div className="relative max-w-xl">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagements..."
-          className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagement, owner, framework, or code..."
+          className="w-full pl-9 pr-4 h-10 rounded-lg border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" />
       </div>
 
-      <div className="rounded-xl border border-border-light bg-white overflow-hidden">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-              <th className="px-4 py-2.5 text-left">Engagement</th>
-              <th className="px-4 py-2.5 text-center w-[100px]">Type</th>
-              <th className="px-4 py-2.5 text-left w-[120px]">Process</th>
-              <th className="px-4 py-2.5 text-left w-[100px]">Entity</th>
-              <th className="px-4 py-2.5 text-left w-[110px]">Owner</th>
-              <th className="px-4 py-2.5 text-center w-[110px]">Status</th>
-              <th className="px-4 py-2.5 text-center w-[80px]">Exceptions</th>
-              <th className="px-4 py-2.5 text-left w-[120px]">Period</th>
-              <th className="px-4 py-2.5 text-left w-[130px]">Next Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((eng, i) => {
-              const iconBg = eng.type === 'Automation' ? 'bg-emerald-100' : eng.type === 'Compliance' ? 'bg-blue-100' : 'bg-purple-100';
-              const iconEl = eng.type === 'Automation' ? <Workflow size={16} className="text-emerald-600" />
-                : eng.type === 'Compliance' ? <ShieldCheck size={16} className="text-blue-600" />
-                : <ClipboardCheck size={16} className="text-purple-600" />;
-              const typeBadge = eng.type === 'Automation' ? 'bg-emerald-50 text-emerald-700'
-                : eng.type === 'Compliance' ? 'bg-blue-50 text-blue-700'
-                : 'bg-purple-50 text-purple-700';
-              const actionBadge = eng.type === 'Automation' ? 'bg-emerald-50 text-emerald-700'
-                : eng.type === 'Compliance' ? 'bg-blue-50 text-blue-700'
-                : 'bg-purple-50 text-purple-700';
-              return (
-                <motion.tr key={eng.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                  onClick={() => onOpen(eng)} className="border-b border-border-light/50 hover:bg-primary/[0.02] cursor-pointer transition-colors group">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>{iconEl}</div>
-                      <div><div className="text-[13px] font-semibold text-text group-hover:text-primary transition-colors">{eng.name}</div></div>
+      {/* Filter Chips */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Type</span>
+        {['All', 'Compliance', 'Internal Audit', 'Automation'].map(t => (
+          <button key={t} onClick={() => setTypeFilter(t)}
+            className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${typeFilter === t ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
+            {t}
+          </button>
+        ))}
+        <div className="w-px h-5 bg-border-light" />
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</span>
+        {['All', ...allStatuses.slice(0, 4)].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${statusFilter === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
+            {s}
+          </button>
+        ))}
+        <div className="w-px h-5 bg-border-light" />
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Process</span>
+        {['All', ...allProcesses].map(p => (
+          <button key={p} onClick={() => setProcessFilter(p)}
+            className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${processFilter === p ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Engagement List */}
+      <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+        {/* Column Headers */}
+        <div className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr] gap-5 px-6 py-3 bg-surface-2/30 border-b border-border-light text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80">
+          <div>Engagement</div>
+          <div>Type</div>
+          <div>Health</div>
+          <div>Activity</div>
+        </div>
+
+        {/* Rows */}
+        {filtered.length === 0 && (
+          <div className="px-6 py-12 text-center text-[13px] text-text-muted">No engagements match your filters.</div>
+        )}
+        {filtered.map((eng, i) => {
+          const health = healthTier(eng.health);
+          const labels = activityLabel(eng);
+          const isNotStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
+          return (
+            <motion.div key={eng.id}
+              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.025 }}
+              onClick={() => onOpen(eng)}
+              className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr] gap-5 px-6 py-5 border-b border-border-light last:border-0 hover:bg-surface-2/30 transition-colors cursor-pointer items-start"
+            >
+              {/* Col 1: Engagement */}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{eng.name}</h3>
+                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_CLS[eng.status] || 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status] || 'bg-gray-400'}`} />
+                    {eng.status}
+                  </span>
+                </div>
+                <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">{eng.description}</p>
+                <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
+                  <span className="font-mono tracking-tight">{eng.code}</span>
+                  <span className="text-border">·</span>
+                  <span>{eng.owner}</span>
+                  <span className="text-border">·</span>
+                  <span className="tabular-nums">{eng.period}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">{eng.process}</span>
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">{eng.framework}</span>
+                </div>
+              </div>
+
+              {/* Col 2: Type */}
+              <div className="flex flex-col items-start gap-1.5">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${TYPE_CLS[eng.type] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                  {eng.type}
+                </span>
+              </div>
+
+              {/* Col 3: Health */}
+              <div className="space-y-1.5">
+                {isNotStarted ? (
+                  <div className="text-[11px] text-text-muted italic">Not yet started</div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[13px] font-bold tabular-nums ${health.text}`}>{eng.health}%</span>
+                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wide">Effective</span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeBadge}`}>
-                      {eng.type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-text-muted">{eng.process}</td>
-                  <td className="px-4 py-3 text-text-muted">{eng.entity}</td>
-                  <td className="px-4 py-3"><div className="text-text font-medium">{eng.owner}</div><div className="text-[10px] text-gray-400">{eng.reviewer}</div></td>
-                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${eng.statusTone}`}>{eng.status}</span></td>
-                  <td className="px-4 py-3 text-center"><span className={`font-semibold tabular-nums ${eng.exceptions > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{eng.exceptions}</span></td>
-                  <td className="px-4 py-3 text-text-muted text-[11px]"><span className="flex items-center gap-1"><Calendar size={10} />{eng.period}</span></td>
-                  <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold ${actionBadge}`}>{eng.nextAction}</span></td>
-                </motion.tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
+                      <div className={`h-full ${health.bar} rounded-full transition-all duration-500`} style={{ width: `${eng.health}%` }} />
+                    </div>
+                  </>
+                )}
+                {eng.exceptions > 0 && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <AlertTriangle size={11} className="text-risk-700" />
+                    <span className="text-[11px] font-semibold text-risk-700">{eng.exceptions}</span>
+                    <span className="text-[11px] text-text-muted">open</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Col 4: Activity */}
+              <div className="flex flex-col gap-1 min-w-0 text-[11px]">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-text-muted shrink-0">{labels.last}</span>
+                  <span className="text-text font-medium truncate">{eng.lastActivity}</span>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <Clock size={10} className="text-text-muted shrink-0 self-center" />
+                  <span className="text-text-muted shrink-0">{labels.next}</span>
+                  <span className="text-text font-medium truncate">{eng.nextAction}</span>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+
+        {/* Footer */}
+        <div className="px-6 py-2.5 bg-surface-2/30 border-t border-border-light text-[11px] text-text-muted">
+          {filtered.length} of {MOCK_IA_ENGAGEMENTS.length} engagements
+        </div>
       </div>
 
       {/* Type Picker Modal */}
@@ -529,7 +657,7 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
     description: `Continuous monitoring of ${card.process} process.`,
     type: 'Automation',
     subtype: 'CCM',
-    process: (card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : 'P2P') as RACMEngagement['process'],
+    process: (card.process as RACMEngagement['process']) || 'P2P',
     framework: 'Internal Policy',
     owner: card.owner,
     status: 'Active',
@@ -778,7 +906,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
     name: card.name,
     description: `Internal audit of ${card.process} process.`,
     type: 'Internal Audit',
-    process: (card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : 'P2P') as RACMEngagement['process'],
+    process: (card.process as RACMEngagement['process']) || 'P2P',
     framework: 'Internal Audit',
     owner: card.owner,
     status: 'Active',
@@ -1054,9 +1182,9 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
     id: card.id,
     code: card.id.toUpperCase(),
     name: card.name,
-    description: `${card.process} compliance control testing — RACM, controls, samples, evidence, attribute testing, and working paper.`,
+    description: card.description,
     type: 'Compliance',
-    process: (card.process === 'Procure to Pay' ? 'P2P' : card.process === 'Order to Cash' ? 'O2C' : card.process === 'Record to Report' ? 'R2R' : 'P2P') as RACMEngagement['process'],
+    process: (card.process as RACMEngagement['process']) || 'P2P',
     framework: 'SOX ICFR',
     owner: card.owner,
     status: card.status === 'Planned' ? 'Planned' : 'Active',
