@@ -502,8 +502,6 @@ function ComplianceCreateModal({ onClose, onCreate }: {
   const [entity, setEntity] = useState('');
   const [owner, setOwner] = useState('');
   const [reviewer, setReviewer] = useState('');
-  const [periodFrom, setPeriodFrom] = useState('');
-  const [periodTo, setPeriodTo] = useState('');
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -515,7 +513,6 @@ function ComplianceCreateModal({ onClose, onCreate }: {
     if (!process) { setValidation('Business process is required.'); return; }
     if (!owner.trim()) { setValidation('Owner is required.'); return; }
     if (!reviewer.trim()) { setValidation('Reviewer is required.'); return; }
-    if (!periodFrom || !periodTo) { setValidation('Audit period is required.'); return; }
     const card: IAEngagementCard = {
       id: `ef-comp-new-${Date.now()}`,
       code: `EF-C-${Date.now().toString().slice(-3)}`,
@@ -529,7 +526,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
       framework: framework,
       status: 'Planned',
       statusTone: 'bg-brand-50 text-brand-700',
-      period: `${periodFrom} – ${periodTo}`,
+      period: startDate && endDate ? `${startDate} – ${endDate}` : '—',
       exceptions: 0,
       health: 0,
       nextAction: 'Start Testing',
@@ -623,17 +620,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
 
           {/* Timeline */}
           <div className="space-y-3">
-            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Audit Period & Timeline</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={fieldLabelCls}>Audit Period From <span className="text-red-400">*</span></label>
-                <input type="date" value={periodFrom} onChange={e => { setPeriodFrom(e.target.value); setValidation(''); }} className={fieldCls} />
-              </div>
-              <div>
-                <label className={fieldLabelCls}>Audit Period To <span className="text-red-400">*</span></label>
-                <input type="date" value={periodTo} onChange={e => { setPeriodTo(e.target.value); setValidation(''); }} className={fieldCls} />
-              </div>
-            </div>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Planned Start Date</label>
