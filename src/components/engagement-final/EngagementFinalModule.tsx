@@ -419,36 +419,7 @@ function IACreateModal({ onClose, onCreate }: {
             </div>
           </div>
 
-          {/* C. Scope Context */}
-          <div className="space-y-3">
-            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Scope Context</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={fieldLabelCls}>Business Process</label>
-                <select value={process} onChange={e => setProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
-                  <option value="">Select...</option>
-                  {BUSINESS_PROCESSES_LIST.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={fieldLabelCls}>Entity / Location</label>
-                <input value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Corporate" className={fieldCls} />
-              </div>
-            </div>
-            <div>
-              <label className={fieldLabelCls}>Scope Level</label>
-              <div className="flex flex-wrap gap-2">
-                {SCOPE_LEVELS.map(lvl => (
-                  <button key={lvl} onClick={() => setScopeLevel(lvl)}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer transition-all border ${scopeLevel === lvl ? 'border-primary bg-primary/8 text-primary' : 'border-border-light text-gray-500 hover:border-gray-300'}`}>
-                    {lvl}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* D. Timeline */}
+          {/* C. Timeline */}
           <div className="space-y-3">
             <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
             <div className="grid grid-cols-2 gap-4">
