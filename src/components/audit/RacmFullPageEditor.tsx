@@ -553,11 +553,21 @@ function RacmGridRow({
         const left = stickyOffsets.offsets.get(c.key);
         const isLastPinned = pinned && [...pinnedKeys].slice(-1)[0] === c.key;
         const isEditing = editingKey === c.key;
+        const isAttrEditing = isEditing && c.key === 'attributes';
         return (
           <div key={c.key}
             style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-            className={`h-10 px-3 py-1.5 text-[11px] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing ? 'p-0' : ''}`}>
-            {isEditing ? (
+            className={`h-10 px-3 py-1.5 text-[11px] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
+            {isAttrEditing ? (
+              <>
+                <CellContent row={row} col={c} onEdit={() => {}} onOpenDetail={onOpenDetail} />
+                <AttributeEditModal
+                  value={row[c.key]}
+                  onSave={(v) => { onUpdateCell(rowKey, c.key, v); setEditingKey(null); }}
+                  onClose={() => setEditingKey(null)}
+                />
+              </>
+            ) : isEditing ? (
               <input autoFocus defaultValue={row[c.key]}
                 onBlur={e => { onUpdateCell(rowKey, c.key, e.target.value); setEditingKey(null); }}
                 onKeyDown={e => {
@@ -577,6 +587,82 @@ function RacmGridRow({
         );
       })}
     </div>
+  );
+}
+
+// ─── Attribute Edit Modal ─────────────────────────────────────────────────
+function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave: (v: string) => void; onClose: () => void }) {
+  const initial = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const [attrs, setAttrs] = useState<string[]>(initial);
+  const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const addAttr = () => {
+    const trimmed = input.trim();
+    if (trimmed && !attrs.includes(trimmed)) {
+      setAttrs(p => [...p, trimmed]);
+      setInput('');
+    }
+  };
+
+  const removeAttr = (idx: number) => setAttrs(p => p.filter((_, i) => i !== idx));
+
+  const handleSave = () => onSave(attrs.join(', '));
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/30 backdrop-blur-[1px] z-50" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[440px] bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
+          <h3 className="text-[14px] font-bold text-text">Edit Attributes</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors"><X size={15} /></button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          {/* Current attributes */}
+          {attrs.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attrs.map((a, idx) => (
+                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                  {a}
+                  <button onClick={() => removeAttr(idx)} className="text-purple-400 hover:text-red-500 cursor-pointer transition-colors"><X size={10} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          {attrs.length === 0 && (
+            <p className="text-[11px] text-gray-400 italic">No attributes yet. Type below and press Enter to add.</p>
+          )}
+
+          {/* Input */}
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttr(); } }}
+              placeholder="Type attribute and press Enter..."
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            />
+            <button onClick={addAttr} disabled={!input.trim()}
+              className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[11px] font-semibold cursor-pointer hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              Add
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400">Press Enter after each attribute to add it. Click the x on a chip to remove.</p>
+        </div>
+        <div className="px-5 py-3 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
+          <button onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors shadow-sm">Save</button>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -618,18 +704,18 @@ function CellContent({
     );
   }
 
-  // Attributes — render pipe-separated values as individual chips
+  // Attributes — render comma-separated values as individual chips, click to edit via modal
   if (col.key === 'attributes') {
-    if (!val) return <span className="text-[10px] text-gray-300">—</span>;
-    const items = val.split(' | ').map(s => s.trim()).filter(Boolean);
+    if (!val) return <button onClick={onEdit} className="text-[10px] text-primary hover:underline cursor-pointer">+ Add attributes</button>;
+    const items = val.split(',').map(s => s.trim()).filter(Boolean);
     return (
-      <div className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1">
+      <button onClick={onEdit} className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1 cursor-pointer hover:bg-white/60 rounded transition-colors w-full text-left">
         {items.map((attr, idx) => (
           <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
           </span>
         ))}
-      </div>
+      </button>
     );
   }
 

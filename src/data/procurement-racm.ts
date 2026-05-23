@@ -55,7 +55,7 @@ export interface ProcurementRacmRow {
   confidence: string;
   /** SOP Section Ref */
   sopSectionRef: string;
-  /** Attributes — pipe-separated list of test attributes for this control (a control can have one or multiple) */
+  /** Attributes — comma-separated list of test attributes for this control (a control can have one or multiple) */
   attributes: string;
 }
 
@@ -218,7 +218,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.4",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R005",
@@ -274,7 +274,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
-    "attributes": "Completeness of documentation | Sign-off obtained"
+    "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
     "riskId": "R007",
@@ -330,7 +330,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R009",
@@ -386,7 +386,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
-    "attributes": "Approval evidence verified | Sign-off obtained"
+    "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R011",
@@ -414,7 +414,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.1",
-    "attributes": "Evidence of review | Segregation of duties confirmed"
+    "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
     "riskId": "R012",
@@ -442,7 +442,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.2",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R013",
@@ -470,7 +470,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.3",
-    "attributes": "Evidence of review | System configuration validated"
+    "attributes": "Evidence of review,System configuration validated"
   },
   {
     "riskId": "R014",
@@ -498,7 +498,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.4",
-    "attributes": "Exception identification accuracy | Sign-off obtained"
+    "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R015",
@@ -526,7 +526,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.5",
-    "attributes": "Completeness of documentation | Approval evidence verified"
+    "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
     "riskId": "R016",
@@ -554,7 +554,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R017",
@@ -610,7 +610,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
-    "attributes": "Completeness of documentation | Sign-off obtained"
+    "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
     "riskId": "R019",
@@ -666,7 +666,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
-    "attributes": "Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R021",
@@ -694,7 +694,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
-    "attributes": "Completeness of documentation | Exception identification accuracy"
+    "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
     "riskId": "R022",
@@ -722,7 +722,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
-    "attributes": "Sign-off obtained | Segregation of duties confirmed"
+    "attributes": "Sign-off obtained,Segregation of duties confirmed"
   },
   {
     "riskId": "R023",
@@ -778,7 +778,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R025",
@@ -834,7 +834,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
-    "attributes": "Sign-off obtained | System configuration validated"
+    "attributes": "Sign-off obtained,System configuration validated"
   },
   {
     "riskId": "R027",
@@ -890,7 +890,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
-    "attributes": "Timeliness of execution | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R029",
@@ -946,7 +946,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.1",
-    "attributes": "Completeness of documentation | Approval evidence verified | Sign-off obtained"
+    "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R031",
@@ -1002,7 +1002,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.3",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R033",
@@ -1030,7 +1030,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.4",
-    "attributes": "Completeness of documentation | Segregation of duties confirmed"
+    "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
     "riskId": "R034",
@@ -1086,7 +1086,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.6",
-    "attributes": "Approval evidence verified | Exception identification accuracy"
+    "attributes": "Approval evidence verified,Exception identification accuracy"
   },
   {
     "riskId": "R036",
@@ -1114,7 +1114,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R037",
@@ -1198,7 +1198,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
-    "attributes": "Completeness of documentation | System configuration validated"
+    "attributes": "Completeness of documentation,System configuration validated"
   },
   {
     "riskId": "R040",
@@ -1226,7 +1226,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
-    "attributes": "Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R041",
@@ -1282,7 +1282,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.1",
-    "attributes": "Completeness of documentation | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Completeness of documentation,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R043",
@@ -1338,7 +1338,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.3",
-    "attributes": "Timeliness of execution | Sign-off obtained | Segregation of duties confirmed"
+    "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
     "riskId": "R045",
@@ -1366,7 +1366,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.4",
-    "attributes": "Completeness of documentation | Approval evidence verified"
+    "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
     "riskId": "R046",
@@ -1450,7 +1450,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R049",
@@ -1506,7 +1506,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
-    "attributes": "Approval evidence verified | Sign-off obtained"
+    "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R051",
@@ -1562,7 +1562,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
-    "attributes": "Timeliness of execution | Sign-off obtained | System configuration validated"
+    "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
     "riskId": "R053",
@@ -1618,7 +1618,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.2",
-    "attributes": "Completeness of documentation | Sign-off obtained"
+    "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
     "riskId": "R055",
@@ -1646,7 +1646,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.3",
-    "attributes": "Approval evidence verified | Segregation of duties confirmed"
+    "attributes": "Approval evidence verified,Segregation of duties confirmed"
   },
   {
     "riskId": "R056",
@@ -1674,7 +1674,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.4",
-    "attributes": "Timeliness of execution | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R057",
@@ -1786,7 +1786,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
-    "attributes": "Completeness of documentation | Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R061",
@@ -1870,7 +1870,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
-    "attributes": "Completeness of documentation | Exception identification accuracy"
+    "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
     "riskId": "R064",
@@ -1898,7 +1898,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.1",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R065",
@@ -1926,7 +1926,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.2",
-    "attributes": "Approval evidence verified | System configuration validated"
+    "attributes": "Approval evidence verified,System configuration validated"
   },
   {
     "riskId": "R066",
@@ -1954,7 +1954,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.3",
-    "attributes": "Completeness of documentation | Sign-off obtained | Segregation of duties confirmed"
+    "attributes": "Completeness of documentation,Sign-off obtained,Segregation of duties confirmed"
   },
   {
     "riskId": "R067",
@@ -2010,7 +2010,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.6",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R069",
@@ -2066,7 +2066,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
-    "attributes": "Approval evidence verified | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Approval evidence verified,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R071",
@@ -2122,7 +2122,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R073",
@@ -2206,7 +2206,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.1",
-    "attributes": "Completeness of documentation | Approval evidence verified"
+    "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
     "riskId": "R076",
@@ -2234,7 +2234,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.2",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R077",
@@ -2262,7 +2262,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.3",
-    "attributes": "Exception identification accuracy | Segregation of duties confirmed"
+    "attributes": "Exception identification accuracy,Segregation of duties confirmed"
   },
   {
     "riskId": "R078",
@@ -2290,7 +2290,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.4",
-    "attributes": "Completeness of documentation | Sign-off obtained | System configuration validated"
+    "attributes": "Completeness of documentation,Sign-off obtained,System configuration validated"
   },
   {
     "riskId": "R079",
@@ -2346,7 +2346,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.6",
-    "attributes": "Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R081",
@@ -2458,7 +2458,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
-    "attributes": "Completeness of documentation | Timeliness of execution | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R085",
@@ -2570,7 +2570,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
-    "attributes": "Timeliness of execution | Sign-off obtained | Segregation of duties confirmed"
+    "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
     "riskId": "R089",
@@ -2626,7 +2626,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
-    "attributes": "Completeness of documentation | Approval evidence verified | Sign-off obtained"
+    "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R091",
@@ -2654,7 +2654,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
-    "attributes": "Exception identification accuracy | System configuration validated"
+    "attributes": "Exception identification accuracy,System configuration validated"
   },
   {
     "riskId": "R092",
@@ -2682,7 +2682,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.1",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R093",
@@ -2794,7 +2794,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.5",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R097",
@@ -2850,7 +2850,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
-    "attributes": "Exception identification accuracy | Sign-off obtained"
+    "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R099",
@@ -2878,7 +2878,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
-    "attributes": "Completeness of documentation | Segregation of duties confirmed"
+    "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
     "riskId": "R100",
@@ -2906,7 +2906,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
-    "attributes": "Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R101",
@@ -2962,7 +2962,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
-    "attributes": "Completeness of documentation | Sign-off obtained"
+    "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
     "riskId": "R103",
@@ -3018,7 +3018,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
-    "attributes": "Timeliness of execution | Sign-off obtained | System configuration validated"
+    "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
     "riskId": "R105",
@@ -3046,7 +3046,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
-    "attributes": "Completeness of documentation | Approval evidence verified | Exception identification accuracy"
+    "attributes": "Completeness of documentation,Approval evidence verified,Exception identification accuracy"
   },
   {
     "riskId": "R106",
@@ -3130,7 +3130,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
-    "attributes": "Completeness of documentation | Timeliness of execution | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R109",
@@ -3186,7 +3186,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
-    "attributes": "Approval evidence verified | Sign-off obtained | Segregation of duties confirmed"
+    "attributes": "Approval evidence verified,Sign-off obtained,Segregation of duties confirmed"
   },
   {
     "riskId": "R111",
@@ -3242,7 +3242,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
-    "attributes": "Timeliness of execution | Exception identification accuracy | Sign-off obtained"
+    "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
     "riskId": "R113",
@@ -3298,7 +3298,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
-    "attributes": "Completeness of documentation | Sign-off obtained"
+    "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
     "riskId": "R115",
@@ -3354,7 +3354,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
     "riskId": "R117",
@@ -3382,7 +3382,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
-    "attributes": "Completeness of documentation | System configuration validated"
+    "attributes": "Completeness of documentation,System configuration validated"
   },
   {
     "riskId": "R118",
@@ -3466,7 +3466,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 3",
-    "attributes": "Completeness of documentation | Timeliness of execution | Approval evidence verified | Sign-off obtained"
+    "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
     "riskId": "R121",
@@ -3494,7 +3494,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
-    "attributes": "Evidence of review | Segregation of duties confirmed"
+    "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
     "riskId": "R122",
@@ -3578,7 +3578,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Sections 6.3, 11.3",
-    "attributes": "Timeliness of execution | Sign-off obtained"
+    "attributes": "Timeliness of execution,Sign-off obtained"
   }
 ];
 
