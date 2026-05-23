@@ -487,6 +487,188 @@ function IACreateModal({ onClose, onCreate }: {
   );
 }
 
+// ─── Compliance Creation Modal ────────────────────────────────────────
+
+const FRAMEWORKS = ['SOX ICFR', 'IFC', 'ICFR', 'ICOFR', 'SOC 1', 'Internal Financial Control', 'Custom'] as const;
+const COMP_PROCESSES = ['P2P', 'O2C', 'R2R', 'Inventory', 'Payroll', 'ITGC'] as const;
+
+function ComplianceCreateModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (card: IAEngagementCard) => void;
+}) {
+  const [name, setName] = useState('');
+  const [framework, setFramework] = useState('');
+  const [process, setProcess] = useState('');
+  const [entity, setEntity] = useState('');
+  const [owner, setOwner] = useState('');
+  const [reviewer, setReviewer] = useState('');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
+  const [description, setDescription] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [validation, setValidation] = useState('');
+
+  const handleCreate = () => {
+    if (!name.trim()) { setValidation('Engagement name is required.'); return; }
+    if (!framework) { setValidation('Framework is required.'); return; }
+    if (!process) { setValidation('Business process is required.'); return; }
+    if (!owner.trim()) { setValidation('Owner is required.'); return; }
+    if (!reviewer.trim()) { setValidation('Reviewer is required.'); return; }
+    if (!periodFrom || !periodTo) { setValidation('Audit period is required.'); return; }
+    const card: IAEngagementCard = {
+      id: `ef-comp-new-${Date.now()}`,
+      code: `EF-C-${Date.now().toString().slice(-3)}`,
+      name: name.trim(),
+      description: description.trim() || `${framework} compliance control testing for ${process}.`,
+      type: 'Compliance',
+      process: process,
+      entity: entity || 'Corporate',
+      owner: owner.trim(),
+      reviewer: reviewer.trim(),
+      framework: framework,
+      status: 'Planned',
+      statusTone: 'bg-brand-50 text-brand-700',
+      period: `${periodFrom} – ${periodTo}`,
+      exceptions: 0,
+      health: 0,
+      nextAction: 'Start Testing',
+      lastActivity: 'Just created',
+    };
+    onCreate(card);
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[560px] bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+              <ShieldCheck size={16} className="text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-text">Create Compliance Engagement</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">RACM, controls, samples, evidence, testing, review, and conclusion can be completed after creation.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Basic Details */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
+            <div>
+              <label className={fieldLabelCls}>Engagement Name <span className="text-red-400">*</span></label>
+              <input value={name} onChange={e => { setName(e.target.value); setValidation(''); }} placeholder="e.g. P2P SOX Control Testing" className={fieldCls} />
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Description / Objective</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+                placeholder="What is the testing scope and objective?" className={fieldCls + ' resize-none'} />
+            </div>
+          </div>
+
+          {/* Framework & Process */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Framework & Process</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Framework <span className="text-red-400">*</span></label>
+                <select value={framework} onChange={e => { setFramework(e.target.value); setValidation(''); }} className={fieldCls + ' cursor-pointer appearance-none'}>
+                  <option value="">Select framework...</option>
+                  {FRAMEWORKS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Business Process <span className="text-red-400">*</span></label>
+                <select value={process} onChange={e => { setProcess(e.target.value); setValidation(''); }} className={fieldCls + ' cursor-pointer appearance-none'}>
+                  <option value="">Select process...</option>
+                  {COMP_PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Entity / Location</label>
+              <input value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Corporate" className={fieldCls} />
+            </div>
+          </div>
+
+          {/* Ownership */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Owner <span className="text-red-400">*</span></label>
+                <input value={owner} onChange={e => { setOwner(e.target.value); setValidation(''); }} placeholder="e.g. Tushar Goel" className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Reviewer <span className="text-red-400">*</span></label>
+                <input value={reviewer} onChange={e => { setReviewer(e.target.value); setValidation(''); }} placeholder="e.g. Audit Lead" className={fieldCls} />
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Audit Period & Timeline</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Audit Period From <span className="text-red-400">*</span></label>
+                <input type="date" value={periodFrom} onChange={e => { setPeriodFrom(e.target.value); setValidation(''); }} className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Audit Period To <span className="text-red-400">*</span></label>
+                <input type="date" value={periodTo} onChange={e => { setPeriodTo(e.target.value); setValidation(''); }} className={fieldCls} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Planned Start Date</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Planned End Date</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-100/60 text-[10.5px] text-blue-700 leading-relaxed">
+            <ShieldCheck size={12} className="shrink-0 mt-0.5" />
+            <span>You can select RACM, set up controls, and begin testing after creation.</span>
+          </div>
+
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleCreate}
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            Create Compliance Engagement
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Type Picker Modal ─────────────────────────────────────────────────
 
 function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: (type: 'Internal Audit' | 'Automation' | 'Compliance') => void }) {
@@ -563,6 +745,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showAutoCreate, setShowAutoCreate] = useState(false);
   const [showIACreate, setShowIACreate] = useState(false);
+  const [showCompCreate, setShowCompCreate] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const filtered = MOCK_IA_ENGAGEMENTS.filter(e => {
@@ -744,6 +927,8 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
                 setShowAutoCreate(true);
               } else if (type === 'Internal Audit') {
                 setShowIACreate(true);
+              } else if (type === 'Compliance') {
+                setShowCompCreate(true);
               } else {
                 setToast(`${type} engagement creation coming soon`);
               }
@@ -772,6 +957,19 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
             onClose={() => setShowIACreate(false)}
             onCreate={(card) => {
               setShowIACreate(false);
+              onOpen(card);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Compliance Creation Modal */}
+      <AnimatePresence>
+        {showCompCreate && (
+          <ComplianceCreateModal
+            onClose={() => setShowCompCreate(false)}
+            onCreate={(card) => {
+              setShowCompCreate(false);
               onOpen(card);
             }}
           />
