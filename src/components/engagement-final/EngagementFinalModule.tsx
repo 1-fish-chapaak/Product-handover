@@ -292,6 +292,230 @@ function AutomationCreateModal({ onClose, onCreate }: {
   );
 }
 
+// ─── Internal Audit Creation Modal ────────────────────────────────────
+
+const SCOPE_LEVELS = ['Process', 'Sub-process', 'Activity', 'Specific Element'] as const;
+const BUSINESS_PROCESSES_LIST = ['P2P', 'O2C', 'R2R', 'H2R', 'ITGC'] as const;
+
+interface IASetupOptions {
+  includeScope: boolean;
+  useSOP: boolean;
+  useChecklist: boolean;
+  useRACM: boolean;
+  enableWorkflows: boolean;
+  enableExceptions: boolean;
+  enableReport: boolean;
+  enableTrail: boolean;
+}
+
+const DEFAULT_SETUP: IASetupOptions = {
+  includeScope: true, useSOP: false, useChecklist: false, useRACM: false,
+  enableWorkflows: true, enableExceptions: true, enableReport: true, enableTrail: true,
+};
+
+function IACreateModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (card: IAEngagementCard) => void;
+}) {
+  const [name, setName] = useState('');
+  const [objective, setObjective] = useState('');
+  const [owner, setOwner] = useState('');
+  const [reviewer, setReviewer] = useState('');
+  const [process, setProcess] = useState('');
+  const [entity, setEntity] = useState('');
+  const [scopeLevel, setScopeLevel] = useState('Process');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
+  const [setup, setSetup] = useState<IASetupOptions>({ ...DEFAULT_SETUP });
+  const [validation, setValidation] = useState('');
+
+  const toggle = (key: keyof IASetupOptions) => setSetup(p => ({ ...p, [key]: !p[key] }));
+
+  const handleCreate = () => {
+    if (!name.trim()) { setValidation('Assignment name is required.'); return; }
+    if (!objective.trim()) { setValidation('Objective is required.'); return; }
+    if (!owner.trim()) { setValidation('Owner is required.'); return; }
+    const card: IAEngagementCard = {
+      id: `ef-ia-new-${Date.now()}`,
+      code: `EF-${Date.now().toString().slice(-3)}`,
+      name: name.trim(),
+      description: objective.trim(),
+      type: 'Internal Audit',
+      process: process || 'P2P',
+      entity: entity || 'Corporate',
+      owner: owner.trim(),
+      reviewer: reviewer.trim() || '—',
+      framework: 'Internal Policy',
+      status: 'Draft',
+      statusTone: 'bg-draft-50 text-draft-700',
+      period: periodFrom && periodTo ? `${periodFrom} – ${periodTo}` : startDate && endDate ? `${startDate} – ${endDate}` : '—',
+      exceptions: 0,
+      health: 0,
+      nextAction: 'Define Scope',
+      lastActivity: 'Just created',
+    };
+    onCreate(card);
+  };
+
+  const checkboxCls = 'w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/20 cursor-pointer accent-primary';
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 12 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[580px] bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
+              <ClipboardCheck size={16} className="text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-text">Create Internal Audit Assignment</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">Define scope, attach RACM/checklists, run workflows, and generate reports after creation.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* A. Basic Details */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
+            <div>
+              <label className={fieldLabelCls}>Assignment Name <span className="text-red-400">*</span></label>
+              <input value={name} onChange={e => { setName(e.target.value); setValidation(''); }} placeholder="e.g. P2P Internal Audit Review" className={fieldCls} />
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Objective / Description <span className="text-red-400">*</span></label>
+              <textarea value={objective} onChange={e => { setObjective(e.target.value); setValidation(''); }} rows={2}
+                placeholder="What is the audit focus and scope?" className={fieldCls + ' resize-none'} />
+            </div>
+          </div>
+
+          {/* B. Ownership */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Owner <span className="text-red-400">*</span></label>
+                <input value={owner} onChange={e => { setOwner(e.target.value); setValidation(''); }} placeholder="e.g. Karan Mehta" className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Reviewer</label>
+                <input value={reviewer} onChange={e => setReviewer(e.target.value)} placeholder="e.g. Sneha Desai" className={fieldCls} />
+              </div>
+            </div>
+          </div>
+
+          {/* C. Scope Context */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Scope Context</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Business Process</label>
+                <select value={process} onChange={e => setProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
+                  <option value="">Select...</option>
+                  {BUSINESS_PROCESSES_LIST.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Entity / Location</label>
+                <input value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Corporate" className={fieldCls} />
+              </div>
+            </div>
+            <div>
+              <label className={fieldLabelCls}>Scope Level</label>
+              <div className="flex flex-wrap gap-2">
+                {SCOPE_LEVELS.map(lvl => (
+                  <button key={lvl} onClick={() => setScopeLevel(lvl)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer transition-all border ${scopeLevel === lvl ? 'border-primary bg-primary/8 text-primary' : 'border-border-light text-gray-500 hover:border-gray-300'}`}>
+                    {lvl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* D. Timeline */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Planned Start Date</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Planned End Date</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={fieldLabelCls}>Data / Audit Period From</label>
+                <input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className={fieldCls} />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>Data / Audit Period To</label>
+                <input type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)} className={fieldCls} />
+              </div>
+            </div>
+          </div>
+
+          {/* E. Initial Setup Options */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Initial Setup Options</h4>
+            <div className="rounded-lg border border-border-light bg-surface-2/20 p-4 space-y-3">
+              {([
+                { key: 'includeScope' as const, label: 'Include Scope setup', desc: 'Define what this audit will cover' },
+                { key: 'useSOP' as const, label: 'Use SOP / process documents', desc: 'Attach SOPs to derive RACM and controls' },
+                { key: 'useChecklist' as const, label: 'Use Checklist', desc: 'Create controls from checklist items' },
+                { key: 'useRACM' as const, label: 'Use RACM', desc: 'Select and map risk-control matrix' },
+                { key: 'enableWorkflows' as const, label: 'Enable workflow execution', desc: 'Run automated workflows on audit data' },
+                { key: 'enableExceptions' as const, label: 'Enable exception management', desc: 'Track and manage exceptions from runs' },
+                { key: 'enableReport' as const, label: 'Generate audit report', desc: 'Create and publish audit report' },
+                { key: 'enableTrail' as const, label: 'Enable action trail', desc: 'Track engagement activity' },
+              ]).map(opt => (
+                <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
+                  <input type="checkbox" checked={setup[opt.key]} onChange={() => toggle(opt.key)} className={checkboxCls + ' mt-0.5'} />
+                  <div>
+                    <div className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors">{opt.label}</div>
+                    <div className="text-[10.5px] text-text-muted">{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleCreate}
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            Create Internal Audit
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Type Picker Modal ─────────────────────────────────────────────────
 
 function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: (type: 'Internal Audit' | 'Automation' | 'Compliance') => void }) {
@@ -367,6 +591,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
   const [processFilter, setProcessFilter] = useState('All');
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showAutoCreate, setShowAutoCreate] = useState(false);
+  const [showIACreate, setShowIACreate] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const filtered = MOCK_IA_ENGAGEMENTS.filter(e => {
@@ -546,6 +771,8 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
               setShowTypePicker(false);
               if (type === 'Automation') {
                 setShowAutoCreate(true);
+              } else if (type === 'Internal Audit') {
+                setShowIACreate(true);
               } else {
                 setToast(`${type} engagement creation coming soon`);
               }
@@ -561,6 +788,19 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
             onClose={() => setShowAutoCreate(false)}
             onCreate={(card) => {
               setShowAutoCreate(false);
+              onOpen(card);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Internal Audit Creation Modal */}
+      <AnimatePresence>
+        {showIACreate && (
+          <IACreateModal
+            onClose={() => setShowIACreate(false)}
+            onCreate={(card) => {
+              setShowIACreate(false);
               onOpen(card);
             }}
           />
