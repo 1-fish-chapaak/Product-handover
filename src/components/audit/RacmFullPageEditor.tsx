@@ -618,6 +618,21 @@ function CellContent({
     );
   }
 
+  // Attributes — render pipe-separated values as individual chips
+  if (col.key === 'attributes') {
+    if (!val) return <span className="text-[10px] text-gray-300">—</span>;
+    const items = val.split(' | ').map(s => s.trim()).filter(Boolean);
+    return (
+      <div className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1">
+        {items.map((attr, idx) => (
+          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
+            {attr}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
   // Plain text — single line truncated, double click to edit
   return (
     <button onDoubleClick={onEdit} onClick={onEdit}
