@@ -6,13 +6,15 @@
 // palette inherited from the rest of the report system. Variants differ in
 // typography, rhythm, and information density — never in the underlying data.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield } from 'lucide-react';
+import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2 } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
-import { useToast } from '../shared/Toast';
+import { useToast, type ToastType } from '../shared/Toast';
+import { KpiCountUp } from '../shared/KpiTile';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './ReportsView';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -69,9 +71,11 @@ type Report = {
 export function BulkAuditVariantView({
   report,
   onBack,
+  onShare,
 }: {
   report: Report;
   onBack: () => void;
+  onShare?: () => void;
 }) {
   const variant = report.aestheticVariant ?? 'editorial';
   const { addToast } = useToast();
@@ -98,7 +102,7 @@ export function BulkAuditVariantView({
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       className={`h-full overflow-y-auto ${backgroundClass(variant)}`}
     >
-      <BackBar onBack={onBack} variant={variant} />
+      <BulkReportHeader onBack={onBack} onShare={onShare} reportName={report.name} variant={variant} />
       {variant === 'editorial' && <EditorialLayout report={report} workflows={workflows} totals={totals} onOpenWorkflow={handleOpenWorkflow} onRequestDelete={handleRequestDelete} />}
       {variant === 'forensic' && <ForensicLayout report={report} workflows={workflows} totals={totals} />}
       {variant === 'minimal' && <MinimalLayout report={report} workflows={workflows} totals={totals} />}
@@ -204,18 +208,208 @@ function backgroundClass(variant: NonNullable<Report['aestheticVariant']>) {
   }
 }
 
-function BackBar({ onBack, variant }: { onBack: () => void; variant: NonNullable<Report['aestheticVariant']> }) {
-  const isMono = variant === 'forensic';
+const ICON_MAP: Record<string, ElementType> = {
+  shield: Shield,
+  'alert-triangle': AlertTriangle,
+  'check-circle': CheckCircle2,
+  'bar-chart': BarChart3,
+  'file-text': FileText,
+  'trending-up': TrendingUp,
+  'clipboard-check': CheckCircle2,
+  'lightbulb': Lightbulb,
+  'book-open': BookOpen,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Compliance: 'text-evidence-700 bg-evidence-50',
+  Risk: 'text-high-700 bg-high-50',
+  Controls: 'text-brand-700 bg-brand-50',
+  Analytics: 'text-brand-700 bg-brand-50',
+  Audit: 'text-risk-700 bg-risk-50',
+  Executive: 'text-indigo-600 bg-indigo-50',
+};
+
+// Simulated report download — a 'loading' toast that resolves to 'success'
+// after a short "preparing" delay. No real file is produced (the prototype's
+// report exports are all mock).
+function startReportDownload(
+  addToast: (t: { type: ToastType; message: string }) => string,
+  updateToast: (id: string, patch: { type: ToastType; message: string }) => void,
+  reportName: string,
+  ext = 'pdf',
+) {
+  const file = `${reportName}.${ext}`;
+  const id = addToast({ type: 'loading', message: `Preparing ${file}…` });
+  window.setTimeout(() => {
+    updateToast(id, { type: 'success', message: `${file} downloaded.` });
+  }, 1800);
+}
+
+// ─── Apply Template Dropdown ───
+function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
   return (
-    <div className={`px-8 pt-6 ${isMono ? 'font-mono' : ''}`}>
-      <button
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-[12px] text-text-secondary hover:text-primary transition-colors cursor-pointer"
-      >
-        <ArrowLeft size={13} />
-        Back to Reports
-      </button>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, y: -5, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -5, scale: 0.97 }}
+      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-xl shadow-xl border border-border-light z-50 overflow-hidden"
+    >
+      <div className="px-3 py-2 border-b border-border-light">
+        <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
+      </div>
+      <div className="max-h-[260px] overflow-y-auto p-1.5">
+        {REPORT_TEMPLATES.map(rt => {
+          const Icon = ICON_MAP[rt.icon] || FileText;
+          return (
+            <button
+              key={rt.id}
+              onClick={() => { onSelect(rt); onClose(); }}
+              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
+            >
+              <div className={`p-1.5 rounded-md ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+                <Icon size={12} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-medium text-text truncate">{rt.name}</div>
+                <div className="text-[10px] text-text-muted">{rt.category}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
+// Report top bar — back link + Apply Template / Share / Download, matching the
+// internal audit report header. Apply Template is a UX match here: a bulk audit
+// report has a fixed editorial layout, so applying a template animates + toasts
+// without swapping sections.
+function BulkReportHeader({ onBack, onShare, reportName, variant }: {
+  onBack: () => void;
+  onShare?: () => void;
+  reportName: string;
+  variant: NonNullable<Report['aestheticVariant']>;
+}) {
+  const { addToast, updateToast } = useToast();
+  const [showApplyTemplate, setShowApplyTemplate] = useState(false);
+  const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const isMono = variant === 'forensic';
+
+  const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
+    setApplyingTemplate(true);
+    window.setTimeout(() => {
+      setAppliedTemplate(template);
+      setApplyingTemplate(false);
+      addToast({ type: 'success', message: `Template "${template.name}" applied!` });
+    }, 800);
+  };
+
+  return (
+    <>
+      <div className={`mx-auto px-8 pt-6 pb-4 max-w-[1100px] ${isMono ? 'font-mono' : ''}`}>
+        <div className="flex items-center justify-between gap-4">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer"
+          >
+            <ArrowLeft size={14} /> Back to Reports
+          </button>
+          <div className="flex items-center gap-2 relative">
+            {/* Apply Template */}
+            <div className="relative">
+              <button
+                onClick={() => setShowApplyTemplate(p => !p)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                style={{ borderRadius: '8px' }}
+              >
+                <Layout size={13} />
+                <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
+                <motion.span
+                  animate={{ rotate: showApplyTemplate ? 180 : 0 }}
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  className="inline-flex"
+                >
+                  <ChevronDown size={13} />
+                </motion.span>
+              </button>
+              <AnimatePresence>
+                {showApplyTemplate && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
+                    <ApplyTemplateDropdown
+                      onSelect={handleApplyTemplate}
+                      onClose={() => setShowApplyTemplate(false)}
+                    />
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+            {/* Share */}
+            {onShare && (
+              <button
+                onClick={onShare}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                style={{ borderRadius: '8px' }}
+              >
+                <Share2 size={13} /> Share
+              </button>
+            )}
+            {/* Download */}
+            <div className="relative">
+              <button
+                onClick={() => setShowDownloadDropdown(p => !p)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                style={{ borderRadius: '8px' }}
+              >
+                <Download size={13} /> Download <ChevronDown size={11} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showDownloadDropdown && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-36" style={{ borderRadius: '8px' }}>
+                  {[
+                    { label: 'PDF', ext: 'pdf' },
+                    { label: 'Word (DOC)', ext: 'doc' },
+                    { label: 'PowerPoint', ext: 'ppt' },
+                    { label: 'Excel', ext: 'xlsx' },
+                  ].map(({ label, ext }) => (
+                    <button
+                      key={ext}
+                      onClick={() => { startReportDownload(addToast, updateToast, reportName, ext); setShowDownloadDropdown(false); }}
+                      className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Applying Template Overlay */}
+      <AnimatePresence>
+        {applyingTemplate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 flex items-center justify-center bg-white/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-2xl shadow-lg"
+            >
+              <Loader2 size={20} className="text-primary animate-spin" />
+              <span className="text-[14px] font-semibold text-text">Applying template...</span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -234,7 +428,7 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
   return (
     <div className="mx-auto px-8 pt-2 pb-24 max-w-[1100px]">
       {/* Cover — rounded top only so the white body below attaches cleanly */}
-      <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]" style={{ boxShadow: '0 4px 24px rgba(106,18,205,0.35)' }}>
+      <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
         <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
           <FloatingLines
             enabledWaves={['top', 'middle']}
@@ -300,11 +494,19 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
 
       {/* Editorial body — white card attached to the header (no gap) */}
       <article className="bg-white border-x border-b border-border-light rounded-b-2xl px-8 py-8">
-        <EditorialSummary workflows={workflows} totals={totals} />
+        <EditorialContents workflows={workflows} />
 
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
-        <EditorialWorkflowStatus workflows={workflows} auditDate={report.generatedAt} />
+        <div id="bulk-exec-summary" className="scroll-mt-6">
+          <EditorialSummary workflows={workflows} totals={totals} />
+        </div>
+
+        <hr className="my-10 border-0 border-t border-ink-900/15" />
+
+        <div id="bulk-workflow-status" className="scroll-mt-6">
+          <EditorialWorkflowStatus workflows={workflows} auditDate={report.generatedAt} />
+        </div>
 
         <hr className="mt-10 mb-4 border-0 border-t border-ink-900/15" />
 
@@ -331,12 +533,72 @@ function workflowStatus(w: WorkflowResult): 'pass' | 'fail' {
   return w.severity === 'Low' ? 'pass' : 'fail';
 }
 
+// Read-only table of contents for the editorial bulk-audit report. Lists the
+// report's sections and smooth-scrolls to each on click. Anchors live on
+// #bulk-exec-summary, #bulk-workflow-status, and #workflow-chapter-${id}
+// (the per-chapter anchor EditorialChapter already renders).
+function EditorialContents({ workflows }: { workflows: WorkflowResult[] }) {
+  const entries = [
+    { id: 'bulk-exec-summary', label: 'Executive Summary' },
+    ...(workflows.length > 0 ? [{ id: 'bulk-workflow-status', label: 'Workflow Status' }] : []),
+    ...workflows.map(w => ({ id: `workflow-chapter-${w.id}`, label: `${w.workflowId} · ${w.name}` })),
+  ];
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-6">
+        <List size={16} className="text-primary" />
+        <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+      </div>
+      <ol className="list-none p-0 m-0 space-y-0.5">
+        {entries.map((e, i) => (
+          <li key={e.id}>
+            <button
+              type="button"
+              onClick={() => document.getElementById(e.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="flex items-center gap-2 w-full py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors text-left cursor-pointer"
+            >
+              <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+              <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{e.label}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function EditorialSummary({ workflows, totals }: { workflows: WorkflowResult[]; totals: Totals }) {
   const passed = workflows.filter(w => workflowStatus(w) === 'pass');
   const failed = workflows.filter(w => workflowStatus(w) === 'fail');
 
+  const stats = [
+    { label: 'Workflows Run', value: String(totals.workflows), icon: Layers, color: 'text-brand-700 bg-brand-50' },
+    { label: 'Records Flagged', value: String(totals.records), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+    { label: 'High Severity', value: String(totals.high), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+    { label: 'Medium Severity', value: String(totals.medium), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
+  ];
+
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-3 pb-5 border-b border-ink-900/15">
+        {stats.map((stat, si) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
+            className="flex items-center gap-3"
+          >
+            <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+            <div>
+              <div className="text-xl font-bold text-text leading-none mb-1">
+                <KpiCountUp value={stat.value} delay={120 + si * 80} />
+              </div>
+              <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
       <p className="text-[15.5px] leading-[1.75] text-text">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
         <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
