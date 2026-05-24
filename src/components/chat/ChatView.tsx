@@ -264,6 +264,8 @@ interface ChatViewProps {
   onViewDashboard?: (dashboardId: string) => void;
   /** Navigate to a report view */
   onViewReport?: (reportId: string) => void;
+  /** When set, shows an "Adding workflow for engagement — <name>" banner above the composer. */
+  workflowEngagementContext?: string | null;
 }
 
 // Step labels for the subtle inline audit loader. The artifact panel renders
@@ -2542,7 +2544,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -2572,7 +2574,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
-  const [buildWorkflowMode, setBuildWorkflowMode] = useState(false);
+  // When opened from an engagement's "Create new workflow" flow, start in workflow mode.
+  const [buildWorkflowMode, setBuildWorkflowMode] = useState(!!workflowEngagementContext);
+
+  // If we land here scoped to an engagement, ensure the composer is in workflow-build mode.
+  useEffect(() => {
+    if (workflowEngagementContext) setBuildWorkflowMode(true);
+  }, [workflowEngagementContext]);
 
   // Save-as-workflow flow state (Path 3 — query → workflow flip)
   const [showSaveAsWfModal, setShowSaveAsWfModal] = useState(false);
@@ -4259,6 +4267,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 Your AI copilot already knows what to look for. Just ask.
               </motion.p>
 
+              {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
+              {workflowEngagementContext && (
+                <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
+                  <Workflow size={15} className="text-primary shrink-0" />
+                  <span className="text-[13px] text-text-secondary">
+                    Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
+                  </span>
+                </div>
+              )}
               <div
                 className="ai-border relative mb-6"
                 onDragEnter={handleDragEnter}
@@ -5411,6 +5428,17 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           )}
           {(
             <>
+              {/* Engagement context banner — shown when the workflow builder was
+                  opened from a specific engagement's "Link Workflow → Create new"
+                  flow. Persists so the user always knows what they're building for. */}
+              {workflowEngagementContext && (
+                <div className="mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary-xlight/50 border border-primary/15">
+                  <Workflow size={14} className="text-primary shrink-0" />
+                  <span className="text-[12.5px] text-text-secondary">
+                    Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
+                  </span>
+                </div>
+              )}
               {/* Workflow-mode notice — Claude-style horizontal banner above
                   the composer. Appears once Path 3 has flipped the thread,
                   fades out automatically the moment the user starts typing

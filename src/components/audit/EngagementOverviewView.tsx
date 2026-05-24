@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, FileText, FolderOpen, Layers, Play,
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
-  RefreshCw, X, Settings, Database, BookOpen,
+  RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
@@ -37,6 +37,10 @@ import RACMTab from './RACMTab';
 import ControlsTab from './ControlsTab';
 import EvidenceTab from './EvidenceTab';
 import WorkingPaperTab from './WorkingPaperTab';
+import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
+import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
+import LinkWorkflowModal from './LinkWorkflowModal';
+import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +53,10 @@ interface Props {
   onOpenCaseManagement: (engagementId: string) => void;
   onOpenRacmFullEditor?: () => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
+  /** Open a workflow's detail page (same route the Workflow Library uses). */
+  onOpenWorkflow?: (libraryWorkflowId: string) => void;
+  /** Launch the Ask IRA workflow-builder chat scoped to this engagement. */
+  onCreateWorkflowForEngagement?: (engagementName: string) => void;
 }
 
 // ─── Tabs per engagement type ─────────────────────────────────────────────────
@@ -115,13 +123,15 @@ interface MockWorkflow {
   /** True positives / total fires over 90 days — for effectiveness scoring. */
   truePositives: number;
   totalFires: number;
+  /** Library workflow id this engagement workflow corresponds to — opens the same detail page as the Workflow Library. */
+  libraryId: string;
 }
 
 const MOCK_WORKFLOWS: MockWorkflow[] = [
-  { id: 'wf1', code: 'WF-P2P-001', name: 'Three-Way Match (PO · GRN · Invoice)', type: 'Reconciliation', inputs: ['Excel', 'PDF'], cadence: { kind: 'Frequency', label: 'Daily 6 AM' }, lastRun: '2h ago', status: 'Success', subProcess: 'Invoice Processing', truePositives: 38, totalFires: 47 },
-  { id: 'wf2', code: 'WF-P2P-002', name: 'Duplicate Invoice Detector',           type: 'Detection',      inputs: ['SQL'],          cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '8m ago',  status: 'Success', subProcess: 'Invoice Processing',         truePositives: 52, totalFires: 84 },
-  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28 },
-  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22 },
+  { id: 'wf1', code: 'WF-P2P-001', name: 'Three-Way Match (PO · GRN · Invoice)', type: 'Reconciliation', inputs: ['Excel', 'PDF'], cadence: { kind: 'Frequency', label: 'Daily 6 AM' }, lastRun: '2h ago', status: 'Success', subProcess: 'Invoice Processing', truePositives: 38, totalFires: 47, libraryId: 'lw-006' },
+  { id: 'wf2', code: 'WF-P2P-002', name: 'Duplicate Invoice Detector',           type: 'Detection',      inputs: ['SQL'],          cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '8m ago',  status: 'Success', subProcess: 'Invoice Processing',         truePositives: 52, totalFires: 84, libraryId: 'lw-010' },
+  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28, libraryId: 'lw-009' },
+  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-001' },
 ];
 
 function effectivenessTier(pct: number): { label: string; tone: string; bar: string } {
@@ -187,7 +197,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenCaseManagement, onOpenRacmFullEditor, onLaunchWorkflowBuilder }: Props) {
+export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onCreateWorkflowForEngagement }: Props) {
   const { addToast } = useToast();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
 
@@ -217,28 +227,45 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
   const processColor = PROCESS_COLORS[eng.process];
 
+  /**
+   * Open the full Case Management workspace in a NEW browser tab, deep-linked to
+   * this engagement and optionally pre-filtered. Used ONLY from the Exception
+   * Management sub-tab — the deep triage surface genuinely belongs in its own tab.
+   */
+  const openCaseWorkspace = (filter?: { severity?: Severity; workflowId?: string; status?: EngagementException['status'] }) => {
+    const params = new URLSearchParams();
+    params.set('view', 'engagement-case-management');
+    params.set('eng', eng.id);
+    if (filter?.severity) params.set('severity', filter.severity);
+    if (filter?.workflowId) params.set('workflow', filter.workflowId);
+    if (filter?.status) params.set('status', filter.status);
+    window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+  };
+
+  // Overview drill-downs navigate to the relevant SUB-TAB in this same browser
+  // tab (a dashboard should route you deeper into the engagement, not pop a new
+  // window). Compliance has no exceptions tab, so it falls back to the workspace.
+  const hasExceptionsTab = tabs.some(t => t.id === 'exceptions');
+  const goToWorkflowsTab = () => setActiveTab('workflows');
+  const goToExceptionsTab = () => {
+    if (hasExceptionsTab) setActiveTab('exceptions');
+    else openCaseWorkspace();
+  };
+
   // KPI strip — adapt the secondary numbers to the engagement type.
   const tested = Math.round(eng.controls * (eng.health > 0 ? eng.health / 100 : 0));
   const failed = eng.openIssues;
   const effective = Math.max(0, tested - failed);
 
-  const kpis = eng.type === 'Automation'
-    ? [
-        { label: 'Controls Monitored', value: eng.controls, icon: Shield },
-        { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
-        { label: 'Open Exceptions', value: eng.openIssues, icon: AlertTriangle },
-        { label: 'Pass Rate', value: notStarted ? '—' : `${eng.health}%`, icon: CheckCircle2 },
-        { label: 'Last Run', value: eng.lastActivity, icon: Clock },
-        { label: 'Next Run', value: eng.nextScheduled, icon: Calendar },
-      ]
-    : [
-        { label: 'Controls in Scope', value: eng.controls, icon: Shield },
-        { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
-        { label: 'Effective', value: notStarted ? '—' : effective, icon: ShieldCheck },
-        { label: 'Failed', value: notStarted ? '—' : failed, icon: AlertTriangle },
-        { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
-        { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
-      ];
+  // Non-Automation types keep the engagement-level 6-card grid.
+  const kpis = [
+    { label: 'Controls in Scope', value: eng.controls, icon: Shield },
+    { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
+    { label: 'Effective', value: notStarted ? '—' : effective, icon: ShieldCheck },
+    { label: 'Failed', value: notStarted ? '—' : failed, icon: AlertTriangle },
+    { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
+    { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
+  ];
 
   // Overview checklist — universal but slightly adapted per type.
   const checklist = eng.type === 'Automation'
@@ -318,22 +345,24 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         </div>
 
-        {/* KPI strip */}
-        <div className="grid grid-cols-6 gap-3 mb-6">
-          {kpis.map((kpi, i) => (
-            <motion.div
-              key={kpi.label}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className="glass-card rounded-xl p-3 text-center"
-            >
-              <kpi.icon size={14} className="mx-auto text-text-muted mb-1" />
-              <div className="text-[15px] font-bold text-text tabular-nums truncate">{kpi.value}</div>
-              <div className="text-[10px] text-text-muted leading-tight">{kpi.label}</div>
-            </motion.div>
-          ))}
-        </div>
+        {/* KPI strip — per-sub-tab for Automation (each tab owns its KPIs), so no shared engagement-level strip here. */}
+        {eng.type !== 'Automation' && (
+          <div className="grid gap-3 mb-6 grid-cols-6">
+            {kpis.map((kpi, i) => (
+              <motion.div
+                key={kpi.label}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.03 }}
+                className="glass-card rounded-xl p-3 text-center"
+              >
+                <kpi.icon size={14} className="mx-auto text-text-muted mb-1" />
+                <div className="text-[15px] font-bold text-text tabular-nums truncate">{kpi.value}</div>
+                <div className="text-[10px] text-text-muted leading-tight">{kpi.label}</div>
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex items-center border-b border-border-light mb-5 overflow-x-auto">
@@ -368,8 +397,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {activeTab === 'overview' && (
               <HealthOverviewTab
                 eng={eng}
-                onDrillToExceptions={() => onOpenCaseManagement(eng.id)}
+                onDrillToExceptions={goToExceptionsTab}
+                onGoToWorkflows={goToWorkflowsTab}
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
+                onOpenWorkflow={onOpenWorkflow}
+                hideWorkflowConfig={eng.type === 'Automation'}
               />
             )}
             {/* ═══ RACM (Compliance / IA) ═══ */}
@@ -384,7 +416,13 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
             {activeTab === 'workflows' && (
-              <WorkflowsBySubProcess workflows={MOCK_WORKFLOWS} />
+              <WorkflowsBySubProcess
+                workflows={MOCK_WORKFLOWS}
+                engagementName={eng.name}
+                onOpenWorkflow={onOpenWorkflow}
+                onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
+                onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
+              />
             )}
 
             {/* ═══ EVIDENCE (Compliance / IA) ═══ */}
@@ -394,7 +432,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ EXCEPTION MANAGEMENT (Automation) — slim summary; full workspace lives at /case-management ═══ */}
             {activeTab === 'exceptions' && (
-              <ExceptionManagementTab eng={eng} onOpenCaseManagement={() => onOpenCaseManagement(eng.id)} />
+              <ExceptionManagementTab eng={eng} onOpenWorkspace={openCaseWorkspace} />
             )}
             {/* ═══ WORKING PAPER (Compliance) / AUDIT REPORT (IA) ═══ */}
             {activeTab === 'working-paper' && (
@@ -437,20 +475,18 @@ const STATUS_PILL_CLS: Record<EngagementException['status'], string> = {
 };
 
 const SEV_BADGE_CLS: Record<Severity, string> = {
-  Critical: 'bg-risk-50 text-risk-700 border-risk-100',
-  High: 'bg-high-50 text-high-700 border-high-100',
-  Medium: 'bg-mitigated-50 text-mitigated-700 border-mitigated-100',
-  Low: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  Critical: 'bg-risk-50 text-risk-700',
+  High: 'bg-high-50 text-high-700',
+  Medium: 'bg-mitigated-50 text-mitigated-700',
+  Low: 'bg-compliant-50 text-compliant-700',
 };
-
-type ExceptionViewMode = 'workflow' | 'all';
 
 function ExceptionManagementTab({
   eng,
-  onOpenCaseManagement,
+  onOpenWorkspace,
 }: {
   eng: Engagement;
-  onOpenCaseManagement: () => void;
+  onOpenWorkspace: (filter?: { severity?: Severity; workflowId?: string; status?: EngagementException['status'] }) => void;
 }) {
   const allExceptions = useMemo(() => exceptionsForEngagement(eng.id), [eng.id]);
   const groups = useMemo(() => groupByWorkflow(allExceptions), [allExceptions]);
@@ -465,90 +501,196 @@ function ExceptionManagementTab({
     return t;
   }, [allExceptions]);
 
+  const [wfSearch, setWfSearch] = useState('');
+  const [sortByOpen, setSortByOpen] = useState(false);
+
+  /**
+   * Show *every* workflow tied to this engagement — even ones that haven't fired
+   * exceptions yet — so the section reads as the live exception inventory rather
+   * than a partial list. Workflows with exceptions keep their breakdown; quiet
+   * ones get a clear "no exceptions yet" marker.
+   */
+  const allWorkflowsView = useMemo(() => {
+    const byId = new Map(groups.map(g => [g.workflowId, g]));
+    return MOCK_WORKFLOWS.map(wf => {
+      const grp = byId.get(wf.id);
+      const exceptions = grp?.exceptions ?? [];
+      const total = exceptions.length;
+      const openCount = exceptions.filter(e => e.status !== 'Resolved').length;
+      return {
+        workflowId: wf.id,
+        workflowName: wf.name,
+        code: wf.code,
+        cadence: wf.cadence,
+        exceptions,
+        total,
+        openCount,
+        openPct: total > 0 ? Math.round((openCount / total) * 100) : 0,
+        severityCounts: grp?.severityCounts ?? { Critical: 0, High: 0, Medium: 0, Low: 0 },
+      };
+    });
+  }, [groups]);
+
+  const visibleWorkflows = useMemo(() => {
+    const q = wfSearch.trim().toLowerCase();
+    const list = allWorkflowsView.filter(w =>
+      !q || w.workflowName.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
+    );
+    if (sortByOpen) {
+      // Highest open % first; ties broken by open count.
+      return [...list].sort((a, b) => b.openPct - a.openPct || b.openCount - a.openCount);
+    }
+    return list;
+  }, [allWorkflowsView, wfSearch, sortByOpen]);
+
   return (
-    <div className="space-y-5">
-      {/* Slim KPI strip — full triage lives in Case Management workspace */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="glass-card rounded-xl p-4">
+    <div className="space-y-4">
+      {/* Sub-tab KPI cards — exception-focused signals for this tab. Click to drill into the workspace. */}
+      <div className="grid grid-cols-4 gap-3">
+        <button
+          onClick={() => onOpenWorkspace()}
+          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">Total Open</span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">All Exceptions</span>
+            <Workflow size={13} className="text-text-muted" />
+          </div>
+          <div className="text-[22px] font-bold text-text tabular-nums leading-none">{allExceptions.length}</div>
+          <div className="text-[11px] text-text-muted mt-1.5">Across {allWorkflowsView.length} workflows</div>
+        </button>
+        <button
+          onClick={() => onOpenWorkspace({ status: 'Open' })}
+          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Open</span>
             <AlertTriangle size={13} className="text-risk-700" />
           </div>
-          <div className="text-[24px] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
+          <div className="text-[22px] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
           <div className="text-[11px] text-text-muted mt-1.5">Awaiting triage</div>
-        </div>
-        <div className="glass-card rounded-xl p-4">
+        </button>
+        <button
+          onClick={() => onOpenWorkspace({ status: 'Triaging' })}
+          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">In Progress</span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">In Progress</span>
             <Clock size={13} className="text-mitigated-700" />
           </div>
-          <div className="text-[24px] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Being triaged by a risk owner</div>
-        </div>
-        <div className="glass-card rounded-xl p-4">
+          <div className="text-[22px] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
+          <div className="text-[11px] text-text-muted mt-1.5">Owner assigned</div>
+        </button>
+        <button
+          onClick={() => onOpenWorkspace({ status: 'Resolved' })}
+          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">Total Closed</span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Resolved</span>
             <CheckCircle2 size={13} className="text-compliant-700" />
           </div>
-          <div className="text-[24px] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Resolved this engagement</div>
+          <div className="text-[22px] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
+          <div className="text-[11px] text-text-muted mt-1.5">Closed this engagement</div>
+        </button>
+      </div>
+
+      {/* Compact toolbar — title, search, sort, workspace link. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-baseline gap-2 shrink-0">
+          <h4 className="text-[13px] font-semibold text-text">Exceptions by workflow</h4>
+          <span className="text-[11px] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              value={wfSearch}
+              onChange={e => setWfSearch(e.target.value)}
+              placeholder="Search workflows..."
+              className="w-48 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            />
+          </div>
+          <button
+            onClick={() => setSortByOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-semibold transition-colors cursor-pointer ${
+              sortByOpen
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
+            }`}
+            title="Sort by open %"
+          >
+            <ArrowUpDown size={12} />
+            Open %
+          </button>
         </div>
       </div>
 
-      {/* Manage CTA */}
-      <button
-        onClick={onOpenCaseManagement}
-        className="w-full glass-card rounded-2xl p-5 flex items-center gap-4 hover:border-primary/30 hover:shadow-sm transition-all cursor-pointer text-left group"
-      >
-        <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-primary-medium shrink-0">
-          <ListChecks size={20} className="text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-[15px] font-bold text-text">Manage Exceptions</h3>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 h-4 rounded inline-flex items-center">Workspace</span>
+      {/* Per-workflow breakdown — shows every workflow, including those with 0 exceptions */}
+      <div className="space-y-2.5">
+        {visibleWorkflows.length === 0 ? (
+          <div className="glass-card rounded-xl px-4 py-8 text-center text-[12px] text-text-muted">
+            No workflows match “{wfSearch}”.
           </div>
-          <p className="text-[12.5px] text-text-secondary mt-1">
-            Open the full case-management workspace — multi-select, bulk assign / classify / close, SLA tracking, saved views, per-exception case + ATR drawer.
-          </p>
-        </div>
-        <ArrowUpRight size={18} className="text-text-muted group-hover:text-primary transition-colors shrink-0" />
-      </button>
-
-      {/* Read-only workflow summary */}
-      {allExceptions.length > 0 && (
-        <div className="space-y-2.5">
-          <h4 className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">Active workflows producing exceptions</h4>
-          {groups.map(group => {
-            const openCount = group.exceptions.filter(e => e.status !== 'Resolved').length;
-            return (
-              <button
-                key={group.workflowId}
-                onClick={onOpenCaseManagement}
-                className="w-full glass-card rounded-xl px-4 py-3 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer text-left"
-              >
-                <div className="p-2 rounded-lg bg-brand-50 shrink-0"><Workflow size={14} className="text-brand-600" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-text">{group.workflowName}</span>
-                    <span className="text-[11px] text-text-muted">{group.exceptions.length} total · {openCount} open</span>
-                  </div>
+        ) : visibleWorkflows.map(group => {
+          const hasNone = group.total === 0;
+          const openTier = group.openPct >= 50 ? 'text-risk-700' : group.openPct > 0 ? 'text-mitigated-700' : 'text-text-muted';
+          const openBar = group.openPct >= 50 ? 'bg-risk' : group.openPct > 0 ? 'bg-mitigated-500' : 'bg-surface-3';
+          return (
+            <button
+              key={group.workflowId}
+              onClick={() => onOpenWorkspace({ workflowId: group.workflowId })}
+              disabled={hasNone}
+              className={`w-full glass-card rounded-xl px-4 py-3 flex items-center gap-4 text-left transition-colors ${
+                hasNone ? 'opacity-70 cursor-default' : 'hover:border-primary/20 cursor-pointer'
+              }`}
+            >
+              <div className={`p-2 rounded-lg shrink-0 ${hasNone ? 'bg-surface-2' : 'bg-brand-50'}`}>
+                <Workflow size={14} className={hasNone ? 'text-text-muted' : 'text-brand-600'} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[13px] font-semibold text-text">{group.workflowName}</span>
+                  <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{group.code}</span>
+                  {hasNone ? (
+                    <span className="text-[11px] text-text-muted italic">No exceptions yet</span>
+                  ) : (
+                    <span className="text-[11px] text-text-muted">
+                      <span className="font-semibold text-text">{group.total}</span> total · <span className="font-semibold text-risk-700">{group.openCount}</span> open
+                    </span>
+                  )}
+                </div>
+                {!hasNone && (
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map(sev => (
                       group.severityCounts[sev] > 0 && (
-                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide border ${SEV_BADGE_CLS[sev]}`}>
+                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[sev]}`}>
                           {group.severityCounts[sev]} {sev}
                         </span>
                       )
                     ))}
                   </div>
-                </div>
-                <ChevronRight size={14} className="text-text-muted shrink-0" />
-              </button>
-            );
-          })}
-        </div>
-      )}
+                )}
+              </div>
+
+              {/* Right-aligned open % */}
+              <div className="flex items-center gap-3 shrink-0">
+                {hasNone ? (
+                  <span className="text-[11px] text-text-muted tabular-nums w-[88px] text-right">—</span>
+                ) : (
+                  <div className="w-[88px] text-right">
+                    <div className={`text-[15px] font-bold tabular-nums leading-none ${openTier}`}>{group.openPct}%</div>
+                    <div className="text-[9.5px] text-text-muted uppercase tracking-wide mt-0.5">open</div>
+                    <div className="mt-1 h-1 bg-surface-3 rounded-full overflow-hidden">
+                      <div className={`h-full ${openBar} rounded-full transition-all`} style={{ width: `${group.openPct}%` }} />
+                    </div>
+                  </div>
+                )}
+                {!hasNone && <ArrowUpRight size={14} className="text-text-muted" aria-label="Opens in a new tab" />}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -559,7 +701,7 @@ function ExceptionRow({ ex, onClick, showWorkflow }: { ex: EngagementException; 
       onClick={onClick}
       className="w-full flex items-center gap-4 px-4 py-3 hover:bg-surface-2/30 transition-colors cursor-pointer text-left"
     >
-      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide border ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
+      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
         {ex.severity}
       </span>
       <span className="font-mono text-[11.5px] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
@@ -634,6 +776,7 @@ function ActionTrailTab({ eng }: { eng: Engagement }) {
 
   const [workflowFilter, setWorkflowFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory>('All');
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Unique workflows referenced in this engagement's events.
   const workflowOptions = useMemo(() => {
@@ -675,6 +818,21 @@ function ActionTrailTab({ eng }: { eng: Engagement }) {
 
   return (
     <div className="space-y-5">
+      {/* Header — title + generate report */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-[13px] font-semibold text-text">Action Trail</h3>
+          <p className="text-[11px] text-text-muted mt-0.5">Every event on this engagement — runs, exceptions, evidence, and sign-offs.</p>
+        </div>
+        <button
+          onClick={() => setReportOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary-xlight/40 text-primary hover:bg-primary/10 text-[12px] font-semibold transition-colors cursor-pointer"
+          title="Generate an AI-summarised report for a chosen period"
+        >
+          <Sparkles size={13} />Generate Report
+        </button>
+      </div>
+
       {/* KPI strip */}
       <div className="grid grid-cols-4 gap-3">
         {[
@@ -840,6 +998,12 @@ function ActionTrailTab({ eng }: { eng: Engagement }) {
           ))}
         </div>
       )}
+
+      <AnimatePresence>
+        {reportOpen && (
+          <ActionTrailReportModal eng={eng} events={allEvents} onClose={() => setReportOpen(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -868,12 +1032,18 @@ function heatmapCellCls(count: number): string {
 export function HealthOverviewTab({
   eng,
   onDrillToExceptions,
+  onGoToWorkflows,
   onConfigureWorkflow,
+  onOpenWorkflow,
   hideWorkflowConfig,
 }: {
   eng: Engagement;
-  onDrillToExceptions: (filter: { severity?: Severity; workflowId?: string; status?: EngagementException['status'] }) => void;
+  /** Navigate to the Exception Management sub-tab (same browser tab). */
+  onDrillToExceptions: () => void;
+  /** Navigate to the Workflows sub-tab (same browser tab). */
+  onGoToWorkflows: () => void;
   onConfigureWorkflow: (workflowId: string) => void;
+  onOpenWorkflow?: (libraryWorkflowId: string) => void;
   hideWorkflowConfig?: boolean;
 }) {
   // ─── Type-aware copy + funnel stages ────────────────────────────────────
@@ -1029,7 +1199,7 @@ export function HealthOverviewTab({
           sub={labels.kpi1Sub}
           icon={Workflow}
           tone="text-text"
-          onClick={() => onDrillToExceptions({})}
+          onClick={onGoToWorkflows}
         />
         <KpiCard
           label={labels.kpi2Label}
@@ -1037,7 +1207,7 @@ export function HealthOverviewTab({
           sub={totalCount > 0 ? `${pct(openCount)}% of ${totalCount}` : '—'}
           icon={AlertTriangle}
           tone="text-risk-700"
-          onClick={() => onDrillToExceptions({ status: 'Open' })}
+          onClick={onDrillToExceptions}
         />
         <KpiCard
           label={labels.kpi3Label}
@@ -1045,7 +1215,7 @@ export function HealthOverviewTab({
           sub={totalCount > 0 ? `${pct(inProgressCount)}% of ${totalCount}` : '—'}
           icon={Clock}
           tone="text-mitigated-700"
-          onClick={() => onDrillToExceptions({ status: 'Triaging' })}
+          onClick={onDrillToExceptions}
         />
         <KpiCard
           label={labels.kpi4Label}
@@ -1055,6 +1225,7 @@ export function HealthOverviewTab({
           tone={tier.text}
           progress={eng.health}
           progressCls={tier.bar}
+          onClick={onDrillToExceptions}
         />
       </div>
 
@@ -1082,10 +1253,7 @@ export function HealthOverviewTab({
                       cx="50%" cy="50%"
                       innerRadius={50} outerRadius={75}
                       paddingAngle={2}
-                      onClick={(data) => {
-                        const name = (data as { name?: string }).name;
-                        if (name) onDrillToExceptions({ severity: name as Severity });
-                      }}
+                      onClick={() => onDrillToExceptions()}
                     >
                       {severityData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} stroke="white" strokeWidth={2} className="cursor-pointer hover:opacity-80 transition-opacity" />
@@ -1106,7 +1274,7 @@ export function HealthOverviewTab({
                 {severityData.map(d => (
                   <button
                     key={d.name}
-                    onClick={() => onDrillToExceptions({ severity: d.name as Severity })}
+                    onClick={() => onDrillToExceptions()}
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
                   >
                     <span className="flex items-center gap-2 text-[12px] text-text">
@@ -1156,7 +1324,7 @@ export function HealthOverviewTab({
                     className="cursor-pointer"
                     onClick={(data) => {
                       const wfId = (data as { workflowId?: string }).workflowId;
-                      if (wfId) onDrillToExceptions({ workflowId: wfId });
+                      if (wfId) onDrillToExceptions();
                     }}
                   />
                 </BarChart>
@@ -1195,7 +1363,7 @@ export function HealthOverviewTab({
             {heatmapData.map(row => (
               <div key={row.workflowId} className="flex items-center gap-3">
                 <button
-                  onClick={() => onDrillToExceptions({ workflowId: row.workflowId })}
+                  onClick={() => onDrillToExceptions()}
                   className="w-[180px] text-left text-[11.5px] text-text font-medium truncate hover:text-primary transition-colors cursor-pointer shrink-0"
                   title={row.name}
                 >
@@ -1205,7 +1373,7 @@ export function HealthOverviewTab({
                   {row.counts.map((c, idx) => (
                     <button
                       key={idx}
-                      onClick={() => onDrillToExceptions({ workflowId: row.workflowId })}
+                      onClick={() => onDrillToExceptions()}
                       title={`${formatChartDay(heatmapDays - 1 - idx)} — ${c} exception${c === 1 ? '' : 's'}`}
                       className={`h-6 rounded-sm border transition-transform hover:scale-110 cursor-pointer ${heatmapCellCls(c)}`}
                     >
@@ -1242,15 +1410,20 @@ export function HealthOverviewTab({
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-[13px] font-semibold text-text">{labels.effectivenessHeader}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">True positives / total fires per workflow. Low signal = tune the threshold.</p>
+              <p className="text-[11px] text-text-muted mt-0.5">True positives / total fires per workflow. Click a workflow to see its past runs.</p>
             </div>
           </div>
-          <div className="space-y-2.5">
+          <div className="space-y-1">
             {MOCK_WORKFLOWS.map(wf => {
               const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
               const tier = effectivenessTier(eff);
               return (
-                <div key={wf.id} className="space-y-1">
+                <button
+                  key={wf.id}
+                  onClick={() => onOpenWorkflow?.(wf.libraryId)}
+                  disabled={!onOpenWorkflow}
+                  className={`w-full space-y-1 text-left px-2 py-1.5 -mx-2 rounded-lg transition-colors ${onOpenWorkflow ? 'hover:bg-surface-2/50 cursor-pointer' : 'cursor-default'}`}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[12px] text-text truncate">{wf.name}</span>
                     <span className={`text-[12px] font-bold tabular-nums shrink-0 ${tier.tone}`}>{eff}% · {tier.label}</span>
@@ -1261,7 +1434,7 @@ export function HealthOverviewTab({
                     </div>
                     <span className="text-[10.5px] text-text-muted tabular-nums shrink-0 w-12 text-right">{wf.truePositives}/{wf.totalFires}</span>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -1710,107 +1883,321 @@ function groupBySubProcess<T extends { subProcess: string }>(items: T[]): { subP
   return Array.from(map.entries()).map(([subProcess, items]) => ({ subProcess, items }));
 }
 
-function WorkflowsBySubProcess({ workflows }: { workflows: MockWorkflow[] }) {
-  const groups = useMemo(() => groupBySubProcess(workflows), [workflows]);
+function toLibraryShape(wf: MockWorkflow): LibraryWorkflow {
+  return {
+    id: wf.libraryId,
+    name: wf.name,
+    description: wf.type,
+    tags: [wf.subProcess],
+    businessProcess: wf.subProcess,
+    controlId: wf.code,
+    live: wf.cadence.kind === 'Frequency',
+  };
+}
+
+function linkedToMockWorkflow(w: LibraryWorkflow): MockWorkflow {
+  return {
+    id: `linked-${w.id}`,
+    code: w.controlId,
+    name: w.name,
+    type: 'Linked',
+    inputs: ['SQL'],
+    cadence: w.live ? { kind: 'Frequency', label: 'Daily 6 AM' } : { kind: 'Ad-hoc' },
+    lastRun: 'Not run yet',
+    status: 'Success',
+    subProcess: w.businessProcess,
+    truePositives: 0,
+    totalFires: 0,
+    libraryId: w.id,
+  };
+}
+
+function WorkflowsBySubProcess({
+  workflows,
+  engagementName,
+  onOpenWorkflow,
+  onConfigureWorkflow,
+  onCreateWorkflow,
+}: {
+  workflows: MockWorkflow[];
+  engagementName: string;
+  onOpenWorkflow?: (libraryWorkflowId: string) => void;
+  onConfigureWorkflow?: (workflowId: string) => void;
+  onCreateWorkflow?: () => void;
+}) {
+  const [linked, setLinked] = useState<MockWorkflow[]>([]);
+  const allWorkflows = useMemo(() => [...workflows, ...linked], [workflows, linked]);
+  const groups = useMemo(() => groupBySubProcess(allWorkflows), [allWorkflows]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const { addToast } = useToast();
+
   const toggle = (sp: string) => setCollapsed(prev => {
     const n = new Set(prev);
     if (n.has(sp)) n.delete(sp); else n.add(sp);
     return n;
   });
+
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+
+  const enterBulkMode = () => { setBulkMode(true); setSelectedIds(new Set()); };
+  const exitBulkMode = () => { setBulkMode(false); setSelectedIds(new Set()); };
+  const selectAll = () => setSelectedIds(new Set(allWorkflows.map(w => w.id)));
+  const allSelected = allWorkflows.length > 0 && selectedIds.size === allWorkflows.length;
+
+  const selectedLibraryWorkflows = useMemo(
+    () => allWorkflows.filter(w => selectedIds.has(w.id)).map(toLibraryShape),
+    [allWorkflows, selectedIds]
+  );
+
+  const handleLink = (picked: LibraryWorkflow[]) => {
+    setLinked(prev => {
+      const have = new Set([...workflows, ...prev].map(w => w.libraryId));
+      const fresh = picked.filter(w => !have.has(w.id)).map(linkedToMockWorkflow);
+      return [...prev, ...fresh];
+    });
+    setLinkModalOpen(false);
+    addToast({ message: `Linked ${picked.length} workflow${picked.length === 1 ? '' : 's'} to ${engagementName}`, type: 'success' });
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-[13px] font-semibold text-text">
-          Workflows <span className="text-text-muted font-normal">({workflows.length})</span>
-          <span className="text-text-muted font-normal ml-2">· grouped by sub-process</span>
+          Workflows <span className="text-text-muted font-normal">({allWorkflows.length})</span>
+          {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
         </h3>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
-          <Plus size={12} />Link Workflow
-        </button>
-      </div>
-      <div className="space-y-3">
-        {groups.map(group => {
-          const isCollapsed = collapsed.has(group.subProcess);
-          return (
-            <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2">
+          {bulkMode && (
+            <>
+              <span className="text-[12px] text-text-secondary">
+                <span className="font-semibold text-text">{selectedIds.size}</span> selected
+              </span>
               <button
-                onClick={() => toggle(group.subProcess)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
+                onClick={allSelected ? () => setSelectedIds(new Set()) : selectAll}
+                className="text-[11.5px] font-semibold text-text-secondary hover:text-primary px-2 py-1 cursor-pointer"
               >
-                <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-text">{group.subProcess}</span>
-                    <span className="text-[11px] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isCollapsed ? '' : 'rotate-90'}`} />
+                {allSelected ? 'Clear' : 'Select all'}
               </button>
-              <AnimatePresence initial={false}>
-                {!isCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden border-t border-border-light"
-                  >
-                    <div className="divide-y divide-border-light/60">
-                      {group.items.map(wf => <WorkflowRow key={wf.id} wf={wf} />)}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
+              <button
+                onClick={() => setBulkModalOpen(true)}
+                disabled={selectedIds.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
+              >
+                <Play size={12} />Execute {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+              </button>
+              <button
+                onClick={exitBulkMode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+          {!bulkMode && (
+            <>
+              <button
+                onClick={() => setGrouped(g => !g)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
+                  grouped
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
+                }`}
+                title="Group workflows by process"
+              >
+                <Layers size={12} />Group by process
+              </button>
+              <button
+                onClick={enterBulkMode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
+              >
+                <Play size={12} />Execute Workflows
+              </button>
+              <button
+                onClick={() => setLinkModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+              >
+                <Plus size={12} />Link Workflow
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {grouped ? (
+        <div className="space-y-3">
+          {groups.map(group => {
+            const isCollapsed = collapsed.has(group.subProcess);
+            return (
+              <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+                <button
+                  onClick={() => toggle(group.subProcess)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
+                >
+                  <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[13px] font-semibold text-text">{group.subProcess}</span>
+                      <span className="text-[11px] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isCollapsed ? '' : 'rotate-90'}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden border-t border-border-light"
+                    >
+                      <div className="space-y-2 p-2.5">
+                        {group.items.map(wf => (
+                          <WorkflowRow
+                            key={wf.id}
+                            wf={wf}
+                            bulkMode={bulkMode}
+                            selected={selectedIds.has(wf.id)}
+                            onToggleSelect={() => toggleSelect(wf.id)}
+                            onOpen={() => onOpenWorkflow?.(wf.libraryId)}
+                            onConfigure={() => onConfigureWorkflow?.(wf.id)}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {allWorkflows.map(wf => (
+            <WorkflowRow
+              key={wf.id}
+              wf={wf}
+              bulkMode={bulkMode}
+              selected={selectedIds.has(wf.id)}
+              onToggleSelect={() => toggleSelect(wf.id)}
+              onOpen={() => onOpenWorkflow?.(wf.libraryId)}
+              onConfigure={() => onConfigureWorkflow?.(wf.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {bulkModalOpen && (
+          <BulkExecuteModal
+            selectedWorkflows={selectedLibraryWorkflows}
+            onClose={() => setBulkModalOpen(false)}
+            onContinue={() => { setBulkModalOpen(false); exitBulkMode(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {linkModalOpen && (
+          <LinkWorkflowModal
+            engagementName={engagementName}
+            alreadyLinkedIds={allWorkflows.map(w => w.libraryId)}
+            onClose={() => setLinkModalOpen(false)}
+            onLink={handleLink}
+            onCreateNew={() => { setLinkModalOpen(false); onCreateWorkflow?.(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function WorkflowRow({ wf }: { wf: MockWorkflow }) {
+function WorkflowRow({
+  wf, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
+}: {
+  wf: MockWorkflow;
+  bulkMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onOpen: () => void;
+  onConfigure: () => void;
+}) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
+  const handleRowClick = () => {
+    if (bulkMode) onToggleSelect();
+    else onOpen();
+  };
   return (
-    <div className="flex items-center gap-4 px-4 py-3 hover:bg-surface-2/30 transition-colors cursor-pointer">
-      <div className="p-2 rounded-lg bg-brand-50 shrink-0"><Workflow size={14} className="text-brand-600" /></div>
+    <div
+      onClick={handleRowClick}
+      className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all cursor-pointer group ${
+        selected
+          ? 'border-primary/40 bg-primary-xlight/30'
+          : 'border-border-light bg-white hover:border-primary/50 hover:shadow-sm'
+      }`}
+    >
+      {bulkMode ? (
+        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <Checkbox checked={selected} onChange={onToggleSelect} ariaLabel={`Select ${wf.name}`} />
+        </div>
+      ) : (
+        <div className="p-2.5 rounded-xl bg-brand-50 shrink-0"><Workflow size={16} className="text-brand-600" /></div>
+      )}
       <div className="flex-1 min-w-0">
+        {/* Title line */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[13px] font-semibold text-text">{wf.name}</span>
-          <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{wf.code}</span>
+          <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
+          <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+        </div>
+        {/* Meta line — generous spacing, input badges grouped here */}
+        <div className="text-[11.5px] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
+          <span className="font-medium text-text-secondary">{wf.type}</span>
+          <span className="text-border-light">·</span>
+          {wf.cadence.kind === 'Ad-hoc' ? (
+            <span className="inline-flex items-center px-1.5 h-[18px] rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700">Ad-hoc</span>
+          ) : (
+            <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
+          )}
+          <span className="text-border-light">·</span>
+          <span>Last run {wf.lastRun}</span>
+          <span className="text-border-light">·</span>
+          <span className={`${tier.tone} font-semibold`}>{eff}% effective</span>
+          <span className="text-text-muted/80">({wf.truePositives}/{wf.totalFires} · 90d)</span>
+          {/* Input source badges */}
           {wf.inputs.map(src => (
-            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
+            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
               {src === 'SQL' && <span className="w-1 h-1 rounded-full bg-evidence-600" aria-hidden="true" />}
               {src}
             </span>
           ))}
-          {wf.inputs.length > 1 && (
-            <span className="px-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">Hybrid</span>
-          )}
-        </div>
-        <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5 flex-wrap">
-          <span>{wf.type}</span>
-          <span className="text-border">·</span>
-          {wf.cadence.kind === 'Ad-hoc' ? (
-            <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700 border border-mitigated-100/60">Ad-hoc</span>
-          ) : (
-            <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
-          )}
-          <span className="text-border">·</span>
-          <span>Last run {wf.lastRun}</span>
-          <span className="text-border">·</span>
-          <span className={`${tier.tone} font-semibold`}>{eff}% effective</span>
-          <span className="text-text-muted">({wf.truePositives}/{wf.totalFires} 90d)</span>
         </div>
       </div>
-      <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center shrink-0 ${
+      <span className={`px-2.5 h-6 rounded-full text-[10.5px] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'
         : wf.status === 'Running' ? 'bg-evidence-50 text-evidence-700'
         : 'bg-risk-50 text-risk-700'
       }`}>{wf.status}</span>
-      <ChevronRight size={14} className="text-text-muted shrink-0" />
+      {!bulkMode && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onConfigure(); }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+          title="Configure workflow"
+        >
+          <Settings size={11} />
+          Configure
+        </button>
+      )}
+      <ChevronRight size={15} className="text-text-muted shrink-0" />
     </div>
   );
 }

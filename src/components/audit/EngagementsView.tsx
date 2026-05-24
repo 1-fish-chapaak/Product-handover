@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
-  Play, Pencil, Trash2, AlertTriangle, Clock,
+  Play, Trash2, AlertTriangle, X,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -55,21 +55,13 @@ const SUBTYPE_LABEL: Record<AutomationSubtype, string> = {
 
 const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'Compliance', 'Internal Audit', 'Automation'];
 const STATUS_FILTERS: ('All' | EngStatus)[] = ['All', 'Active', 'In Progress', 'Planned', 'Review', 'Draft'];
+const PROCESS_FILTERS: ('All' | ProcessCode)[] = ['All', 'P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
 
 /** Pick a colour for the health bar by tier. */
 function healthTier(pct: number): { bar: string; text: string } {
   if (pct >= 85) return { bar: 'bg-compliant', text: 'text-compliant-700' };
   if (pct >= 65) return { bar: 'bg-mitigated-500', text: 'text-mitigated-700' };
   return { bar: 'bg-risk', text: 'text-risk-700' };
-}
-
-/** Per-type labels for the activity column. */
-function activityLabels(type: EngType): { last: string; next: string } {
-  switch (type) {
-    case 'Automation':     return { last: 'Last run',     next: 'Next run' };
-    case 'Compliance':     return { last: 'Last tested',  next: 'Next milestone' };
-    case 'Internal Audit': return { last: 'Last activity',next: 'Next milestone' };
-  }
 }
 
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
@@ -80,9 +72,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [created, setCreated] = useState<Engagement[]>([]);
 
+  const all = useMemo(() => [...created, ...ENGAGEMENTS], [created]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return [...created, ...ENGAGEMENTS].filter(e => {
+    return all.filter(e => {
       if (typeFilter !== 'All' && e.type !== typeFilter) return false;
       if (statusFilter !== 'All' && e.status !== statusFilter) return false;
       if (processFilter !== 'All' && e.process !== processFilter) return false;
@@ -92,7 +86,23 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             && !e.code.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [search, typeFilter, statusFilter, processFilter]);
+  }, [all, search, typeFilter, statusFilter, processFilter]);
+
+  /** Static counts across the full library — shown as small badges on each filter chip. */
+  const counts = useMemo(() => {
+    const t = { All: all.length } as Record<string, number>;
+    const s = { All: all.length } as Record<string, number>;
+    const p = { All: all.length } as Record<string, number>;
+    for (const e of all) {
+      t[e.type] = (t[e.type] ?? 0) + 1;
+      s[e.status] = (s[e.status] ?? 0) + 1;
+      p[e.process] = (p[e.process] ?? 0) + 1;
+    }
+    return { type: t, status: s, process: p };
+  }, [all]);
+
+  const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
+  const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
 
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
@@ -141,63 +151,38 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
         </div>
 
         {/* Filters row */}
-        <div className="flex items-center gap-4 mb-5 flex-wrap text-[11px]">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-text-muted uppercase tracking-wide">Type</span>
-            <div className="flex gap-1">
-              {TYPE_FILTERS.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTypeFilter(t)}
-                  className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
-                    typeFilter === t
-                      ? 'bg-primary text-white'
-                      : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="w-px h-5 bg-border-light" />
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-text-muted uppercase tracking-wide">Status</span>
-            <div className="flex gap-1">
-              {STATUS_FILTERS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
-                    statusFilter === s
-                      ? 'bg-primary text-white'
-                      : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="w-px h-5 bg-border-light" />
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-text-muted uppercase tracking-wide">Process</span>
-            <div className="flex gap-1">
-              {(['All', 'P2P', 'O2C', 'R2R', 'S2C', 'ITGC'] as const).map(p => (
-                <button
-                  key={p}
-                  onClick={() => setProcessFilter(p)}
-                  className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
-                    processFilter === p
-                      ? 'bg-primary text-white'
-                      : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 mb-5 flex-wrap rounded-xl border border-border-light bg-surface-1/40 px-3 py-2.5">
+          <FilterGroup
+            label="Type"
+            options={TYPE_FILTERS}
+            value={typeFilter}
+            onChange={setTypeFilter}
+            counts={counts.type}
+          />
+          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
+          <FilterGroup
+            label="Status"
+            options={STATUS_FILTERS}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            counts={counts.status}
+          />
+          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
+          <FilterGroup
+            label="Process"
+            options={PROCESS_FILTERS}
+            value={processFilter}
+            onChange={setProcessFilter}
+            counts={counts.process}
+          />
+          {anyFilterActive && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+            >
+              <X size={11} /> Clear filters
+            </button>
+          )}
         </div>
 
         {/* List */}
@@ -208,20 +193,20 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             <p className="text-[12px] text-text-muted">Try clearing the type, status, process, or search filter.</p>
           </div>
         ) : (
-          <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-            {/* Column headers */}
-            <div className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr_110px] gap-5 px-6 py-3 border-b border-border-light text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 bg-surface-2/30">
+          <div>
+            {/* Column headers — label row above the cards */}
+            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80">
               <div>Engagement</div>
               <div>Type</div>
               <div>Health</div>
-              <div>Activity</div>
               <div className="text-right">Actions</div>
             </div>
 
+            <div className="space-y-2">
             {filtered.map((eng, i) => {
               const health = healthTier(eng.health);
-              const labels = activityLabels(eng.type);
               const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
+              const effective = Math.round((eng.controls * eng.health) / 100);
               return (
                 <motion.div
                   key={eng.id}
@@ -229,7 +214,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.025 }}
                   onClick={() => onOpenEngagement(eng.id)}
-                  className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr_110px] gap-5 px-6 py-5 border-b border-border-light last:border-0 hover:bg-surface-2/30 transition-colors cursor-pointer group items-start"
+                  className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border border-border-light bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer group items-start"
                 >
                   {/* Engagement column */}
                   <div className="min-w-0">
@@ -249,8 +234,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                       <span>{eng.owner}</span>
                       <span className="text-border">·</span>
                       <span className="tabular-nums">{eng.periodStart} – {eng.periodEnd}</span>
-                      <span className="text-border">·</span>
-                      <span>{eng.controls} controls</span>
                     </div>
                     {/* Inline tag badges */}
                     <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
@@ -278,12 +261,20 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                   {/* Health column */}
                   <div className="flex flex-col gap-1.5 min-w-0">
                     {notStarted ? (
-                      <div className="text-[11px] text-text-muted italic">Not yet started</div>
+                      <div className="text-[11px] text-text-muted italic">
+                        {eng.controls} controls · not started
+                      </div>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[13px] font-bold tabular-nums ${health.text}`}>{eng.health}%</span>
-                          <span className="text-[10px] font-medium text-text-muted uppercase tracking-wide">Effective</span>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-2 min-w-0">
+                            <span className={`text-[15px] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
+                            <span className="text-[11px] text-text-secondary tabular-nums truncate">
+                              <span className="font-semibold text-text">{effective}</span>
+                              <span className="text-text-muted">/{eng.controls}</span>
+                              <span className="text-text-muted ml-1">controls effective</span>
+                            </span>
+                          </div>
                         </div>
                         <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
                           <div className={`h-full ${health.bar} rounded-full transition-all duration-500`} style={{ width: `${eng.health}%` }} />
@@ -299,19 +290,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                     )}
                   </div>
 
-                  {/* Activity column */}
-                  <div className="flex flex-col gap-1 min-w-0 text-[11px]">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-text-muted shrink-0">{labels.last}</span>
-                      <span className="text-text font-medium truncate">{eng.lastActivity}</span>
-                    </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <Clock size={10} className="text-text-muted shrink-0 self-center" />
-                      <span className="text-text-muted shrink-0">{labels.next}</span>
-                      <span className="text-text font-medium truncate">{eng.nextScheduled}</span>
-                    </div>
-                  </div>
-
                   {/* Actions column */}
                   <div className="flex items-start justify-end gap-1">
                     <button
@@ -320,13 +298,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                       title="Open engagement"
                     >
                       <Play size={14} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); }}
-                      className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
-                      title="Edit"
-                    >
-                      <Pencil size={14} />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); }}
@@ -339,9 +310,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                 </motion.div>
               );
             })}
+            </div>
 
             {/* Footer */}
-            <div className="px-6 py-2.5 text-[11px] text-text-muted bg-surface-2/30 border-t border-border-light">
+            <div className="px-6 py-2.5 mt-2 text-[11px] text-text-muted">
               {filtered.length} of {ENGAGEMENTS.length + created.length} engagements
             </div>
           </div>
@@ -359,6 +331,44 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function FilterGroup<T extends string>({
+  label, options, value, onChange, counts,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (next: T) => void;
+  counts: Record<string, number>;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider mr-0.5">{label}</span>
+      <div className="flex gap-1 flex-wrap">
+        {options.map(opt => {
+          const active = opt === value;
+          const n = counts[opt] ?? 0;
+          return (
+            <button
+              key={opt}
+              onClick={() => onChange(opt)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                active
+                  ? 'bg-primary text-white shadow-sm ring-1 ring-primary/20'
+                  : 'bg-white text-text-secondary border border-border-light hover:border-primary/30 hover:text-primary hover:bg-primary/5'
+              }`}
+            >
+              <span>{opt}</span>
+              <span className={`tabular-nums text-[10px] font-bold px-1 rounded ${
+                active ? 'bg-white/20 text-white' : 'text-text-muted/80 bg-surface-2'
+              }`}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

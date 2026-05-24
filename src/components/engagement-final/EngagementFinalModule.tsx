@@ -326,6 +326,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
         <HealthOverviewTab
           eng={racmEngagement}
           onDrillToExceptions={() => setActiveTab('exceptions')}
+          onGoToWorkflows={() => setActiveTab('workflows')}
           onConfigureWorkflow={() => setActiveTab('workflows')}
           hideWorkflowConfig
         />

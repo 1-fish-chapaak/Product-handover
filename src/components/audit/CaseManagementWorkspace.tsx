@@ -524,14 +524,26 @@ function ExceptionRow({
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-interface Props { engagementId: string; onBack: () => void; /** When true, strips the full-page wrapper, back button, and header — for embedding inside a tab. */ embedded?: boolean; }
+interface Props {
+  engagementId: string;
+  onBack: () => void;
+  /** When true, strips the full-page wrapper, back button, and header — for embedding inside a tab. */
+  embedded?: boolean;
+  /** Pre-applied filters — e.g. when drilled in from an Overview chart via deep-link. */
+  initialFilters?: { severity?: string; workflow?: string; status?: string };
+}
 
-export default function CaseManagementWorkspace({ engagementId, onBack, embedded }: Props): JSX.Element {
+export default function CaseManagementWorkspace({ engagementId, onBack, embedded, initialFilters }: Props): JSX.Element {
   const { addToast } = useToast();
   const eng: Engagement | undefined = useMemo(() => ENGAGEMENTS.find((e) => e.id === engagementId), [engagementId]);
   const allExceptions = useMemo(() => exceptionsForEngagement(engagementId), [engagementId]);
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...EMPTY_FILTERS,
+    ...(initialFilters?.severity ? { severity: initialFilters.severity as Filters['severity'] } : {}),
+    ...(initialFilters?.workflow ? { workflow: initialFilters.workflow } : {}),
+    ...(initialFilters?.status ? { status: initialFilters.status as Filters['status'] } : {}),
+  }));
   const [savedViews, setSavedViews] = useState<SavedView[]>(SEED_VIEWS);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
