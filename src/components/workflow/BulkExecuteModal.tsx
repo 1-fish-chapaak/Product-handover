@@ -3,12 +3,12 @@ import { motion } from 'motion/react';
 import {
   Search, Sparkles, Check, ArrowRight, X, Calendar, Loader2, FileText,
   UploadCloud, Database, ChevronDown, ChevronUp, AlertTriangle, Upload,
-  Minus, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink,
+  Minus, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
 import { useBulkRunProgress } from '../shared/BulkRunProgress';
-import type { LibraryWorkflow } from './WorkflowLibraryView';
+import { LIBRARY_WORKFLOWS, type LibraryWorkflow } from './WorkflowLibraryView';
 
 const FREQUENCIES = ['Hourly', 'Daily', 'Weekly', 'Monthly'] as const;
 type Frequency = typeof FREQUENCIES[number];
@@ -317,6 +317,9 @@ export function BulkExecuteModal({
   const { addToast } = useToast();
   const { startBulkRun } = useBulkRunProgress();
   const [modalDeselected, setModalDeselected] = useState<Set<string>>(new Set());
+  // Workflows added via the in-modal catalog search (on top of the pre-selected set).
+  const [addedWorkflows, setAddedWorkflows] = useState<LibraryWorkflow[]>([]);
+  const [addSearch, setAddSearch] = useState('');
   const [auditName, setAuditName] = useState(defaultAuditName || 'Q3-P2P');
   const [auditDescription, setAuditDescription] = useState(defaultAuditDescription || '');
   const [frequency, setFrequency] = useState<Frequency>('Daily');
@@ -356,8 +359,29 @@ export function BulkExecuteModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose, isFetching]);
 
-  const activeWorkflows = selectedWorkflows.filter(w => !modalDeselected.has(w.id));
+  // Pre-selected workflows plus any added via in-modal search (deduped).
+  const combinedSelected = useMemo(() => {
+    const seen = new Set(selectedWorkflows.map(w => w.id));
+    return [...selectedWorkflows, ...addedWorkflows.filter(w => !seen.has(w.id))];
+  }, [selectedWorkflows, addedWorkflows]);
+  const activeWorkflows = combinedSelected.filter(w => !modalDeselected.has(w.id));
   const uniqueBps = Array.from(new Set(activeWorkflows.map(w => w.businessProcess)));
+
+  // Catalog matches for the "add workflows" search (excludes already-included ones).
+  const addMatches = useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    if (!q) return [];
+    const have = new Set(combinedSelected.map(w => w.id));
+    return LIBRARY_WORKFLOWS
+      .filter(w => !have.has(w.id) && (w.name.toLowerCase().includes(q) || w.businessProcess.toLowerCase().includes(q) || w.controlId.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [addSearch, combinedSelected]);
+
+  const addWorkflow = (w: LibraryWorkflow) => {
+    setAddedWorkflows(prev => [...prev, w]);
+    setModalDeselected(prev => { const n = new Set(prev); n.delete(w.id); return n; });
+    setAddSearch('');
+  };
   const hasAuditName = auditName.trim().length > 0;
   const hasWorkflows = activeWorkflows.length > 0;
   const needsMonthlyDate = triggerOn === 'Schedule' && frequency === 'Monthly';
@@ -734,18 +758,50 @@ export function BulkExecuteModal({
               <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[11px] font-semibold">
                 {activeWorkflows.length}
               </span>
-              {selectedWorkflows.length > activeWorkflows.length && (
+              {combinedSelected.length > activeWorkflows.length && (
                 <span className="text-[11px] text-text-muted">
-                  ({selectedWorkflows.length - activeWorkflows.length} deselected)
+                  ({combinedSelected.length - activeWorkflows.length} deselected)
                 </span>
               )}
               <span className="ml-auto text-text-muted">
                 {selectedListOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </span>
             </button>
+
+            {/* Search + add workflows from the catalog (handles long lists) */}
+            <div className="relative mb-2">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                value={addSearch}
+                onChange={e => setAddSearch(e.target.value)}
+                placeholder="Search workflows to add…"
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              />
+              {addSearch.trim() && (
+                <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-border-light rounded-md shadow-lg max-h-[220px] overflow-y-auto">
+                  {addMatches.length === 0 ? (
+                    <div className="px-3 py-2.5 text-[12px] text-text-muted">No matching workflows to add.</div>
+                  ) : addMatches.map(w => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => addWorkflow(w)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-surface-2/60 transition-colors cursor-pointer"
+                    >
+                      <Plus size={14} className="text-primary shrink-0" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-medium text-text truncate">{w.name}</span>
+                        <span className="block text-[11px] text-text-muted">{w.businessProcess} · {w.controlId}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {selectedListOpen && (
             <div className="border border-border-light rounded-md divide-y divide-border-light overflow-hidden max-h-[240px] overflow-y-auto">
-              {selectedWorkflows.map(w => {
+              {combinedSelected.map(w => {
                 const checked = !modalDeselected.has(w.id);
                 return (
                   <label

@@ -1132,6 +1132,7 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
         <HealthOverviewTab
           eng={overviewEngagement}
           onDrillToExceptions={() => setActiveTab('exceptions')}
+          onGoToWorkflows={() => setActiveTab('workflows')}
           onConfigureWorkflow={() => setActiveTab('workflows')}
           hideWorkflowConfig
         />
@@ -1367,6 +1368,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
         <HealthOverviewTab
           eng={racmEngagement}
           onDrillToExceptions={() => setActiveTab('exceptions')}
+          onGoToWorkflows={() => setActiveTab('workflows')}
           onConfigureWorkflow={() => setActiveTab('workflows')}
           hideWorkflowConfig
         />
@@ -1645,6 +1647,7 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
         <HealthOverviewTab
           eng={complianceEngagement}
           onDrillToExceptions={() => setActiveTab('controls')}
+          onGoToWorkflows={() => setActiveTab('workflows')}
           onConfigureWorkflow={() => setActiveTab('controls')}
           hideWorkflowConfig
         />

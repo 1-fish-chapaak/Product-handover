@@ -151,6 +151,8 @@ interface Props {
   onOpenExecutor?: () => void;
   onEditInChat?: () => void;
   onViewVersionHistory?: () => void;
+  /** Which tab to land on. Defaults to 'overview'. */
+  initialTab?: TabId;
 }
 
 const RUN_HISTORY = [
@@ -878,9 +880,9 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
   return null;
 }
 
-export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory }: Props) {
+export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [expandedDataset, setExpandedDataset] = useState<{ stepIdx: number; dsName: string } | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<'Hourly' | 'Daily' | 'Weekly' | 'Monthly'>('Daily');
