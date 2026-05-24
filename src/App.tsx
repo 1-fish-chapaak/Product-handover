@@ -44,6 +44,7 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/admin/PlatformUsageView';
 import FindingsView from './components/execution/FindingsView';
@@ -780,6 +781,15 @@ export default function App() {
       case 'ai-concierge-forensics':
       case 'ai-concierge-table-extractor':
         return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
+
+      case 'ai-concierge-workflow-builder':
+        return (
+          <WorkflowBuilderJourney
+            onBack={() => setView('ai-concierge')}
+            initialPrompt={state.workflowBuilderSeedPrompt ?? undefined}
+            onInitialPromptConsumed={() => setWorkflowBuilderSeedPrompt(null)}
+          />
+        );
 
       // Execution — Findings
       case 'findings':
