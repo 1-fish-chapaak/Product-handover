@@ -44,7 +44,6 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
-import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/admin/PlatformUsageView';
 import FindingsView from './components/execution/FindingsView';
@@ -346,6 +345,7 @@ export default function App() {
             setSelectedWorkflow={setSelectedWorkflow}
             openAuditExecution={openAuditExecution}
             setSelectedBP={setSelectedBP}
+            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
 
@@ -393,6 +393,8 @@ export default function App() {
               }}
               onDismissPendingDashboard={() => setPendingDashboard(null)}
               onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+              workflowBuilderSeedPrompt={state.workflowBuilderSeedPrompt}
+              onWorkflowBuilderSeedConsumed={() => setWorkflowBuilderSeedPrompt(null)}
               availableDashboards={[
                 ...state.createdDashboards.map(d => ({ id: d.id, name: d.name, description: d.description, accent: d.accent })),
                 ...BUILTIN_DASHBOARDS,
@@ -777,16 +779,7 @@ export default function App() {
       case 'ai-concierge':
       case 'ai-concierge-forensics':
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} />;
-
-      case 'ai-concierge-workflow-builder':
-        return (
-          <WorkflowBuilderJourney
-            onBack={() => setView('ai-concierge')}
-            initialPrompt={state.workflowBuilderSeedPrompt ?? undefined}
-            onInitialPromptConsumed={() => setWorkflowBuilderSeedPrompt(null)}
-          />
-        );
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
 
       // Execution — Findings
       case 'findings':

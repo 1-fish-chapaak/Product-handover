@@ -30,6 +30,28 @@ import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { useDialogA11y } from './useModalA11y';
+// Workflow build runs inline inside this chat thread via rich-type messages.
+import StepUploadFiles from '../concierge-workflow-builder/StepUploadFiles';
+import StepMapData from '../concierge-workflow-builder/StepMapData';
+import StepReviewRun from '../concierge-workflow-builder/StepReviewRun';
+import StepOutputView from '../concierge-workflow-builder/StepOutputView';
+import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
+import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
+import {
+  generateWorkflow as wfGenerate,
+  getClarifyQuestions as wfGetClarify,
+  runWorkflow as wfRun,
+  seedAlignments as wfSeedAlignments,
+} from '../concierge-workflow-builder/mockApi';
+import type {
+  WorkflowDraft,
+  JourneyFiles,
+  JourneyMappings,
+  JourneyAlignments,
+  RunResult,
+  ClarifyQuestion,
+  UploadedFile,
+} from '../concierge-workflow-builder/types';
 
 interface ChatMessage {
   id: string;
@@ -41,7 +63,22 @@ interface ChatMessage {
   followUps?: string[];
   timestamp: Date;
   // Rich inline components
-  richType?: 'summary-kpi' | 'audit-result' | 'audit-loading' | 'clarification' | 'save-workflow-prompt' | 'workflow-checkpoint' | 'qna-plan' | 'error';
+  richType?:
+    | 'summary-kpi'
+    | 'audit-result'
+    | 'audit-loading'
+    | 'clarification'
+    | 'save-workflow-prompt'
+    | 'workflow-checkpoint'
+    | 'qna-plan'
+    | 'error'
+    // Workflow-build rich types — render inside this same chat thread,
+    // not in a separate journey body. Driven by ChatView state.
+    | 'workflow-clarify'
+    | 'workflow-upload'
+    | 'workflow-map'
+    | 'workflow-review'
+    | 'workflow-output';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
   addedTo?: {
@@ -236,8 +273,22 @@ interface ChatViewProps {
    * Hand the typed prompt to the AI Concierge workflow builder. Invoked from
    * the empty-state Submit when the "Build a workflow" toggle is on — the
    * builder opens directly on the clarification screen.
+   *
+   * After the ChatView convergence this still exists but is wired to
+   * `launchWorkflowBuilderWithPrompt`, which now routes to `view='chat'` +
+   * `workflowBuilderSeedPrompt`. The journey renders embedded inside this
+   * ChatView instance.
    */
   onLaunchWorkflowBuilder?: (prompt: string) => void;
+  /**
+   * Seed prompt for an inline workflow build. When non-null, ChatView
+   * boots into workflow mode on first render and (if the seed is
+   * non-empty) auto-starts a workflow-build thread with that prompt.
+   * Empty string just pre-toggles Workflow mode on the empty-state pill.
+   */
+  workflowBuilderSeedPrompt?: string | null;
+  /** Called once the seed prompt has been consumed; clears global state. */
+  onWorkflowBuilderSeedConsumed?: () => void;
   /** Available dashboards for "Add to Dashboard" modal */
   availableDashboards?: import('./AddToDashboardModal').DashboardOption[];
   /** Available reports for "Add to Report" modal */
@@ -2542,9 +2593,23 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport }: ChatViewProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
+  // Workflow-build seed handoff. Non-empty string = the chat starts in
+  // workflow mode and auto-pushes the prompt as a user message (kicking
+  // off the in-thread workflow build). Empty string = chat starts with
+  // the Workflow pill pre-toggled but no auto-build. Null = query default.
+  const [journeySeed, setJourneySeed] = useState<string | null>(
+    workflowBuilderSeedPrompt ?? null,
+  );
+  useEffect(() => {
+    if (workflowBuilderSeedPrompt != null) {
+      setJourneySeed(workflowBuilderSeedPrompt);
+      onWorkflowBuilderSeedConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowBuilderSeedPrompt]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
@@ -2569,6 +2634,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Workflow build flow state
   const [workflowBuildPhase, setWorkflowBuildPhase] = useState(0); // 0=idle, 1=asking-files, 2=asking-logic, 3=confirming, 4=input-config, 5=freeze-confirm, 6=output-config, 7=save
   const [currentWorkflowType, setCurrentWorkflowType] = useState<WorkflowTypeId | null>(null);
+
+  // ── Converged workflow-build state ──
+  // The standalone WorkflowBuilderJourney is gone; its state lives here so
+  // workflow-build cards can render inside this chat thread.
+  const [wfWorkflow, setWfWorkflow] = useState<WorkflowDraft | null>(null);
+  const [wfFiles, setWfFiles] = useState<JourneyFiles>({});
+  const [wfMappings, setWfMappings] = useState<JourneyMappings>({});
+  const [wfAlignments, setWfAlignments] = useState<JourneyAlignments>({});
+  const [wfRunning, setWfRunning] = useState(false);
+  const [wfResult, setWfResult] = useState<RunResult | null>(null);
+  const [wfSaved, setWfSaved] = useState(false);
+  const [wfMapExpanded, setWfMapExpanded] = useState<string | null>(null);
+  const [wfSaveModalOpen, setWfSaveModalOpen] = useState(false);
+  const [wfUploadModalOpen, setWfUploadModalOpen] = useState(false);
+  const [wfDraftAttachments, setWfDraftAttachments] = useState<UploadedFile[]>([]);
+  // Tracks the latest workflow-clarify card id so we can advance it from
+  // user keyboard input (option submit / skip).
+  const wfClarifyMsgIdRef = useRef<string | null>(null);
 
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
@@ -3506,6 +3589,114 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     });
   }, []);
 
+  // ─── Workflow build orchestration (in-thread) ───────────────────────────
+  // Push helpers + step-card pushers. Replaces the standalone journey's
+  // applyWorkflow/pushStepCardOnce/finishClarifying machinery, scoped to
+  // ChatView's own messages array.
+  const wfMakeId = () => `msg-wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const wfPushAssistant = useCallback((text: string) => {
+    setMessages(m => [...m, { id: wfMakeId(), role: 'assistant', text, timestamp: new Date() }]);
+  }, []);
+  const wfPushClarify = useCallback((questions: ClarifyQuestion[], phase: 'initial' | 'validate', stepLabel?: string) => {
+    const id = wfMakeId();
+    wfClarifyMsgIdRef.current = id;
+    setMessages(m => [...m, {
+      id,
+      role: 'assistant',
+      text: '',
+      timestamp: new Date(),
+      richType: 'workflow-clarify',
+      richData: { questions, phase, stepLabel, index: 0, answers: {} as Record<string, string> },
+    }]);
+  }, []);
+  const wfPushCard = useCallback((cardType: 'workflow-upload' | 'workflow-map' | 'workflow-review' | 'workflow-output') => {
+    setMessages(m => {
+      // Dedup: only push if the latest card of this type isn't already present.
+      if (m.length > 0 && m[m.length - 1].richType === cardType) return m;
+      return [...m, {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: cardType,
+      }];
+    });
+  }, []);
+
+  // Kick off a workflow build from a typed prompt. Mirrors the journey's
+  // applyWorkflow but pushes everything into ChatView's messages array.
+  const startWorkflowBuild = useCallback(async (prompt: string, attachments: UploadedFile[] = []) => {
+    // Push the user's prompt as the opening message of the thread.
+    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    // Generate the workflow draft (mock). Keep a brief "thinking" beat
+    // so the assistant turn has shape.
+    await new Promise(r => setTimeout(r, 600));
+    const draft = wfGenerate(prompt);
+    setWfWorkflow(draft);
+
+    // Carry-forward Step 1 attachments into required inputs.
+    const seededFiles: JourneyFiles = {};
+    if (attachments.length > 0) {
+      const reqInputs = draft.inputs.filter(i => i.required);
+      const fallback = draft.inputs[0]?.id ?? '';
+      for (const f of attachments) {
+        let target = '';
+        for (const inp of reqInputs) {
+          if ((seededFiles[inp.id] ?? []).length === 0) { target = inp.id; break; }
+        }
+        if (!target) target = fallback;
+        if (target) seededFiles[target] = [...(seededFiles[target] ?? []), f];
+      }
+    }
+    setWfFiles(seededFiles);
+    setWfMappings({});
+    setWfAlignments(wfSeedAlignments(draft));
+    setWfResult(null);
+    setWfSaved(false);
+    setWfDraftAttachments([]);
+
+    const intro = `I've analyzed your prompt and built the **${draft.name}** workflow. Before I begin, a few quick clarifications — pick what fits below.`;
+    setIsTyping(false);
+    wfPushAssistant(intro);
+    const questions = wfGetClarify(draft);
+    wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
+  }, [wfPushAssistant, wfPushClarify]);
+
+  // Effect — once the workflow draft exists and the latest clarify card is
+  // fully answered/skipped, advance to the upload step. Uses the message
+  // list as the source of truth so each transition is reactive.
+  const wfHasPushedUploadRef = useRef(false);
+  useEffect(() => {
+    if (!wfWorkflow) { wfHasPushedUploadRef.current = false; return; }
+    if (wfHasPushedUploadRef.current) return;
+    const clarifyMsg = [...messages].reverse().find(m => m.richType === 'workflow-clarify');
+    if (!clarifyMsg) return;
+    const data = clarifyMsg.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string> };
+    if (data.phase !== 'initial') return;
+    if (data.index < data.questions.length) return;
+    // All initial questions resolved → push the upload card once.
+    wfHasPushedUploadRef.current = true;
+    wfPushAssistant('Got it — locked those in. Drop the required data files into the upload window so I can map them.');
+    wfPushCard('workflow-upload');
+    setWfUploadModalOpen(true);
+  }, [messages, wfWorkflow, wfPushAssistant, wfPushCard]);
+
+  const wfAnswerClarify = useCallback((msgId: string, answerOrSkip: string | null) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msgId || m.richType !== 'workflow-clarify') return m;
+      const data = m.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
+      const q = data.questions[data.index];
+      if (!q) return m;
+      const nextAnswers = { ...data.answers };
+      if (answerOrSkip != null) nextAnswers[q.id] = answerOrSkip;
+      return { ...m, richData: { ...data, answers: nextAnswers, index: data.index + 1 } };
+    }));
+    if (answerOrSkip != null) {
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}-ans`, role: 'user', text: answerOrSkip, timestamp: new Date() }]);
+    }
+  }, []);
+
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
@@ -3551,16 +3742,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     ].filter(Boolean);
     if (attachmentLabels.length > 0) text += `\n[Attached: ${attachmentLabels.join(', ')}]`;
 
-    // Empty-state Submit with the "Build a workflow" toggle on hands the
-    // typed prompt off to the AI Concierge workflow builder, which opens on
-    // the clarification screen. The chat thread isn't started — the user
-    // continues the conversation inside the journey.
-    if (buildWorkflowMode && messages.length === 0 && trimmed && onLaunchWorkflowBuilder) {
-      onLaunchWorkflowBuilder(trimmed);
+    // Empty-state Submit with the Workflow mode pill starts an inline
+    // workflow build in THIS chat thread (same composer, same chrome,
+    // same prose). Workflow cards render as assistant rich-type messages.
+    if (buildWorkflowMode && messages.length === 0 && trimmed) {
+      const attachmentsForWorkflow: UploadedFile[] = files.map(f => ({ name: f.name, size: f.size }));
       setInput('');
       setFiles([]);
       setAttachedSources([]);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      startWorkflowBuild(trimmed, attachmentsForWorkflow);
       return;
     }
 
@@ -4169,6 +4360,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     </AnimatePresence>
   );
 
+  // When a workflow build is kicked off via a non-empty seed from Path 1
+  // (Home / AI Concierge → Build a workflow), bootstrap the workflow build
+  // in this thread on first render. Empty seed = open chat in workflow
+  // mode but don't auto-build; user types their prompt and we start.
+  useEffect(() => {
+    if (journeySeed == null) return;
+    if (journeySeed.trim().length > 0 && messages.length === 0) {
+      const seed = journeySeed;
+      setJourneySeed(null);
+      setBuildWorkflowMode(true);
+      // defer so the state flush has settled before pushing messages
+      queueMicrotask(() => startWorkflowBuild(seed));
+    } else {
+      // Empty seed: just preset workflow mode and clear.
+      setBuildWorkflowMode(true);
+      setJourneySeed(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journeySeed]);
+
   /* ────────────────────── EMPTY STATE ────────────────────── */
   if (isEmpty) {
     return (
@@ -4344,12 +4555,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   rows={1}
                 />
 
-                {/* Action row — matches the in-thread composer exactly:
-                    single + attach on the left, quiet Query/Workflow picker
-                    + dark Send disc on the right (only renders when there
-                    is input or attachments). */}
+                {/* Action row — input affordances on the LEFT (attach + mode
+                    picker), output action (Send) on the RIGHT. Grouping
+                    follows the Claude pattern: "what's coming in" stacked
+                    together, "what's going out" isolated. */}
                 <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-                  <div className="flex items-center">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setShowDataPicker(true)}
@@ -4359,45 +4570,95 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     >
                       <Plus size={18} strokeWidth={2} />
                     </button>
-                  </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={buildWorkflowMode}
-                      aria-label="Build a workflow"
-                      title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
-                      onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                        buildWorkflowMode
-                          ? 'text-brand-700 hover:bg-brand-50'
-                          : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
-                      }`}
+                    {/* Mode segmented control — BOTH options visible, BOTH
+                        selection states identical (brand-600 fill) so they
+                        read as peers, not Query-as-default + Workflow-as-
+                        special. Symmetric pill = clean toggle. */}
+                    <div
+                      role="radiogroup"
+                      aria-label="Composer mode"
+                      className="inline-flex items-center rounded-full bg-canvas p-0.5"
                     >
-                      {buildWorkflowMode ? 'Workflow' : 'Query'}
-                      <ChevronDown size={14} className="opacity-70" />
-                    </button>
-
-                    {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
                         type="button"
-                        onClick={handleSend}
-                        aria-label="Send message"
-                        title="Send · Enter to send, Shift+Enter for new line"
-                        className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        role="radio"
+                        aria-checked={!buildWorkflowMode}
+                        onClick={() => setBuildWorkflowMode(false)}
+                        title="Query — ask Ira a question, get an answer"
+                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          !buildWorkflowMode
+                            ? 'bg-brand-600 text-white'
+                            : 'text-ink-500 hover:text-ink-800'
+                        }`}
                       >
-                        <ArrowUp size={16} strokeWidth={2.25} />
+                        Query
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={buildWorkflowMode}
+                        onClick={() => setBuildWorkflowMode(true)}
+                        title="Workflow — build a re-runnable audit workflow"
+                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          buildWorkflowMode
+                            ? 'bg-brand-600 text-white'
+                            : 'text-ink-500 hover:text-ink-800'
+                        }`}
+                      >
+                        Workflow
+                      </button>
+                    </div>
                   </div>
+
+                  {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      aria-label="Send message"
+                      title="Send · Enter to send, Shift+Enter for new line"
+                      className="inline-flex items-center justify-center size-8 rounded-full bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    >
+                      <ArrowUp size={16} strokeWidth={2.25} />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Disclaimer — quiet trust line: 10px, very muted, mt-1, no own bottom margin. */}
-              <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
-                Irame.ai may display inaccurate info, including about people, so double-check its responses.
-              </p>
+              {/* Starter prompts — mode-aware. Click fills the composer
+                  (no auto-send) so the user can edit before sending.
+                  Removes the blank-page anxiety on first visit. */}
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                {(buildWorkflowMode
+                  ? [
+                      'Duplicate invoice detection',
+                      'Three-way match (PO / GRN / Invoice)',
+                      'Vendor master change monitoring',
+                      'Aged AP balances over 90 days',
+                    ]
+                  : [
+                      'Find duplicate invoices in Q1',
+                      'Top 5 vendors by spend YTD',
+                      'GL postings outside business hours',
+                      'Approvals above ₹1L without backup',
+                    ]
+                ).map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => {
+                      setInput(prompt);
+                      textareaRef.current?.focus();
+                      // Adjust textarea height on next paint.
+                      requestAnimationFrame(() => handleTextareaInput());
+                    }}
+                    className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+
             </motion.div>
           </div>
         </div>
@@ -4925,6 +5186,122 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           </div>
                         </div>
                       </div>
+                    ) : msg.richType === 'workflow-clarify' ? (
+                      (() => {
+                        const data = msg.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
+                        const q = data.questions[data.index];
+                        if (!q) {
+                          // All answered — recap chip.
+                          return (
+                            <div className="text-[13px] text-ink-500 leading-relaxed max-w-[66ch]">
+                              {data.phase === 'validate' ? 'Validation answers locked in.' : 'Clarifications locked in.'}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden max-w-[66ch]">
+                            <div className="px-4 pt-3.5 pb-3">
+                              {data.stepLabel && (
+                                <div className="text-[12px] font-semibold text-brand-600 uppercase tracking-[0.12em] mb-2">
+                                  {data.stepLabel}
+                                </div>
+                              )}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="text-[15px] font-semibold text-ink-800 leading-snug">{q.title}</div>
+                                {data.questions.length > 1 && (
+                                  <div className="text-[12px] text-ink-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5">
+                                    {data.index + 1} of {data.questions.length}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <ul>
+                              {q.options.map((opt) => (
+                                <li key={opt}>
+                                  <button
+                                    type="button"
+                                    onClick={() => wfAnswerClarify(msg.id, opt)}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-[13px] text-ink-800 hover:bg-brand-50/60 border-t border-canvas-border cursor-pointer transition-colors"
+                                  >
+                                    {opt}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="flex items-center justify-end gap-3 px-4 py-2.5 border-t border-canvas-border">
+                              <button
+                                type="button"
+                                onClick={() => wfAnswerClarify(msg.id, null)}
+                                className="text-[13px] font-semibold text-ink-500 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : msg.richType === 'workflow-upload' ? (
+                      wfWorkflow ? (
+                        <StepUploadFiles
+                          workflow={wfWorkflow}
+                          files={wfFiles}
+                          setFiles={setWfFiles}
+                          view="list-only"
+                          onOpenUploadModal={() => setWfUploadModalOpen(true)}
+                          onViewWorkspace={() => setShowArtifacts(true)}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-map' ? (
+                      wfWorkflow ? (
+                        <StepMapData
+                          workflow={wfWorkflow}
+                          files={wfFiles}
+                          setFiles={setWfFiles}
+                          alignments={wfAlignments}
+                          expandedInputId={wfMapExpanded}
+                          onToggleExpand={(id) => setWfMapExpanded(prev => prev === id ? null : id)}
+                          onConfirm={() => {
+                            wfPushAssistant('Mappings confirmed — opening review.');
+                            wfPushCard('workflow-review');
+                          }}
+                          onViewWorkspace={() => setShowArtifacts(true)}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-review' ? (
+                      wfWorkflow ? (
+                        <StepReviewRun
+                          workflow={wfWorkflow}
+                          running={wfRunning}
+                          result={wfResult}
+                          mappings={wfMappings}
+                          setMappings={setWfMappings}
+                          onValidate={async () => {
+                            // Run immediately for the converged surface — the
+                            // validate clarify step is intentionally collapsed
+                            // here to keep the in-thread flow compact.
+                            if (!wfWorkflow) return;
+                            setWfRunning(true);
+                            wfPushAssistant(`Running **${wfWorkflow.name}**…`);
+                            const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
+                            setWfRunning(false);
+                            setWfResult(res);
+                            wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows.`);
+                            wfPushCard('workflow-output');
+                          }}
+                          validateDisabled={wfRunning || !!wfResult}
+                          onViewWorkspace={() => setShowArtifacts(true)}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-output' ? (
+                      wfWorkflow ? (
+                        <StepOutputView
+                          workflow={wfWorkflow}
+                          running={wfRunning}
+                          result={wfResult}
+                          onSave={() => setWfSaveModalOpen(true)}
+                          saved={wfSaved}
+                        />
+                      ) : null
                     ) : msg.richType === 'error' ? (
                       // Terminal error state. Single icon + label (no side-stripe) per
                       // DESIGN.md alert-card scoping; the risk token names the kind,
@@ -5556,6 +5933,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           (empty state) stays toggleable. */}
                       {(() => {
                         const modeLocked = true;
+                        const isWorkflow = buildWorkflowMode;
                         return (
                           <button
                             type="button"
@@ -5569,10 +5947,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 : 'Query mode — locked. Use Save as workflow to convert this chat.'
                             }
                             onClick={() => { /* locked; no-op */ }}
-                            className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium text-ink-400 cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[13px] font-semibold cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              isWorkflow
+                                ? 'bg-brand-600 text-white'
+                                : 'bg-canvas border border-canvas-border text-ink-500'
+                            }`}
                           >
-                            <Lock size={11} strokeWidth={2.25} className="shrink-0" />
-                            {buildWorkflowMode ? 'Workflow' : 'Query'}
+                            <Lock size={11} strokeWidth={2.5} className="shrink-0" />
+                            {isWorkflow ? 'Workflow' : 'Query'}
                           </button>
                         );
                       })()}
@@ -5947,6 +6329,43 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         onClose={() => setShowDataPicker(false)}
         onConfirm={handleDataPickerConfirm}
       />
+
+      {/* Workflow build — upload modal (auto-opens once at Step 2 / Upload) */}
+      <UploadDataModal
+        open={wfUploadModalOpen}
+        onClose={() => {
+          setWfUploadModalOpen(false);
+          // If all required inputs are now filled, advance to map step.
+          if (wfWorkflow) {
+            const required = wfWorkflow.inputs.filter(i => i.required);
+            const allFilled = required.every(i => (wfFiles[i.id] ?? []).length > 0);
+            if (allFilled) {
+              wfPushAssistant('Files verified — moving to data mapping.');
+              wfPushCard('workflow-map');
+            }
+          }
+        }}
+        workflow={wfWorkflow ?? null}
+        files={wfFiles}
+        setFiles={setWfFiles}
+        onAttachDraft={({ files: pickedFiles }) => {
+          setWfDraftAttachments(prev => [...prev, ...pickedFiles]);
+        }}
+      />
+
+      {/* Workflow build — save modal (terminal step) */}
+      {wfWorkflow && (
+        <SaveWorkflowModal
+          open={wfSaveModalOpen}
+          onClose={() => setWfSaveModalOpen(false)}
+          workflow={wfWorkflow}
+          onConfirm={(payload) => {
+            setWfSaveModalOpen(false);
+            setWfSaved(true);
+            wfPushAssistant(`**${payload.name}** saved to **${payload.businessProcess} · ${payload.racm}**.`);
+          }}
+        />
+      )}
 
       {/* Add to Dashboard modal */}
       <AddToDashboardModal

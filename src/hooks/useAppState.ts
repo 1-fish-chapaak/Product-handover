@@ -49,7 +49,6 @@ export type View =
   | 'ai-concierge'
   | 'ai-concierge-forensics'
   | 'ai-concierge-table-extractor'
-  | 'ai-concierge-workflow-builder'
   | 'findings'
   // System
   | 'configuration'
@@ -412,15 +411,19 @@ export function useAppState() {
     setState(prev => ({ ...prev, exceptionRole: role }));
   }, []);
 
-  // Hand off a prompt typed in chat (with the "Build a workflow" toggle on)
-  // to the AI Concierge workflow builder. Sets the seed and routes to the
-  // builder view in a single transition; the journey consumes the seed on
-  // mount, generates the workflow, and lands the user on the clarification
-  // screen — skipping the prompt page entirely.
+  // Hand off a prompt with the "Build a workflow" intent. After the
+  // ChatView convergence, the workflow build is embedded INSIDE the chat
+  // surface, so we route to `view: 'chat'` and pass the prompt as a
+  // seed. ChatView consumes the seed on mount and renders the journey
+  // body in place of the empty state / message thread.
+  //
+  // Passing an empty string opens the chat with the workflow journey
+  // active at its own Step 1 hero (no auto-generate). Passing a non-empty
+  // string skips Step 1 and lands the user on the clarification.
   const launchWorkflowBuilderWithPrompt = useCallback((prompt: string) => {
     setState(prev => ({
       ...prev,
-      view: 'ai-concierge-workflow-builder' as View,
+      view: 'chat' as View,
       workflowBuilderSeedPrompt: prompt,
       showChatHistory: false,
     }));
