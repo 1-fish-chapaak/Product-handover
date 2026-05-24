@@ -105,12 +105,12 @@ function buildEngagement(card: IAEngagementCard): ConfigurableEngagement {
 function buildAutomationEngagement(card: IAEngagementCard): ConfigurableEngagement {
   return {
     id: card.id, name: card.name,
-    patternType: EngagementPatternType.AUTOMATION_PROJECT,
+    patternType: EngagementPatternType.WORKFLOW_AUTOMATION_PROJECT,
     displayLabel: 'Automation', description: card.description,
     owner: card.owner, reviewer: card.reviewer, businessProcess: card.process, entityOrLocation: card.entity,
     status: EngagementStatus.IN_PROGRESS, stage: card.status,
     config: {
-      patternType: EngagementPatternType.AUTOMATION_PROJECT,
+      patternType: EngagementPatternType.WORKFLOW_AUTOMATION_PROJECT,
     } as any,
     outputs: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };

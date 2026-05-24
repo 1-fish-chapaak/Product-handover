@@ -131,7 +131,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
       controlOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
       keyReport: '', ipeIceDetails: '', segregationOfDuties: '', mgmtReviewControl: '',
-      confidence: 'DRAFT', sopSectionRef: '',
+      confidence: 'DRAFT', sopSectionRef: '', attributes: '',
     };
     setRows(prev => [blank, ...prev]);
     setDetailRowId(`${blank.riskId}-${blank.controlId}`);
