@@ -3712,6 +3712,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // one file, push the 4 initial clarify questions. The previous order
   // (Clarify-then-Upload) was inverted on user feedback so the user
   // answers questions with the actual data context already attached.
+  // This is also where the workspace artifact panel auto-opens so the
+  // user can see the workflow's data shape while answering clarify.
   const wfHasPushedClarifyRef = useRef(false);
   useEffect(() => {
     if (!wfWorkflow) { wfHasPushedClarifyRef.current = false; return; }
@@ -3725,7 +3727,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfPushAssistant('Got it — files received. Now a few quick clarifications before I map and run.');
     const questions = wfGetClarify(wfWorkflow);
     wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
-  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushClarify]);
+    // Open the workspace artifact panel as soon as the files land. The
+    // panel shows the per-source schema + plan, which helps the user
+    // ground their clarify answers against the actual data shape.
+    setArtifactMode('workflow');
+    setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
+    setShowArtifacts(true);
+  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushClarify, setArtifactMode, setWorkflowType, setShowArtifacts]);
 
   // If the user closes the upload modal WITHOUT attaching anything for
   // any required input, surface a gentle nudge prompting them to upload.
@@ -3762,10 +3770,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfHasPushedMapRef.current = true;
     wfPushAssistant('Clarifications locked in — moving to data mapping.');
     wfPushCard('workflow-map');
-    setArtifactMode('workflow');
-    setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
-    setShowArtifacts(true);
-  }, [wfWorkflow, messages, wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType, setShowArtifacts]);
+  }, [wfWorkflow, messages, wfPushAssistant, wfPushCard]);
 
   // Validate-phase completion — fires after the user finishes the
   // matching-logic + tolerance clarify cards pushed from StepReviewRun.

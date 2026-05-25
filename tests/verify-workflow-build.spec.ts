@@ -63,27 +63,35 @@ test('upload-first workflow build', async ({ page }) => {
   // 5. Confirm map
   await page.getByRole('button', { name: /Confirm.*Proceed/i }).click();
   await page.waitForTimeout(600);
+  await snap(page, 'E-map-confirmed');
 
   // 6. Review → Validate
   await expect(page.getByText(/Mappings confirmed/i)).toBeVisible({ timeout: 6000 });
+  await snap(page, 'F-review-card');
   await page.getByRole('button', { name: /Validate workflow/i }).click();
   await page.waitForTimeout(600);
 
   // 7. Validate clarify (matching logic + tolerance)
   await expect(page.getByRole('option', { name: /Exact field matching/i })).toBeVisible({ timeout: 6000 });
+  await snap(page, 'G-validate-clarify-q1');
   await page.keyboard.press('1');
   await page.waitForTimeout(400);
   await expect(page.getByRole('option', { name: /Strict \(±1%\)/i })).toBeVisible({ timeout: 6000 });
+  await snap(page, 'H-validate-clarify-q2');
   await page.keyboard.press('1');
   await page.waitForTimeout(800);
 
-  // 8. Run → View Preview → Output → Save modal
+  // 8. Tolerance card + run + View Preview + Output + Save
+  await expect(page.getByText(/running with.*tolerance/i)).toBeVisible({ timeout: 6000 });
+  await snap(page, 'I-tolerance-card');
   await expect(page.getByRole('button', { name: /View Preview/i })).toBeVisible({ timeout: 15000 });
+  await snap(page, 'J-view-preview');
   await page.getByRole('button', { name: /View Preview/i }).click();
   await page.waitForTimeout(600);
+  await snap(page, 'K-output-card');
   await page.getByRole('button', { name: /Save Workflow/i }).click();
   await page.waitForTimeout(600);
-  await snap(page, 'E-save-modal');
+  await snap(page, 'L-save-modal');
 });
 
 test('upload-nudge if user closes modal without attaching', async ({ page }) => {
