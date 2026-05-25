@@ -4852,14 +4852,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <Plus size={18} strokeWidth={2} />
                     </button>
 
-                    {/* Mode segmented control — BOTH options visible, BOTH
-                        selection states identical (brand-600 fill) so they
-                        read as peers, not Query-as-default + Workflow-as-
-                        special. Symmetric pill = clean toggle. */}
+                    {/* Mode segmented control — softer treatment so the
+                        active pill doesn't compete visually with primary
+                        CTAs (Send, Approve & Run). Container: paper-100
+                        track. Active: brand-50 chip with brand-700 text +
+                        subtle inset ring; inactive: muted ink with hover. */}
                     <div
                       role="radiogroup"
                       aria-label="Composer mode"
-                      className="inline-flex items-center rounded-full bg-canvas p-0.5"
+                      className="inline-flex items-center rounded-full bg-paper-100 p-0.5"
                     >
                       <button
                         type="button"
@@ -4867,10 +4868,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         aria-checked={!buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(false)}
                         title="Query — ask Ira a question, get an answer"
-                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                           !buildWorkflowMode
-                            ? 'bg-brand-600 text-white'
-                            : 'text-ink-500 hover:text-ink-800'
+                            ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
+                            : 'text-ink-500 font-medium hover:text-ink-800'
                         }`}
                       >
                         Query
@@ -4881,10 +4882,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         aria-checked={buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(true)}
                         title="Workflow — build a re-runnable audit workflow"
-                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                           buildWorkflowMode
-                            ? 'bg-brand-600 text-white'
-                            : 'text-ink-500 hover:text-ink-800'
+                            ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
+                            : 'text-ink-500 font-medium hover:text-ink-800'
                         }`}
                       >
                         Workflow
