@@ -377,72 +377,37 @@ ORDER BY
     }
   };
 
-  const sqlLines = sql.split('\n');
-
   return (
     <div className="space-y-3 pt-4">
-      {/* Generated code view — matches the workflow side panel's Plan/Code
-          layout: header row (title + language tagline + Copy/Open) over a
-          dark code panel with filename bar + synced indicator + line-
-          numbered body. */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2 px-1">
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-ink-900 leading-tight">
-              Generated code
-            </div>
-            <div className="text-[12px] text-ink-500 mt-0.5">
-              SQL · query planner
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={handleCopy}
-              aria-label={copied ? 'Copied!' : 'Copy SQL'}
-              title={copied ? 'Copied!' : 'Copy to clipboard'}
-              className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[12px] font-semibold text-ink-700 transition-colors cursor-pointer"
-            >
-              {copied ? <Check size={11} /> : <Copy size={11} />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
+      <CollapsibleSection title="Generated SQL Query" icon={FileCode}>
+        <div className="mt-3 relative">
+          <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[12px] font-mono overflow-x-auto leading-relaxed">
+            <code>{sql}</code>
+          </pre>
+          <div className="absolute top-2 right-2 flex items-center gap-1">
             <button
               type="button"
               onClick={handleDownload}
               aria-label="Download SQL"
               title="Download as query.sql"
-              className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[12px] font-semibold text-ink-700 transition-colors cursor-pointer"
+              className="p-1.5 bg-ink-700 hover:bg-ink-600 text-paper-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
             >
-              <Download size={11} />
-              Open
+              <Download size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label={copied ? 'Copied!' : 'Copy SQL'}
+              title={copied ? 'Copied!' : 'Copy to clipboard'}
+              className={`p-1.5 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                copied ? 'bg-brand-600 text-white' : 'bg-ink-700 hover:bg-ink-600 text-paper-50'
+              }`}
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
             </button>
           </div>
         </div>
-
-        <div className="rounded-xl border border-canvas-border overflow-hidden bg-[#0f1115]">
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/5">
-            <span className="text-[12px] font-mono text-white/70">
-              query.sql
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-[12px] font-mono text-emerald-400/90">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              synced
-            </span>
-          </div>
-          <pre className="text-[12px] leading-[1.55] font-mono text-white/90 px-3 py-3 overflow-x-auto">
-            <code>
-              {sqlLines.map((line, i) => (
-                <div key={i} className="flex">
-                  <span className="select-none text-white/30 pr-3 tabular-nums w-6 text-right shrink-0">
-                    {i + 1}
-                  </span>
-                  <span className="whitespace-pre">{line}</span>
-                </div>
-              ))}
-            </code>
-          </pre>
-        </div>
-      </section>
+      </CollapsibleSection>
 
       <CollapsibleSection title="Execution Stats" icon={BarChart3} defaultOpen={false}>
         <div className="grid grid-cols-3 gap-3 pt-3">

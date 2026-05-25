@@ -31,6 +31,8 @@ import {
   Copy,
   ListChecks,
   MessageSquare,
+  FileCode,
+  Check,
   ExternalLink,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
@@ -1110,61 +1112,11 @@ export default function DataSourcePanel({
             </section>
 
             {codeOpen ? (
-              /* Generated code view */
-              <section className="flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-2 px-1">
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-ink-900 leading-tight">
-                      Generated code
-                    </div>
-                    <div className="text-[12px] text-ink-500 mt-0.5">
-                      Python · pandas · ira utils
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[12px] font-semibold text-ink-700 transition-colors cursor-pointer"
-                    >
-                      <Copy size={11} />
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[12px] font-semibold text-ink-700 transition-colors cursor-pointer"
-                    >
-                      <ExternalLink size={11} />
-                      Open
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-canvas-border overflow-hidden bg-[#0f1115]">
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/5">
-                    <span className="text-[12px] font-mono text-white/70">
-                      workflow.py
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-mono text-emerald-400/90">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      synced
-                    </span>
-                  </div>
-                  <pre className="text-[12px] leading-[1.55] font-mono text-white/90 px-3 py-3 overflow-x-auto">
-                    <code>
-                      {SAMPLE_CODE_LINES.map((line, i) => (
-                        <div key={i} className="flex">
-                          <span className="select-none text-white/30 pr-3 tabular-nums w-6 text-right shrink-0">
-                            {i + 1}
-                          </span>
-                          <span className="whitespace-pre">
-                            {highlightPython(line)}
-                          </span>
-                        </div>
-                      ))}
-                    </code>
-                  </pre>
-                </div>
-              </section>
+              /* Generated code view — matches the query CodeTab's
+                 CollapsibleSection chrome (header row with icon + title +
+                 chevron, dark code block with Copy/Download icon buttons
+                 anchored top-right). */
+              <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
             ) : (
               /* Steps list */
               <section>
@@ -1252,6 +1204,89 @@ const PY_KEYWORDS = new Set([
   'False',
   'None',
 ]);
+
+// Generated-code section — mirrors the query ArtifactPanel's CodeTab UI:
+// CollapsibleSection-style header (icon + title + chevron) over a dark
+// code block with Copy / Download icon buttons anchored top-right.
+function CodeSection({ code, filename }: { code: string; filename: string }) {
+  const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard denied — silent */ }
+  };
+  const handleDownload = () => {
+    try {
+      const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* download failed — silent */ }
+  };
+  return (
+    <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+      <div className="flex items-center px-4 py-3 hover:bg-paper-50/60 transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <FileCode size={14} className="text-primary shrink-0" />
+          <span className="flex-1 text-left">Generated Code</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? 'Collapse section' : 'Expand section'}
+          aria-expanded={open}
+          className="ml-1 p-1 text-ink-400 hover:text-ink-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <ChevronDown size={14} className={`transition-transform duration-150 ${open ? '' : '-rotate-90'}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="px-4 pb-4 border-t border-canvas-border">
+          <div className="mt-3 relative">
+            <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[12px] font-mono overflow-x-auto leading-relaxed">
+              <code>{code}</code>
+            </pre>
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleDownload}
+                aria-label="Download code"
+                title={`Download as ${filename}`}
+                className="p-1.5 bg-ink-700 hover:bg-ink-600 text-paper-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+              >
+                <Download size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                aria-label={copied ? 'Copied!' : 'Copy code'}
+                title={copied ? 'Copied!' : 'Copy to clipboard'}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                  copied ? 'bg-brand-600 text-white' : 'bg-ink-700 hover:bg-ink-600 text-paper-50'
+                }`}
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function highlightPython(line: string): ReactNode {
   if (line.length === 0) return ' ';
