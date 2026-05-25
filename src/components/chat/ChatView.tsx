@@ -10,8 +10,9 @@ import {
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
+  Clock, Play, Settings2,
 } from 'lucide-react';
-import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
+import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
@@ -37,11 +38,15 @@ import StepReviewRun from '../concierge-workflow-builder/StepReviewRun';
 import StepOutputView from '../concierge-workflow-builder/StepOutputView';
 import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
 import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
+import Stepper, { type JourneyStep } from '../concierge-workflow-builder/Stepper';
+import { ToleranceAdjustCard, ViewPreviewCard, type ToleranceCardState } from '../concierge-workflow-builder/AIAssistantPanel';
+import { SAMPLE_WORKFLOWS } from '../concierge-workflow-builder/sampleWorkflows';
 import {
   generateWorkflow as wfGenerate,
   getClarifyQuestions as wfGetClarify,
   runWorkflow as wfRun,
   seedAlignments as wfSeedAlignments,
+  tolerancePctFromAnswer,
 } from '../concierge-workflow-builder/mockApi';
 import type {
   WorkflowDraft,
@@ -78,6 +83,8 @@ interface ChatMessage {
     | 'workflow-upload'
     | 'workflow-map'
     | 'workflow-review'
+    | 'workflow-tolerance'
+    | 'workflow-view-preview'
     | 'workflow-output';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
@@ -2649,9 +2656,20 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [wfSaveModalOpen, setWfSaveModalOpen] = useState(false);
   const [wfUploadModalOpen, setWfUploadModalOpen] = useState(false);
   const [wfDraftAttachments, setWfDraftAttachments] = useState<UploadedFile[]>([]);
+  // Amount tolerance used by the run — populated by the validate-phase
+  // clarify, then surfaced as an inline ToleranceAdjustCard. Mirrors the
+  // original WorkflowBuilderJourney's tolerance state.
+  const [wfTolerance, setWfTolerance] = useState<ToleranceCardState>({
+    mode: 'percentage', percentage: 5, absolute: 100, enabled: true,
+  });
   // Tracks the latest workflow-clarify card id so we can advance it from
   // user keyboard input (option submit / skip).
   const wfClarifyMsgIdRef = useRef<string | null>(null);
+  // Guards the once-per-workflow effects (validate clarify finish, view-preview
+  // push, upload-modal auto-open) so they don't re-fire when messages mutate.
+  const wfValidateCompleteRef = useRef<string | null>(null);
+  const wfUploadModalSeededFor = useRef<string | null>(null);
+  const wfViewPreviewRevealedRef = useRef<string | null>(null);
 
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
@@ -3609,9 +3627,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       richData: { questions, phase, stepLabel, index: 0, answers: {} as Record<string, string> },
     }]);
   }, []);
-  const wfPushCard = useCallback((cardType: 'workflow-upload' | 'workflow-map' | 'workflow-review' | 'workflow-output') => {
+  const wfPushCard = useCallback((cardType: 'workflow-upload' | 'workflow-map' | 'workflow-review' | 'workflow-tolerance' | 'workflow-view-preview' | 'workflow-output') => {
+    // Phase-aware quick-reply chips that surface beneath the card.
+    // Routed through wfQuickReplies so the click pushes a canned assistant
+    // reply rather than starting a brand-new build via simulateResponse.
+    const phaseFollowUps: Record<string, string[]> = {
+      'workflow-upload': ['What columns do I need?', 'Link a data source', 'Show a sample format'],
+      'workflow-map': ['Recommend columns', 'Explain a column', 'Preview sample rows'],
+      'workflow-review': ['Check data quality', 'Preview schema', 'Explain extraction logic'],
+    };
     setMessages(m => {
-      // Dedup: only push if the latest card of this type isn't already present.
       if (m.length > 0 && m[m.length - 1].richType === cardType) return m;
       return [...m, {
         id: wfMakeId(),
@@ -3619,9 +3644,24 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         text: '',
         timestamp: new Date(),
         richType: cardType,
+        followUps: phaseFollowUps[cardType],
       }];
     });
   }, []);
+
+  // Canned assistant replies for workflow quick-reply chips. Mirrors the
+  // original AIAssistantPanel's quickReply onClick payloads.
+  const WF_QUICK_REPLIES: Record<string, string> = {
+    'What columns do I need?': 'For most inputs you\'ll want the join keys (PO #, Invoice #, Vendor ID), the amount column, and a date column to anchor the period. I\'ll flag any column whose type or distribution looks off.',
+    'Link a data source': 'Use the **+ Attach** button in the upload modal — you can pick from existing files, databases, APIs, cloud connectors, or last session\'s artefacts.',
+    'Show a sample format': 'Each required input has a sample row strip on the upload card. Hover the input name to see the expected column types and a 5-row preview from the most recent run.',
+    'Recommend columns': 'Keep all join keys, amount, and date by default. Toggle off only optional columns that aren\'t referenced by downstream steps — I\'ve marked those with a dim badge.',
+    'Explain a column': 'Pick any column in the mapping card and I\'ll describe what it holds, its inferred type, and how confidently it aligns with the target field.',
+    'Preview sample rows': 'Click **Preview** on a mapped input to inspect the first few rows alongside the alignment confidence.',
+    'Check data quality': 'I\'ll surface null ratios, duplicate rates, and out-of-range outliers per source — anything above 5% triggers a warning badge on the review card.',
+    'Preview schema': 'The review card lists every data source with its column roles (join key / amount / date / dimension). Expand a source to see the column-by-column type and example value.',
+    'Explain extraction logic': 'Each step on the review card shows the extraction it runs (type, description, dependencies). Expand a step to see the SQL-equivalent pseudocode I\'ll execute.',
+  };
 
   // Kick off a workflow build from a typed prompt. Mirrors the journey's
   // applyWorkflow but pushes everything into ChatView's messages array.
@@ -3679,8 +3719,49 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfHasPushedUploadRef.current = true;
     wfPushAssistant('Got it — locked those in. Drop the required data files into the upload window so I can map them.');
     wfPushCard('workflow-upload');
-    setWfUploadModalOpen(true);
+    // Auto-open the upload modal once per workflow id (guarded so it doesn't
+    // re-fire if the user closes the modal and the effect re-runs).
+    if (wfUploadModalSeededFor.current !== wfWorkflow.id) {
+      wfUploadModalSeededFor.current = wfWorkflow.id;
+      const t = window.setTimeout(() => setWfUploadModalOpen(true), 400);
+      return () => window.clearTimeout(t);
+    }
   }, [messages, wfWorkflow, wfPushAssistant, wfPushCard]);
+
+  // Validate-phase completion — fires after the user finishes the
+  // matching-logic + tolerance clarify cards pushed from StepReviewRun.
+  // Derives a percentage from the tolerance-preset answer, narrates the
+  // run, and pushes the interactive ToleranceAdjustCard. The card's
+  // onRun handler executes runWorkflow + cascades to view-preview/output.
+  useEffect(() => {
+    if (!wfWorkflow) return;
+    const validateMsg = [...messages].reverse().find(m => {
+      if (m.richType !== 'workflow-clarify') return false;
+      const d = m.richData as { phase?: string; questions?: ClarifyQuestion[]; index?: number };
+      return d.phase === 'validate' && (d.questions?.length ?? 0) > 0 && (d.index ?? 0) >= (d.questions?.length ?? 0);
+    });
+    if (!validateMsg) return;
+    if (wfValidateCompleteRef.current === validateMsg.id) return;
+    wfValidateCompleteRef.current = validateMsg.id;
+    const data = validateMsg.richData as { answers: Record<string, string> };
+    const pct = tolerancePctFromAnswer(data.answers?.['tolerance-preset']);
+    setWfTolerance(prev => ({ ...prev, mode: 'percentage', percentage: pct, enabled: true }));
+    wfPushAssistant(`Got it — running with **±${pct}%** amount tolerance.`);
+    wfPushCard('workflow-tolerance');
+    // Auto-fire the run after a short beat so the user sees the card
+    // settle before the run kicks off. The card's onRun handler also
+    // works manually for re-runs at different tolerances.
+    const t = setTimeout(async () => {
+      if (!wfWorkflow) return;
+      setWfRunning(true);
+      const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
+      setWfRunning(false);
+      setWfResult(res);
+      wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows, ${res.stats.find(s => s.label === 'Records Scanned')?.value ?? '—'} records scanned.`);
+      wfPushCard('workflow-view-preview');
+    }, 700);
+    return () => clearTimeout(t);
+  }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
 
   const wfAnswerClarify = useCallback((msgId: string, answerOrSkip: string | null) => {
     setMessages(prev => prev.map(m => {
@@ -3797,6 +3878,17 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     if (processingRef.current) return;
     processingRef.current = true;
     setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: question, timestamp: new Date() }]);
+    // Workflow quick-reply chips short-circuit the standard simulateResponse
+    // path — they just push a canned assistant reply so the in-thread build
+    // doesn't get reset by keyword-detection on the chip text.
+    const cannedReply = WF_QUICK_REPLIES[question];
+    if (cannedReply) {
+      setTimeout(() => {
+        wfPushAssistant(cannedReply);
+        processingRef.current = false;
+      }, 300);
+      return;
+    }
     simulateResponse(question);
     setTimeout(() => { processingRef.current = false; }, 2000);
   };
@@ -4625,39 +4717,156 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
 
-              {/* Starter prompts — mode-aware. Click fills the composer
-                  (no auto-send) so the user can edit before sending.
-                  Removes the blank-page anxiety on first visit. */}
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {(buildWorkflowMode
-                  ? [
-                      'Duplicate invoice detection',
-                      'Three-way match (PO / GRN / Invoice)',
-                      'Vendor master change monitoring',
-                      'Aged AP balances over 90 days',
-                    ]
-                  : [
-                      'Find duplicate invoices in Q1',
-                      'Top 5 vendors by spend YTD',
-                      'GL postings outside business hours',
-                      'Approvals above ₹1L without backup',
-                    ]
-                ).map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => {
-                      setInput(prompt);
-                      textareaRef.current?.focus();
-                      // Adjust textarea height on next paint.
-                      requestAnimationFrame(() => handleTextareaInput());
-                    }}
-                    className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
+              {/* Mode-aware empty-state body. Query mode keeps the compact
+                  starter-prompt chips for fast intent capture. Workflow mode
+                  swaps in the original journey's "Recent Workflows" list
+                  (SAMPLE_WORKFLOWS + WORKFLOWS) so the user can pick a
+                  template or pick up where they left off — same surface the
+                  standalone WorkflowBuilderJourney's Step 1 showed. */}
+              {buildWorkflowMode ? (
+                <section className="mt-8 w-full text-left">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h2 className="text-[14px] font-semibold text-ink-800">
+                        Recent Workflows
+                      </h2>
+                      <p className="text-[12px] text-ink-400 mt-0.5">Pick up where you left off</p>
+                    </div>
+                    <span className="text-[12px] text-ink-400 font-semibold">
+                      {WORKFLOWS.length + SAMPLE_WORKFLOWS.length} workflows
+                    </span>
+                  </div>
+
+                  <ul className="flex flex-col gap-2">
+                    {SAMPLE_WORKFLOWS.map((w) => (
+                      <li key={w.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Seed the composer with the template description
+                            // so the user can hit Send to enter the journey.
+                            setInput(w.description);
+                            textareaRef.current?.focus();
+                            requestAnimationFrame(() => handleTextareaInput());
+                          }}
+                          className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors cursor-pointer"
+                        >
+                          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+                            <Workflow size={16} className="text-brand-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[13px] font-semibold text-ink-800 truncate">
+                                {w.name}
+                              </span>
+                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
+                                Template
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-ink-500 truncate">{w.description}</p>
+                            <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
+                              <span className="inline-flex items-center gap-1">
+                                <FileText size={11} />
+                                {w.inputs.length} inputs
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Sparkles size={11} />
+                                {w.steps.length} steps
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 px-3 py-1.5">
+                              <Settings2 size={12} />
+                              Configure
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold px-3 py-1.5">
+                              <Play size={12} />
+                              Run
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+
+                    {WORKFLOWS.map((w) => (
+                      <li key={w.id}>
+                        <div className="group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors">
+                          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+                            <FileText size={16} className="text-brand-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[13px] font-semibold text-ink-800 truncate">
+                                {w.name}
+                              </span>
+                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
+                                {w.status === 'active' ? 'Active' : 'Draft'}
+                              </span>
+                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-brand-50 text-brand-700">
+                                {w.type}
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-ink-500 truncate">{w.desc}</p>
+                            <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock size={11} />
+                                Last run {w.lastRun}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Sparkles size={11} />
+                                {w.runs} runs
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <FileText size={11} />
+                                {w.steps.length} steps
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas text-[12px] font-semibold text-ink-600 px-3 py-1.5 transition-colors cursor-pointer"
+                            >
+                              <Settings2 size={12} />
+                              Configure
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
+                            >
+                              <Play size={12} />
+                              Run
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : (
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {[
+                    'Find duplicate invoices in Q1',
+                    'Top 5 vendors by spend YTD',
+                    'GL postings outside business hours',
+                    'Approvals above ₹1L without backup',
+                  ].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => {
+                        setInput(prompt);
+                        textareaRef.current?.focus();
+                        requestAnimationFrame(() => handleTextareaInput());
+                      }}
+                      className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
 
             </motion.div>
           </div>
@@ -4828,6 +5037,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           className="h-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
         >
           <div className={`max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-10 space-y-10 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
+            {/* Workflow journey stepper — visible whenever a workflow build
+                is underway in this thread. Mirrors the original
+                WorkflowBuilderJourney's Stepper, mapping the in-thread cards
+                pushed so far to Step 1 (Describe/Clarify) → Step 4 (Review). */}
+            {buildWorkflowMode && wfWorkflow && (() => {
+              const has = (t: string) => messages.some(m => m.richType === t);
+              const completed = new Set<JourneyStep>();
+              let current: JourneyStep = 1;
+              if (has('workflow-upload')) { completed.add(1); current = 2; }
+              if (has('workflow-map')) { completed.add(2); current = 3; }
+              if (has('workflow-review')) { completed.add(3); current = 4; }
+              if (has('workflow-output')) { completed.add(4); }
+              return (
+                <div className="sticky top-0 z-10 -mt-8 -mx-4 sm:-mx-6 mb-2 px-4 sm:px-6 pt-3 pb-3 bg-canvas/95 backdrop-blur-sm border-b border-canvas-border/60">
+                  <div className="flex items-center justify-center">
+                    <Stepper current={current} completed={completed} />
+                  </div>
+                </div>
+              );
+            })()}
             <AnimatePresence initial={false}>
               {messages.map((msg, msgIdx) => (
                 <motion.div
@@ -5275,23 +5504,65 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           result={wfResult}
                           mappings={wfMappings}
                           setMappings={setWfMappings}
-                          onValidate={async () => {
-                            // Run immediately for the converged surface — the
-                            // validate clarify step is intentionally collapsed
-                            // here to keep the in-thread flow compact.
+                          onValidate={() => {
+                            // Mirror the original journey: clicking Validate
+                            // opens a brief inline clarify (matching logic +
+                            // tolerance) BEFORE the run kicks off. The
+                            // validate-phase effect picks up the answers and
+                            // pushes the tolerance card + run.
                             if (!wfWorkflow) return;
-                            setWfRunning(true);
-                            wfPushAssistant(`Running **${wfWorkflow.name}**…`);
-                            const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
-                            setWfRunning(false);
-                            setWfResult(res);
-                            wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows.`);
-                            wfPushCard('workflow-output');
+                            wfPushAssistant("Before I kick off the run, I've spotted a couple of ambiguities — pick what fits below.");
+                            wfPushClarify([
+                              {
+                                id: 'matching-logic',
+                                title: 'What matching logic should I use?',
+                                options: [
+                                  'Exact field matching',
+                                  'Fuzzy match with tolerance',
+                                  'AI-powered pattern detection',
+                                  "Custom rules (I'll define)",
+                                ],
+                              },
+                              {
+                                id: 'tolerance-preset',
+                                title: 'What tolerance should I apply for amount comparisons?',
+                                options: ['Strict (±1%)', 'Moderate (±5%)', 'Relaxed (±10%)', 'Custom'],
+                              },
+                            ], 'validate', 'Step 4 · Validate Workflow');
                           }}
                           validateDisabled={wfRunning || !!wfResult}
                           onViewWorkspace={() => setShowArtifacts(true)}
                         />
                       ) : null
+                    ) : msg.richType === 'workflow-tolerance' ? (
+                      <ToleranceAdjustCard
+                        state={wfTolerance}
+                        onChange={setWfTolerance}
+                        onRun={async (next) => {
+                          if (!wfWorkflow) return;
+                          setWfTolerance(next);
+                          setWfRunning(true);
+                          const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
+                          setWfRunning(false);
+                          setWfResult(res);
+                          wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows, ${res.stats.find(s => s.label === 'Records Scanned')?.value ?? '—'} records scanned.`);
+                          wfPushCard('workflow-view-preview');
+                        }}
+                        onReset={() => setWfTolerance({ mode: 'percentage', percentage: 5, absolute: 100, enabled: true })}
+                        running={wfRunning}
+                        locked={!!wfResult}
+                      />
+                    ) : msg.richType === 'workflow-view-preview' ? (
+                      <ViewPreviewCard
+                        revealed={wfViewPreviewRevealedRef.current === msg.id}
+                        onClick={() => {
+                          wfViewPreviewRevealedRef.current = msg.id;
+                          // Force a re-render so revealed=true sticks; flip the
+                          // id ref via setMessages no-op (cheap nudge).
+                          setMessages(prev => [...prev]);
+                          wfPushCard('workflow-output');
+                        }}
+                      />
                     ) : msg.richType === 'workflow-output' ? (
                       wfWorkflow ? (
                         <StepOutputView
@@ -5815,6 +6086,51 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Workflow context chip — surfaces the active build (workflow
+                  name + current journey step) above the composer so the user
+                  always knows where they are in the multi-step flow. Mirrors
+                  the original AIAssistantPanel ContextChip. Dismissing clears
+                  the workflow state and exits build mode. */}
+              {buildWorkflowMode && wfWorkflow && !lockedAsWorkflow && (() => {
+                const has = (t: string) => messages.some(m => m.richType === t);
+                const stepLabel = has('workflow-output') ? 'Output'
+                  : has('workflow-review') ? 'Step 4 · Review'
+                  : has('workflow-map') ? 'Step 3 · Map'
+                  : has('workflow-upload') ? 'Step 2 · Upload'
+                  : 'Step 1 · Clarify';
+                return (
+                  <div className="mb-2 flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-brand-50 text-brand-600 shrink-0">
+                      <Workflow size={13} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-ink-800 truncate">{wfWorkflow.name}</div>
+                      <div className="text-[11.5px] text-ink-500 truncate">{stepLabel}</div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Exit workflow build"
+                      title="Exit workflow build"
+                      onClick={() => {
+                        setWfWorkflow(null);
+                        setWfFiles({});
+                        setWfMappings({});
+                        setWfAlignments({});
+                        setWfResult(null);
+                        setWfSaved(false);
+                        wfHasPushedUploadRef.current = false;
+                        wfValidateCompleteRef.current = null;
+                        wfUploadModalSeededFor.current = null;
+                      }}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                );
+              })()}
+
               <div
                 className="ai-border relative"
                 onDragEnter={handleDragEnter}
