@@ -10,9 +10,8 @@ import {
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
-  Clock, Play, Settings2,
 } from 'lucide-react';
-import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
+import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
@@ -40,7 +39,6 @@ import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
 import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
 import Stepper, { type JourneyStep } from '../concierge-workflow-builder/Stepper';
 import { ToleranceAdjustCard, ViewPreviewCard, type ToleranceCardState } from '../concierge-workflow-builder/AIAssistantPanel';
-import { SAMPLE_WORKFLOWS } from '../concierge-workflow-builder/sampleWorkflows';
 import {
   generateWorkflow as wfGenerate,
   getClarifyQuestions as wfGetClarify,
@@ -4717,120 +4715,38 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
 
-              {/* Mode-aware empty-state body. Query mode keeps the compact
-                  starter-prompt chips for fast intent capture. Workflow mode
-                  swaps in the original journey's "Recent Workflows" list
-                  (SAMPLE_WORKFLOWS + WORKFLOWS) so the user can pick a
-                  template or pick up where they left off — same surface the
-                  standalone WorkflowBuilderJourney's Step 1 showed. */}
-              {buildWorkflowMode ? (
-                <section className="mt-8 w-full text-left">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h2 className="text-[14px] font-semibold text-ink-800">
-                        Recent Workflows
-                      </h2>
-                      <p className="text-[12px] text-ink-400 mt-0.5">Pick up where you left off</p>
-                    </div>
-                    <span className="text-[12px] text-ink-400 font-semibold">
-                      {WORKFLOWS.length + SAMPLE_WORKFLOWS.length} workflows
-                    </span>
-                  </div>
-
-                  <ul className="flex flex-col gap-2">
-                    {SAMPLE_WORKFLOWS.map((w) => (
-                      <li key={w.id}>
-                        <div className="flex items-center gap-4 bg-canvas-elevated border border-canvas-border rounded-2xl px-4 py-3">
-                          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-                            <Workflow size={16} className="text-brand-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-[13px] font-semibold text-ink-800 truncate">
-                                {w.name}
-                              </span>
-                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
-                                Template
-                              </span>
-                            </div>
-                            <p className="text-[12px] text-ink-500 truncate">{w.description}</p>
-                            <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
-                              <span className="inline-flex items-center gap-1">
-                                <FileText size={11} />
-                                {w.inputs.length} inputs
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Sparkles size={11} />
-                                {w.steps.length} steps
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-
-                    {WORKFLOWS.map((w) => (
-                      <li key={w.id}>
-                        <div className="flex items-center gap-4 bg-canvas-elevated border border-canvas-border rounded-2xl px-4 py-3">
-                          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-                            <FileText size={16} className="text-brand-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-[13px] font-semibold text-ink-800 truncate">
-                                {w.name}
-                              </span>
-                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
-                                {w.status === 'active' ? 'Active' : 'Draft'}
-                              </span>
-                              <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-brand-50 text-brand-700">
-                                {w.type}
-                              </span>
-                            </div>
-                            <p className="text-[12px] text-ink-500 truncate">{w.desc}</p>
-                            <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
-                              <span className="inline-flex items-center gap-1">
-                                <Clock size={11} />
-                                Last run {w.lastRun}
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Sparkles size={11} />
-                                {w.runs} runs
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <FileText size={11} />
-                                {w.steps.length} steps
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : (
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  {[
-                    'Find duplicate invoices in Q1',
-                    'Top 5 vendors by spend YTD',
-                    'GL postings outside business hours',
-                    'Approvals above ₹1L without backup',
-                  ].map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => {
-                        setInput(prompt);
-                        textareaRef.current?.focus();
-                        requestAnimationFrame(() => handleTextareaInput());
-                      }}
-                      className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Starter prompts — mode-aware. Click fills the composer
+                  (no auto-send) so the user can edit before sending.
+                  Removes the blank-page anxiety on first visit. */}
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                {(buildWorkflowMode
+                  ? [
+                      'Duplicate invoice detection',
+                      'Three-way match (PO / GRN / Invoice)',
+                      'Vendor master change monitoring',
+                      'Aged AP balances over 90 days',
+                    ]
+                  : [
+                      'Find duplicate invoices in Q1',
+                      'Top 5 vendors by spend YTD',
+                      'GL postings outside business hours',
+                      'Approvals above ₹1L without backup',
+                    ]
+                ).map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => {
+                      setInput(prompt);
+                      textareaRef.current?.focus();
+                      requestAnimationFrame(() => handleTextareaInput());
+                    }}
+                    className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
             </motion.div>
           </div>
