@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, ClipboardCheck, Plus, Search, Calendar, Users, ChevronRight,
   Shield, ShieldCheck, Workflow, AlertTriangle, FileText, CheckCircle2, Clock, Eye,
-  X,
+  X, Send, Upload, Package,
 } from 'lucide-react';
 
 // Reused components
@@ -980,6 +980,7 @@ const ALL_TABS: TabDef[] = [
   { id: 'scope', label: 'Scope' },
   { id: 'racm', label: 'RACM' },
   { id: 'controls', label: 'Controls' },
+  { id: 'idr', label: 'IDR / Requests' },
   { id: 'workflows', label: 'Workflows' },
   { id: 'exceptions', label: 'Exception Management' },
   { id: 'report', label: 'Audit Report' },
@@ -993,6 +994,7 @@ function getVisibleTabs(scope: InternalAuditScopeState): TabDef[] {
   return ALL_TABS.filter(t => {
     if (t.id === 'racm') return showRacm;
     if (t.id === 'controls') return showControls;
+    if (t.id === 'idr') return showControls;
     if (t.id === 'workflows') return showWorkflows;
     if (t.id === 'exceptions') return showWorkflows;
     return true;
@@ -1193,6 +1195,287 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
               })}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── IDR / Requests Tab (Internal Audit) ───────────────────────────────
+
+interface IDRItem {
+  id: string;
+  name: string;
+  type: string;
+  source: string;
+  requestedFrom: string;
+  dueDate: string;
+  status: 'Draft' | 'Sent' | 'Pending' | 'Received' | 'Overdue';
+  filesReceived: number;
+}
+
+interface ReceivedFile {
+  name: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  mappedTo: string;
+  status: 'Received';
+}
+
+const IDR_MAPPINGS: Record<string, { items: string[]; type: string }> = {
+  'Three-Way PO/GRN/Invoice Matching': { items: ['PO Register', 'GRN Register', 'Invoice Register', 'Three-way match exception report', 'Tolerance approval matrix'], type: 'Transaction Data' },
+  'Vendor Master Change Approval': { items: ['Vendor master dump', 'Vendor change log', 'Bank account change approval evidence', 'Maker-checker approval matrix'], type: 'Master Data' },
+  'Duplicate Invoice Detection': { items: ['Invoice register', 'Vendor ledger', 'Payment register', 'Duplicate invoice exception report'], type: 'Transaction Data' },
+  'High-Value Payment Review': { items: ['Payment run file', 'Approval workflow report', 'Delegation of authority matrix'], type: 'Approval Evidence' },
+  'PO Dual Sign-Off Authorization': { items: ['PO authorization log', 'Sign-off evidence for high-value POs'], type: 'Approval Evidence' },
+};
+
+const IDR_STATUS_CLS: Record<string, string> = {
+  Draft: 'bg-gray-100 text-gray-600',
+  Sent: 'bg-blue-50 text-blue-700',
+  Pending: 'bg-amber-50 text-amber-700',
+  Received: 'bg-emerald-50 text-emerald-700',
+  Overdue: 'bg-red-50 text-red-700',
+};
+
+function IAIDRTab() {
+  const [idrItems, setIdrItems] = useState<IDRItem[]>(() => {
+    const items: IDRItem[] = [];
+    let idx = 0;
+    for (const [control, mapping] of Object.entries(IDR_MAPPINGS)) {
+      for (const docName of mapping.items) {
+        idx++;
+        items.push({
+          id: `idr-${idx}`,
+          name: docName,
+          type: mapping.type,
+          source: control,
+          requestedFrom: 'Process Owner',
+          dueDate: 'Jun 15, 2026',
+          status: 'Draft',
+          filesReceived: 0,
+        });
+      }
+    }
+    return items;
+  });
+  const [sentStatus, setSentStatus] = useState<'draft' | 'sent'>('draft');
+  const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
+  const [showSendModal, setShowSendModal] = useState(false);
+
+  const totalRequests = idrItems.length;
+  const sentCount = idrItems.filter(i => i.status === 'Sent').length;
+  const pendingCount = idrItems.filter(i => i.status === 'Pending').length;
+  const receivedCount = idrItems.filter(i => i.status === 'Received').length;
+  const overdueCount = idrItems.filter(i => i.status === 'Overdue').length;
+
+  const handleSend = () => {
+    setIdrItems(prev => prev.map(item => ({ ...item, status: 'Sent' as const })));
+    setSentStatus('sent');
+    setShowSendModal(false);
+  };
+
+  const handleSimulateUpload = () => {
+    const mockFiles: ReceivedFile[] = [
+      { name: 'PO_Register_Q1.xlsx', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'PO Register', status: 'Received' },
+      { name: 'GRN_Register_Q1.xlsx', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'GRN Register', status: 'Received' },
+      { name: 'Invoice_Register_Q1.xlsx', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'Invoice Register', status: 'Received' },
+      { name: 'Vendor_Master_Dump.xlsx', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'Vendor master dump', status: 'Received' },
+      { name: 'Vendor_Change_Log.xlsx', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'Vendor change log', status: 'Received' },
+      { name: 'Approval_Matrix.pdf', uploadedBy: 'Process Owner', uploadedAt: 'Today', mappedTo: 'Maker-checker approval matrix', status: 'Received' },
+    ];
+    setReceivedFiles(mockFiles);
+    setIdrItems(prev => prev.map(item => {
+      const matched = mockFiles.find(f => f.mappedTo === item.name);
+      if (matched) return { ...item, status: 'Received' as const, filesReceived: 1 };
+      return { ...item, status: 'Pending' as const };
+    }));
+  };
+
+  if (totalRequests === 0) {
+    return (
+      <div className="rounded-xl border border-border-light bg-white p-12 text-center">
+        <AlertTriangle size={32} className="text-gray-200 mx-auto mb-3" />
+        <p className="text-[14px] font-semibold text-text mb-1">No Controls Selected</p>
+        <p className="text-[12px] text-text-muted">Complete RACM and Controls review to generate a consolidated IDR list.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div>
+        <h3 className="text-[15px] font-bold text-text flex items-center gap-2"><Package size={15} className="text-primary" />IDR / Document Requests</h3>
+        <p className="text-[11px] text-text-muted mt-0.5">Consolidated information and document requests generated from audit controls.</p>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-5 gap-3">
+        {[
+          { label: 'Total Requests', value: totalRequests, color: 'text-text' },
+          { label: 'Sent', value: sentCount, color: 'text-blue-600' },
+          { label: 'Pending', value: pendingCount, color: 'text-amber-600' },
+          { label: 'Received', value: receivedCount, color: 'text-emerald-600' },
+          { label: 'Overdue', value: overdueCount, color: 'text-red-600' },
+        ].map(c => (
+          <div key={c.label} className="rounded-xl border border-border-light bg-white p-4 text-center">
+            <div className={`text-[20px] font-bold tabular-nums ${c.color}`}>{c.value}</div>
+            <div className="text-[10px] text-gray-400 font-medium mt-0.5">{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Send CTA Banner */}
+      {sentStatus === 'draft' ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Send size={14} className="text-blue-600" />
+            <div>
+              <p className="text-[12px] font-semibold text-blue-800">Ready to send consolidated IDR</p>
+              <p className="text-[10px] text-blue-600">{totalRequests} document requests across {Object.keys(IDR_MAPPINGS).length} controls</p>
+            </div>
+          </div>
+          <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+            <Send size={12} />Send Consolidated IDR
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center gap-2">
+          <CheckCircle2 size={14} className="text-emerald-600" />
+          <div>
+            <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to process owner. Waiting for document submission.</p>
+            <p className="text-[10px] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+        </div>
+      )}
+
+      {/* IDR Table */}
+      <div className="rounded-xl border border-border-light bg-white overflow-hidden">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-border-light bg-surface-2/30">
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider w-10">#</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Request Item</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Type</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Source Control</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Requested From</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Due Date</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider w-14">Files</th>
+            </tr>
+          </thead>
+          <tbody>
+            {idrItems.map((item, idx) => (
+              <tr key={item.id} className="border-b border-border-light last:border-0 hover:bg-surface-2/20 transition-colors">
+                <td className="px-4 py-2.5 text-[11px] text-gray-400 tabular-nums">{idx + 1}</td>
+                <td className="px-4 py-2.5 text-[11px] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-gray-300 shrink-0" />{item.name}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.type}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted max-w-[180px] truncate" title={item.source}>{item.source}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.requestedFrom}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.dueDate}</td>
+                <td className="px-4 py-2.5"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold ${IDR_STATUS_CLS[item.status]}`}>{item.status}</span></td>
+                <td className="px-4 py-2.5 text-[11px] text-text-muted tabular-nums text-center">{item.filesReceived}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Process Owner Submissions */}
+      {sentStatus === 'sent' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[13px] font-bold text-text flex items-center gap-1.5"><Upload size={13} className="text-primary" />Process Owner Submissions</h4>
+            {receivedFiles.length === 0 && (
+              <button onClick={handleSimulateUpload} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-[10px] font-semibold text-text cursor-pointer transition-colors flex items-center gap-1.5">
+                <Upload size={11} />Simulate Process Owner Upload
+              </button>
+            )}
+          </div>
+          {receivedFiles.length === 0 ? (
+            <div className="rounded-xl border border-border-light border-dashed bg-white p-8 text-center">
+              <Clock size={24} className="text-gray-200 mx-auto mb-2" />
+              <p className="text-[12px] font-semibold text-text mb-0.5">Waiting for Submissions</p>
+              <p className="text-[10px] text-text-muted">The process owner has been notified. Documents are expected by Jun 15, 2026.</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border-light bg-white overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-border-light bg-surface-2/30">
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">File Name</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Uploaded By</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Uploaded At</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Mapped To</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receivedFiles.map(f => (
+                    <tr key={f.name} className="border-b border-border-light last:border-0 hover:bg-surface-2/20 transition-colors">
+                      <td className="px-4 py-2.5 text-[11px] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-blue-400 shrink-0" />{f.name}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.uploadedBy}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.uploadedAt}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.mappedTo}</td>
+                      <td className="px-4 py-2.5"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">{f.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Send Modal */}
+      {showSendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSendModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+              <div>
+                <h2 className="text-[15px] font-bold text-text">Send Consolidated IDR Request</h2>
+                <p className="text-[11px] text-text-muted mt-0.5">Review and send document requests to the process owner.</p>
+              </div>
+              <button onClick={() => setShowSendModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Recipient</p>
+                  <p className="text-[12px] font-semibold text-text">Process Owner — Karan Mehta</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Due Date</p>
+                  <p className="text-[12px] font-semibold text-text">Jun 15, 2026</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Requests ({totalRequests} items)</p>
+                <div className="rounded-lg border border-border-light max-h-[240px] overflow-y-auto divide-y divide-border-light">
+                  {idrItems.map((item, idx) => (
+                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                      <span className="text-gray-400 tabular-nums w-5 text-right shrink-0">{idx + 1}.</span>
+                      <FileText size={11} className="text-gray-300 shrink-0" />
+                      <span className="font-medium text-text truncate">{item.name}</span>
+                      <span className="ml-auto text-[9px] text-text-muted shrink-0">{item.type}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
+              <button onClick={() => setShowSendModal(false)} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleSend} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+                <Send size={12} />Send Request
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1416,6 +1699,8 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
           onNavigateTab={(tabId) => setActiveTab(tabId === 'analysis' ? 'exceptions' : tabId)}
         />
       )}
+
+      {activeTab === 'idr' && <IAIDRTab />}
 
       {activeTab === 'workflows' && (
         <AutomationWorkflowsTab
