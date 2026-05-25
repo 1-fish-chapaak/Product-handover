@@ -1264,6 +1264,19 @@ function IAIDRTab() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemType, setNewItemType] = useState('Supporting Evidence');
+  const [newItemSource, setNewItemSource] = useState('Manual');
+  const addRequestItem = () => {
+    if (!newItemName.trim()) return;
+    setIdrItems(prev => [...prev, {
+      id: `idr-custom-${Date.now()}`, name: newItemName.trim(), type: newItemType,
+      source: newItemSource, requestedFrom: 'Process Owner', dueDate: 'Jul 15, 2026',
+      status: sentStatus === 'sent' ? 'Pending' : 'Draft', filesReceived: 0,
+    }]);
+    setNewItemName(''); setNewItemType('Supporting Evidence'); setNewItemSource('Manual'); setShowAddItem(false);
+  };
 
   const totalRequests = idrItems.length;
   const sentCount = idrItems.filter(i => i.status === 'Sent').length;
@@ -1338,17 +1351,27 @@ function IAIDRTab() {
               <p className="text-[10px] text-blue-600">{totalRequests} document requests across {Object.keys(IDR_MAPPINGS).length} controls</p>
             </div>
           </div>
-          <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
-            <Send size={12} />Send Consolidated IDR
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowAddItem(true)} className="px-3 py-2 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+              <Plus size={12} />Add Request Item
+            </button>
+            <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+              <Send size={12} />Send Consolidated IDR
+            </button>
+          </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center gap-2">
-          <CheckCircle2 size={14} className="text-emerald-600" />
-          <div>
-            <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to {recipientName || 'process owner'}{recipientEmail ? ` (${recipientEmail})` : ''}. Waiting for document submission.</p>
-            <p className="text-[10px] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <div>
+              <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to {recipientName || 'process owner'}{recipientEmail ? ` (${recipientEmail})` : ''}. Waiting for document submission.</p>
+              <p className="text-[10px] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
           </div>
+          <button onClick={() => setShowAddItem(true)} className="px-3 py-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-700 text-[10px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shrink-0">
+            <Plus size={10} />Add Item
+          </button>
         </div>
       )}
 
@@ -1431,6 +1454,48 @@ function IAIDRTab() {
       )}
 
       {/* Send Modal */}
+      {/* Add Request Item Modal */}
+      {showAddItem && (
+        <>
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-[1px] z-50" onClick={() => setShowAddItem(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-border-light overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
+              <h3 className="text-[14px] font-bold text-text">Add Request Item</h3>
+              <button onClick={() => setShowAddItem(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors"><X size={15} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-text-muted block mb-1">Request Item Name <span className="text-red-400">*</span></label>
+                <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="e.g. Bank reconciliation report"
+                  onKeyDown={e => { if (e.key === 'Enter') addRequestItem(); }}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-text-muted block mb-1">Request Type</label>
+                  <select value={newItemType} onChange={e => setNewItemType(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 cursor-pointer appearance-none">
+                    {['SOP / Policy', 'Transaction Data', 'Master Data', 'Approval Evidence', 'System Report', 'Walkthrough Document', 'Supporting Evidence'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-text-muted block mb-1">Source</label>
+                  <select value={newItemSource} onChange={e => setNewItemSource(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 cursor-pointer appearance-none">
+                    {['Scope', 'RACM', 'Control', 'Workflow', 'Manual'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-2">
+              <button onClick={() => setShowAddItem(false)} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
+              <button onClick={addRequestItem} disabled={!newItemName.trim()}
+                className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add Item</button>
+            </div>
+          </div>
+        </>
+      )}
+
       {showSendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowSendModal(false)} />
