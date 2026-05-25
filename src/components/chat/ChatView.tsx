@@ -3746,7 +3746,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfHasPushedMapRef.current = true;
     wfPushAssistant('Files verified — moving to data mapping.');
     wfPushCard('workflow-map');
-  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushCard]);
+    // Open the workspace artifact panel alongside the Map step — the
+    // original journey paired the mapping card with a right-side workspace
+    // showing per-source detail. Without this the chat embed feels half-
+    // configured at Step 3.
+    setArtifactMode('workflow');
+    setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
+    setShowArtifacts(true);
+  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType, setShowArtifacts]);
 
   // Validate-phase completion — fires after the user finishes the
   // matching-logic + tolerance clarify cards pushed from StepReviewRun.
