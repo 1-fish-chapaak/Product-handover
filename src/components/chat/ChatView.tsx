@@ -6073,51 +6073,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 )}
               </AnimatePresence>
 
-              {/* Workflow context chip — surfaces the active build (workflow
-                  name + current journey step) above the composer so the user
-                  always knows where they are in the multi-step flow. Mirrors
-                  the original AIAssistantPanel ContextChip. Dismissing clears
-                  the workflow state and exits build mode. */}
-              {buildWorkflowMode && wfWorkflow && !lockedAsWorkflow && (() => {
-                const has = (t: string) => messages.some(m => m.richType === t);
-                const stepLabel = has('workflow-output') ? 'Output'
-                  : has('workflow-review') ? 'Step 4 · Review'
-                  : has('workflow-map') ? 'Step 3 · Map'
-                  : has('workflow-upload') ? 'Step 2 · Upload'
-                  : 'Step 1 · Clarify';
-                return (
-                  <div className="mb-2 flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2">
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-brand-50 text-brand-600 shrink-0">
-                      <Workflow size={13} />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-ink-800 truncate">{wfWorkflow.name}</div>
-                      <div className="text-[11.5px] text-ink-500 truncate">{stepLabel}</div>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Exit workflow build"
-                      title="Exit workflow build"
-                      onClick={() => {
-                        setWfWorkflow(null);
-                        setWfFiles({});
-                        setWfMappings({});
-                        setWfAlignments({});
-                        setWfResult(null);
-                        setWfSaved(false);
-                        wfHasPushedClarifyRef.current = false;
-                        wfHasPushedMapRef.current = false;
-                        wfValidateCompleteRef.current = null;
-                        wfUploadModalSeededFor.current = null;
-                      }}
-                      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                );
-              })()}
-
               <div
                 className="ai-border relative"
                 onDragEnter={handleDragEnter}
