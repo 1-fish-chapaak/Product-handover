@@ -73,7 +73,6 @@ interface ChatMessage {
     | 'clarification'
     | 'save-workflow-prompt'
     | 'workflow-checkpoint'
-    | 'qna-plan'
     | 'error'
     // Workflow-build rich types — render inside this same chat thread,
     // not in a separate journey body. Driven by ChatView state.
@@ -3216,43 +3215,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       return;
     }
 
-    schedule(() => {
-      if (buildWorkflowMode) {
-        // Workflow-mode plan-approve gate (ported from auditify-app aa19493).
-        // In workflow mode, surface the plan and wait for explicit Approve / Revise
-        // before kicking off the audit run. Query mode auto-approves below.
-        setMessages(prev => [...prev, {
-          id: `msg-qna-plan-${Date.now()}`,
-          role: 'assistant',
-          text: '',
-          timestamp: new Date(),
-          richType: 'qna-plan',
-          richData: {
-            planText: 'Plan ready. Review the steps in the Workspace, then approve to run the audit or revise to adjust your inputs.',
-          },
-        }]);
-      } else {
-        startAuditQueryRun();
-      }
-    }, 240);
-  };
-
-  // ─── Approve / Revise the workflow-mode plan-gate (qna-plan messages) ───
-  const handleApprovePlan = (msgId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== msgId));
-    startAuditQueryRun();
-  };
-
-  const handleRevisePlan = (msgId: string) => {
-    setMessages(prev => [
-      ...prev.filter(m => m.id !== msgId),
-      {
-        id: `msg-plan-revise-${Date.now()}`,
-        role: 'assistant',
-        text: 'Got it. Revise your inputs in the message box and re-send.',
-        timestamp: new Date(),
-      },
-    ]);
+    // Clarification submitted — run the audit query directly. The legacy
+    // workflow-mode qna-plan gate ("Approve & run / Revise") is dropped:
+    // workflow builds now have their own Approve & Run on the Output
+    // Preview card, so a separate plan gate after a follow-up query is
+    // redundant.
+    schedule(() => startAuditQueryRun(), 240);
   };
 
   // ─── Workflow Clarification Complete Handler ───
@@ -5161,30 +5129,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             {(msg.richData as unknown as ClarificationData).intro}
                           </div>
                         )}
-                      </div>
-                    ) : msg.richType === 'qna-plan' ? (
-                      // Workflow-mode plan-approve gate — Approve runs the audit,
-                      // Revise drops the plan and returns control to the composer.
-                      <div className="space-y-3 w-full">
-                        {(msg.richData as { planText?: string })?.planText && (
-                          <div className="text-[14px] leading-[1.6] text-ink-700">
-                            {(msg.richData as { planText?: string }).planText}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            onClick={() => handleApprovePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
-                          >
-                            <CheckCircle size={13} /> Approve & run
-                          </button>
-                          <button
-                            onClick={() => handleRevisePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[12px] font-semibold text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
-                          >
-                            <Pencil size={12} /> Revise
-                          </button>
-                        </div>
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
                       // ~40px of breathing room directly below the loader.
