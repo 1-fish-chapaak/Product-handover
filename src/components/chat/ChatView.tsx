@@ -3752,16 +3752,17 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       timestamp: new Date(),
     }]);
 
-    // Open the workspace artifact panel alongside the processing
-    // experience — the user can watch the per-source schema land while
-    // the assistant runs through its steps.
+    // Lock the artifact mode to workflow now, but DON'T open the panel
+    // yet — opening it instantly would reveal a fully-populated schema
+    // before the processing trail has finished, which feels fake. The
+    // panel opens together with the clarify card after the wait.
     setArtifactMode('workflow');
     setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
-    setShowArtifacts(true);
 
     // Step 2: after a brief delay, swap the processing message for a
-    // confirmation and push the clarify card. NOTE: no cleanup return
-    // here — the messages-change re-fire would cancel the schedule.
+    // confirmation, push the clarify card, and reveal the side panel.
+    // NOTE: no cleanup return here — the messages-change re-fire would
+    // cancel the schedule.
     window.setTimeout(() => {
       setIsTyping(false);
       setMessages(m => m.map(msg =>
@@ -3771,6 +3772,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       ));
       const questions = wfGetClarify(wfWorkflow);
       wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
+      setShowArtifacts(true);
     }, 2400);
   }, [wfWorkflow, wfFiles, messages, wfPushClarify, setArtifactMode, setWorkflowType, setShowArtifacts]);
 
