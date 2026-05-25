@@ -3736,10 +3736,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setWfDraftAttachments([]);
 
     // Upload-first flow: introduce the workflow, push the Upload card,
-    // and auto-open the data picker. Clarification only happens AFTER the
-    // user has attached files — that way the questions are answered with
-    // real source context, not abstract guesses.
-    const intro = `I've analyzed your prompt and built the **${draft.name}** workflow. To begin, drop the required data files in the upload window — I'll ask a few quick clarifications right after.`;
+    // and auto-open the data picker — but ONLY if no files came in with
+    // the prompt. When the user attached files/sources via the composer
+    // + button before sending, those land in seededFiles and the
+    // Upload → Clarify effect picks up from there immediately.
+    const hasPreAttachedFiles = Object.values(seededFiles).some(arr => arr.length > 0);
+    const intro = hasPreAttachedFiles
+      ? `I've analyzed your prompt and built the **${draft.name}** workflow with the **${attachments.length} source${attachments.length === 1 ? '' : 's'}** you attached. Verifying and asking a few quick clarifications now.`
+      : `I've analyzed your prompt and built the **${draft.name}** workflow. To begin, drop the required data files in the upload window — I'll ask a few quick clarifications right after.`;
     setIsTyping(false);
     wfPushAssistant(intro);
     wfPushCard('workflow-upload');
@@ -3749,9 +3753,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // panel. Doesn't auto-OPEN the panel, just sets the mode.
     setArtifactMode('workflow');
     setWorkflowType?.(detectWorkflowType(draft.name));
-    if (wfUploadModalSeededFor.current !== draft.id) {
+    if (!hasPreAttachedFiles && wfUploadModalSeededFor.current !== draft.id) {
       wfUploadModalSeededFor.current = draft.id;
       window.setTimeout(() => setWfUploadModalOpen(true), 400);
+    } else if (hasPreAttachedFiles) {
+      // Mark the modal as already-seen for this workflow so the
+      // Upload → Clarify effect's nudge logic doesn't pop the modal
+      // open after the processing trail completes.
+      wfUploadModalSeededFor.current = draft.id;
     }
   }, [wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType]);
 
@@ -3959,7 +3968,17 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // so the new prompt gets a clean run. This guarantees the Workflow
     // toggle never silently downgrades to the query path.
     if (buildWorkflowMode && trimmed) {
-      const attachmentsForWorkflow: UploadedFile[] = files.map(f => ({ name: f.name, size: f.size }));
+      // Include BOTH fresh uploads (composer + button → file picker) AND
+      // linked sources (composer + button → All Data / DB picks) as
+      // pre-attached seeds for the workflow build. Linked sources carry
+      // a flag so the upload card can render them with a "linked"
+      // affordance instead of a file size.
+      const attachmentsForWorkflow: UploadedFile[] = [
+        ...files.map(f => ({ name: f.name, size: f.size })),
+        ...attachedSources
+          .filter((s): s is Extract<AttachmentSelection, { kind: 'source' }> => s.kind === 'source')
+          .map(s => ({ name: s.name, size: 0, linkedSource: true })),
+      ];
       setInput('');
       setFiles([]);
       setAttachedSources([]);
