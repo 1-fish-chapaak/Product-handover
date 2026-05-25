@@ -1193,16 +1193,8 @@ export default function DataSourcePanel({
                               {step.description}
                             </p>
                             {relevant.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {relevant.map((input) => (
-                                  <span
-                                    key={input.id}
-                                    className="inline-flex items-center gap-1.5 rounded-md bg-canvas border border-canvas-border px-2 py-0.5 text-[12px] text-ink-700"
-                                  >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0" />
-                                    {input.name}
-                                  </span>
-                                ))}
+                              <div className="mt-2">
+                                <StepFilesAndColumns inputs={relevant} />
                               </div>
                             )}
                           </div>
@@ -1242,6 +1234,103 @@ const PY_KEYWORDS = new Set([
 // Generated-code section — mirrors the query ArtifactPanel's CodeTab UI:
 // CollapsibleSection-style header (icon + title + chevron) over a dark
 // code block with Copy / Download icon buttons anchored top-right.
+// Per-step files + columns block. Scales for "so many files and columns
+// used": each input is its own row with file icon + name + chip count,
+// and a collapsible column list with show-more if the column count is
+// large. Collapsed by default to keep step rows compact; user expands
+// any file they care about.
+function StepFilesAndColumns({ inputs }: { inputs: { id: string; name: string; type: string; columns?: string[] }[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [showAllExpanded, setShowAllExpanded] = useState<Set<string>>(new Set());
+  const COLLAPSED_COLUMN_CAP = 6;
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleShowAll = (id: string) => setShowAllExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  return (
+    <div className="rounded-lg border border-canvas-border bg-canvas/40 overflow-hidden">
+      <ul className="flex flex-col">
+        {inputs.map((input, i) => {
+          const cols = input.columns ?? [];
+          const isExpanded = expanded.has(input.id);
+          const isShowAll = showAllExpanded.has(input.id);
+          const Icon = typeIcon(input.type);
+          const visibleCols = isShowAll ? cols : cols.slice(0, COLLAPSED_COLUMN_CAP);
+          const hiddenCount = cols.length - visibleCols.length;
+          return (
+            <li
+              key={input.id}
+              className={i > 0 ? 'border-t border-canvas-border/60' : ''}
+            >
+              <button
+                type="button"
+                onClick={() => toggle(input.id)}
+                aria-expanded={isExpanded}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-canvas-elevated transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+              >
+                <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}>
+                  <Icon size={11} />
+                </div>
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink-800 truncate">{input.name}</span>
+                  <span className="text-[11px] font-mono text-ink-500 tabular-nums shrink-0">
+                    {cols.length} col{cols.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400 shrink-0">
+                  {input.type}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={`text-ink-400 shrink-0 transition-transform duration-150 ${isExpanded ? '' : '-rotate-90'}`}
+                />
+              </button>
+              {isExpanded && cols.length > 0 && (
+                <div className="px-3 pb-2.5 pt-0.5">
+                  <div className="flex flex-wrap gap-1">
+                    {visibleCols.map(col => (
+                      <span
+                        key={col}
+                        className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
+                      >
+                        {col}
+                      </span>
+                    ))}
+                    {hiddenCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleShowAll(input.id)}
+                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                      >
+                        +{hiddenCount} more
+                      </button>
+                    )}
+                    {isShowAll && cols.length > COLLAPSED_COLUMN_CAP && (
+                      <button
+                        type="button"
+                        onClick={() => toggleShowAll(input.id)}
+                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function CodeSection({ code, filename }: { code: string; filename: string }) {
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState(false);
