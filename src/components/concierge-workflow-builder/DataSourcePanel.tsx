@@ -633,40 +633,81 @@ export default function DataSourcePanel({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 items-start mb-4">
+            {/* Folder rows — same shape as the Files section: primary row
+                + footer with file-count + Open / Chat actions. */}
+            <div
+              className="grid gap-3 mb-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
+            >
               {INPUT_FILE_FOLDERS.map((folder) => {
                 const expanded = expandedInputFolderIds.has(folder.id);
                 return (
                   <div
                     key={folder.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 transition-colors"
+                    className="group w-full rounded-lg bg-canvas-elevated border border-canvas-border hover:border-brand-200 transition-colors"
                   >
-                    {/* Header row */}
-                    <div className="flex items-start gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
-                        {expanded ? <FolderOpen size={14} /> : <FolderClosed size={14} />}
+                    {/* Primary row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleInputFolderExpansion(folder.id)}
+                      aria-expanded={expanded}
+                      className="w-full flex items-center gap-3 px-4 h-16 rounded-t-lg hover:bg-brand-50/30 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                      aria-label={expanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
+                    >
+                      <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                        {expanded ? <FolderOpen size={16} /> : <FolderClosed size={16} />}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-ink-800 leading-tight truncate">
-                          {folder.name}
-                        </div>
-                        <div className="text-[12px] text-ink-400 leading-tight truncate mt-0.5">
-                          {folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold text-ink-900 truncate">{folder.name}</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                          PDF · <span className="text-ink-400">{folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[12px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass('pdf'),
                         ].join(' ')}
                       >
                         PDF
                       </span>
+                    </button>
+
+                    {/* Footer row */}
+                    <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
+                      <span className="text-[11px] text-ink-500 shrink-0">
+                        <span className="font-mono tabular-nums text-ink-700">{folder.fileCount}</span> file{folder.fileCount === 1 ? '' : 's'}:
+                      </span>
+                      <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={folder.files.map(f => f.name).join(', ')}>
+                        {folder.files.map(f => f.name).join(', ') || '(empty)'}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleInputFolderExpansion(folder.id)}
+                          aria-label={expanded ? `Hide files in ${folder.name}` : `Show files in ${folder.name}`}
+                          title={expanded ? 'Hide files' : 'Show files'}
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          {expanded ? <ChevronDown size={11} strokeWidth={2.25} /> : <ChevronRight size={11} strokeWidth={2.25} />}
+                          {expanded ? 'Hide' : 'Show'}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Discuss ${folder.name} in chat`}
+                          title="Describe in chat"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          <MessageSquare size={11} strokeWidth={2.25} />
+                          Chat
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Expanded file list */}
                     {expanded && (
                       folder.files.length > 0 ? (
-                        <ul className="flex flex-col gap-1.5">
+                        <ul className="flex flex-col gap-1.5 border-t border-canvas-border/70 px-4 py-3">
                           {folder.files.map((f) => {
                             const Icon = typeIcon(f.type);
                             return (
@@ -685,31 +726,13 @@ export default function DataSourcePanel({
                           })}
                         </ul>
                       ) : (
-                        <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[12px] text-ink-400">
-                          Empty folder
+                        <div className="border-t border-canvas-border/70 px-4 py-3">
+                          <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[12px] text-ink-400">
+                            Empty folder
+                          </div>
                         </div>
                       )
                     )}
-
-                    <button
-                      type="button"
-                      onClick={() => toggleInputFolderExpansion(folder.id)}
-                      aria-expanded={expanded}
-                      aria-label={expanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
-                      className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[12px] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
-                    >
-                      {expanded ? (
-                        <>
-                          <ChevronDown size={12} />
-                          Hide files
-                        </>
-                      ) : (
-                        <>
-                          <ChevronRight size={12} />
-                          Show files
-                        </>
-                      )}
-                    </button>
                   </div>
                 );
               })}
