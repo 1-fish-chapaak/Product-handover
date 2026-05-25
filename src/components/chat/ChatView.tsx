@@ -1545,101 +1545,38 @@ function WorkflowOutputPreviewCard({
   onConfirm: () => void;
   onViewWorkspace: () => void;
 }) {
-  // Mirrors the query OutputConfigTab — same KpiTile (canonical Dashboard
-  // KPI tile), same plain section header style, same grid sizing. Charts
-  // and Tables follow the same simple, unornamented list pattern.
-  const kpis = [
-    { label: 'Records scanned', value: '12.2K' },
-    { label: 'Flags raised',    value: '8' },
-    { label: 'Amount at risk',  value: '₹6.16L' },
-    { label: 'Match confidence',value: '94%' },
-  ];
-  const charts = [
-    { label: 'Exception Severity', type: 'donut' as const, detail: 'Breakdown of flagged records by High / Medium / Low severity.' },
-    { label: 'Trend over Time',    type: 'line' as const,  detail: 'Daily exception count across the selected date range.' },
-    { label: 'Top Vendors by Risk',type: 'bar' as const,   detail: 'Highest-risk vendors ranked by aggregate flagged amount.' },
-  ];
-  const tables = [
-    { label: 'Detailed Exception Report', detail: 'Full row-level output with the join keys, amounts, dates, and the rule each row tripped.' },
-    ...workflow.inputs.slice(0, 2).map(i => ({
-      label: `Unmatched ${i.name} rows`,
-      detail: `${i.name} records with no counterpart after the configured matching logic.`,
-    })),
-    { label: 'Rule Audit Trail', detail: 'For each rule: rows evaluated, rows flagged, runtime, confidence.' },
-  ];
-
+  const { addToast } = useToast();
+  // Reuse the same fixture the query audit-result uses so the preview
+  // surface looks identical to what the user actually gets after a run:
+  // 8 KpiTiles in a 2/4-col grid, the real ChartGroup with its widget
+  // shell, and a real ResultsTable preview with Open / Download actions.
   return (
-    <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-      <div className="px-5 py-5 space-y-6">
-        {/* KPIs — same KpiTile + grid sizing as the query OutputConfigTab */}
-        <section>
-          <header className="mb-4">
-            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Dashboard KPIs</h3>
-            <p className="text-[12.5px] text-ink-500 mt-0.5">
-              Sample values from a representative run of {workflow.name}
-            </p>
-          </header>
-          <div className={`grid gap-4 ${kpis.length >= 4 ? 'grid-cols-2' : kpis.length === 3 ? 'grid-cols-3' : kpis.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {kpis.map((k, i) => (
-              <KpiTile key={`${k.label}-${i}`} label={k.label} value={k.value} index={i} />
-            ))}
-          </div>
-        </section>
-
-        {/* Charts */}
-        <section>
-          <header className="mb-3">
-            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Charts</h3>
-            <p className="text-[12.5px] text-ink-500 mt-0.5">Visuals that will appear on the dashboard</p>
-          </header>
-          <ul className="flex flex-col gap-2">
-            {charts.map((c, i) => {
-              const ChartIcon = c.type === 'donut' ? PieChart : c.type === 'line' ? LineChart : BarChart3;
-              return (
-                <li
-                  key={i}
-                  className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
-                >
-                  <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                    <ChartIcon size={14} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold text-ink-900 truncate">{c.label}</div>
-                    <div className="text-[12px] text-ink-500 truncate">{c.detail}</div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        {/* Tables */}
-        <section>
-          <header className="mb-3">
-            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Tables</h3>
-            <p className="text-[12.5px] text-ink-500 mt-0.5">Row-level reports produced by the run</p>
-          </header>
-          <ul className="flex flex-col gap-2">
-            {tables.map((t, i) => (
-              <li
-                key={i}
-                className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
-              >
-                <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                  <FileText size={14} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-ink-900 truncate">{t.label}</div>
-                  <div className="text-[12px] text-ink-500 truncate">{t.detail}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+    <div className="space-y-4 w-full">
+      <div className="text-[14px] leading-[1.6] text-ink-700 max-w-[66ch]">
+        Here's a preview of what <span className="font-semibold text-ink-900">{workflow.name}</span> will produce when you run it. KPIs, charts, and the results table all use the same dashboard widgets as a live query result.
       </div>
 
-      {/* Footer actions */}
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-canvas-border bg-canvas/40">
+      {/* KPI scoreboard — same grid + KpiTile as audit-result */}
+      <div role="list" aria-label="Sample results" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {AUDIT_RESULT.kpis.map((kpi, ki) => (
+          <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
+        ))}
+      </div>
+
+      {/* Charts — same ChartGroup used by audit-result */}
+      <ChartGroup charts={AUDIT_RESULT.charts} embedded />
+
+      {/* Table preview — same ResultsTable used by audit-result */}
+      <ResultsTable
+        columns={AUDIT_RESULT.table.columns}
+        rows={AUDIT_RESULT.table.rows}
+        totalRows={AUDIT_RESULT.table.totalRows}
+        onOpen={() => addToast({ type: 'info', message: 'Opening preview in a new view…' })}
+        onDownload={() => addToast({ type: 'success', message: 'Sample CSV download started.' })}
+      />
+
+      {/* Confirm-and-proceed footer */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-canvas-border">
         <button
           type="button"
           onClick={onViewWorkspace}
