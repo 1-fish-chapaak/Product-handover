@@ -5502,8 +5502,40 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <WorkflowOutputPreviewCard
                           workflow={wfWorkflow}
                           onConfirm={() => {
-                            wfPushAssistant('Mappings confirmed — opening review.');
-                            wfPushCard('workflow-review');
+                            // Approve & Run: push a brief running trail
+                            // then materialise the audit-result message
+                            // (KPI grid + chart + table) directly. Skips
+                            // the validate / tolerance steps — the user
+                            // already approved the preview spec.
+                            if (!wfWorkflow) return;
+                            const runningId = wfMakeId();
+                            setIsTyping(true);
+                            setMessages(m => [...m, {
+                              id: runningId,
+                              role: 'assistant',
+                              text: 'Running the workflow…',
+                              thinking: [
+                                `Aggregating EDC records across ${wfWorkflow.inputs.length} source${wfWorkflow.inputs.length === 1 ? '' : 's'}`,
+                                'Joining on payment date + concat key',
+                                'Computing variance and matching counts',
+                                'Building dashboard KPIs, charts, and tables',
+                              ],
+                              timestamp: new Date(),
+                            }]);
+                            window.setTimeout(() => {
+                              setIsTyping(false);
+                              setMessages(m => m.map(msg =>
+                                msg.id === runningId
+                                  ? {
+                                      ...msg,
+                                      text: `**${wfWorkflow.name}** finished — surfaced **8 high-confidence findings** across the reconciliation. Headline KPIs, charts, and the row-level table are below; the full plan, SQL, and sources are in the Workspace on the right.`,
+                                      thinking: undefined,
+                                      richType: 'audit-result',
+                                      richData: AUDIT_RESULT,
+                                    }
+                                  : msg,
+                              ));
+                            }, 2200);
                           }}
                           onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
                         />

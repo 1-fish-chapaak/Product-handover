@@ -42,33 +42,15 @@ test('workflow runs with only 1 file attached', async ({ page }) => {
   for (let i = 0; i < 4; i++) { await page.keyboard.press('1'); await page.waitForTimeout(400); }
   await snap(page, 'C-clarify-done');
 
-  // Map step → Confirm
+  // Map step → Approve & Run → runs the workflow directly
   await expect(page.getByText(/moving to data mapping/i)).toBeVisible({ timeout: 6000 });
   await expect(page.getByRole('button', { name: /Approve.*Run/i })).toBeVisible({ timeout: 6000 });
   await snap(page, 'D-map-card');
   await page.getByRole('button', { name: /Approve.*Run/i }).click();
   await page.waitForTimeout(600);
 
-  // Review → Validate
-  await expect(page.getByRole('button', { name: /Validate workflow/i })).toBeVisible({ timeout: 6000 });
-  await page.getByRole('button', { name: /Validate workflow/i }).click();
-  await page.waitForTimeout(600);
-
-  // Validate clarify
-  await expect(page.getByRole('option', { name: /Exact field matching/i })).toBeVisible({ timeout: 6000 });
-  await page.keyboard.press('1');
-  await page.waitForTimeout(400);
-  await expect(page.getByRole('option', { name: /Strict \(±1%\)/i })).toBeVisible({ timeout: 6000 });
-  await page.keyboard.press('1');
-  await page.waitForTimeout(800);
-
-  // Run + View Preview + Output
-  await expect(page.getByText(/running with.*tolerance/i)).toBeVisible({ timeout: 6000 });
-  await snap(page, 'E-tolerance-card');
-  await expect(page.getByRole('button', { name: /View Preview/i })).toBeVisible({ timeout: 15000 });
-  await snap(page, 'F-view-preview');
-  await page.getByRole('button', { name: /View Preview/i }).click();
-  await page.waitForTimeout(600);
-  await expect(page.getByRole('button', { name: /Save Workflow/i })).toBeVisible({ timeout: 6000 });
-  await snap(page, 'G-output-1-file');
+  // Audit-result surfaces — KPI grid + chart + table
+  await expect(page.getByText(/finished — surfaced/i)).toBeVisible({ timeout: 6000 });
+  await snap(page, 'E-result-1-file');
+  await expect(page.getByText('Records scanned', { exact: false }).first()).toBeVisible({ timeout: 4000 });
 });

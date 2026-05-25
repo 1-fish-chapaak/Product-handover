@@ -65,38 +65,20 @@ test('upload-first workflow build', async ({ page }) => {
   await expect(page.getByText(/Clarifications locked in.*moving to data mapping/i)).toBeVisible({ timeout: 6000 });
   await snap(page, 'D-map-card');
 
-  // 5. Confirm map
+  // 5. Approve & Run → runs the workflow directly, surfacing the
+  //    audit-result message (KPI grid + chart + table).
   await page.getByRole('button', { name: /Approve.*Run/i }).click();
   await page.waitForTimeout(600);
-  await snap(page, 'E-map-confirmed');
+  await expect(page.getByText(/Running the workflow/i)).toBeVisible({ timeout: 4000 });
+  await snap(page, 'E-running');
 
-  // 6. Review → Validate
-  await expect(page.getByText(/Mappings confirmed/i)).toBeVisible({ timeout: 6000 });
-  await snap(page, 'F-review-card');
-  await page.getByRole('button', { name: /Validate workflow/i }).click();
-  await page.waitForTimeout(600);
-
-  // 7. Validate clarify (matching logic + tolerance)
-  await expect(page.getByRole('option', { name: /Exact field matching/i })).toBeVisible({ timeout: 6000 });
-  await snap(page, 'G-validate-clarify-q1');
-  await page.keyboard.press('1');
-  await page.waitForTimeout(400);
-  await expect(page.getByRole('option', { name: /Strict \(±1%\)/i })).toBeVisible({ timeout: 6000 });
-  await snap(page, 'H-validate-clarify-q2');
-  await page.keyboard.press('1');
-  await page.waitForTimeout(800);
-
-  // 8. Tolerance card + run + View Preview + Output + Save
-  await expect(page.getByText(/running with.*tolerance/i)).toBeVisible({ timeout: 6000 });
-  await snap(page, 'I-tolerance-card');
-  await expect(page.getByRole('button', { name: /View Preview/i })).toBeVisible({ timeout: 15000 });
-  await snap(page, 'J-view-preview');
-  await page.getByRole('button', { name: /View Preview/i }).click();
-  await page.waitForTimeout(600);
-  await snap(page, 'K-output-card');
-  await page.getByRole('button', { name: /Save Workflow/i }).click();
-  await page.waitForTimeout(600);
-  await snap(page, 'L-save-modal');
+  // 6. Audit-result surfaces — KPI tiles, ChartGroup, ResultsTable
+  await expect(page.getByText(/finished — surfaced/i)).toBeVisible({ timeout: 6000 });
+  await snap(page, 'F-result');
+  // KPI tile sanity
+  await expect(page.getByText('Records scanned', { exact: false }).first()).toBeVisible({ timeout: 4000 });
+  // Chart group title
+  await expect(page.getByText(/Findings by/i).first()).toBeVisible({ timeout: 4000 });
 });
 
 test('upload-nudge if user closes modal without attaching', async ({ page }) => {
