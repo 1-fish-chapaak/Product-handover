@@ -243,6 +243,72 @@ export function racmRowsForProcess(process: ProcessCode): RACMRow[] {
   return RACM_LIBRARY.filter(r => r.process === process);
 }
 
+/** Generate RACM rows for a process. Returns existing library rows if present, otherwise creates process-appropriate mock data. */
+export function generateRacmForProcess(process: ProcessCode): RACMRow[] {
+  const existing = racmRowsForProcess(process);
+  if (existing.length > 0) return existing;
+
+  const templates: Record<string, { subProcesses: string[]; risks: string[]; controls: string[] }> = {
+    O2C: {
+      subProcesses: ['Order Entry', 'Credit Management', 'Invoicing', 'Revenue Recognition', 'Collections'],
+      risks: ['Unauthorized sales order entry', 'Credit limit exceeded without approval', 'Invoice pricing discrepancy', 'Revenue recognized in wrong period', 'Uncollected receivables write-off without approval', 'Duplicate invoice generation', 'Sales returns not recorded timely', 'Customer master data changes without authorization'],
+      controls: ['Sales order requires manager approval above threshold', 'Credit limit override requires credit manager sign-off', 'Invoice auto-matched against confirmed sales order and delivery', 'Revenue cutoff reconciliation at month-end', 'AR aging review and escalation process', 'System prevents duplicate invoice for same delivery', 'Sales return authorization and credit note workflow', 'Customer master change log with dual approval'],
+    },
+    R2R: {
+      subProcesses: ['Journal Entries', 'Account Reconciliation', 'Financial Close', 'Intercompany', 'Consolidation'],
+      risks: ['Unauthorized manual journal entries posted', 'Unreconciled balance sheet accounts', 'Delayed financial close', 'Intercompany imbalances unresolved', 'Consolidation adjustments not reviewed', 'Recurring JE template errors', 'Bank reconciliation exceptions unresolved', 'Materiality threshold override'],
+      controls: ['Manual JE requires dual approval above materiality', 'Monthly account reconciliation with sign-off', 'Close checklist with deadline tracking', 'Automated intercompany matching and elimination', 'Consolidation package review by controller', 'Recurring JE template validation quarterly', 'Bank reconciliation exceptions escalation within 5 days', 'Materiality threshold enforced by system configuration'],
+    },
+    ITGC: {
+      subProcesses: ['Access Management', 'Change Management', 'Operations', 'Data Backup'],
+      risks: ['Unauthorized access to financial applications', 'Changes deployed without testing', 'Batch job failures not detected', 'Data backup not recoverable', 'Privileged access not reviewed', 'Emergency access not logged'],
+      controls: ['Quarterly user access review for all financial apps', 'Change request approval and UAT sign-off required', 'Batch monitoring dashboard with automated alerts', 'Monthly backup restore test with documented results', 'Privileged access review by CISO quarterly', 'Emergency access logged and reviewed within 24 hours'],
+    },
+    S2C: {
+      subProcesses: ['Sourcing', 'Contract Negotiation', 'Contract Execution', 'Vendor Management'],
+      risks: ['Single-source award without justification', 'Contract terms not aligned with policy', 'Contract executed without authority', 'Vendor performance not monitored'],
+      controls: ['Competitive bid required above threshold', 'Legal review mandatory for non-standard terms', 'Contract authority matrix enforced', 'Quarterly vendor scorecard review'],
+    },
+  };
+
+  const tmpl = templates[process] || templates['O2C'];
+  const rows: RACMRow[] = [];
+  const prefix = process;
+
+  tmpl.risks.forEach((risk, i) => {
+    const subProc = tmpl.subProcesses[i % tmpl.subProcesses.length];
+    const control = tmpl.controls[i] || tmpl.controls[0];
+    const riskNum = String(i + 1).padStart(2, '0');
+    const assertions: SoxAssertion[] = ['Existence', 'Completeness', 'Accuracy', 'Valuation', 'Occurrence', 'Presentation'];
+    const frequencies: Frequency[] = ['Monthly', 'Quarterly', 'Event-driven', 'Daily', 'Annually'];
+    const ctrlTypes: ControlType[] = ['Preventive', 'Detective'];
+    const autos: Automation[] = ['Manual', 'IT-dependent', 'Automated'];
+
+    rows.push({
+      id: `racm-${process.toLowerCase()}-${i + 1}`,
+      process,
+      subProcess: subProc,
+      riskId: `RSK-${prefix}-${riskNum}`,
+      riskDescription: risk,
+      controlId: `${prefix}-C-${riskNum}`,
+      controlDescription: control,
+      attributes: [
+        { id: `${prefix}-C-${riskNum}.1`, description: `Primary test for ${control.toLowerCase().slice(0, 50)}`, testProcedure: `Inspect sample for compliance with ${control.toLowerCase().slice(0, 40)}.`,
+          requiredEvidence: ['Supporting documentation', 'Approval evidence'], populationSize: 200 + i * 50, defaultSampleSize: 25 },
+        ...(i % 3 === 0 ? [{ id: `${prefix}-C-${riskNum}.2`, description: 'Exception handling and follow-up verification', testProcedure: 'Review exception log and verify resolution within SLA.',
+          requiredEvidence: ['Exception log', 'Resolution evidence'], populationSize: 30 + i * 5, defaultSampleSize: 15 }] : []),
+      ],
+      assertion: assertions[i % assertions.length],
+      frequency: frequencies[i % frequencies.length],
+      controlType: ctrlTypes[i % ctrlTypes.length],
+      automation: autos[i % autos.length],
+      isKey: i % 3 === 0,
+    });
+  });
+
+  return rows;
+}
+
 /** Group RACM rows by sub-process — returns ordered groups for rendering. */
 export function groupRacmBySubProcess(rows: RACMRow[]): { subProcess: string; rows: RACMRow[] }[] {
   const map = new Map<string, RACMRow[]>();
