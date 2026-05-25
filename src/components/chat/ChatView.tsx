@@ -1537,7 +1537,6 @@ function ClarificationBlock({
 // polished "what you'll see when this workflow runs" preview — KPIs,
 // Charts, Tables — matching the query Output description style.
 function WorkflowOutputPreviewCard({
-  workflow,
   onConfirm,
   onViewWorkspace,
 }: {
@@ -1545,42 +1544,48 @@ function WorkflowOutputPreviewCard({
   onConfirm: () => void;
   onViewWorkspace: () => void;
 }) {
-  const { addToast } = useToast();
-  // Reuse the same fixture the query audit-result uses so the preview
-  // surface looks identical to what the user actually gets after a run:
-  // 8 KpiTiles in a 2/4-col grid, the real ChartGroup with its widget
-  // shell, and a real ResultsTable preview with Open / Download actions.
+  // Reconciliation-specific output description. Rendered on a dark
+  // markdown-style surface so the preview reads as a structured spec
+  // sheet of the run's output shape (KPIs / Charts / Tables) rather
+  // than a live dashboard mockup.
+  const kpis: { label: string; detail: React.ReactNode }[] = [
+    { label: '"Total EDC Aggregated Amount"', detail: <>Total summed "Submission Calculated Gross Amount" after filtering for <CodeChip>SOC</CodeChip> and <CodeChip>Chargebacks</CodeChip>.</> },
+    { label: '"Total Statement Gross Amount Matched"', detail: 'Total AMEX statement "GROSS" amount matched to EDC records through primary or secondary matching.' },
+    { label: '"Total Variance"', detail: 'Difference between aggregated EDC amount and matched statement gross amount.' },
+    { label: '"Primary Matched Count"', detail: 'Number of EDC aggregated records matched using payment date plus concat key.' },
+    { label: '"Secondary Matched Count"', detail: 'Number of EDC aggregated records matched using concat key only after primary match failed.' },
+    { label: '"Unmatched EDC Count"', detail: 'Number of EDC aggregated records not found in AMEX statement.' },
+    { label: '"Unmatched Statement Count"', detail: 'Number of AMEX statement rows not found in EDC.' },
+  ];
+  const charts: { label: string; detail: string }[] = [
+    { label: '"Reconciliation Status by Amount" (bar)', detail: 'Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.' },
+    { label: '"Reconciliation Status by Count" (bar)', detail: 'Count of records by reconciliation remark.' },
+    { label: '"Top Variances by Concat Key" (bar)', detail: 'Largest absolute variances by concat key.' },
+  ];
+  const tables: { label: string; detail: string }[] = [
+    { label: '"Detailed Reco Report"', detail: 'Full reconciliation output showing concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.' },
+    { label: '"Unmatched EDC Transactions"', detail: 'Aggregated EDC records where no AMEX statement match was found.' },
+    { label: '"Unmatched Statement Transactions"', detail: 'AMEX statement rows where no EDC concat key match was found.' },
+    { label: '"Variance Exceptions"', detail: 'Matched records where aggregated EDC amount and statement gross amount differ.' },
+  ];
+
   return (
-    <div className="space-y-4 w-full">
-      <div className="text-[14px] leading-[1.6] text-ink-700 max-w-[66ch]">
-        Here's a preview of what <span className="font-semibold text-ink-900">{workflow.name}</span> will produce when you run it. KPIs, charts, and the results table all use the same dashboard widgets as a live query result.
+    <div className="rounded-xl border border-white/5 bg-[#0b0f1a] overflow-hidden text-white">
+      <div className="px-6 py-6 space-y-8">
+        <h2 className="text-[28px] font-bold tracking-tight">Output</h2>
+
+        <OutputDarkSection title="KPIs you will see" items={kpis} />
+        <OutputDarkSection title="Charts you will see" items={charts} />
+        <OutputDarkSection title="Tables you will see" items={tables} />
       </div>
 
-      {/* KPI scoreboard — same grid + KpiTile as audit-result */}
-      <div role="list" aria-label="Sample results" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {AUDIT_RESULT.kpis.map((kpi, ki) => (
-          <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
-        ))}
-      </div>
-
-      {/* Charts — same ChartGroup used by audit-result */}
-      <ChartGroup charts={AUDIT_RESULT.charts} embedded />
-
-      {/* Table preview — same ResultsTable used by audit-result */}
-      <ResultsTable
-        columns={AUDIT_RESULT.table.columns}
-        rows={AUDIT_RESULT.table.rows}
-        totalRows={AUDIT_RESULT.table.totalRows}
-        onOpen={() => addToast({ type: 'info', message: 'Opening preview in a new view…' })}
-        onDownload={() => addToast({ type: 'success', message: 'Sample CSV download started.' })}
-      />
-
-      {/* Confirm-and-proceed footer */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-canvas-border">
+      {/* Footer actions — light strip so the buttons read as actionable
+          chrome separate from the dark spec content. */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-white/5 bg-[#0b0f1a]">
         <button
           type="button"
           onClick={onViewWorkspace}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-white/70 hover:text-white hover:bg-white/5 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
         >
           <PanelRightOpen size={13} />
           View Workspace
@@ -1595,6 +1600,33 @@ function WorkflowOutputPreviewCard({
         </button>
       </div>
     </div>
+  );
+}
+
+function CodeChip({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="inline-block align-middle rounded px-1.5 py-0.5 text-[12px] font-mono bg-white/5 text-emerald-300/95">
+      {children}
+    </code>
+  );
+}
+
+function OutputDarkSection({ title, items }: { title: string; items: { label: string; detail: React.ReactNode }[] }) {
+  return (
+    <section>
+      <h3 className="text-[20px] font-semibold tracking-tight text-white mb-4">{title}</h3>
+      <ul className="space-y-3 pl-1">
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-3 items-start">
+            <span className="mt-[10px] w-1 h-1 rounded-full bg-white/60 shrink-0" />
+            <p className="text-[14.5px] leading-[1.65] text-white/90">
+              <span className="font-semibold text-white">{it.label}</span>
+              <span className="text-white/70"> — {it.detail}</span>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
