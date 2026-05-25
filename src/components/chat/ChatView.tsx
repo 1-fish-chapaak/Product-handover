@@ -1537,6 +1537,7 @@ function ClarificationBlock({
 // polished "what you'll see when this workflow runs" preview — KPIs,
 // Charts, Tables — matching the query Output description style.
 function WorkflowOutputPreviewCard({
+  workflow,
   onConfirm,
   onViewWorkspace,
 }: {
@@ -1544,48 +1545,113 @@ function WorkflowOutputPreviewCard({
   onConfirm: () => void;
   onViewWorkspace: () => void;
 }) {
-  // Reconciliation-specific output description. Rendered on a dark
-  // markdown-style surface so the preview reads as a structured spec
-  // sheet of the run's output shape (KPIs / Charts / Tables) rather
-  // than a live dashboard mockup.
-  const kpis: { label: string; detail: React.ReactNode }[] = [
-    { label: '"Total EDC Aggregated Amount"', detail: <>Total summed "Submission Calculated Gross Amount" after filtering for <CodeChip>SOC</CodeChip> and <CodeChip>Chargebacks</CodeChip>.</> },
-    { label: '"Total Statement Gross Amount Matched"', detail: 'Total AMEX statement "GROSS" amount matched to EDC records through primary or secondary matching.' },
-    { label: '"Total Variance"', detail: 'Difference between aggregated EDC amount and matched statement gross amount.' },
-    { label: '"Primary Matched Count"', detail: 'Number of EDC aggregated records matched using payment date plus concat key.' },
-    { label: '"Secondary Matched Count"', detail: 'Number of EDC aggregated records matched using concat key only after primary match failed.' },
-    { label: '"Unmatched EDC Count"', detail: 'Number of EDC aggregated records not found in AMEX statement.' },
-    { label: '"Unmatched Statement Count"', detail: 'Number of AMEX statement rows not found in EDC.' },
+  // Reconciliation-specific output description, rendered in the same
+  // light/platform chrome the query audit-result uses: KpiTile grid +
+  // chart-card list + table-card list. Sample values give the surface
+  // weight; the long descriptions live on the cards beneath the value.
+  const kpis: { label: string; value: string; description: React.ReactNode }[] = [
+    { label: 'Total EDC Aggregated', value: '₹1.24Cr', description: <>Summed "Submission Calculated Gross Amount" after filtering for <InlineCode>SOC</InlineCode> and <InlineCode>Chargebacks</InlineCode>.</> },
+    { label: 'Statement Gross Matched', value: '₹1.18Cr', description: 'AMEX statement "GROSS" matched to EDC via primary or secondary matching.' },
+    { label: 'Total Variance', value: '₹6.2L', description: 'Difference between aggregated EDC amount and matched statement gross.' },
+    { label: 'Primary Matched', value: '1,247', description: 'EDC aggregated records matched using payment date + concat key.' },
+    { label: 'Secondary Matched', value: '89', description: 'EDC aggregated records matched using concat key only after primary match failed.' },
+    { label: 'Unmatched EDC', value: '23', description: 'EDC aggregated records not found in the AMEX statement.' },
+    { label: 'Unmatched Statement', value: '41', description: 'AMEX statement rows not found in EDC.' },
   ];
   const charts: { label: string; detail: string }[] = [
-    { label: '"Reconciliation Status by Amount" (bar)', detail: 'Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.' },
-    { label: '"Reconciliation Status by Count" (bar)', detail: 'Count of records by reconciliation remark.' },
-    { label: '"Top Variances by Concat Key" (bar)', detail: 'Largest absolute variances by concat key.' },
+    { label: 'Reconciliation Status by Amount', detail: 'Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.' },
+    { label: 'Reconciliation Status by Count', detail: 'Count of records by reconciliation remark.' },
+    { label: 'Top Variances by Concat Key', detail: 'Largest absolute variances by concat key.' },
   ];
   const tables: { label: string; detail: string }[] = [
-    { label: '"Detailed Reco Report"', detail: 'Full reconciliation output showing concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.' },
-    { label: '"Unmatched EDC Transactions"', detail: 'Aggregated EDC records where no AMEX statement match was found.' },
-    { label: '"Unmatched Statement Transactions"', detail: 'AMEX statement rows where no EDC concat key match was found.' },
-    { label: '"Variance Exceptions"', detail: 'Matched records where aggregated EDC amount and statement gross amount differ.' },
+    { label: 'Detailed Reco Report', detail: 'Concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.' },
+    { label: 'Unmatched EDC Transactions', detail: 'Aggregated EDC records where no AMEX statement match was found.' },
+    { label: 'Unmatched Statement Transactions', detail: 'AMEX statement rows where no EDC concat key match was found.' },
+    { label: 'Variance Exceptions', detail: 'Matched records where aggregated EDC amount and statement gross amount differ.' },
   ];
 
   return (
-    <div className="rounded-xl border border-white/5 bg-[#0b0f1a] overflow-hidden text-white">
-      <div className="px-6 py-6 space-y-8">
-        <h2 className="text-[28px] font-bold tracking-tight">Output</h2>
-
-        <OutputDarkSection title="KPIs you will see" items={kpis} />
-        <OutputDarkSection title="Charts you will see" items={charts} />
-        <OutputDarkSection title="Tables you will see" items={tables} />
+    <div className="space-y-6 w-full">
+      <div className="text-[14px] leading-[1.6] text-ink-700 max-w-[66ch]">
+        Preview of what <span className="font-semibold text-ink-900">{workflow.name}</span> will produce. The KPIs, charts, and tables below mirror what you'd see on the live dashboard.
       </div>
 
-      {/* Footer actions — light strip so the buttons read as actionable
-          chrome separate from the dark spec content. */}
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-white/5 bg-[#0b0f1a]">
+      {/* KPIs */}
+      <section>
+        <header className="mb-3">
+          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">KPIs you will see</h3>
+          <p className="text-[12.5px] text-ink-500 mt-0.5">Headline metrics surfaced at the top of the dashboard</p>
+        </header>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {kpis.map((k, i) => (
+            <KpiTile
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              index={i}
+              footer={<p className="text-[11.5px] leading-snug text-ink-500">{k.description}</p>}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* Charts */}
+      <section>
+        <header className="mb-3">
+          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Charts you will see</h3>
+          <p className="text-[12.5px] text-ink-500 mt-0.5">Visual cuts of the same flagged-pair population</p>
+        </header>
+        <ul className="flex flex-col gap-2">
+          {charts.map((c, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
+            >
+              <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <BarChart3 size={14} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[13px] font-semibold text-ink-900 truncate">{c.label}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400 shrink-0">BAR</span>
+                </div>
+                <div className="text-[12px] text-ink-500">{c.detail}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Tables */}
+      <section>
+        <header className="mb-3">
+          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Tables you will see</h3>
+          <p className="text-[12.5px] text-ink-500 mt-0.5">Row-level reports produced by the run</p>
+        </header>
+        <ul className="flex flex-col gap-2">
+          {tables.map((t, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
+            >
+              <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                <FileText size={14} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-ink-900 truncate">{t.label}</div>
+                <div className="text-[12px] text-ink-500">{t.detail}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Footer */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-canvas-border">
         <button
           type="button"
           onClick={onViewWorkspace}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-white/70 hover:text-white hover:bg-white/5 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
         >
           <PanelRightOpen size={13} />
           View Workspace
@@ -1603,30 +1669,11 @@ function WorkflowOutputPreviewCard({
   );
 }
 
-function CodeChip({ children }: { children: React.ReactNode }) {
+function InlineCode({ children }: { children: React.ReactNode }) {
   return (
-    <code className="inline-block align-middle rounded px-1.5 py-0.5 text-[12px] font-mono bg-white/5 text-emerald-300/95">
+    <code className="inline-block align-baseline rounded px-1.5 py-0.5 text-[11.5px] font-mono bg-brand-50 text-brand-700">
       {children}
     </code>
-  );
-}
-
-function OutputDarkSection({ title, items }: { title: string; items: { label: string; detail: React.ReactNode }[] }) {
-  return (
-    <section>
-      <h3 className="text-[20px] font-semibold tracking-tight text-white mb-4">{title}</h3>
-      <ul className="space-y-3 pl-1">
-        {items.map((it, i) => (
-          <li key={i} className="flex gap-3 items-start">
-            <span className="mt-[10px] w-1 h-1 rounded-full bg-white/60 shrink-0" />
-            <p className="text-[14.5px] leading-[1.65] text-white/90">
-              <span className="font-semibold text-white">{it.label}</span>
-              <span className="text-white/70"> — {it.detail}</span>
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
