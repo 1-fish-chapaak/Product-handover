@@ -8,7 +8,6 @@ import { GENERATED_REPORTS } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
-import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
@@ -279,12 +278,10 @@ export default function App() {
   const renderArtifactPanel = () => {
     if (!state.showArtifacts) return null;
 
-    const inner = state.artifactMode === 'workflow' ? (
-      <ChatWorkflowWorkspace
-        onClose={() => setShowArtifacts(false)}
-        workflowType={state.workflowType ?? undefined}
-      />
-    ) : (
+    // Both workflow and query modes render the same ArtifactPanel so
+    // the side surface is visually identical (Plan / Code / Sources /
+    // Output tabs, identical chrome, identical content shape).
+    const inner = (
       <ArtifactPanel
         activeTab={state.activeArtifactTab}
         setActiveTab={setActiveArtifactTab}
