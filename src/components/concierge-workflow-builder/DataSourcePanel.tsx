@@ -29,6 +29,8 @@ import {
   Workflow as WorkflowIcon,
   Code2,
   Copy,
+  ListChecks,
+  MessageSquare,
   ExternalLink,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
@@ -726,92 +728,97 @@ export default function DataSourcePanel({
               </span>
             </div>
 
-            {/* Input source cards */}
-            <div className="grid grid-cols-2 gap-2 items-start mb-4">
+            {/* Input source rows — match the query SourcesTab card shape:
+                primary row (icon + name + meta + format badge) on top, a
+                footer with "Using N of M: cols…" + Pick + Chat actions. */}
+            <div
+              className="grid gap-3 mb-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
+            >
               {workflow.inputs.map((input) => {
-                const expanded = expandedInputCardIds.has(input.id);
                 const cols = input.columns ?? [];
                 return (
                   <div
                     key={input.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 transition-colors"
+                    className="group w-full rounded-lg bg-canvas-elevated border border-canvas-border hover:border-brand-200 transition-colors"
                   >
-                    {/* Header row */}
-                    <div className="flex items-start gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
-                        <Database size={14} />
+                    {/* Primary row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleInputCardExpansion(input.id)}
+                      className="w-full flex items-center gap-3 px-4 h-16 rounded-t-lg hover:bg-brand-50/30 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                      aria-label={`Open ${input.name}`}
+                    >
+                      <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                        <Database size={16} />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-ink-800 leading-tight truncate">
-                          {input.name}
-                        </div>
-                        <div className="text-[12px] text-ink-400 leading-tight truncate mt-0.5">
-                          {input.description || 'Data source'}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold text-ink-900 truncate">{input.name}</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                          {input.type.toUpperCase()} · <span className="text-ink-400">{input.description || 'Data source'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[12px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass(input.type),
                         ].join(' ')}
                       >
                         {input.type}
                       </span>
-                    </div>
+                    </button>
 
-                    {/* Columns — chips when collapsed, descriptions when expanded */}
+                    {/* Columns footer */}
                     {cols.length > 0 && (
-                      expanded ? (
-                        <ul className="flex flex-col gap-1.5">
-                          {cols.map((col) => (
-                            <li
-                              key={col}
-                              className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
-                            >
-                              <div className="text-[12px] font-mono font-semibold text-ink-800 truncate">
-                                {col}
-                              </div>
-                              <div className="text-[12px] text-ink-500 leading-snug mt-0.5">
-                                {describeColumn(col)}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {cols.map((col) => (
-                            <span
-                              key={col}
-                              className="inline-flex items-center rounded-md bg-canvas border border-canvas-border px-1.5 py-0.5 text-[12px] text-ink-600 font-mono"
-                            >
-                              {col}
-                            </span>
-                          ))}
+                      <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] text-ink-500 shrink-0">
+                          Using <span className="font-mono tabular-nums text-ink-700">{cols.length}</span> of{' '}
+                          <span className="font-mono tabular-nums text-ink-700">{cols.length}</span>:
+                        </span>
+                        <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={cols.join(', ')}>
+                          {cols.join(', ')}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleInputCardExpansion(input.id)}
+                            aria-label={`Pick columns from ${input.name}`}
+                            title="Pick columns"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <ListChecks size={11} strokeWidth={2.25} />
+                            Pick
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Describe column change for ${input.name} in chat`}
+                            title="Describe in chat"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <MessageSquare size={11} strokeWidth={2.25} />
+                            Chat
+                          </button>
                         </div>
-                      )
+                      </div>
                     )}
 
-                    {/* Expand / collapse trigger */}
-                    {cols.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => toggleInputCardExpansion(input.id)}
-                        aria-expanded={expanded}
-                        aria-label={expanded ? `Collapse ${input.name}` : `Expand ${input.name}`}
-                        className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[12px] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
-                      >
-                        {expanded ? (
-                          <>
-                            <ChevronDown size={12} />
-                            Hide column details
-                          </>
-                        ) : (
-                          <>
-                            <ChevronRight size={12} />
-                            Show column details
-                          </>
-                        )}
-                      </button>
+                    {/* Expanded column details (kept from original) */}
+                    {expandedInputCardIds.has(input.id) && cols.length > 0 && (
+                      <ul className="flex flex-col gap-1.5 border-t border-canvas-border/70 px-4 py-3">
+                        {cols.map((col) => (
+                          <li
+                            key={col}
+                            className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
+                          >
+                            <div className="text-[12px] font-mono font-semibold text-ink-800 truncate">
+                              {col}
+                            </div>
+                            <div className="text-[12px] text-ink-500 leading-snug mt-0.5">
+                              {describeColumn(col)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 );
