@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { motion } from 'motion/react';
 import {
   Search,
   FolderClosed,
@@ -529,11 +530,12 @@ export default function DataSourcePanel({
     label: string;
     badge?: string;
     tone: 'ok' | 'warn' | 'idle';
+    icon: typeof Database;
   }[] = [
-    { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone },
-    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone },
-    { id: 'output', label: 'Output Config', badge: outputBadge, tone: outputTone },
-    { id: 'preview', label: 'Preview', tone: previewTone },
+    { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone, icon: Database },
+    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: Sparkles },
+    { id: 'output', label: 'Output Config', badge: outputBadge, tone: outputTone, icon: FileOutput },
+    { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
   ];
 
   const totalColumnsInUse = workflow.inputs.reduce(
@@ -542,37 +544,71 @@ export default function DataSourcePanel({
   );
 
   return (
-    <aside className="flex flex-col h-full w-full bg-canvas min-h-0">
-      {/* Tabs — pill buttons; active = solid brand, inactive = outline. */}
-      <div className="px-4 py-3 shrink-0 flex items-center gap-2">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+    <aside className="flex flex-col h-full w-full bg-canvas-elevated min-h-0">
+      {/* Tab strip — matches the query ArtifactPanel: icon + label + count
+          chip, with an animated gradient underline on the active tab. Same
+          h-12 chrome height + bottom hairline border so the two side
+          panels read as variants of the same surface. */}
+      <div className="@container h-12 shrink-0 px-2 sm:px-4 border-b border-canvas-border flex items-end gap-2 bg-canvas-elevated">
+        <div
+          role="tablist"
+          aria-label="Workflow workspace"
+          className="relative flex items-end gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {TABS.map((t) => {
             const active = tab === t.id;
+            const Icon = t.icon;
             return (
-              <button
+              <motion.button
                 key={t.id}
                 type="button"
+                role="tab"
                 onClick={() => setTab(t.id)}
-                aria-pressed={active}
-                className={[
-                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer',
+                aria-selected={active}
+                whileHover={!active ? { y: -1 } : undefined}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                title={t.label}
+                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[13px] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                   active
-                    ? 'bg-brand-600 text-white hover:bg-brand-500'
-                    : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:border-brand-200 hover:text-ink-800',
-                ].join(' ')}
+                    ? 'text-brand-700 font-semibold'
+                    : 'text-ink-500 font-medium hover:text-brand-700 hover:bg-brand-50'
+                }`}
               >
-                <span>{t.label}</span>
+                <motion.span
+                  animate={{ scale: active ? 1.06 : 1 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                  className="inline-flex"
+                >
+                  <Icon
+                    size={14}
+                    strokeWidth={active ? 2.25 : 2}
+                    className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-brand-600 transition-colors'}
+                  />
+                </motion.span>
+                <span className={`leading-none tracking-tight ${active ? 'inline' : 'hidden @[360px]:inline'}`}>
+                  {t.label}
+                </span>
                 {t.badge && (
                   <span
-                    className={[
-                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[12px] font-semibold tabular-nums',
-                      active ? 'bg-white/20 text-white' : 'text-ink-500',
-                    ].join(' ')}
+                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-mono tabular-nums leading-none transition-colors ${
+                      active
+                        ? 'bg-brand-100 text-brand-700'
+                        : 'bg-paper-100 text-ink-500 group-hover:bg-brand-100 group-hover:text-brand-700'
+                    }`}
                   >
                     {t.badge}
                   </span>
                 )}
-              </button>
+                {active && (
+                  <motion.span
+                    layoutId="workflow-tab-underline"
+                    aria-hidden="true"
+                    className="absolute left-2 right-2 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-brand-500 via-brand-600 to-brand-500"
+                    transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.55 }}
+                  />
+                )}
+              </motion.button>
             );
           })}
         </div>
