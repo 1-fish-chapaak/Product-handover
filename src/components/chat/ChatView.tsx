@@ -3629,8 +3629,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // Phase-aware quick-reply chips that surface beneath the card.
     // Routed through wfQuickReplies so the click pushes a canned assistant
     // reply rather than starting a brand-new build via simulateResponse.
+    // workflow-upload deliberately has NO chips — there's no data context
+    // to ground their answers in until files are attached.
     const phaseFollowUps: Record<string, string[]> = {
-      'workflow-upload': ['What columns do I need?', 'Link a data source', 'Show a sample format'],
       'workflow-map': ['Recommend columns', 'Explain a column', 'Preview sample rows'],
       'workflow-review': ['Check data quality', 'Preview schema', 'Explain extraction logic'],
     };
