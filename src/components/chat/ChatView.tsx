@@ -4836,27 +4836,24 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   rows={1}
                 />
 
-                {/* Action row — input affordances on the LEFT (attach + mode
-                    picker), output action (Send) on the RIGHT. Grouping
-                    follows the Claude pattern: "what's coming in" stacked
-                    together, "what's going out" isolated. */}
+                {/* Action row — attach on the LEFT (input affordance),
+                    mode picker + Send on the RIGHT. Putting the Query/
+                    Workflow toggle next to Send keeps the user's eye
+                    near where the action happens. */}
                 <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowDataPicker(true)}
-                      aria-label="Attach data sources or files"
-                      title="Attach data or files"
-                      className="inline-flex items-center justify-center size-8 rounded-full text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      <Plus size={18} strokeWidth={2} />
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDataPicker(true)}
+                    aria-label="Attach data sources or files"
+                    title="Attach data or files"
+                    className="inline-flex items-center justify-center size-8 rounded-full text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <Plus size={18} strokeWidth={2} />
+                  </button>
 
-                    {/* Mode segmented control — softer treatment so the
-                        active pill doesn't compete visually with primary
-                        CTAs (Send, Approve & Run). Container: paper-100
-                        track. Active: brand-50 chip with brand-700 text +
-                        subtle inset ring; inactive: muted ink with hover. */}
+                  <div className="flex items-center gap-2">
+                    {/* Mode segmented control — soft selected-chip treatment
+                        so it doesn't compete with the Send CTA. */}
                     <div
                       role="radiogroup"
                       aria-label="Composer mode"
@@ -4891,19 +4888,19 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         Workflow
                       </button>
                     </div>
-                  </div>
 
-                  {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
-                    <button
-                      type="button"
-                      onClick={handleSend}
-                      aria-label="Send message"
-                      title="Send · Enter to send, Shift+Enter for new line"
-                      className="inline-flex items-center justify-center size-8 rounded-full bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      <ArrowUp size={16} strokeWidth={2.25} />
-                    </button>
-                  )}
+                    {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={handleSend}
+                        aria-label="Send message"
+                        title="Send · Enter to send, Shift+Enter for new line"
+                        className="inline-flex items-center justify-center size-8 rounded-full bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      >
+                        <ArrowUp size={16} strokeWidth={2.25} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
