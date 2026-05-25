@@ -1620,7 +1620,6 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
-  if (!query) return null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1650,6 +1649,8 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
+
+  if (!query || !query.id) return null;
 
   return (
     <motion.div
