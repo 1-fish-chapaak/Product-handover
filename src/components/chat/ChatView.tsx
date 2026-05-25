@@ -4989,6 +4989,27 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           </div>
         </header>
 
+        {/* Workflow journey stepper — fixed strip just under the chat
+            header so it stays visible without eating the message-list
+            real estate, and never overlaps message content. Renders only
+            while a workflow build is active in this thread. */}
+        {buildWorkflowMode && wfWorkflow && (() => {
+          const has = (t: string) => messages.some(m => m.richType === t);
+          const completed = new Set<JourneyStep>();
+          let current: JourneyStep = 1;
+          if (has('workflow-upload')) { completed.add(1); current = 2; }
+          if (has('workflow-map')) { completed.add(2); current = 3; }
+          if (has('workflow-review')) { completed.add(3); current = 4; }
+          if (has('workflow-output')) { completed.add(4); }
+          return (
+            <div className="shrink-0 px-4 sm:px-6 py-3 border-b border-canvas-border bg-canvas-elevated/40">
+              <div className="max-w-[52.5rem] mx-auto flex items-center justify-center">
+                <Stepper current={current} completed={completed} />
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Pending Dashboard Banner */}
         {pendingDashboard && (
           <div className="shrink-0 px-4 sm:px-6 py-2.5 bg-brand-50 border-b border-canvas-border flex items-center justify-between gap-3">
@@ -5043,26 +5064,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           className="h-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
         >
           <div className={`max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-10 space-y-10 ${pendingDashboard ? 'pt-4' : 'pt-8'}`}>
-            {/* Workflow journey stepper — visible whenever a workflow build
-                is underway in this thread. Mirrors the original
-                WorkflowBuilderJourney's Stepper, mapping the in-thread cards
-                pushed so far to Step 1 (Describe/Clarify) → Step 4 (Review). */}
-            {buildWorkflowMode && wfWorkflow && (() => {
-              const has = (t: string) => messages.some(m => m.richType === t);
-              const completed = new Set<JourneyStep>();
-              let current: JourneyStep = 1;
-              if (has('workflow-upload')) { completed.add(1); current = 2; }
-              if (has('workflow-map')) { completed.add(2); current = 3; }
-              if (has('workflow-review')) { completed.add(3); current = 4; }
-              if (has('workflow-output')) { completed.add(4); }
-              return (
-                <div className="sticky top-0 z-10 -mt-8 -mx-4 sm:-mx-6 mb-2 px-4 sm:px-6 pt-3 pb-3 bg-canvas/95 backdrop-blur-sm border-b border-canvas-border/60">
-                  <div className="flex items-center justify-center">
-                    <Stepper current={current} completed={completed} />
-                  </div>
-                </div>
-              );
-            })()}
             <AnimatePresence initial={false}>
               {messages.map((msg, msgIdx) => (
                 <motion.div
