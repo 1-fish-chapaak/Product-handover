@@ -10,6 +10,7 @@ import {
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
+  LayoutDashboard,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
@@ -1529,6 +1530,109 @@ function ClarificationBlock({
           handled by the parent: once all questions are answered it
           fires onSubmit automatically. */}
     </div>
+  );
+}
+
+// ─── Workflow output preview card ─────────────────────────────────────────
+// Replaces the StepMapData column-mapping card at the Map step with a
+// polished "what you'll see when this workflow runs" preview — KPIs,
+// Charts, Tables — matching the query Output description style.
+function WorkflowOutputPreviewCard({
+  workflow,
+  onConfirm,
+  onViewWorkspace,
+}: {
+  workflow: WorkflowDraft;
+  onConfirm: () => void;
+  onViewWorkspace: () => void;
+}) {
+  // Synthesize a representative preview spec from the workflow. In prod
+  // this would come off `workflow.output` + the planner's spec; for the
+  // mock we derive plausible KPIs/Charts/Tables from the workflow's
+  // inputs + steps so the card reflects the user's actual selections.
+  const kpis = [
+    { label: 'Records Scanned', detail: `Total rows processed across ${workflow.inputs.length} source${workflow.inputs.length === 1 ? '' : 's'}.` },
+    { label: 'Flags Raised', detail: 'Count of records flagged by every active rule in this workflow.' },
+    { label: 'Amount at Risk', detail: 'Total monetary exposure across all flagged exceptions, currency-normalised.' },
+    { label: 'Match Confidence', detail: 'Average alignment confidence across joined sources after auto-mapping.' },
+  ];
+  const charts = [
+    { label: 'Exception Severity (donut)', detail: 'Breakdown of flagged records by High / Medium / Low severity.' },
+    { label: 'Trend over Time (line)', detail: 'Daily exception count across the selected date range.' },
+    { label: 'Top Vendors by Risk (bar)', detail: 'Highest-risk vendors ranked by aggregate flagged amount.' },
+  ];
+  const tables = [
+    { label: 'Detailed Exception Report', detail: 'Full row-level output with the join keys, amounts, dates, and the rule each row tripped.' },
+    ...workflow.inputs.slice(0, 2).map(i => ({
+      label: `Unmatched ${i.name} rows`,
+      detail: `${i.name} records that have no counterpart after the configured matching logic.`,
+    })),
+    { label: 'Rule Audit Trail', detail: 'For each rule in the workflow: rows evaluated, rows flagged, runtime, confidence.' },
+  ];
+
+  return (
+    <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b border-canvas-border">
+        <div className="flex items-center gap-2">
+          <LayoutDashboard size={14} className="text-primary shrink-0" />
+          <h3 className="text-[14px] font-semibold text-ink-900 tracking-tight">
+            Output preview
+          </h3>
+          <span className="ml-auto text-[11px] font-medium text-ink-400">
+            What {workflow.name} will produce
+          </span>
+        </div>
+      </div>
+
+      {/* Body — three sections */}
+      <div className="px-4 py-4 space-y-5">
+        <PreviewSection title="KPIs you will see" items={kpis} />
+        <PreviewSection title="Charts you will see" items={charts} />
+        <PreviewSection title="Tables you will see" items={tables} />
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-canvas-border bg-canvas/40">
+        <button
+          type="button"
+          onClick={onViewWorkspace}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
+        >
+          <PanelRightOpen size={13} />
+          View Workspace
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
+        >
+          <CheckCircle size={13} />
+          Confirm &amp; Proceed
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PreviewSection({ title, items }: { title: string; items: { label: string; detail: string }[] }) {
+  return (
+    <section>
+      <h4 className="text-[12px] font-bold uppercase tracking-[0.10em] text-ink-700 mb-2">
+        {title}
+      </h4>
+      <ul className="space-y-2">
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-2 items-start">
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[13px] font-semibold text-ink-900">{it.label}</span>
+              <span className="text-[12.5px] text-ink-500"> — {it.detail}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -5450,13 +5554,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       ) : null
                     ) : msg.richType === 'workflow-map' ? (
                       wfWorkflow ? (
-                        <StepMapData
+                        <WorkflowOutputPreviewCard
                           workflow={wfWorkflow}
-                          files={wfFiles}
-                          setFiles={setWfFiles}
-                          alignments={wfAlignments}
-                          expandedInputId={wfMapExpanded}
-                          onToggleExpand={(id) => setWfMapExpanded(prev => prev === id ? null : id)}
                           onConfirm={() => {
                             wfPushAssistant('Mappings confirmed — opening review.');
                             wfPushCard('workflow-review');
