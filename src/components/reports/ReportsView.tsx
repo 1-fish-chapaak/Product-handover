@@ -1620,24 +1620,25 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
+  const safeQuery = query ?? { id: '', status: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
-  const availableGraphs = QUERY_GRAPHS[query.id] ?? [];
-  const queryTable = QUERY_TABLES[query.id];
-  const queryKpis = computeQueryKpis(query);
+  const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
+  const queryTable = QUERY_TABLES[safeQuery.id];
+  const queryKpis = computeQueryKpis(safeQuery);
   const [selectedKpis, setSelectedKpis] = useState<Set<string>>(() => new Set(queryKpis.map(k => k.label)));
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
   const [tableAttached, setTableAttached] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
-  const statusStyle = query.status === 'Completed'
+  const statusStyle = safeQuery.status === 'Completed'
     ? { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' }
     : { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' };
 
-  const severityStyle = query.severity === 'Critical'
+  const severityStyle = safeQuery.severity === 'Critical'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
     : { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' };
 
