@@ -1022,94 +1022,120 @@ export default function DataSourcePanel({
 
         {tab === 'plan' && (
           <div className="flex flex-col gap-3">
-            {/* Workflow / Code toggle */}
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setCodeOpen(false)}
-                aria-pressed={!codeOpen}
-                className={[
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[13px] font-semibold transition-colors cursor-pointer',
-                  !codeOpen
-                    ? 'border border-canvas-border bg-canvas-elevated text-ink-800'
-                    : 'border border-transparent text-ink-500 hover:text-ink-800 hover:bg-canvas-elevated',
-                ].join(' ')}
+            {/* Tab intro — title + summary chip + Workflow|Code segmented
+                control. Replaces the floating left-aligned toggle so the
+                Plan tab leads with a clear hierarchy. */}
+            <div className="flex items-center gap-2 px-1">
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold tracking-tight text-ink-900 leading-tight">
+                  Plan
+                </div>
+                <div className="text-[12px] text-ink-500 mt-0.5">
+                  {workflow.steps.length} step{workflow.steps.length === 1 ? '' : 's'} · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
+                </div>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Plan view"
+                className="inline-flex items-center rounded-full bg-canvas p-0.5 border border-canvas-border shrink-0"
               >
-                <WorkflowIcon size={12} />
-                Workflow
-              </button>
-              <button
-                type="button"
-                onClick={() => setCodeOpen(true)}
-                aria-pressed={codeOpen}
-                className={[
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-mono font-semibold rounded-md transition-colors cursor-pointer',
-                  codeOpen
-                    ? 'text-brand-700 bg-brand-50 border border-brand-200/70'
-                    : 'text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated border border-transparent',
-                ].join(' ')}
-              >
-                <Code2 size={12} />
-                Code
-              </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!codeOpen}
+                  onClick={() => setCodeOpen(false)}
+                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
+                    !codeOpen
+                      ? 'bg-brand-600 text-white'
+                      : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  <WorkflowIcon size={11} />
+                  Workflow
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={codeOpen}
+                  onClick={() => setCodeOpen(true)}
+                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
+                    codeOpen
+                      ? 'bg-brand-600 text-white'
+                      : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  <Code2 size={11} />
+                  Code
+                </button>
+              </div>
             </div>
 
-            {/* References */}
-            <section className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setReferencesOpen((v) => !v)}
-                aria-expanded={referencesOpen}
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-canvas/40 transition-colors cursor-pointer"
-              >
-                <FileText size={12} className="text-ink-500 shrink-0" />
-                <span className="text-[12px] font-bold tracking-[0.14em] text-ink-700 uppercase">
-                  References
-                </span>
-                <span className="text-[12px] text-ink-500 truncate">
-                  · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
-                </span>
-                <span className="ml-auto text-ink-400 shrink-0">
-                  {referencesOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </span>
-              </button>
+            {/* References — matches the Generated Code CollapsibleSection
+                chrome (rounded-xl border + hover shadow, icon + title +
+                chevron header, border-top separator on the body). */}
+            <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+              <div className="flex items-center px-4 py-3 hover:bg-paper-50/60 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setReferencesOpen((v) => !v)}
+                  aria-expanded={referencesOpen}
+                  className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <FileText size={14} className="text-primary shrink-0" />
+                  <span className="flex-1 text-left">References</span>
+                  <span className="text-[12px] font-normal text-ink-500">
+                    {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReferencesOpen((v) => !v)}
+                  aria-label={referencesOpen ? 'Collapse references' : 'Expand references'}
+                  aria-expanded={referencesOpen}
+                  className="ml-1 p-1 text-ink-400 hover:text-ink-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <ChevronDown size={14} className={`transition-transform duration-150 ${referencesOpen ? '' : '-rotate-90'}`} />
+                </button>
+              </div>
               {referencesOpen && (
-                <div className="px-3 pb-3 pt-0 flex flex-col gap-2.5 border-t border-canvas-border">
-                  {workflow.inputs.map((input) => {
-                    const Icon = typeIcon(input.type);
-                    return (
-                      <div key={input.id} className="min-w-0 pt-2.5">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div
-                            className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}
-                          >
-                            <Icon size={10} />
+                <div className="px-4 pb-4 border-t border-canvas-border">
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {workflow.inputs.map((input) => {
+                      const Icon = typeIcon(input.type);
+                      return (
+                        <div key={input.id} className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div
+                              className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}
+                            >
+                              <Icon size={10} />
+                            </div>
+                            <span className="text-[13px] font-semibold text-ink-800 truncate">
+                              {input.name}
+                            </span>
+                            <span className="text-[12px] text-ink-400 truncate">
+                              {inputMeta(input)}
+                            </span>
                           </div>
-                          <span className="text-[13px] font-semibold text-ink-800 truncate">
-                            {input.name}
-                          </span>
-                          <span className="text-[12px] text-ink-400 truncate">
-                            {inputMeta(input)}
-                          </span>
+                          {(input.columns?.length ?? 0) > 0 && (
+                            <div className="flex flex-wrap gap-1 ml-[26px]">
+                              {input.columns!.map((col) => (
+                                <span
+                                  key={col}
+                                  className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[12px] text-brand-700 font-mono"
+                                >
+                                  {col}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {(input.columns?.length ?? 0) > 0 && (
-                          <div className="flex flex-wrap gap-1 ml-[26px]">
-                            {input.columns!.map((col) => (
-                              <span
-                                key={col}
-                                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[12px] text-brand-700 font-mono"
-                              >
-                                {col}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-            </section>
+            </div>
 
             {codeOpen ? (
               /* Generated code view — matches the query CodeTab's
@@ -1118,18 +1144,26 @@ export default function DataSourcePanel({
                  anchored top-right). */
               <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
             ) : (
-              /* Steps list */
-              <section>
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[13px] font-semibold text-ink-800">Steps</span>
+              /* Steps card — wraps the step list in the same chrome as
+                 References + Generated Code so the Plan tab reads as
+                 three cohesive sections (Plan intro, References, Steps). */
+              <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+                <div className="flex items-center px-4 py-3">
+                  <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
+                    <Sparkles size={14} className="text-primary shrink-0" />
+                    <span className="flex-1 text-left">Steps</span>
+                    <span className="text-[12px] font-normal text-ink-500">
+                      {workflow.steps.length} total
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    className="text-[13px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+                    className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
                   >
                     Reorder
                   </button>
                 </div>
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col border-t border-canvas-border">
                   {workflow.steps.map((step, idx) => {
                     const badge = STEP_BADGE[step.type];
                     const relevant = workflow.inputs.filter((i) =>
@@ -1138,7 +1172,7 @@ export default function DataSourcePanel({
                     return (
                       <li
                         key={step.id}
-                        className="rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-3 hover:border-brand-200 transition-colors"
+                        className={`px-4 py-3 hover:bg-brand-50/30 transition-colors ${idx > 0 ? 'border-t border-canvas-border/70' : ''}`}
                       >
                         <div className="flex items-start gap-3">
                           <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[12px] font-bold shrink-0 mt-0.5 tabular-nums">
@@ -1146,11 +1180,11 @@ export default function DataSourcePanel({
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-[13px] font-semibold text-ink-800">
+                              <h3 className="text-[13px] font-semibold text-ink-900">
                                 {step.name}
                               </h3>
                               <span
-                                className={`text-[12px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
+                                className={`text-[11px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
                               >
                                 {badge.label}
                               </span>
@@ -1177,7 +1211,7 @@ export default function DataSourcePanel({
                     );
                   })}
                 </ul>
-              </section>
+              </div>
             )}
           </div>
         )}

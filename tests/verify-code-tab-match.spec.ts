@@ -54,8 +54,10 @@ test('workflow Plan/Code view — same CollapsibleSection chrome', async ({ page
   await expect(page.getByRole('tab', { name: /Plan/ })).toBeVisible({ timeout: 6000 });
   await page.getByRole('tab', { name: /Plan/ }).click();
   await page.waitForTimeout(300);
-  // Switch to Code view within Plan
-  await page.getByRole('button', { name: /^Code$/ }).click();
+  // Workflow (steps) view first
+  await snap(page, 'workflow-plan-steps');
+  // Switch to Code view within Plan (segmented control radio button)
+  await page.getByRole('radio', { name: /^Code$/ }).click();
   await page.waitForTimeout(500);
   await snap(page, 'workflow-code-view');
 });
