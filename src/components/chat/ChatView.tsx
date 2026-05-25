@@ -1537,7 +1537,6 @@ function ClarificationBlock({
 // polished "what you'll see when this workflow runs" preview — KPIs,
 // Charts, Tables — matching the query Output description style.
 function WorkflowOutputPreviewCard({
-  workflow,
   onConfirm,
   onViewWorkspace,
 }: {
@@ -1545,108 +1544,44 @@ function WorkflowOutputPreviewCard({
   onConfirm: () => void;
   onViewWorkspace: () => void;
 }) {
-  // Reconciliation-specific output description, rendered in the same
-  // light/platform chrome the query audit-result uses: KpiTile grid +
-  // chart-card list + table-card list. Sample values give the surface
-  // weight; the long descriptions live on the cards beneath the value.
-  const kpis: { label: string; value: string; description: React.ReactNode }[] = [
-    { label: 'Total EDC Aggregated', value: '₹1.24Cr', description: <>Summed "Submission Calculated Gross Amount" after filtering for <InlineCode>SOC</InlineCode> and <InlineCode>Chargebacks</InlineCode>.</> },
-    { label: 'Statement Gross Matched', value: '₹1.18Cr', description: 'AMEX statement "GROSS" matched to EDC via primary or secondary matching.' },
-    { label: 'Total Variance', value: '₹6.2L', description: 'Difference between aggregated EDC amount and matched statement gross.' },
-    { label: 'Primary Matched', value: '1,247', description: 'EDC aggregated records matched using payment date + concat key.' },
-    { label: 'Secondary Matched', value: '89', description: 'EDC aggregated records matched using concat key only after primary match failed.' },
-    { label: 'Unmatched EDC', value: '23', description: 'EDC aggregated records not found in the AMEX statement.' },
-    { label: 'Unmatched Statement', value: '41', description: 'AMEX statement rows not found in EDC.' },
-  ];
-  const charts: { label: string; detail: string }[] = [
-    { label: 'Reconciliation Status by Amount', detail: 'Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.' },
-    { label: 'Reconciliation Status by Count', detail: 'Count of records by reconciliation remark.' },
-    { label: 'Top Variances by Concat Key', detail: 'Largest absolute variances by concat key.' },
-  ];
-  const tables: { label: string; detail: string }[] = [
-    { label: 'Detailed Reco Report', detail: 'Concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.' },
-    { label: 'Unmatched EDC Transactions', detail: 'Aggregated EDC records where no AMEX statement match was found.' },
-    { label: 'Unmatched Statement Transactions', detail: 'AMEX statement rows where no EDC concat key match was found.' },
-    { label: 'Variance Exceptions', detail: 'Matched records where aggregated EDC amount and statement gross amount differ.' },
-  ];
+  // Full reconciliation spec — exact KPI / Chart / Table content the
+  // user supplied, rendered through the platform's audit-result prose
+  // pipeline (ReactMarkdown via renderAssistantText) so the typography,
+  // bullet style, emphasis, and inline-code chips match the rest of
+  // the chat surface.
+  const summary = `## Output
+
+### KPIs you will see
+
+- **"Total EDC Aggregated Amount"** — Total summed "Submission Calculated Gross Amount" after filtering for \`SOC\` and \`Chargebacks\`.
+- **"Total Statement Gross Amount Matched"** — Total AMEX statement "GROSS" amount matched to EDC records through primary or secondary matching.
+- **"Total Variance"** — Difference between aggregated EDC amount and matched statement gross amount.
+- **"Primary Matched Count"** — Number of EDC aggregated records matched using payment date plus concat key.
+- **"Secondary Matched Count"** — Number of EDC aggregated records matched using concat key only after primary match failed.
+- **"Unmatched EDC Count"** — Number of EDC aggregated records not found in AMEX statement.
+- **"Unmatched Statement Count"** — Number of AMEX statement rows not found in EDC.
+
+### Charts you will see
+
+- **"Reconciliation Status by Amount"** (bar) — Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.
+- **"Reconciliation Status by Count"** (bar) — Count of records by reconciliation remark.
+- **"Top Variances by Concat Key"** (bar) — Largest absolute variances by concat key.
+
+### Tables you will see
+
+- **"Detailed Reco Report"** — Full reconciliation output showing concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.
+- **"Unmatched EDC Transactions"** — Aggregated EDC records where no AMEX statement match was found.
+- **"Unmatched Statement Transactions"** — AMEX statement rows where no EDC concat key match was found.
+- **"Variance Exceptions"** — Matched records where aggregated EDC amount and statement gross amount differ.`;
 
   return (
-    <div className="space-y-6 w-full">
-      <div className="text-[14px] leading-[1.6] text-ink-700 max-w-[66ch]">
-        Preview of what <span className="font-semibold text-ink-900">{workflow.name}</span> will produce. The KPIs, charts, and tables below mirror what you'd see on the live dashboard.
+    <div className="space-y-4 w-full">
+      <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[72ch]">
+        {renderAssistantText(summary)}
       </div>
 
-      {/* KPIs */}
-      <section>
-        <header className="mb-3">
-          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">KPIs you will see</h3>
-          <p className="text-[12.5px] text-ink-500 mt-0.5">Headline metrics surfaced at the top of the dashboard</p>
-        </header>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {kpis.map((k, i) => (
-            <KpiTile
-              key={k.label}
-              label={k.label}
-              value={k.value}
-              index={i}
-              footer={<p className="text-[11.5px] leading-snug text-ink-500">{k.description}</p>}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* Charts */}
-      <section>
-        <header className="mb-3">
-          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Charts you will see</h3>
-          <p className="text-[12.5px] text-ink-500 mt-0.5">Visual cuts of the same flagged-pair population</p>
-        </header>
-        <ul className="flex flex-col gap-2">
-          {charts.map((c, i) => (
-            <li
-              key={i}
-              className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
-            >
-              <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                <BarChart3 size={14} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-semibold text-ink-900 truncate">{c.label}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400 shrink-0">BAR</span>
-                </div>
-                <div className="text-[12px] text-ink-500">{c.detail}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Tables */}
-      <section>
-        <header className="mb-3">
-          <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Tables you will see</h3>
-          <p className="text-[12.5px] text-ink-500 mt-0.5">Row-level reports produced by the run</p>
-        </header>
-        <ul className="flex flex-col gap-2">
-          {tables.map((t, i) => (
-            <li
-              key={i}
-              className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
-            >
-              <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                <FileText size={14} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold text-ink-900 truncate">{t.label}</div>
-                <div className="text-[12px] text-ink-500">{t.detail}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Footer */}
+      {/* Action bar — outline secondary on the left, primary "Approve &
+          Run" on the right. */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-canvas-border">
         <button
           type="button"
@@ -1662,18 +1597,10 @@ function WorkflowOutputPreviewCard({
           className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
         >
           <CheckCircle size={13} />
-          Confirm &amp; Proceed
+          Approve &amp; Run
         </button>
       </div>
     </div>
-  );
-}
-
-function InlineCode({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="inline-block align-baseline rounded px-1.5 py-0.5 text-[11.5px] font-mono bg-brand-50 text-brand-700">
-      {children}
-    </code>
   );
 }
 

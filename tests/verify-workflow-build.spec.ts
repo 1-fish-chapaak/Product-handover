@@ -66,7 +66,7 @@ test('upload-first workflow build', async ({ page }) => {
   await snap(page, 'D-map-card');
 
   // 5. Confirm map
-  await page.getByRole('button', { name: /Confirm.*Proceed/i }).click();
+  await page.getByRole('button', { name: /Approve.*Run/i }).click();
   await page.waitForTimeout(600);
   await snap(page, 'E-map-confirmed');
 

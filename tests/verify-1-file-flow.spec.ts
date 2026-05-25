@@ -44,9 +44,9 @@ test('workflow runs with only 1 file attached', async ({ page }) => {
 
   // Map step → Confirm
   await expect(page.getByText(/moving to data mapping/i)).toBeVisible({ timeout: 6000 });
-  await expect(page.getByRole('button', { name: /Confirm.*Proceed/i })).toBeVisible({ timeout: 6000 });
+  await expect(page.getByRole('button', { name: /Approve.*Run/i })).toBeVisible({ timeout: 6000 });
   await snap(page, 'D-map-card');
-  await page.getByRole('button', { name: /Confirm.*Proceed/i }).click();
+  await page.getByRole('button', { name: /Approve.*Run/i }).click();
   await page.waitForTimeout(600);
 
   // Review → Validate
