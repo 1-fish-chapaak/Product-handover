@@ -6251,10 +6251,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 : 'Query mode — locked. Use Save as workflow to convert this chat.'
                             }
                             onClick={() => { /* locked; no-op */ }}
-                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[13px] font-semibold cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[13px] cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                               isWorkflow
-                                ? 'bg-brand-600 text-white'
-                                : 'bg-canvas border border-canvas-border text-ink-500'
+                                ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
+                                : 'bg-paper-100 text-ink-500 font-medium'
                             }`}
                           >
                             <Lock size={11} strokeWidth={2.5} className="shrink-0" />
