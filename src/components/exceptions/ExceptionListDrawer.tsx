@@ -62,7 +62,7 @@ function ExceptionCard({ ex }: { ex: GrcException }) {
           <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
           <Pill className={CLASSIFICATION_STYLE[ex.classification]}>{ex.classification}</Pill>
         </div>
-        <span className="text-[12px] text-ink-700 shrink-0">{ex.assignedTo.name}</span>
+        <span className="text-[12px] text-ink-700 shrink-0">{ex.assignedTo?.name ?? '—'}</span>
       </div>
     </article>
   );

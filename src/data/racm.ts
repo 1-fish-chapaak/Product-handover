@@ -279,8 +279,8 @@ export function generateRacmForProcess(process: ProcessCode): RACMRow[] {
     const subProc = tmpl.subProcesses[i % tmpl.subProcesses.length];
     const control = tmpl.controls[i] || tmpl.controls[0];
     const riskNum = String(i + 1).padStart(2, '0');
-    const assertions: SoxAssertion[] = ['Existence', 'Completeness', 'Accuracy', 'Valuation', 'Occurrence', 'Presentation'];
-    const frequencies: Frequency[] = ['Monthly', 'Quarterly', 'Event-driven', 'Daily', 'Annually'];
+    const assertions: SoxAssertion[] = ['Existence', 'Completeness', 'Accuracy', 'Valuation', 'Cutoff', 'Presentation'];
+    const frequencies: Frequency[] = ['Monthly', 'Quarterly', 'Event-driven', 'Daily', 'Annual'];
     const ctrlTypes: ControlType[] = ['Preventive', 'Detective'];
     const autos: Automation[] = ['Manual', 'IT-dependent', 'Automated'];
 
