@@ -1260,6 +1260,8 @@ function IAIDRTab() {
     return items;
   });
   const [sentStatus, setSentStatus] = useState<'draft' | 'sent'>('draft');
+  const [recipientName, setRecipientName] = useState('Karan Mehta');
+  const [recipientEmail, setRecipientEmail] = useState('');
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [showSendModal, setShowSendModal] = useState(false);
 
@@ -1344,7 +1346,7 @@ function IAIDRTab() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center gap-2">
           <CheckCircle2 size={14} className="text-emerald-600" />
           <div>
-            <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to process owner. Waiting for document submission.</p>
+            <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to {recipientName || 'process owner'}{recipientEmail ? ` (${recipientEmail})` : ''}. Waiting for document submission.</p>
             <p className="text-[10px] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
           </div>
         </div>
@@ -1443,13 +1445,21 @@ function IAIDRTab() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Recipient</p>
-                  <p className="text-[12px] font-semibold text-text">Process Owner — Karan Mehta</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Name</label>
+                    <input value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="e.g. Karan Mehta"
+                      className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Email</label>
+                    <input value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="e.g. karan@company.com" type="email"
+                      className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+                  </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Due Date</p>
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Due Date</label>
                   <p className="text-[12px] font-semibold text-text">Jun 15, 2026</p>
                 </div>
               </div>
