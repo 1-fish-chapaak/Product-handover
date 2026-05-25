@@ -91,6 +91,8 @@ export interface AppState {
   showArtifacts: boolean;
   showChatHistory: boolean;
   selectedWorkflowId: string | null;
+  /** Which tab WorkflowDetail should open on (e.g. 'runs' when drilled in from an engagement). */
+  workflowDetailInitialTab: 'overview' | 'runs' | 'config';
   selectedBPId: string | null;
   selectedEngagementId: string | null;
   selectedRiskId: string | null;
@@ -109,6 +111,8 @@ export interface AppState {
   // Chat initial context (for workflow mode entry)
   chatInitialQuery: string | null;
   chatWorkflowContext: { templateId?: string; workflowId?: string } | null;
+  /** Engagement name shown as a banner above the composer when building a workflow for a specific engagement. */
+  workflowBuilderEngagementName: string | null;
   // Pre-fill text dropped into the chat composer (not auto-submitted). Used
   // when another surface — e.g. the workspace panel's "Edit assumptions"
   // action — wants to seed the textarea with a draft prompt.
@@ -165,8 +169,15 @@ const getInitialView = (): View => {
   const v = params.get('view');
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
+  if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
+};
+
+/** Deep-link target engagement (e.g. when Case Management is opened in a new tab). */
+const getInitialEngagementId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('eng');
 };
 
 const INITIAL_STATE: AppState = {
@@ -178,8 +189,9 @@ const INITIAL_STATE: AppState = {
   showArtifacts: false,
   showChatHistory: false,
   selectedWorkflowId: null,
+  workflowDetailInitialTab: 'overview',
   selectedBPId: null,
-  selectedEngagementId: null,
+  selectedEngagementId: getInitialEngagementId(),
   selectedRiskId: null,
   showExceptionModal: false,
   showEmailPreviewModal: false,
@@ -193,6 +205,7 @@ const INITIAL_STATE: AppState = {
   chatInitialQuery: null,
   chatComposerDraft: null,
   chatWorkflowContext: null,
+  workflowBuilderEngagementName: null,
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
   queryAssumptions: [],
@@ -227,7 +240,13 @@ export function useAppState() {
   }, [state.notifications]);
 
   const setView = useCallback((view: View) => {
-    setState(prev => ({ ...prev, view, showChatHistory: false }));
+    setState(prev => ({
+      ...prev,
+      view,
+      showChatHistory: false,
+      // The engagement workflow-builder banner only belongs in the chat it was opened for.
+      workflowBuilderEngagementName: view === 'chat' ? prev.workflowBuilderEngagementName : null,
+    }));
   }, []);
 
   const toggleSidebar = useCallback(() => {
@@ -254,8 +273,8 @@ export function useAppState() {
     setState(prev => ({ ...prev, showChatHistory: !prev.showChatHistory }));
   }, []);
 
-  const setSelectedWorkflow = useCallback((id: string | null) => {
-    setState(prev => ({ ...prev, selectedWorkflowId: id, view: id ? 'workflow-detail' : 'workflow-templates' }));
+  const setSelectedWorkflow = useCallback((id: string | null, initialTab: AppState['workflowDetailInitialTab'] = 'overview') => {
+    setState(prev => ({ ...prev, selectedWorkflowId: id, workflowDetailInitialTab: initialTab, view: id ? 'workflow-detail' : 'workflow-templates' }));
   }, []);
 
   const setSelectedBP = useCallback((id: string | null) => {
@@ -348,6 +367,21 @@ export function useAppState() {
       artifactMode: 'workflow' as ArtifactMode,
       showArtifacts: true,
       chatWorkflowContext: context ?? null,
+      workflowBuilderEngagementName: null,
+    }));
+  }, []);
+
+  /** Enter the Ask IRA workflow-builder chat scoped to a specific engagement (shows a context banner). */
+  const startWorkflowForEngagement = useCallback((engagementName: string) => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      chatMode: 'workflow' as ChatMode,
+      artifactMode: 'workflow' as ArtifactMode,
+      showArtifacts: true,
+      chatWorkflowContext: null,
+      selectedChatId: null,
+      workflowBuilderEngagementName: engagementName,
     }));
   }, []);
 
@@ -516,6 +550,7 @@ export function useAppState() {
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
+    startWorkflowForEngagement,
     openWorkflowExecutor,
     openAuditExecution,
     openEngagement,

@@ -29,11 +29,20 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   className?: string;
   headerExtra?: ReactNode;
   animateRows?: boolean;
+  // 'modern' = minimal AI-SaaS chrome: subtle outer edge, no header fill,
+  // sentence-case muted labels, generous rows, no vertical grid lines,
+  // very quiet hover. The opposite of a spreadsheet.
+  variant?: 'default' | 'modern';
 }
 
 /* ─── Sort Icon ─── */
-function SortIcon({ direction }: { direction: 'asc' | 'desc' | null }) {
-  if (!direction) return <ChevronsUpDown size={12} className="text-text-muted/40" />;
+function SortIcon({ direction, quiet }: { direction: 'asc' | 'desc' | null; quiet?: boolean }) {
+  if (!direction) {
+    // Modern (quiet) tables hide the resting icon entirely; default tables
+    // show a faint hint so the column reads as sortable.
+    if (quiet) return null;
+    return <ChevronsUpDown size={12} className="text-text-muted/40" />;
+  }
   return direction === 'asc'
     ? <ChevronUp size={12} className="text-primary" />
     : <ChevronDown size={12} className="text-primary" />;
@@ -56,7 +65,11 @@ export default function SmartTable<T extends Record<string, unknown>>({
   className = '',
   headerExtra,
   animateRows = true,
+  variant = 'default',
 }: SmartTableProps<T>) {
+  const isModern = variant === 'modern';
+  // Striping is off in modern mode — modern tables read cleaner without it.
+  const stripeOn = striped && !isModern;
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -115,10 +128,16 @@ export default function SmartTable<T extends Record<string, unknown>>({
     a === 'center' ? 'text-center' : a === 'right' ? 'text-right' : 'text-left';
 
   return (
-    <div className={`bg-white rounded-xl border border-border-light overflow-hidden ${className}`}>
+    <div
+      className={
+        isModern
+          ? `${className}`
+          : `bg-white border border-border-light overflow-hidden rounded-xl ${className}`
+      }
+    >
       {/* Toolbar */}
       {(searchable || headerExtra) && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-light bg-surface-2/50">
+        <div className={`flex items-center justify-between gap-3 ${isModern ? 'px-5 py-3' : 'px-4 py-2.5 border-b border-border-light bg-surface-2/50'}`}>
           {searchable && (
             <div className="relative flex-1 max-w-xs">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -149,23 +168,27 @@ export default function SmartTable<T extends Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
+        <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
-            <tr className="bg-surface-2 border-b border-border-light">
+            <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
               {expandable && <th className="w-8" />}
-              {columns.map(col => (
+              {columns.map((col, ci) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-2.5 font-semibold text-text-secondary ${alignClass(col.align)} ${
-                    col.sortable !== false ? 'cursor-pointer select-none hover:text-primary transition-colors' : ''
-                  }`}
+                  className={[
+                    isModern
+                      ? `py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      : 'px-4 py-2.5 font-semibold text-text-secondary',
+                    alignClass(col.align),
+                    col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
+                  ].filter(Boolean).join(' ')}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
                 >
                   <span className="inline-flex items-center gap-1.5">
                     {col.label}
                     {col.sortable !== false && (
-                      <SortIcon direction={sortKey === col.key ? sortDir : null} />
+                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern} />
                     )}
                   </span>
                 </th>
@@ -206,24 +229,38 @@ export default function SmartTable<T extends Record<string, unknown>>({
               return (
                 <Wrapper key={String(id)} {...wrapperProps}>
                   <tr
-                    className={`border-b border-border-light last:border-0 transition-colors group ${
-                      striped && i % 2 === 1 ? 'bg-surface-2/30' : ''
-                    } ${onRowClick || expandable ? 'cursor-pointer' : ''} hover:bg-primary-xlight/50`}
+                    className={[
+                      'transition-colors group',
+                      isModern
+                        ? 'border-b border-border-light/70'
+                        : 'border-b border-border-light last:border-0',
+                      stripeOn && i % 2 === 1 ? 'bg-surface-2/30' : '',
+                      onRowClick || expandable ? 'cursor-pointer' : '',
+                      isModern ? 'hover:bg-paper-50/50' : 'hover:bg-primary-xlight/50',
+                    ].filter(Boolean).join(' ')}
                     onClick={() => {
                       if (expandable) handleToggleExpand(id);
                       if (onRowClick) onRowClick(item);
                     }}
                   >
                     {expandable && (
-                      <td className="px-2 py-3 text-center w-8">
+                      <td className="text-center w-8 px-2 py-3">
                         <ChevronRight
                           size={13}
                           className={`text-text-muted transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
                         />
                       </td>
                     )}
-                    {columns.map(col => (
-                      <td key={col.key} className={`px-4 py-3 ${alignClass(col.align)}`}>
+                    {columns.map((col, ci) => (
+                      <td
+                        key={col.key}
+                        className={[
+                          isModern
+                            ? `py-4 ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                            : 'px-4 py-3',
+                          alignClass(col.align),
+                        ].filter(Boolean).join(' ')}
+                      >
                         {col.render ? col.render(item, safePage * pageSize + i) : String(item[col.key] ?? '')}
                       </td>
                     ))}

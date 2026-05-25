@@ -24,6 +24,7 @@ import {
   Download,
   Pencil,
   Trash2,
+  UserPlus,
 } from 'lucide-react';
 import {
   GRC_CASE_DETAILS,
@@ -163,6 +164,7 @@ export type ColumnKey =
   | 'actionReview'
   | 'actionableId'
   | 'lastUpdated'
+  | 'assignedTo'
   | 'classify'
   | 'action';
 
@@ -231,6 +233,7 @@ function buildColumnDefs(role: ExceptionRole, riskCategories: string[]): ColumnD
     { key: 'actionReview',   label: 'Action Review',  draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_COMBINED_REVIEW_LABELS, accessor: combinedReviewAccessor, minWidth: 220 },
     { key: 'actionableId',   label: 'Actionable ID',  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.bulkId ?? '', minWidth: 110 },
     { key: 'lastUpdated',    label: 'Last Updated',   draggable: true, filterable: false, accessor: (e) => e.lastUpdated },
+    { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => e.assignedTo?.name ?? '', minWidth: 160 },
   ];
   // Risk Owner gets the Classify CTA; Auditor only sees the Action CTA.
   if (!isAuditor) {
@@ -493,6 +496,7 @@ function renderCell(
   onOpenClassification: () => void,
   onOpenAction: () => void,
   onOpenActionable: (bulkId: string) => void,
+  onAssign: () => void,
 ): React.ReactNode {
   const isOverdue = ex.flags?.includes('Overdue');
   const isBulk = ex.flags?.includes('Bulk');
@@ -558,6 +562,25 @@ function renderCell(
       );
     case 'lastUpdated':
       return <span className="text-ink-500 text-[11.5px] tabular-nums whitespace-nowrap">{ex.lastUpdated}</span>;
+    case 'assignedTo':
+      return ex.assignedTo ? (
+        <div className="inline-flex items-center gap-2 min-w-0">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
+            {ex.assignedTo.initials}
+          </span>
+          <span className="text-ink-700 text-[12.5px] truncate">{ex.assignedTo.name}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onAssign}
+          className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11.5px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-[6px] transition-colors cursor-pointer"
+          title={`Assign ${ex.id} to a user`}
+        >
+          <UserPlus size={12} />
+          Assign
+        </button>
+      );
     case 'classify': {
       if (role === 'risk-owner') {
         return ex.classification === 'Unclassified' ? (
@@ -595,6 +618,7 @@ export interface ExceptionsTableProps {
   onOpenClassification: (ex: GrcException) => void;
   onOpenAction: (ex: GrcException) => void;
   onOpenActionable?: (bulkId: string) => void;
+  onAssign?: (ex: GrcException) => void;
   headerLeading?: React.ReactNode;
   headerExtras?: React.ReactNode;
   sampleSheets?: { id: string; name: string }[];
@@ -615,6 +639,7 @@ export default function ExceptionsTable({
   onOpenClassification,
   onOpenAction,
   onOpenActionable,
+  onAssign,
   headerLeading,
   headerExtras,
   sampleSheets = [],
@@ -1219,8 +1244,11 @@ export default function ExceptionsTable({
               pagedExceptions.map((ex) => {
                 const isOverdue = ex.flags?.includes('Overdue');
                 const sel = selected.has(ex.id);
-                const rowBg = isOverdue ? 'bg-risk-50/40' : sel ? 'bg-brand-50/60' : 'hover:bg-[#FAFAFB]';
-                const rowBgForPin = isOverdue ? '#FEF3F2' : sel ? 'rgba(247,240,255,0.96)' : '#FFFFFF';
+                // Selection wins over the overdue tint — selection is the
+                // user's active UI state and needs to read first; the
+                // Overdue pill in the ID cell still carries that signal.
+                const rowBg = sel ? 'bg-brand-50' : isOverdue ? 'bg-risk-50/40' : 'hover:bg-[#FAFAFB]';
+                const rowBgForPin = sel ? '#F7F0FF' : isOverdue ? '#FEF3F2' : '#FFFFFF';
                 return (
                   <tr key={ex.id} className={`border-b border-canvas-border last:border-b-0 transition-colors ${rowBg}`}>
                     {renderOrder.map((key) => {
@@ -1255,6 +1283,7 @@ export default function ExceptionsTable({
                             () => onOpenClassification(ex),
                             () => onOpenAction(ex),
                             (bulkId) => onOpenActionable?.(bulkId),
+                            () => onAssign?.(ex),
                           )}
                         </td>
                       );
