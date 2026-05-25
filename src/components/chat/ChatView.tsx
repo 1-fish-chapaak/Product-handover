@@ -3953,19 +3953,31 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     ].filter(Boolean);
     if (attachmentLabels.length > 0) text += `\n[Attached: ${attachmentLabels.join(', ')}]`;
 
-    // Workflow mode pill + no active workflow yet → start the inline
-    // workflow build in THIS chat thread (same composer, same chrome,
-    // same prose). Workflow cards render as assistant rich-type messages.
-    // Previously gated on messages.length === 0, but that meant any prior
-    // chat content silently downgraded the Workflow toggle to the old
-    // keyword-driven query/workflow router. The right signal is "no
-    // workflow in progress", which is wfWorkflow being null.
-    if (buildWorkflowMode && !wfWorkflow && trimmed) {
+    // Workflow mode pill is on → ALWAYS start a workflow build. If a
+    // previous workflow build is still hanging around (wfWorkflow set
+    // from an earlier prompt in this thread), we reset its state first
+    // so the new prompt gets a clean run. This guarantees the Workflow
+    // toggle never silently downgrades to the query path.
+    if (buildWorkflowMode && trimmed) {
       const attachmentsForWorkflow: UploadedFile[] = files.map(f => ({ name: f.name, size: f.size }));
       setInput('');
       setFiles([]);
       setAttachedSources([]);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      // Reset any in-flight workflow state from a prior build in this
+      // thread so the new prompt isn't blocked by stale refs.
+      if (wfWorkflow) {
+        setWfWorkflow(null);
+        setWfFiles({});
+        setWfMappings({});
+        setWfAlignments({});
+        setWfResult(null);
+        setWfSaved(false);
+        wfHasPushedClarifyRef.current = false;
+        wfHasPushedMapRef.current = false;
+        wfValidateCompleteRef.current = null;
+        wfUploadModalSeededFor.current = null;
+      }
       startWorkflowBuild(trimmed, attachmentsForWorkflow);
       return;
     }
@@ -4002,15 +4014,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         textareaRef.current.focus();
       }
     }
-    // Workflow mode: don't force 'workflow' explicit (which routes straight to
-    // the canvas builder); fall through to the keyword router so non-workflow
-    // queries reach clarification → the qna-plan approve/revise gate.
-    // BUT: if a workflow build is already in progress (wfWorkflow set), pass
-    // 'query' so the auto-detect router doesn't keyword-spin off a *second*
-    // workflow build on top of the active one.
-    const explicit: 'query' | 'workflow' | undefined =
-      buildWorkflowMode ? (wfWorkflow ? 'query' : undefined) : 'query';
-    simulateResponse(text, explicit);
+    // Anything that gets here is the query path. Workflow-mode messages
+    // were handled above; this fallthrough should only fire for query-
+    // mode submissions. Force 'query' explicit so the keyword auto-
+    // detect can't spin off a workflow build by accident.
+    simulateResponse(text, 'query');
   };
 
   const handleFollowUpClick = (question: string) => {
