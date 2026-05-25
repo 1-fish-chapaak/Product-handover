@@ -4348,6 +4348,29 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     m => m.richType === 'clarification' && (m.richData as unknown as ClarificationData)?.status === 'open'
   );
 
+  // Most-recent open workflow clarify (initial + validate phases) — same docked
+  // pattern as the query clarification, so the UI/placement matches.
+  const openWorkflowClarify = [...messages].reverse().find(m => {
+    if (m.richType !== 'workflow-clarify') return false;
+    const d = m.richData as { questions?: ClarifyQuestion[]; index?: number };
+    return (d.questions?.length ?? 0) > 0 && (d.index ?? 0) < (d.questions?.length ?? 0);
+  });
+  const openWorkflowClarifyData: ClarificationData | null = openWorkflowClarify ? (() => {
+    const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; answers: Record<string, string>; index: number; stepLabel?: string; phase?: string };
+    const numericAnswers: Record<number, string> = {};
+    d.questions.forEach((q, i) => {
+      const a = d.answers?.[q.id];
+      if (a) numericAnswers[i] = a;
+    });
+    return {
+      intro: d.stepLabel ?? 'Asking a few clarifying questions',
+      questions: d.questions.map(q => ({ question: q.title, options: q.options })),
+      answers: numericAnswers,
+      status: 'open',
+      purpose: 'workflow-build',
+    } as unknown as ClarificationData;
+  })() : null;
+
   /* ────────────────────── CHAT HISTORY SIDEBAR ────────────────────── */
   // Outer motion.div animates the column width; inner content stays pinned
   // at 280px so rows don't squish during open/close.
@@ -5300,54 +5323,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     ) : msg.richType === 'workflow-clarify' ? (
                       (() => {
                         const data = msg.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
-                        const q = data.questions[data.index];
-                        if (!q) {
-                          // All answered — recap chip.
-                          return (
-                            <div className="text-[13px] text-ink-500 leading-relaxed max-w-[66ch]">
-                              {data.phase === 'validate' ? 'Validation answers locked in.' : 'Clarifications locked in.'}
-                            </div>
-                          );
-                        }
+                        const done = data.index >= data.questions.length;
+                        // Active state: card is docked above the composer
+                        // (matches query clarification placement) — render
+                        // nothing inline. Once all answered, leave a quiet
+                        // recap so the thread has a trace.
+                        if (!done) return null;
                         return (
-                          <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden max-w-[66ch]">
-                            <div className="px-4 pt-3.5 pb-3">
-                              {data.stepLabel && (
-                                <div className="text-[12px] font-semibold text-brand-600 uppercase tracking-[0.12em] mb-2">
-                                  {data.stepLabel}
-                                </div>
-                              )}
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="text-[15px] font-semibold text-ink-800 leading-snug">{q.title}</div>
-                                {data.questions.length > 1 && (
-                                  <div className="text-[12px] text-ink-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5">
-                                    {data.index + 1} of {data.questions.length}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <ul>
-                              {q.options.map((opt) => (
-                                <li key={opt}>
-                                  <button
-                                    type="button"
-                                    onClick={() => wfAnswerClarify(msg.id, opt)}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-[13px] text-ink-800 hover:bg-brand-50/60 border-t border-canvas-border cursor-pointer transition-colors"
-                                  >
-                                    {opt}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                            <div className="flex items-center justify-end gap-3 px-4 py-2.5 border-t border-canvas-border">
-                              <button
-                                type="button"
-                                onClick={() => wfAnswerClarify(msg.id, null)}
-                                className="text-[13px] font-semibold text-ink-500 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
-                              >
-                                Skip
-                              </button>
-                            </div>
+                          <div className="text-[13px] text-ink-500 leading-relaxed max-w-[66ch]">
+                            {data.phase === 'validate' ? 'Validation answers locked in.' : 'Clarifications locked in.'}
                           </div>
                         );
                       })()
@@ -5936,6 +5920,25 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 onSubmit={() => submitClarification(openClarification.id)}
                 onSkipAll={() => submitClarification(openClarification.id, true)}
                 onSkipCurrent={(qi) => skipClarificationQuestion(openClarification.id, qi)}
+              />
+            </div>
+          )}
+          {openWorkflowClarify && openWorkflowClarifyData && (
+            // Workflow clarify — same docked treatment as the query
+            // clarification above. Mirrors UI + placement so the user
+            // doesn't see two different patterns in the same surface.
+            <div className="mb-2">
+              <ClarificationBlock
+                data={openWorkflowClarifyData}
+                onAnswer={(_qi, ans) => wfAnswerClarify(openWorkflowClarify.id, ans)}
+                onSubmit={() => { /* advancement is driven by wfAnswerClarify; no submit step */ }}
+                onSkipAll={() => {
+                  // Skip every remaining question by passing null until exhausted.
+                  const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; index: number };
+                  const remaining = (d.questions?.length ?? 0) - (d.index ?? 0);
+                  for (let i = 0; i < remaining; i++) wfAnswerClarify(openWorkflowClarify.id, null);
+                }}
+                onSkipCurrent={() => wfAnswerClarify(openWorkflowClarify.id, null)}
               />
             </div>
           )}
