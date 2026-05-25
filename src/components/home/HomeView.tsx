@@ -1915,7 +1915,7 @@ function OpenExceptionsSection({ setView, rangeDays }: { setView: Props['setView
                     <div className="text-ink-900 line-clamp-1">{e.title}</div>
                     <div className="text-xs text-ink-500 mt-0.5">{e.riskCategory} · {e.status}</div>
                   </td>
-                  <td className="px-2 text-ink-700">{e.assignedTo.name}</td>
+                  <td className="px-2 text-ink-700">{e.assignedTo?.name ?? '—'}</td>
                   <td className="px-4 text-right text-ink-500">{e.lastUpdated}</td>
                 </tr>
               ))}
