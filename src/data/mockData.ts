@@ -233,6 +233,30 @@ const SEED_BULK_AUDIT_WORKFLOWS = [
       ],
     },
   },
+  // Failed runs — excluded from the report body, only surfaced via the
+  // "failed runs" callout in the Executive Summary.
+  {
+    id: 'wfr-seed-4',
+    workflowId: 'WF-004',
+    name: 'Vendor Bank Account Anomaly',
+    businessProcess: 'P2P',
+    severity: 'Low' as const,
+    findings: [],
+    observations: [],
+    runStatus: 'failed' as const,
+    failureReason: 'errored' as const,
+  },
+  {
+    id: 'wfr-seed-5',
+    workflowId: 'WF-005',
+    name: 'GRN Quantity Reconciliation',
+    businessProcess: 'P2P',
+    severity: 'Low' as const,
+    findings: [],
+    observations: [],
+    runStatus: 'failed' as const,
+    failureReason: 'skipped' as const,
+  },
 ];
 
 export const GENERATED_REPORTS = [
@@ -346,7 +370,7 @@ export interface GrcException {
   flags?: Array<'Overdue' | 'Bulk'>;
   bulkId?: string;
   title: string;
-  assignedTo: { name: string; initials: string };
+  assignedTo?: { name: string; initials: string };
 }
 
 export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner';
@@ -387,9 +411,9 @@ export const GRC_EXCEPTIONS: GrcException[] = [
   { id: 'EXC004', riskCategory: 'IT Security',       severity: 'High',   status: 'Under Review', classification: 'System Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '3 days ago',   flags: ['Bulk'], bulkId: 'ACT001', title: 'Missing MFA for C-Suite Remote Access',                               assignedTo: PERSON.AS },
   { id: 'EXC005', riskCategory: 'Compliance',        severity: 'High',   status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '2 days ago',   flags: ['Overdue', 'Bulk'], bulkId: 'ACT002', title: 'GDPR Data Subject Requests Exceeding 30-Day SLA',                     assignedTo: PERSON.SR },
   { id: 'EXC006', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'Design Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '15 days ago',  bulkId: 'ACT004', title: 'Trading Desk Reconciliation Errors in Q3',                            assignedTo: PERSON.RK },
-  { id: 'EXC007', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: 'about 7 hours ago',                title: 'Firewall Rule Permits Unrestricted Outbound Traffic',                 assignedTo: PERSON.AS },
+  { id: 'EXC007', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: 'about 7 hours ago',                title: 'Firewall Rule Permits Unrestricted Outbound Traffic' },
   { id: 'EXC008', riskCategory: 'Compliance',        severity: 'High',   status: 'Open',         classification: 'Business as Usual',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '4 days ago',                       title: 'Missing Security Log Retention on Payment Processing System',         assignedTo: PERSON.SR },
-  { id: 'EXC009', riskCategory: 'Operational Risk',  severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '5 days ago',                       title: 'Inadequate Access Review for Terminated Contractors',                 assignedTo: PERSON.RK },
+  { id: 'EXC009', riskCategory: 'Operational Risk',  severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '5 days ago',                       title: 'Inadequate Access Review for Terminated Contractors' },
   { id: 'EXC010', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'System Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '12 days ago',  bulkId: 'ACT005', title: 'Duplicate Payments to 3 Vendors (Oct-Nov)',                           assignedTo: PERSON.AS },
   { id: 'EXC011', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'False Positive',           classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '6 days ago',                       title: 'Service Account API Key Usage: policy-exempt accounts',              assignedTo: PERSON.SR },
   { id: 'EXC012', riskCategory: 'Data Privacy',      severity: 'High',   status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Rejected',   lastUpdated: '1 day ago',   bulkId: 'ACT006', title: 'Customer Data Shared with Unauthorized Third-Party',                  assignedTo: PERSON.RK },
