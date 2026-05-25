@@ -67,8 +67,26 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
       // states in a single run.
       const severities: Array<'High' | 'Medium' | 'Low'> = ['High', 'Medium', 'Low'];
       const workflowResults = run.workflows.map((w, i) => {
-        const severity = severities[i % 3];
         const displayId = `WF-${String(i + 1).padStart(3, '0')}`;
+
+        // Demo: simulate failed runs at fixed indices so the "failed runs
+        // excluded from this report" behavior is visible. A run with ≥3
+        // workflows shows at least one failure; ≥6 shows two.
+        if (i === 2 || i === 5) {
+          return {
+            id: `wfr-${run.id}-${i}`,
+            workflowId: displayId,
+            name: w.name,
+            businessProcess: w.businessProcess,
+            severity: 'Low' as const,
+            findings: [],
+            observations: [],
+            runStatus: 'failed' as const,
+            failureReason: (i === 2 ? 'errored' : 'skipped') as 'errored' | 'skipped',
+          };
+        }
+
+        const severity = severities[i % 3];
         return {
           id: `wfr-${run.id}-${i}`,
           workflowId: displayId,
@@ -113,7 +131,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
       // Persist so ReportsView picks it up on next mount even if it isn't
       // currently rendered.
       try {
-        const key = 'irame.reports.generatedReports.v6';
+        const key = 'irame.reports.generatedReports.v7';
         const raw = localStorage.getItem(key);
         const arr = raw ? JSON.parse(raw) : [];
         if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {

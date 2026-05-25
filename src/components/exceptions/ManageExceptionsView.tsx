@@ -480,26 +480,43 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               }}
               onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
+              onAssign={(ex) => {
+                addToast({ type: 'info', message: `Assigning ${ex.id}…` });
+              }}
               headerLeading={
                 <div className="flex items-center gap-1.5">
-                  {role === 'risk-owner' && (
+                  {/* Bulk Classify + Bulk Assign only appear once one or more
+                      rows are checked; default toolbar stays uncluttered. */}
+                  {role === 'risk-owner' && selected.size > 0 && (
                     <button
-                      disabled={selected.size === 0}
                       onClick={() => setBulkClassifyOpen(true)}
-                      title={selected.size === 0 ? 'Select cases first' : `Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className={`flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border transition-colors ${
-                        selected.size === 0
-                          ? 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
-                          : 'text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer'
-                      }`}
+                      title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
                     >
                       <Tag size={13} />
                       Bulk Classify
-                      {selected.size > 0 && (
-                        <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                          {selected.size}
-                        </span>
-                      )}
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                        {selected.size}
+                      </span>
+                    </button>
+                  )}
+                  {role === 'risk-owner' && selected.size > 0 && (
+                    <button
+                      onClick={() => {
+                        if (onBulkAssign) {
+                          onBulkAssign(Array.from(selected));
+                        } else {
+                          addToast({ type: 'info', message: `Assigning ${selected.size} case${selected.size === 1 ? '' : 's'}…` });
+                        }
+                      }}
+                      title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 cursor-pointer transition-colors"
+                    >
+                      <UserPlus size={13} />
+                      Bulk Assign
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-100 rounded-full tabular-nums">
+                        {selected.size}
+                      </span>
                     </button>
                   )}
                   {onBulkAssign && role !== 'risk-owner' && (

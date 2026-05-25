@@ -82,7 +82,14 @@ export function BulkAuditVariantView({
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
 
-  const totals = computeTotals(workflows);
+  // Failed runs (errored / skipped) are excluded from the report body and only
+  // surfaced via a callout in the Executive Summary. The body renders the
+  // successful runs. When *every* run failed, swap the layout for a dedicated
+  // empty state since there's nothing to report on the audit itself.
+  const successfulWorkflows = workflows.filter(w => (w.runStatus ?? 'succeeded') !== 'failed');
+  const failedWorkflows = workflows.filter(w => w.runStatus === 'failed');
+  const allFailed = successfulWorkflows.length === 0 && failedWorkflows.length > 0;
+  const totals = computeTotals(successfulWorkflows);
 
   const handleOpenWorkflow = (w: WorkflowResult) => {
     addToast({ type: 'info', message: `Opening ${w.workflowId} — ${w.name}…` });
@@ -103,10 +110,16 @@ export function BulkAuditVariantView({
       className={`h-full overflow-y-auto ${backgroundClass(variant)}`}
     >
       <BulkReportHeader onBack={onBack} onShare={onShare} reportName={report.name} variant={variant} />
-      {variant === 'editorial' && <EditorialLayout report={report} workflows={workflows} totals={totals} onOpenWorkflow={handleOpenWorkflow} onRequestDelete={handleRequestDelete} />}
-      {variant === 'forensic' && <ForensicLayout report={report} workflows={workflows} totals={totals} />}
-      {variant === 'minimal' && <MinimalLayout report={report} workflows={workflows} totals={totals} />}
-      {variant === 'architectural' && <ArchitecturalLayout report={report} workflows={workflows} totals={totals} />}
+      {allFailed ? (
+        <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} />
+      ) : (
+        <>
+          {variant === 'editorial' && <EditorialLayout report={report} workflows={successfulWorkflows} failedWorkflows={failedWorkflows} totals={totals} onOpenWorkflow={handleOpenWorkflow} onRequestDelete={handleRequestDelete} />}
+          {variant === 'forensic' && <ForensicLayout report={report} workflows={successfulWorkflows} totals={totals} />}
+          {variant === 'minimal' && <MinimalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
+          {variant === 'architectural' && <ArchitecturalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
+        </>
+      )}
 
       {pendingDelete && createPortal(
         <DeleteWorkflowConfirm
@@ -417,9 +430,54 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
 // EDITORIAL — printed-page proportions, serif headlines, prose findings
 // ─────────────────────────────────────────────────────────────────────
 
-function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestDelete }: {
+// Empty state shown when *every* workflow in the bulk run failed. Replaces the
+// normal report layout — no audit content to show, just the cover and a list of
+// the failed runs so the reader knows what was attempted.
+function AllFailedEmpty({ report, failedWorkflows }: {
+  report: Report;
+  failedWorkflows: WorkflowResult[];
+}) {
+  return (
+    <div className="mx-auto px-8 pt-2 pb-24 max-w-[1100px]">
+      {/* Cover — same purple gradient as the editorial layout, but slimmer */}
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
+        <div className="relative z-10 px-8 py-7">
+          <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
+          <p className="text-white/65 text-[13px] leading-snug">
+            All {failedWorkflows.length} {failedWorkflows.length === 1 ? 'workflow' : 'workflows'} failed during this run.
+          </p>
+        </div>
+      </div>
+
+      {/* Empty-state body */}
+      <div className="bg-white border border-border-light rounded-2xl mt-5 p-10 text-center">
+        <div className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={20} className="text-brand-700" />
+        </div>
+        <h2 className="text-[18px] font-bold text-text mb-2">Nothing to report on the audit itself</h2>
+        <p className="text-[13.5px] text-text-secondary mb-6 max-w-[540px] mx-auto">
+          None of the {failedWorkflows.length} workflows in this run produced results — the report has no audit content. The failed runs are listed below for reference.
+        </p>
+        <div className="text-left max-w-[640px] mx-auto rounded-xl border border-brand-200 bg-brand-50/40 px-5 py-4">
+          <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">Failed runs</p>
+          <ul className="space-y-1.5">
+            {failedWorkflows.map(w => (
+              <li key={w.id} className="text-[13px] text-text">
+                <span className="font-medium text-ink-900">{w.name}</span>
+                <span className="text-text-muted"> ({w.workflowId}, {w.failureReason ?? 'errored'})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditorialLayout({ report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete }: {
   report: Report;
   workflows: WorkflowResult[];
+  failedWorkflows: WorkflowResult[];
   totals: Totals;
   onOpenWorkflow: (w: WorkflowResult) => void;
   onRequestDelete: (w: WorkflowResult) => void;
@@ -480,13 +538,6 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
               >
                 <History size={15} />
               </button>
-              <button
-                onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-              >
-                <Sparkles size={13} />
-                Generate Summary
-              </button>
             </div>
           </div>
         </div>
@@ -499,13 +550,13 @@ function EditorialLayout({ report, workflows, totals, onOpenWorkflow, onRequestD
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
         <div id="bulk-exec-summary" className="scroll-mt-6">
-          <EditorialSummary workflows={workflows} totals={totals} />
+          <EditorialSummary totals={totals} />
         </div>
 
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
         <div id="bulk-workflow-status" className="scroll-mt-6">
-          <EditorialWorkflowStatus workflows={workflows} auditDate={report.generatedAt} />
+          <EditorialWorkflowStatus workflows={workflows} failedWorkflows={failedWorkflows} auditDate={report.generatedAt} />
         </div>
 
         <hr className="mt-10 mb-4 border-0 border-t border-ink-900/15" />
@@ -567,20 +618,15 @@ function EditorialContents({ workflows }: { workflows: WorkflowResult[] }) {
   );
 }
 
-function EditorialSummary({ workflows, totals }: { workflows: WorkflowResult[]; totals: Totals }) {
-  const passed = workflows.filter(w => workflowStatus(w) === 'pass');
-  const failed = workflows.filter(w => workflowStatus(w) === 'fail');
-
+function EditorialSummary({ totals }: { totals: Totals }) {
   const stats = [
     { label: 'Workflows Run', value: String(totals.workflows), icon: Layers, color: 'text-brand-700 bg-brand-50' },
     { label: 'Records Flagged', value: String(totals.records), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
-    { label: 'High Severity', value: String(totals.high), icon: Shield, color: 'text-risk-700 bg-risk-50' },
-    { label: 'Medium Severity', value: String(totals.medium), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
   ];
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-4 gap-3 pb-5 border-b border-ink-900/15">
+      <div className="flex flex-wrap items-center gap-10 pb-5 border-b border-ink-900/15">
         {stats.map((stat, si) => (
           <motion.div
             key={stat.label}
@@ -602,42 +648,8 @@ function EditorialSummary({ workflows, totals }: { workflows: WorkflowResult[]; 
       <p className="text-[15.5px] leading-[1.75] text-text">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
         <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
-        Severity distribution stands at{' '}
-        <strong className="text-risk-700">{totals.high} high</strong>,{' '}
-        <strong className="text-high-700">{totals.medium} medium</strong>, and{' '}
-        <strong className="text-compliant-700">{totals.low} low</strong>. High-severity items should be triaged first;
-        the remainder are queued for AP review.
+        High-severity items should be triaged first; the remainder are queued for AP review.
       </p>
-
-      {passed.length > 0 && (
-        <p className="text-[14.5px] leading-[1.7] text-text">
-          <strong className="font-semibold text-compliant-700">{passed.length} {passed.length === 1 ? 'workflow' : 'workflows'} passed</strong>
-          {passed.length > 0 && ' — '}
-          {passed.map((w, i) => (
-            <span key={w.id}>
-              <span className="font-medium text-ink-900">{w.name}</span>
-              <span className="text-text-muted"> ({w.workflowId})</span>
-              {i < passed.length - 1 && '; '}
-            </span>
-          ))}
-          . These controls ran clean with no severity above Low.
-        </p>
-      )}
-
-      {failed.length > 0 && (
-        <p className="text-[14.5px] leading-[1.7] text-text">
-          <strong className="font-semibold text-risk-700">{failed.length} {failed.length === 1 ? 'workflow' : 'workflows'} failed</strong>
-          {failed.length > 0 && ' — '}
-          {failed.map((w, i) => (
-            <span key={w.id}>
-              <span className="font-medium text-ink-900">{w.name}</span>
-              <span className="text-text-muted"> ({w.workflowId}, {w.severity.toLowerCase()})</span>
-              {i < failed.length - 1 && '; '}
-            </span>
-          ))}
-          . Review the detail below and assign a risk owner where missing.
-        </p>
-      )}
     </div>
   );
 }
@@ -658,8 +670,16 @@ function scrollToWorkflow(id: string) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function EditorialWorkflowStatus({ workflows, auditDate }: { workflows: WorkflowResult[]; auditDate: string }) {
-  if (workflows.length === 0) return null;
+function EditorialWorkflowStatus({ workflows, failedWorkflows, auditDate }: {
+  workflows: WorkflowResult[];
+  failedWorkflows: WorkflowResult[];
+  auditDate: string;
+}) {
+  // All workflows attempted in this bulk audit — successful first, failed last.
+  // Successful rows scroll to their chapter; failed rows have no chapter and
+  // render as plain text with a "failed (reason)" status.
+  const allRows = [...workflows, ...failedWorkflows];
+  if (allRows.length === 0) return null;
   return (
     <div>
       <table className="w-full border-collapse text-[13px]">
@@ -673,29 +693,37 @@ function EditorialWorkflowStatus({ workflows, auditDate }: { workflows: Workflow
           </tr>
         </thead>
         <tbody>
-          {workflows.map(w => {
-            const status = workflowStatus(w);
+          {allRows.map(w => {
+            const isFailed = w.runStatus === 'failed';
             return (
               <tr key={w.id} className="border-b border-ink-900/10">
                 <td className="py-3 align-baseline font-bold text-primary uppercase tracking-wider text-[11px]">
                   {w.workflowId}
                 </td>
                 <td className="py-3 align-baseline">
-                  <button
-                    type="button"
-                    onClick={() => scrollToWorkflow(w.id)}
-                    className="text-left text-[13px] font-semibold text-text hover:text-primary transition-colors cursor-pointer"
-                  >
-                    {w.name}
-                  </button>
+                  {isFailed ? (
+                    <span className="text-[13px] font-semibold text-text">{w.name}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => scrollToWorkflow(w.id)}
+                      className="text-left text-[13px] font-semibold text-text hover:text-primary transition-colors cursor-pointer"
+                    >
+                      {w.name}
+                    </button>
+                  )}
                 </td>
                 <td className="py-3 align-baseline text-[13px] text-text">
-                  {resultSummary(w)}
+                  {isFailed
+                    ? <span className="text-text-muted">Run failed — no result.</span>
+                    : resultSummary(w)}
                 </td>
                 <td className="py-3 align-baseline">
-                  <span className={`font-semibold ${status === 'pass' ? 'text-compliant-700' : 'text-risk-700'}`}>
-                    {status === 'pass' ? 'completed' : 'failed'}
-                  </span>
+                  {isFailed ? (
+                    <span className="font-semibold text-risk-700">failed ({w.failureReason ?? 'errored'})</span>
+                  ) : (
+                    <span className="font-semibold text-compliant-700">completed</span>
+                  )}
                 </td>
                 <td className="py-3 align-baseline text-[13px] text-text tabular-nums">
                   {auditDate}
