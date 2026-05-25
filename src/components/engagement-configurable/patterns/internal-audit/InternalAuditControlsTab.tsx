@@ -6,7 +6,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import {
   ClipboardCheck, Shield, FileText, ChevronRight, ChevronDown, CheckCircle2,
-  Play, Workflow, AlertTriangle, Info,
+  Play, Workflow, AlertTriangle, Info, Plus, Link2,
 } from 'lucide-react';
 import type { ConfigurableEngagement } from '../../configurableEngagementTypes';
 import { RACMS, SOPS, CHECKLISTS, type InternalAuditScopeState } from './internalAuditScopeData';
@@ -368,8 +368,8 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
               <div key={ctrl.id} className={i > 0 ? 'border-t border-border-light' : ''}>
                 {/* Control row */}
                 <div
-                  onClick={() => wfCount > 0 && toggleExpand(ctrl.id)}
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${wfCount > 0 ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-primary/5' : isControlSelected ? 'bg-primary/[0.03]' : wfCount > 0 ? 'hover:bg-surface-2/30' : ''}`}
+                  onClick={() => toggleExpand(ctrl.id)}
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${isExpanded ? 'bg-primary/5' : isControlSelected ? 'bg-primary/[0.03]' : 'hover:bg-surface-2/30'}`}
                 >
                   {wfCount > 0 && (
                     <input type="checkbox" checked={isControlSelected} onChange={(e) => { e.stopPropagation(); toggleControlSelect(ctrl.id); }}
@@ -377,7 +377,7 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                       className="w-3.5 h-3.5 rounded border-gray-300 accent-[#6a12cd] cursor-pointer shrink-0" />
                   )}
                   {wfCount === 0 && <div className="w-3.5 shrink-0" />}
-                  {wfCount > 0 ? (isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />) : <div className="w-3.5 shrink-0" />}
+                  {isExpanded ? <ChevronDown size={14} className="text-primary shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-semibold text-text">{ctrl.name}</span>
@@ -395,10 +395,26 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
                   </div>
                 </div>
 
-                {/* Expanded: linked workflows with selection (only for controls with workflows) */}
-                {isExpanded && wfCount > 0 && (
+                {/* Expanded: linked workflows with selection */}
+                {isExpanded && (
                   <div className="border-t border-border-light bg-surface-2/10 px-5 py-4 space-y-3">
-                    {(
+                    {/* Link / Create workflow actions */}
+                    <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); alert('Link Workflow — will be connected to Workflow Library.'); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-primary/8 hover:bg-primary/15 cursor-pointer transition-colors border border-primary/15">
+                        <Link2 size={10} />Link Workflow
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); alert('Create Workflow — will open Workflow Builder.'); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-primary/8 hover:bg-primary/15 cursor-pointer transition-colors border border-primary/15">
+                        <Plus size={10} />Create Workflow
+                      </button>
+                    </div>
+
+                    {wfCount === 0 && (
+                      <p className="text-[11px] text-gray-400 italic">No workflows linked yet. Link or create a workflow to enable execution.</p>
+                    )}
+
+                    {wfCount > 0 && (
                       <>
                         {/* Selection toolbar */}
                         <div className="flex items-center justify-between">
@@ -476,6 +492,8 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
           selectedWorkflows={selectedLibraryWorkflows}
           onClose={() => { setShowBulkModal(false); }}
           onContinue={() => handleBulkRunComplete()}
+          defaultAuditName={engagement.name}
+          defaultAuditDescription={engagement.description}
         />
       )}
     </div>

@@ -84,7 +84,29 @@ const SHARED_DASHBOARD_OPTIONS = [
   { id: 'shared-3', name: 'GL Reconciliation Monitor', description: 'General Ledger reconciliation status', accent: 'bg-brand-50 text-brand-700', sharedBy: 'Sneha Desai' },
 ];
 
-export default function App() {
+// ─── Error Boundary ──────────────────────────────────────────────────────
+import React from 'react';
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, fontFamily: 'system-ui' }}>
+          <h2 style={{ color: '#c00', marginBottom: 12 }}>Something went wrong</h2>
+          <pre style={{ fontSize: 13, color: '#666', whiteSpace: 'pre-wrap', maxWidth: 800 }}>{this.state.error?.message}\n{this.state.error?.stack}</pre>
+          <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            style={{ marginTop: 16, padding: '8px 16px', background: '#6a12cd', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppInner() {
   const {
     state,
     setView,
@@ -110,6 +132,7 @@ export default function App() {
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
+    startWorkflowForEngagement,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -437,6 +460,7 @@ export default function App() {
               }}
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={() => setView('reports')}
+              workflowEngagementContext={state.workflowBuilderEngagementName}
             /></div>
             {state.showArtifacts && (
               <div
@@ -494,6 +518,7 @@ export default function App() {
             }}
             onOpenExecutor={() => openWorkflowExecutor(state.selectedWorkflowId!)}
             onEditInChat={() => enterWorkflowMode({ workflowId: state.selectedWorkflowId! })}
+            initialTab={state.workflowDetailInitialTab}
           />
         );
       }
@@ -692,16 +717,27 @@ export default function App() {
               backView: 'engagement-overview',
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+            onOpenWorkflow={(id) => setSelectedWorkflow(id, 'runs')}
+            onCreateWorkflowForEngagement={startWorkflowForEngagement}
           />
         );
 
-      case 'engagement-case-management':
+      case 'engagement-case-management': {
+        // Deep-link filters (set when drilled in from an Overview chart in a new tab).
+        const sp = new URLSearchParams(window.location.search);
+        const initialFilters = {
+          severity: sp.get('severity') ?? undefined,
+          workflow: sp.get('workflow') ?? undefined,
+          status: sp.get('status') ?? undefined,
+        };
         return (
           <CaseManagementWorkspace
             engagementId={state.selectedEngagementId ?? ''}
             onBack={() => setView('engagement-overview')}
+            initialFilters={initialFilters}
           />
         );
+      }
 
       case 'my-queue':
         return (
@@ -973,5 +1009,13 @@ export default function App() {
       </div>
       </BulkRunProgressProvider>
     </ToastProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }

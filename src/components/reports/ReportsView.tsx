@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import {
-  FileText, Shield, AlertTriangle, CheckCircle2, BarChart3,
+  FileText, FileSpreadsheet, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowRight, ArrowLeft, ChevronDown,
   ChevronLeft, ChevronRight,
   Sparkles, Settings, Palette, Type,
@@ -10,18 +10,21 @@ import {
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
   ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink, Copy,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
-  Star, Layers, Check, CloudUpload,
+  Star, Layers, Check, CloudUpload, RefreshCw,
 } from 'lucide-react';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
-import { QUERY_GRAPHS, type QueryGraph } from '../../data/queryGraphs';
+import { QUERY_GRAPHS, QUERY_TABLES, type QueryGraph, type QueryTable } from '../../data/queryGraphs';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { SectionHeader, Checkbox, KpiPreviewRow, TablePreviewRow } from '../chat/WidgetPickerParts';
+import { setAll, toggleIn } from '../chat/widgetPickerHelpers';
 import { StatusBadge } from '../shared/StatusBadge';
 import SmartTable from '../shared/SmartTable';
-import { useToast } from '../shared/Toast';
+import { useToast, type ToastType } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
 import { KpiCountUp } from '../shared/KpiTile';
+import { renderAssistantText } from '../shared/AssistantMarkdown';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
@@ -47,6 +50,56 @@ const CATEGORY_COLORS: Record<string, string> = {
   Executive: 'text-indigo-600 bg-indigo-50',
 };
 
+// Observation attachments — auditors evidence files. Any number, any
+// type (image/pdf/csv/xlsx/doc/docx). Stored as base64 data URLs so the
+// preview/lightbox doesn't depend on any backend.
+type ObservationAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  dataUrl: string;
+};
+
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
+const ATTACHMENT_ACCEPT =
+  'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function isImageMime(mime: string): boolean {
+  return mime.startsWith('image/');
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Maps mime type → { Icon, tint } for the chip rendering. Falls back to a
+// generic paperclip so an unrecognized but otherwise-valid mime still
+// renders something coherent.
+function attachmentVisual(mime: string): { Icon: React.ElementType; tone: string } {
+  if (mime === 'application/pdf') return { Icon: FileText, tone: 'text-risk-700' };
+  if (mime === 'text/csv' || mime.includes('spreadsheet') || mime === 'application/vnd.ms-excel')
+    return { Icon: FileSpreadsheet, tone: 'text-compliant-700' };
+  if (mime === 'application/msword' || mime.includes('wordprocessing'))
+    return { Icon: FileText, tone: 'text-evidence-700' };
+  return { Icon: Paperclip, tone: 'text-text-muted' };
+}
+
+// Report tag chip — maps the freeform tag string to the GRC semantic
+// palette instead of one-off hex pairs. Keeps the colour vocabulary the
+// same one used everywhere else in the product.
+function reportTagChip(tag: string): { classes: string; label: string } {
+  if (tag === 'Internal Audit') {
+    return { classes: 'bg-evidence-50 text-evidence-700', label: tag };
+  }
+  if (tag === 'Bulk Audit') {
+    return { classes: 'bg-mitigated-50 text-mitigated-700', label: tag };
+  }
+  return { classes: 'bg-paper-100 text-ink-600', label: tag };
+}
+
 type AttachedQuery = {
   id: string;
   kind: 'query' | 'source' | 'upload';
@@ -70,6 +123,12 @@ export type WorkflowResult = {
     columns: string[];
     rows: (string | number)[][];
   };
+  /** Run-time status. Missing = treated as 'succeeded' for back-compat with
+   *  pre-existing reports. Failed runs are excluded from the report body and
+   *  only acknowledged via a callout in the Executive Summary. */
+  runStatus?: 'succeeded' | 'failed';
+  /** Why the run failed. Only set when runStatus === 'failed'. */
+  failureReason?: 'errored' | 'skipped';
 };
 
 // Four design treatments for the bulk audit report detail page, exposed as
@@ -1265,7 +1324,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
 }
 
 // ─── Query Card Component ───
-type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; chartData: number[] };
+type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
 function parseNumeric(v: string): number {
   const match = String(v).match(/-?\d[\d,.]*/);
@@ -1274,7 +1333,7 @@ function parseNumeric(v: string): number {
 }
 
 function computeQueryKpis(query: QueryShape) {
-  const firstVal = parseNumeric(query.kpis[0]?.value ?? '0');
+  const firstVal = parseNumeric((query.kpis ?? [])[0]?.value ?? '0');
   const total = firstVal > 0 ? firstVal : 40 + (query.id.charCodeAt(query.id.length - 1) % 120);
   const closed = Math.max(0, Math.round(total * (0.45 + ((query.id.charCodeAt(0) % 10) / 40))));
   const open = Math.max(0, total - closed);
@@ -1285,6 +1344,22 @@ function computeQueryKpis(query: QueryShape) {
     { label: 'Closed',           value: closed.toLocaleString(), icon: CheckCircle2,  color: 'text-compliant-700 bg-compliant-50' },
     { label: 'Check Health',     value: `${healthPct}%`,         icon: TrendingUp,    color: 'text-evidence-700 bg-evidence-50' },
   ];
+}
+
+// Simulated report download — shows a 'loading' toast that resolves to a
+// 'success' toast after a short "preparing" delay. No real file is produced
+// (the prototype's report exports are all mock).
+function startReportDownload(
+  addToast: (t: { type: ToastType; message: string }) => string,
+  updateToast: (id: string, patch: { type: ToastType; message: string }) => void,
+  reportName: string,
+  ext = 'pdf',
+) {
+  const file = `${reportName}.${ext}`;
+  const id = addToast({ type: 'loading', message: `Preparing ${file}…` });
+  window.setTimeout(() => {
+    updateToast(id, { type: 'success', message: `${file} downloaded.` });
+  }, 1800);
 }
 
 /**
@@ -1302,14 +1377,16 @@ function computeQueryKpis(query: QueryShape) {
  * (the keyframes auto-shorten to 10ms via the global reduced-motion rule in
  * index.css), and has no dependency on external animation libraries.
  */
-function ManageExceptionsLaunchButton({ queryId }: { queryId: string }) {
+function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: string; compact?: boolean }) {
   const [launching, setLaunching] = useState(false);
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null);
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (launching) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    setRipple({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() });
+    if (!compact) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setRipple({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() });
+    }
     setLaunching(true);
     // Kick off a page-level LTR launch pulse so the whole shell nudges right
     // in sync with the button — reinforces the "content is ejecting" metaphor.
@@ -1325,6 +1402,28 @@ function ManageExceptionsLaunchButton({ queryId }: { queryId: string }) {
       setRipple(null);
     }, 700);
   };
+
+  // Compact link — lives in the QueryCard meta row alongside the icon buttons.
+  // Editorial register: type-only, no fill, no shadow. Hover lifts to brand.
+  if (compact) {
+    return (
+      <button
+        onClick={handleClick}
+        disabled={launching}
+        title="Review & classify exceptions · opens in a new tab"
+        aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
+        className={`group inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-text-secondary hover:text-primary cursor-pointer transition-colors ${
+          launching ? 'opacity-60' : ''
+        }`}
+      >
+        <span>Manage Exceptions</span>
+        <ArrowRight
+          size={11}
+          className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+        />
+      </button>
+    );
+  }
 
   return (
     <button
@@ -1519,23 +1618,27 @@ function ConfirmDialog({
   );
 }
 
-function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, comments = [], onAddComment, casesPhase, onCasesPhaseChange, title }: { query: QueryShape; index: number; onManageExceptions?: () => void; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; casesPhase: CasesPhase; onCasesPhaseChange: (phase: CasesPhase) => void; title?: string }) {
+function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
+  const safeQuery = query ?? { id: '', status: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [graphModalOpen, setGraphModalOpen] = useState(false);
-  const [attachedGraphId, setAttachedGraphId] = useState<string | null>(null);
-  const availableGraphs = QUERY_GRAPHS[query.id] ?? [];
-  const attachedGraph = availableGraphs.find(g => g.id === attachedGraphId) ?? null;
+  const [widgetModalOpen, setWidgetModalOpen] = useState(false);
+  const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
+  const queryTable = QUERY_TABLES[safeQuery.id];
+  const queryKpis = computeQueryKpis(safeQuery);
+  const [selectedKpis, setSelectedKpis] = useState<Set<string>>(() => new Set(queryKpis.map(k => k.label)));
+  const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
+  const [tableAttached, setTableAttached] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
-  const statusStyle = query.status === 'Completed'
+  const statusStyle = safeQuery.status === 'Completed'
     ? { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' }
     : { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' };
 
-  const severityStyle = query.severity === 'Critical'
+  const severityStyle = safeQuery.severity === 'Critical'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
     : { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' };
 
@@ -1548,167 +1651,153 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
+  if (!query || !query.id) return null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="relative border-x border-b border-border-light bg-white overflow-hidden"
+      className="relative bg-white border border-border-light overflow-hidden"
     >
 
-      <div className="px-6 py-5">
-        {/* Meta row */}
+      <div className="px-7 py-6">
+        {/* Meta band — type-only line: Q01 · risk · severity · status on the left;
+            Manage Exceptions (text-link), Comments, 3-dots on the right. */}
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
-          className="flex items-center justify-between mb-4 gap-4"
+          className="mb-4"
         >
-          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
-            <span className="font-bold text-primary uppercase tracking-wider shrink-0">{title ?? `Query · ${query.id}`}</span>
-            <span className="w-px h-3 bg-border-light shrink-0" />
-            <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">{query.risk}</span>
-            <span className="w-px h-3 bg-border-light shrink-0" />
-            <span className="flex items-center gap-1.5 shrink-0">
-              <span className="relative inline-flex">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10.5px] font-semibold uppercase tracking-wider">
+              <span className="font-mono text-[12px] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
+              <span aria-hidden className="text-ink-300 select-none">·</span>
+              <span className="text-text-muted shrink-0">{query.risk}</span>
+              <span aria-hidden className="text-ink-300 select-none">·</span>
+              <span className="flex items-center gap-1.5 shrink-0">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-                {query.severity === 'Critical' && (
-                  <motion.span
-                    className={`absolute inset-0 rounded-full ${severityStyle.dot}`}
-                    animate={{ scale: [1, 2.4], opacity: [0.5, 0] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-                  />
-                )}
+                <span className={query.severity === 'Critical' ? 'text-risk-700' : 'text-high-700'}>{query.severity}</span>
               </span>
-              <span className={`font-semibold uppercase tracking-wider ${query.severity === 'Critical' ? 'text-risk-700' : 'text-high-700'}`}>{query.severity}</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider ${statusStyle.pill}`} style={{ borderRadius: '6px' }}>
-              <span className={`w-1 h-1 rounded-full ${statusStyle.dot}`} />
-              {query.status}
-            </span>
-            <GenerateCasesGate queryId={query.id} phase={casesPhase} onPhaseChange={onCasesPhaseChange} />
-            {(() => {
-              const myComments = comments.filter(c => c.queryId === query.id).length;
-              return (
+              <span aria-hidden className="text-ink-300 select-none">·</span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
+                <span className={query.status === 'Completed' ? 'text-compliant-700' : 'text-mitigated-700'}>{query.status}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              <ManageExceptionsLaunchButton queryId={query.id} compact />
+              {(() => {
+                const myComments = comments.filter(c => c.queryId === query.id).length;
+                return (
+                  <button
+                    onClick={() => setDrawerTab('comments')}
+                    title="Comments on this query"
+                    aria-label="Comments on this query"
+                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-md cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
+                  >
+                    <MessageSquare size={14} className="shrink-0" />
+                    {myComments > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[9px] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
+                        {myComments}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+              <div className="relative -ml-1" ref={menuRef}>
                 <button
-                  onClick={() => setDrawerTab('comments')}
-                  title="Comments on this query"
-                  aria-label="Comments on this query"
-                  className="relative inline-flex items-center justify-center w-8 h-8 text-primary bg-white border border-primary/25 rounded-[8px] cursor-pointer hover:bg-primary-xlight hover:border-primary/40 transition-colors"
+                  onClick={() => setMenuOpen(o => !o)}
+                  title="More options"
+                  aria-label="More options"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
                 >
-                  <MessageSquare size={14} className="shrink-0" />
-                  {myComments > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[9.5px] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
-                      {myComments}
-                    </span>
-                  )}
+                  <MoreVertical size={15} />
                 </button>
-              );
-            })()}
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setMenuOpen(o => !o)}
-                title="More options"
-                aria-label="More options"
-                className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
-              >
-                <MoreVertical size={15} />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onOpenQuery?.({ id: query.id, title: query.title });
-                    }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <ExternalLink size={13} />
-                    Open Query
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      navigator.clipboard?.writeText(query.id);
-                      addToast({ type: 'success', message: `Copied ${query.id}` });
-                    }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <Copy size={13} />
-                    Copy Card ID
-                  </button>
-                  <button
-                    onClick={() => { setMenuOpen(false); setGraphModalOpen(true); }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <BarChart3 size={13} />
-                    Add Graph
-                  </button>
-                  <button
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <Download size={13} />
-                    Download
-                  </button>
-                  <div className="my-1 border-t border-border-light" />
-                  <button
-                    onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
-                  >
-                    <Trash2 size={13} />
-                    Delete
-                  </button>
-                </div>
-              )}
+                {menuOpen && (
+                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onOpenQuery?.({ id: query.id, title: query.title });
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                    >
+                      <ExternalLink size={13} />
+                      Open Query
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                    >
+                      <LayoutGrid size={13} />
+                      Add Widgets
+                    </button>
+                    <button
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                    >
+                      <Download size={13} />
+                      Download
+                    </button>
+                    <div className="my-1 border-t border-border-light" />
+                    <button
+                      onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                    >
+                      <Trash2 size={13} />
+                      Delete Query
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
         </motion.div>
 
-        {/* Title */}
+        {/* Title — the question. Set in Source Serif 4 so it reads like an
+            audit prompt on a printed page rather than a UI label. */}
         <motion.h3
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[15px] font-semibold text-text leading-[1.5] mb-5"
+          className="font-display text-[20px] text-text leading-[1.3] tracking-[-0.005em] mb-4"
         >
           {query.title}
         </motion.h3>
 
-        {/* KPI strip — appears once cases are ready, count-up animated to mirror
-            the chat's KPI tiles. No placeholder while generating: the toggle
-            itself already carries the in-flight state. */}
-        {casesPhase === 'ready' ? (() => {
-          const kpis = computeQueryKpis(query);
+        {/* Inline metrics — sit directly below the query title so the numbers
+            read as the answer to the question above. Driven by the "Add
+            Widgets" modal selection. */}
+        {(() => {
+          const kpis = queryKpis.filter(k => selectedKpis.has(k.label));
           if (kpis.length === 0) return null;
           return (
-            <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="flex items-baseline flex-wrap gap-x-6 gap-y-1.5 tabular-nums mb-5">
               {kpis.map((k, ki) => (
-                <motion.div
+                <motion.span
                   key={k.label}
-                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + ki * 0.08 }}
-                  className="bg-canvas-elevated border border-border-light rounded-xl p-4 flex items-center gap-3"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
+                  className="flex items-baseline gap-2"
                 >
-                  <div className={`p-2 rounded-lg ${k.color}`}><k.icon size={16} /></div>
-                  <div>
-                    <div className="text-xl font-bold text-text tabular-nums">
-                      <KpiCountUp value={k.value} delay={120 + ki * 80} />
-                    </div>
-                    <div className="text-[10px] text-text-muted tracking-wide">{k.label}</div>
-                  </div>
-                </motion.div>
+                  <span className="text-[16px] font-semibold text-text leading-none">
+                    <KpiCountUp value={k.value} delay={120 + ki * 80} />
+                  </span>
+                  <span className="text-[12px] text-text-muted font-medium">{k.label}</span>
+                </motion.span>
               ))}
             </div>
           );
-        })() : null}
+        })()}
 
-        {/* Attached graph (selected from Add Graph modal) */}
-        {attachedGraph && (
+        {/* Attached charts — selected via the "Add Widgets" modal */}
+        {availableGraphs.filter(g => selectedCharts.has(g.id)).map(g => (
           <motion.div
+            key={g.id}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
@@ -1717,10 +1806,10 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                 <BarChart3 size={12} />
-                {attachedGraph.title}
+                {g.title}
               </div>
               <button
-                onClick={() => setAttachedGraphId(null)}
+                onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
                 title="Remove graph"
                 aria-label="Remove graph"
                 className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -1730,56 +1819,77 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
             </div>
             <div className="h-[200px]">
               <ConfigurableChart
-                type={attachedGraph.type}
-                xAxis={attachedGraph.xAxis}
-                yAxis={attachedGraph.yAxis}
-                color={attachedGraph.color ?? '#6a12cd'}
+                type={g.type}
+                xAxis={g.xAxis}
+                yAxis={g.yAxis}
+                color={g.color ?? '#6a12cd'}
                 showTarget={false}
                 showLegend
               />
             </div>
           </motion.div>
+        ))}
+
+        {/* Attached results table — selected via the "Add Widgets" modal */}
+        {tableAttached && queryTable && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+                <LayoutGrid size={12} />
+                Results Table
+              </div>
+              <button
+                onClick={() => setTableAttached(false)}
+                title="Remove table"
+                aria-label="Remove table"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border-light">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-paper-50">
+                    {queryTable.columns.map(c => (
+                      <th
+                        key={c}
+                        className="px-3 py-2 text-left text-[10.5px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
+                      >
+                        {c}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {queryTable.rows.map((row, ri) => (
+                    <tr key={ri} className="border-b border-border-light last:border-b-0">
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-3 py-2 text-[12px] text-text-secondary whitespace-nowrap">
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
         )}
 
-        {/* Summary */}
-        <motion.p
+        {/* Answer — rendered in the chat's rich markdown format (shared renderer) */}
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: baseDelay + 0.6, duration: 0.4 }}
-          className="text-[13px] text-text-secondary leading-relaxed mb-4"
         >
-          {query.summary}
-        </motion.p>
-
-        {/* Findings & observations (always visible) */}
-        <div className="space-y-6 pt-2">
-          {[
-            { title: 'Findings', items: query.findings, emptyCopy: 'No findings recorded for this query yet.' },
-            { title: 'Observations', items: query.observations, emptyCopy: 'No observations recorded for this query yet.' },
-          ].map(section => (
-            <div key={section.title}>
-              <h4 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">{section.title}</h4>
-              {section.items.length === 0 ? (
-                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {section.items.map((item, i) => (
-                    <motion.li
-                      key={i}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: baseDelay + 0.7 + i * 0.05, duration: 0.3 }}
-                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
-                    >
-                      <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
-                      {item}
-                    </motion.li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
+          {renderAssistantText(query.answer)}
+        </motion.div>
       </div>
 
       {drawerTab && createPortal(
@@ -1807,18 +1917,24 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
         }}
       />
 
-      {graphModalOpen && createPortal(
-        <AddGraphModal
+      {widgetModalOpen && createPortal(
+        <QueryWidgetModal
           queryId={query.id}
           queryTitle={query.title}
-          graphs={availableGraphs}
-          attachedGraphId={attachedGraphId}
-          onSelect={(id) => {
-            setAttachedGraphId(id);
-            setGraphModalOpen(false);
-            addToast({ type: 'success', message: 'Graph added to query card.' });
+          kpis={queryKpis}
+          charts={availableGraphs}
+          table={queryTable}
+          initialKpis={selectedKpis}
+          initialCharts={selectedCharts}
+          initialTable={tableAttached}
+          onConfirm={(sel) => {
+            setSelectedKpis(sel.kpis);
+            setSelectedCharts(sel.charts);
+            setTableAttached(sel.table);
+            setWidgetModalOpen(false);
+            addToast({ type: 'success', message: 'Query card updated.' });
           }}
-          onClose={() => setGraphModalOpen(false)}
+          onClose={() => setWidgetModalOpen(false)}
         />,
         document.body,
       )}
@@ -1826,20 +1942,31 @@ function QueryCard({ query, index, onManageExceptions, onOpenQuery, onDelete, co
   );
 }
 
-// ─── "Add Graph" modal — pick from query's available chat-session graphs ───
-function AddGraphModal({
+// ─── "Choose What to Include" modal — multi-select KPIs, charts & table ───
+// Mirrors the chat's Add-to-Report section picker so a query card is built
+// from the same surface. Selection-driven: re-opening shows the current card
+// state, and confirming applies it.
+function QueryWidgetModal({
   queryId,
   queryTitle,
-  graphs,
-  attachedGraphId,
-  onSelect,
+  kpis,
+  charts,
+  table,
+  initialKpis,
+  initialCharts,
+  initialTable,
+  onConfirm,
   onClose,
 }: {
   queryId: string;
   queryTitle: string;
-  graphs: QueryGraph[];
-  attachedGraphId: string | null;
-  onSelect: (id: string) => void;
+  kpis: { label: string; value: string }[];
+  charts: QueryGraph[];
+  table?: QueryTable;
+  initialKpis: Set<string>;
+  initialCharts: Set<string>;
+  initialTable: boolean;
+  onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; table: boolean }) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -1848,7 +1975,25 @@ function AddGraphModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const [pickedId, setPickedId] = useState<string | null>(attachedGraphId);
+  const [selKpis, setSelKpis] = useState<Set<string>>(() => new Set(initialKpis));
+  const [selCharts, setSelCharts] = useState<Set<string>>(() => new Set(initialCharts));
+  const [selTable, setSelTable] = useState(initialTable);
+  const [collapsed, setCollapsed] = useState({ kpis: false, charts: false, table: false });
+
+  const hasTable = !!table && table.columns.length > 0;
+  const totalSelected = selKpis.size + selCharts.size + (selTable ? 1 : 0);
+  const totalItems = kpis.length + charts.length + (hasTable ? 1 : 0);
+
+  const selectAll = () => {
+    setAll(kpis.map(k => k.label), true, setSelKpis);
+    setAll(charts.map(c => c.id), true, setSelCharts);
+    if (hasTable) setSelTable(true);
+  };
+  const clearAll = () => {
+    setSelKpis(new Set());
+    setSelCharts(new Set());
+    setSelTable(false);
+  };
 
   return (
     <AnimatePresence>
@@ -1868,80 +2013,181 @@ function AddGraphModal({
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
-          aria-labelledby="add-graph-title"
+          aria-labelledby="query-widget-title"
           className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
         >
+          {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
-            <div>
-              <h3 id="add-graph-title" className="text-[16px] font-bold text-text tracking-tight">
-                Add Graph
-              </h3>
-              <p className="text-[12.5px] text-text-secondary mt-1">
-                <span className="font-mono text-[11px] text-primary">{queryId}</span>
-                <span className="mx-1.5 text-text-muted">·</span>
-                {queryTitle}
-              </p>
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-[10px] bg-primary-xlight flex items-center justify-center shrink-0">
+                <FileText size={16} className="text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="query-widget-title" className="text-[16px] font-bold text-text tracking-tight">
+                  Choose What to Include
+                </h3>
+                <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">
+                  <span className="font-mono text-[11px] text-primary">{queryId}</span>
+                  <span className="mx-1.5 text-text-muted">·</span>
+                  {queryTitle}
+                </p>
+              </div>
             </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
             >
               <X size={17} />
             </button>
           </div>
 
+          {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {graphs.length === 0 ? (
+            {totalItems === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mb-3">
                   <BarChart3 size={20} className="text-text-muted" />
                 </div>
-                <p className="text-[13px] font-semibold text-text mb-1">No graphs available for this query yet</p>
+                <p className="text-[13px] font-semibold text-text mb-1">Nothing to add for this query yet</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {graphs.map((g) => {
-                  const isPicked = pickedId === g.id;
-                  return (
+              <div className="space-y-5">
+                {/* Selection summary + all/none */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] text-text-muted" aria-live="polite">
+                    {totalSelected === 0
+                      ? 'Select what to show on the card.'
+                      : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
+                  </p>
+                  <div className="flex items-center gap-3">
                     <button
-                      key={g.id}
-                      onClick={() => setPickedId(g.id)}
-                      className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none ${
-                        isPicked
-                          ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
-                          : 'border-border-light hover:border-primary/40'
-                      }`}
+                      type="button"
+                      onClick={selectAll}
+                      className="text-[11.5px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span
-                          className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${
-                            isPicked
-                              ? 'bg-primary border-primary text-white'
-                              : 'bg-white border-border-light text-transparent'
-                          }`}
-                        >
-                          <Check size={12} />
-                        </span>
-                        <span className="text-[12.5px] font-semibold text-text">{g.title}</span>
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearAll}
+                      className="text-[11.5px] font-semibold text-text-muted hover:text-text cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* KPI Cards */}
+                {kpis.length > 0 && (
+                  <div className="space-y-1.5" role="group" aria-label="KPI Cards">
+                    <SectionHeader
+                      title="KPI Cards"
+                      count={selKpis.size}
+                      total={kpis.length}
+                      collapsed={collapsed.kpis}
+                      onToggle={() => setCollapsed(c => ({ ...c, kpis: !c.kpis }))}
+                      onToggleAll={(all) => setAll(kpis.map(k => k.label), all, setSelKpis)}
+                      accent="brand"
+                    />
+                    {!collapsed.kpis && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                        {kpis.map(k => (
+                          <KpiPreviewRow
+                            key={k.label}
+                            kpi={{ label: k.label, value: k.value, color: 'text-ink-900' }}
+                            checked={selKpis.has(k.label)}
+                            onChange={() => toggleIn(selKpis, k.label, setSelKpis)}
+                            accent="brand"
+                          />
+                        ))}
                       </div>
-                      <div className="h-[160px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
-                        <ConfigurableChart
-                          type={g.type}
-                          xAxis={g.xAxis}
-                          yAxis={g.yAxis}
-                          color={g.color ?? '#6a12cd'}
-                          showTarget={false}
-                          showLegend={false}
+                    )}
+                  </div>
+                )}
+
+                {/* Charts */}
+                {charts.length > 0 && (
+                  <div className="space-y-1.5" role="group" aria-label="Charts">
+                    <SectionHeader
+                      title="Charts"
+                      count={selCharts.size}
+                      total={charts.length}
+                      collapsed={collapsed.charts}
+                      onToggle={() => setCollapsed(c => ({ ...c, charts: !c.charts }))}
+                      onToggleAll={(all) => setAll(charts.map(c => c.id), all, setSelCharts)}
+                      accent="brand"
+                    />
+                    {!collapsed.charts && (
+                      <div className="grid grid-cols-2 gap-3 pl-1">
+                        {charts.map(g => {
+                          const on = selCharts.has(g.id);
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={on}
+                              aria-label={g.title}
+                              onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
+                              className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                                on
+                                  ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
+                                  : 'border-border-light hover:border-primary/40'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <Checkbox checked={on} accent="brand" />
+                                <span className="text-[12.5px] font-semibold text-text truncate">{g.title}</span>
+                              </div>
+                              <div className="h-[150px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
+                                <ConfigurableChart
+                                  type={g.type}
+                                  xAxis={g.xAxis}
+                                  yAxis={g.yAxis}
+                                  color={g.color ?? '#6a12cd'}
+                                  showTarget={false}
+                                  showLegend={false}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Results Table */}
+                {hasTable && (
+                  <div className="space-y-1.5" role="group" aria-label="Results Table">
+                    <SectionHeader
+                      title="Results Table"
+                      count={selTable ? 1 : 0}
+                      total={1}
+                      collapsed={collapsed.table}
+                      onToggle={() => setCollapsed(c => ({ ...c, table: !c.table }))}
+                      onToggleAll={(all) => setSelTable(all)}
+                      accent="brand"
+                    />
+                    {!collapsed.table && (
+                      <div className="pl-1">
+                        <TablePreviewRow
+                          columns={table!.columns}
+                          sampleRows={table!.rows}
+                          checked={selTable}
+                          onChange={() => setSelTable(v => !v)}
+                          accent="brand"
                         />
                       </div>
-                    </button>
-                  );
-                })}
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
+          {/* Footer */}
           <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-light bg-paper-50/40">
             <button
               onClick={onClose}
@@ -1950,11 +2196,11 @@ function AddGraphModal({
               Cancel
             </button>
             <button
-              onClick={() => pickedId && onSelect(pickedId)}
-              disabled={!pickedId}
-              className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
             >
-              Add Graph
+              <FileText size={13} />
+              Add to Card
             </button>
           </div>
         </motion.div>
@@ -2642,29 +2888,38 @@ function ObservationCard({
   onDelete,
   attached = true,
 }: {
-  obs: { id: string; obsId: string; title: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
+  obs: { id: string; obsId: string; title: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
   index: number;
   onEdit: () => void;
   onToggleAttachment: () => void;
   onDelete: () => void;
   attached?: boolean;
 }) {
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const attachments = obs.attachments ?? [];
+  const visibleAttachments = obs.attachmentHidden ? [] : attachments;
+  const imageAttachments = visibleAttachments.filter(a => isImageMime(a.mimeType));
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const baseDelay = index * 0.08;
 
   useEffect(() => {
-    if (!lightboxOpen) return;
+    if (lightboxIndex === null) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxOpen(false);
+      if (e.key === 'Escape') setLightboxIndex(null);
+      if (e.key === 'ArrowRight') {
+        setLightboxIndex(i => (i === null ? i : (i + 1) % imageAttachments.length));
+      }
+      if (e.key === 'ArrowLeft') {
+        setLightboxIndex(i => (i === null ? i : (i - 1 + imageAttachments.length) % imageAttachments.length));
+      }
     };
     window.addEventListener('keydown', handler);
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', handler);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
     };
-  }, [lightboxOpen]);
+  }, [lightboxIndex, imageAttachments.length]);
 
   return (
     <motion.div
@@ -2687,7 +2942,7 @@ function ObservationCard({
             <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">Observation</span>
           </div>
           <ObservationActionsMenu
-            hasAttachment={!!obs.attachmentDataUrl}
+            hasAttachment={attachments.length > 0}
             attachmentHidden={!!obs.attachmentHidden}
             onEdit={onEdit}
             onToggleAttachment={onToggleAttachment}
@@ -2717,52 +2972,116 @@ function ObservationCard({
           </motion.p>
         )}
 
-        {/* Attachment — click to open lightbox */}
-        {obs.attachmentDataUrl && !obs.attachmentHidden && (
-          <motion.button
-            type="button"
-            onClick={() => setLightboxOpen(true)}
+        {/* Attachments — images as thumbnails (open lightbox with prev/next
+            across image siblings), non-images as chip rows that open the
+            data URL in a new tab so the browser previews / downloads. */}
+        {visibleAttachments.length > 0 && (
+          <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: baseDelay + 0.5, duration: 0.35 }}
-            whileHover={{ scale: 1.02 }}
-            title="Click to view full size"
-            aria-label="Open attachment in full screen"
-            className="block w-[100px] h-[100px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
+            className="flex flex-wrap gap-2.5"
           >
-            <img src={obs.attachmentDataUrl} alt={obs.title} className="w-full h-full object-cover" />
-          </motion.button>
+            {visibleAttachments.map((att) => {
+              if (isImageMime(att.mimeType)) {
+                const imageIdx = imageAttachments.findIndex(a => a.id === att.id);
+                return (
+                  <motion.button
+                    key={att.id}
+                    type="button"
+                    onClick={() => setLightboxIndex(imageIdx)}
+                    whileHover={{ scale: 1.02 }}
+                    title={`${att.name} — click to view full size`}
+                    aria-label={`Open ${att.name} in full screen`}
+                    className="block w-[88px] h-[88px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
+                  >
+                    <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
+                  </motion.button>
+                );
+              }
+              const { Icon, tone } = attachmentVisual(att.mimeType);
+              const inlineMime = att.mimeType === 'application/pdf';
+              return (
+                <a
+                  key={att.id}
+                  href={att.dataUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={inlineMime ? undefined : att.name}
+                  title={`${att.name} — ${formatFileSize(att.size)}`}
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-md hover:border-primary/40 hover:bg-white transition-colors group"
+                >
+                  <Icon size={14} className={`shrink-0 ${tone}`} />
+                  <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
+                  <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                </a>
+              );
+            })}
+          </motion.div>
         )}
       </div>
 
-      {/* Fullscreen lightbox */}
-      {lightboxOpen && obs.attachmentDataUrl && createPortal(
+      {/* Fullscreen lightbox — only fires for image attachments. */}
+      {lightboxIndex !== null && imageAttachments[lightboxIndex] && createPortal(
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          onClick={() => setLightboxOpen(false)}
+          onClick={() => setLightboxIndex(null)}
           className="fixed inset-0 z-[1100] bg-ink-900/85 flex items-center justify-center p-8 cursor-zoom-out"
         >
           <button
-            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex(null); }}
             aria-label="Close preview"
             className="absolute top-5 right-5 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
           >
             <X size={18} />
           </button>
+          {imageAttachments.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex(i => (i === null ? i : (i - 1 + imageAttachments.length) % imageAttachments.length));
+                }}
+                aria-label="Previous image"
+                className="absolute left-5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex(i => (i === null ? i : (i + 1) % imageAttachments.length));
+                }}
+                aria-label="Next image"
+                className="absolute right-5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
           <motion.img
+            key={imageAttachments[lightboxIndex].id}
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            src={obs.attachmentDataUrl}
-            alt={obs.title}
+            src={imageAttachments[lightboxIndex].dataUrl}
+            alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
           />
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[12px] text-white/70 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
-            {obs.obsId} · {obs.title}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
+            <span>{obs.obsId}</span>
+            <span className="text-white/40">·</span>
+            <span>{imageAttachments[lightboxIndex].name}</span>
+            {imageAttachments.length > 1 && (
+              <>
+                <span className="text-white/40">·</span>
+                <span className="tabular-nums">{lightboxIndex + 1} / {imageAttachments.length}</span>
+              </>
+            )}
           </div>
         </motion.div>,
         document.body,
@@ -3066,24 +3385,18 @@ function DraggableQuerySection({
   section,
   index,
   sectionProps,
-  onManageExceptions,
   onOpenQuery,
   onDelete,
   comments,
   onAddComment,
-  casesPhase,
-  onCasesPhaseChange,
 }: {
   section: { id: string; kind: 'query'; title: string; query: QueryShape };
   index: number;
   sectionProps: SectionProps;
-  onManageExceptions?: () => void;
   onOpenQuery?: (query: { id: string; title: string }) => void;
   onDelete: () => void;
   comments: QueryComment[];
   onAddComment: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
-  casesPhase: CasesPhase;
-  onCasesPhaseChange: (phase: CasesPhase) => void;
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
@@ -3091,13 +3404,10 @@ function DraggableQuerySection({
         query={section.query}
         index={index}
         title={section.title}
-        onManageExceptions={onManageExceptions}
         onOpenQuery={onOpenQuery}
         onDelete={onDelete}
         comments={comments}
         onAddComment={onAddComment}
-        casesPhase={casesPhase}
-        onCasesPhaseChange={onCasesPhaseChange}
       />
     </Reorder.Item>
   );
@@ -3585,7 +3895,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
-  const { addToast } = useToast();
+  const { addToast, updateToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -3863,7 +4173,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     | { id: string; kind: 'query'; title: string; query: typeof DEFAULT_QUERIES[0] }
     | { id: string; kind: 'workflow'; title: string; workflow: WorkflowResult }
     | { id: string; kind: 'note'; title: string; content: string }
-    | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachmentDataUrl?: string; attachmentHidden?: boolean };
+    | { id: string; kind: 'observation'; title: string; obsId: string; description: string; attachments?: ObservationAttachment[]; attachmentHidden?: boolean };
 
   type ObservationItem = {
     id: string;
@@ -3871,7 +4181,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     title: string;
     obsId: string;
     description: string;
-    attachmentDataUrl?: string;
+    attachments?: ObservationAttachment[];
     attachmentHidden?: boolean;
   };
 
@@ -3940,7 +4250,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [showAddObservation, setShowAddObservation] = useState(false);
   const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
   const [editingObservationObsId, setEditingObservationObsId] = useState<string | null>(null);
-  const [obsForm, setObsForm] = useState<{ name: string; description: string; attachmentDataUrl: string }>({ name: '', description: '', attachmentDataUrl: '' });
+  const [obsForm, setObsForm] = useState<{ name: string; description: string; attachments: ObservationAttachment[] }>({ name: '', description: '', attachments: [] });
   // Separate stream of observations added to applied-template view (where the body is template-driven)
   const [appliedObservations, setAppliedObservations] = useState<ObservationItem[]>([]);
 
@@ -3962,16 +4272,16 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const openAddObservation = () => {
     setEditingObservationId(null);
     setEditingObservationObsId(null);
-    setObsForm({ name: '', description: '', attachmentDataUrl: '' });
+    setObsForm({ name: '', description: '', attachments: [] });
     setShowAddObservation(true);
   };
-  const openEditObservation = (obs: { id: string; obsId: string; title: string; description: string; attachmentDataUrl?: string }) => {
+  const openEditObservation = (obs: { id: string; obsId: string; title: string; description: string; attachments?: ObservationAttachment[] }) => {
     setEditingObservationId(obs.id);
     setEditingObservationObsId(obs.obsId);
     setObsForm({
       name: obs.title,
       description: obs.description,
-      attachmentDataUrl: obs.attachmentDataUrl ?? '',
+      attachments: obs.attachments ? [...obs.attachments] : [],
     });
     setShowAddObservation(true);
   };
@@ -3992,33 +4302,111 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ));
   };
 
-  const handleObservationAttachment = (file: File | null) => {
-    if (!file) return;
-    if (!/^image\/(png|jpeg|jpg)$/.test(file.type)) {
-      addToast({ type: 'info', message: 'Only PNG or JPG images are supported.' });
-      return;
+  const handleObservationAttachments = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const queue = Array.from(files);
+    let rejectedSize = 0;
+    queue.forEach((file) => {
+      if (file.size > ATTACHMENT_MAX_BYTES) {
+        rejectedSize += 1;
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = String(e.target?.result ?? '');
+        if (!dataUrl) return;
+        setObsForm(prev => ({
+          ...prev,
+          attachments: [
+            ...prev.attachments,
+            {
+              id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              name: file.name,
+              size: file.size,
+              mimeType: file.type || 'application/octet-stream',
+              dataUrl,
+            },
+          ],
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+    if (rejectedSize > 0) {
+      addToast({
+        type: 'info',
+        message: rejectedSize === 1
+          ? '1 file skipped — over the 10 MB per-file limit.'
+          : `${rejectedSize} files skipped — over the 10 MB per-file limit.`,
+      });
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setObsForm(prev => ({ ...prev, attachmentDataUrl: String(e.target?.result ?? '') }));
-    };
-    reader.readAsDataURL(file);
   };
+
+  const removeObservationAttachment = (id: string) => {
+    setObsForm(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter(a => a.id !== id),
+    }));
+  };
+
+  // Drag-and-drop into the Add Observation modal. dragCounter tracks
+  // enter/leave nesting across child elements so the overlay doesn't
+  // flicker when dragging over inner inputs.
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleModalDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer.types.includes('Files')) return;
+    dragCounter.current += 1;
+    setIsDraggingFiles(true);
+  };
+  const handleModalDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDraggingFiles(false);
+  };
+  const handleModalDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const handleModalDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDraggingFiles(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleObservationAttachments(e.dataTransfer.files);
+      e.dataTransfer.clearData();
+    }
+  };
+
+  // Reset the drag counter whenever the modal closes so a stale count
+  // from a previous interaction can't pin the overlay open next time.
+  useEffect(() => {
+    if (!showAddObservation) {
+      dragCounter.current = 0;
+      setIsDraggingFiles(false);
+    }
+  }, [showAddObservation]);
 
   const saveObservation = () => {
     const name = obsForm.name.trim();
     if (!name) return;
     const description = obsForm.description.trim();
-    const attachmentDataUrl = obsForm.attachmentDataUrl || undefined;
+    const attachments = obsForm.attachments.length > 0 ? obsForm.attachments : undefined;
     if (editingObservationId) {
       setSections(prev => prev.map(s =>
         s.id === editingObservationId && s.kind === 'observation'
-          ? { ...s, title: name, description, attachmentDataUrl }
+          ? { ...s, title: name, description, attachments }
           : s
       ));
       setAppliedObservations(prev => prev.map(o =>
         o.id === editingObservationId
-          ? { ...o, title: name, description, attachmentDataUrl }
+          ? { ...o, title: name, description, attachments }
           : o
       ));
       addToast({ type: 'success', message: `${editingObservationObsId ?? 'Observation'} updated.` });
@@ -4030,7 +4418,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         title: name,
         obsId,
         description,
-        attachmentDataUrl,
+        attachments,
       };
       if (appliedTemplate) {
         setAppliedObservations(prev => [...prev, newItem]);
@@ -4218,7 +4606,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   ].map(({ label, ext }) => (
                     <button
                       key={ext}
-                      onClick={() => { addToast({ type: 'success', message: `Downloading ${report.name}.${ext}...` }); setShowDownloadDropdown(false); }}
+                      onClick={() => { startReportDownload(addToast, updateToast, report.name, ext); setShowDownloadDropdown(false); }}
                       className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
                     >
                       {label}
@@ -4442,13 +4830,6 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     >
                       <History size={15} />
                     </button>
-                    <button
-                      onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                    >
-                      <Sparkles size={13} />
-                      Generate Summary
-                    </button>
                   </div>
                 </div>
               </div>
@@ -4624,13 +5005,6 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 >
                                   <History size={15} />
                                 </button>
-                                <button
-                                  onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                                >
-                                  <Sparkles size={13} />
-                                  Generate Summary
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -4641,12 +5015,25 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   }
 
                   if (section.kind === 'summary') {
+                    const hasQueries = sections.some(s => s.kind === 'query');
                     return (
                       <Reorder.Item {...sectionProps}>
                         <div className="border-x border-b border-border-light bg-white p-6">
-                          <div className="flex items-center gap-2 mb-6">
-                            <FileText size={16} className="text-primary" />
-                            <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
+                          <div className="flex items-center justify-between gap-3 mb-6">
+                            <div className="flex items-center gap-2">
+                              <FileText size={16} className="text-primary" />
+                              <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
+                            </div>
+                            {hasQueries && (
+                              <button
+                                onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
+                                title="Regenerate this summary with the latest queries"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                              >
+                                <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                Regenerate
+                              </button>
+                            )}
                           </div>
                           <div className="grid grid-cols-4 gap-3 pb-5 border-b border-border-light mb-5">
                             {activeStats.map((stat, si) => (
@@ -4698,13 +5085,10 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         section={section}
                         index={i}
                         sectionProps={sectionProps}
-                        onManageExceptions={onManageExceptions}
                         onOpenQuery={onOpenQuery}
                         onDelete={() => removeSection(section.id)}
                         comments={comments}
                         onAddComment={addComment}
-                        casesPhase={casesPhases[section.query.id] ?? 'idle'}
-                        onCasesPhaseChange={(p) => setCasesPhase(section.query.id, p)}
                       />
                     );
                   }
@@ -4820,10 +5204,32 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => e.stopPropagation()}
+              onDragEnter={handleModalDragEnter}
+              onDragLeave={handleModalDragLeave}
+              onDragOver={handleModalDragOver}
+              onDrop={handleModalDrop}
               role="dialog"
               aria-labelledby="add-observation-title"
               className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[520px] max-w-[calc(100vw-32px)] p-6"
             >
+              {/* Drop overlay — visible only while files are being dragged
+                  over the dialog. pointer-events-none so drag events still
+                  hit the modal handlers underneath. */}
+              {isDraggingFiles && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-primary bg-primary-xlight/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
+                >
+                  <div className="text-center">
+                    <CloudUpload size={28} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
+                    <div className="text-[14px] font-semibold text-primary">Drop to attach files</div>
+                    <div className="text-[11px] text-text-secondary mt-1">PNG, JPG, PDF, CSV, XLSX, DOC</div>
+                  </div>
+                </motion.div>
+              )}
               <button
                 onClick={closeAddObservation}
                 aria-label="Close"
@@ -4866,33 +5272,66 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       rows={4}
                       className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-text focus:outline-none focus:ring-0 resize-none"
                     />
-                    {obsForm.attachmentDataUrl && (
-                      <div className="px-3 pb-2">
-                        <div className="relative inline-block w-20 h-20 rounded-lg border border-border-light overflow-hidden bg-paper-50">
-                          <img src={obsForm.attachmentDataUrl} alt="Attachment preview" className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => setObsForm(prev => ({ ...prev, attachmentDataUrl: '' }))}
-                            aria-label="Remove attachment"
-                            className="absolute top-0.5 right-0.5 inline-flex items-center justify-center w-4 h-4 rounded-md bg-ink-900/75 text-white hover:bg-ink-900 transition-colors cursor-pointer"
-                          >
-                            <X size={9} />
-                          </button>
-                        </div>
-                      </div>
+                    {obsForm.attachments.length > 0 && (
+                      <ul className="px-3 pb-2 space-y-1.5">
+                        {obsForm.attachments.map(att => {
+                          const isImage = isImageMime(att.mimeType);
+                          const { Icon, tone } = attachmentVisual(att.mimeType);
+                          return (
+                            <li
+                              key={att.id}
+                              className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[6px]"
+                            >
+                              {isImage ? (
+                                <div className="w-8 h-8 rounded-[4px] border border-border-light overflow-hidden bg-white shrink-0">
+                                  <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className={`w-8 h-8 rounded-[4px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
+                                  <Icon size={15} />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
+                                <div className="text-[10.5px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeObservationAttachment(att.id)}
+                                aria-label={`Remove ${att.name}`}
+                                className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
+                              >
+                                <X size={13} />
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     )}
-                    <div className="flex items-center px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
+                    <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
                       <label
-                        title={obsForm.attachmentDataUrl ? 'Change attachment' : 'Attach image (PNG / JPG)'}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+                        title="Attach files (PNG, JPG, PDF, CSV, XLSX, DOC)"
+                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[11.5px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
                       >
-                        <Paperclip size={14} />
+                        <Paperclip size={13} />
+                        <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
                         <input
                           type="file"
-                          accept="image/png,image/jpeg"
-                          onChange={(e) => handleObservationAttachment(e.target.files?.[0] ?? null)}
+                          multiple
+                          accept={ATTACHMENT_ACCEPT}
+                          onChange={(e) => {
+                            handleObservationAttachments(e.target.files);
+                            // Reset value so picking the same file twice re-fires onChange.
+                            e.target.value = '';
+                          }}
                           className="hidden"
                         />
                       </label>
+                      {obsForm.attachments.length > 0 && (
+                        <span className="text-[10.5px] text-text-muted tabular-nums pr-1">
+                          {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4953,7 +5392,7 @@ export default function ReportsView({
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
   };
-  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v6';
+  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v7';
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
@@ -5037,7 +5476,7 @@ export default function ReportsView({
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportTemplate, setNewReportTemplate] = useState('');
   const [newReportTemplatePrefilled, setNewReportTemplatePrefilled] = useState(false);
-  const { addToast } = useToast();
+  const { addToast, updateToast } = useToast();
 
   const openNewReportModal = () => {
     setNewReportName('');
@@ -5107,6 +5546,7 @@ export default function ReportsView({
         <BulkAuditVariantView
           report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
           onBack={() => setViewingReport(null)}
+          onShare={onShare ? () => onShare(viewingReport.id) : undefined}
         />
       );
     }
@@ -5129,29 +5569,20 @@ export default function ReportsView({
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <div className="px-[124px] py-8 relative flex flex-col min-h-full">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div>
+        {/* Header + Tabs share a single full-bleed white strip — bg-white
+            extends past the page's horizontal/top insets so the strip reads
+            as the page's header section, separate from the content below. */}
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
+          {/* Header */}
+          <div className="mb-6">
             <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
               Reports · {activeTab === 'my-reports' ? 'My Reports' : activeTab === 'shared-reports' ? 'Shared Reports' : 'Templates'}
             </div>
             <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
           </div>
-          <div className="flex items-center gap-2 pt-2">
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-border-light hover:border-primary/30 text-text-secondary hover:text-primary bg-white text-[13px] font-medium transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
-            >
-              <Upload size={14} /> Upload Template
-            </button>
-            <button onClick={openNewReportModal} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>
-              <FileText size={14} /> Create Report
-            </button>
-          </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-border mb-6">
+          {/* Tabs */}
+          <div className="flex gap-0">
           <button
             onClick={() => setActiveTab('my-reports')}
             className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
@@ -5182,12 +5613,15 @@ export default function ReportsView({
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'templates' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{REPORT_TEMPLATES.length + customTemplates.length}</span>
             </span>
           </button>
+          </div>
         </div>
 
-        {/* My Reports */}
+        {/* My Reports — modern AI-SaaS table: minimal chrome, sentence-case
+            headers, no grid lines, generous rows, very quiet hover. */}
         {activeTab === 'my-reports' && viewMode === 'list' && (
           <SmartTable
             className="flex-1"
+            variant="modern"
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search reports..."
@@ -5203,29 +5637,37 @@ export default function ReportsView({
             headerExtra={
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
                   <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
                   <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
                 </div>
               </div>
             }
             columns={[
-              { key: 'name', label: 'Report', render: (item) => (
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => {
-                  const report = generatedReports.find(r => r.id === item.id);
-                  if (report) setViewingReport(report);
-                }}>
-                  <div className="flex items-center justify-center w-8 h-8 shrink-0" style={{ background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}>
-                    <FileText size={16} style={{ color: '#6a12cd' }} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11px] text-text-muted tabular-nums">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+              )},
+              { key: 'name', label: 'Report', render: (item) => {
+                const tagTone = item.tag === 'Internal Audit' ? 'text-evidence-700' : item.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
+                return (
+                  <div className="cursor-pointer min-w-0" onClick={() => {
+                    const report = generatedReports.find(r => r.id === item.id);
+                    if (report) setViewingReport(report);
+                  }}>
+                    {Boolean(item.tag) && (
+                      <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
+                        {String(item.tag)}
+                      </div>
+                    )}
+                    <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
                       {(() => {
                         const n = String(item.name);
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
-                          <span className="relative group/nt inline-flex">
-                            <span className="text-text font-medium hover:text-primary transition-colors">{truncated}</span>
+                          <span className="relative group/nt inline-flex min-w-0">
+                            <span className="text-[14px] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
                               <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
@@ -5234,26 +5676,26 @@ export default function ReportsView({
                           </span>
                         );
                       })()}
-                      {Boolean(item.tag) && (() => { const t = String(item.tag); return <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap shrink-0" style={{ borderRadius: '8px', background: t === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB', color: t === 'Internal Audit' ? '#BF2E84' : '#A74108' }}>{t}</span>; })()}
                       {reportAppliedTemplates[String(item.id)] && (
-                        <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                          <Layout size={8} /> {reportAppliedTemplates[String(item.id)].name}
+                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
+                          <Layout size={9} /> {reportAppliedTemplates[String(item.id)].name}
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-text-muted">{String(item.queries)} queries · {String(item.pages)} pages</div>
+                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                      {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
+                    </div>
                   </div>
-                </div>
+                );
+              }},
+              { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
               )},
-              { key: 'generatedAt', label: 'Date', width: '120px', render: (item) => (
-                <span className="text-text-muted text-[12px]">{String(item.generatedAt)}</span>
-              )},
-              { key: 'status', label: 'Status', width: '100px', render: (item) => <StatusBadge status={String(item.status)} /> },
-              { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-1">
-                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+              { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
+                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5261,15 +5703,15 @@ export default function ReportsView({
         )}
 
         {activeTab === 'my-reports' && viewMode === 'grid' && (
-          <div className="w-full flex-1 bg-white rounded-xl border border-border-light overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-light bg-surface-2/50">
+          <div className="w-full flex-1">
+            <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={gridSearch}
                   onChange={e => setGridSearch(e.target.value)}
                   placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {gridSearch && (
                   <button
@@ -5282,56 +5724,54 @@ export default function ReportsView({
               </div>
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
                   <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
                   <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
                 </div>
               </div>
             </div>
             {filteredReports.length === 0 ? (
-              <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
-                <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-3">
-                  <FileText size={18} className="text-text-muted/50" />
-                </div>
-                <div className="text-[13px] font-medium text-text-secondary">
+              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
+                <FileText size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
+                <div className="text-[13px] text-text-secondary max-w-[280px]">
                   {generatedReports.length === 0
-                    ? 'No reports yet. Create your first report to see it here.'
+                    ? 'No reports yet. Generate one from a template to see it here.'
                     : tagFilter !== 'All'
                       ? `No reports match the "${tagFilter}" filter.`
                       : 'No reports match your search.'}
                 </div>
-                {generatedReports.length === 0 && (
-                  <button
-                    onClick={openNewReportModal}
-                    className="mt-4 inline-flex items-center gap-1.5 h-9 px-4 text-[12.5px] font-semibold text-white bg-primary hover:bg-primary/90 rounded-[8px] cursor-pointer transition-colors"
-                  >
-                    <Plus size={14} />
-                    Create Report
-                  </button>
-                )}
               </div>
             ) : (
-            <div className="w-full p-4 grid grid-cols-3 gap-4 items-start">
+            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
               {filteredReports.map((r, i) => {
+                const tagTone = r.tag === 'Internal Audit' ? 'text-evidence-700' : r.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
                 return (
-                  <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                    className="glass-card rounded-xl p-4 hover:border-primary/20 transition-all group cursor-pointer flex flex-col"
+                  <motion.div
+                    key={r.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
                     onClick={() => setViewingReport(r)}
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center justify-center shrink-0" style={{ width: '42px', height: '42px', background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}><FileText size={20} style={{ color: '#6a12cd' }} /></div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'success', message: `Downloading ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Share"><Share2 size={15} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="hover:text-risk transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Delete"><Trash2 size={15} /></button>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      {r.tag ? (
+                        <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
+                          {r.tag}
+                        </div>
+                      ) : <span />}
+                      <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={13} /></button>
                       </div>
                     </div>
-                    <div className="font-medium text-text group-hover:text-primary transition-colors mb-1 line-clamp-2 min-h-[40px]" style={{ fontSize: '14px', lineHeight: '20px' }} title={r.name}>{r.name}</div>
-                    <div className="text-[11px] text-text-muted mb-3">{r.queries} queries · {r.pages} pages · {r.generatedAt}</div>
-                    <div className="mt-auto">
-                      {r.tag && (
-                        <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap" style={{ borderRadius: '8px', background: r.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB', color: r.tag === 'Internal Audit' ? '#BF2E84' : '#A74108' }}>{r.tag}</span>
-                      )}
+                    <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
+                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                      {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
+                    </div>
+                    <div className="mt-auto pt-4 flex items-center justify-end">
+                      <span className="font-mono text-[11px] text-text-muted tabular-nums">{r.generatedAt}</span>
                     </div>
                   </motion.div>
                 );
@@ -5341,10 +5781,12 @@ export default function ReportsView({
           </div>
         )}
 
-        {/* Shared Reports */}
+        {/* Shared Reports — same modern table variant so tab switching
+            doesn't change the visual grammar. */}
         {activeTab === 'shared-reports' && viewMode === 'list' && (
           <SmartTable
             className="flex-1"
+            variant="modern"
             data={SHARED_REPORTS as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search shared reports..."
@@ -5356,38 +5798,43 @@ export default function ReportsView({
                 : 'No shared reports match your search.'
             }
             headerExtra={
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
                 <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
                 <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
               </div>
             }
             columns={[
+              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11px] text-text-muted tabular-nums">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+              )},
               { key: 'name', label: 'Report', render: (item) => (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center w-8 h-8 shrink-0" style={{ background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}>
-                    <FileText size={16} style={{ color: '#6a12cd' }} />
+                <div className="min-w-0">
+                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
+                    Shared report
                   </div>
-                  <div>
-                    <div className="text-text font-medium">{String(item.name)}</div>
-                    <div className="text-[10px] text-text-muted">{String(item.queries)} queries · {String(item.pages)} pages · shared with {String(item.sharedWith)}</div>
+                  <div className="text-[14px] text-text font-medium truncate">{String(item.name)}</div>
+                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'} · shared with {String(item.sharedWith)}
                   </div>
                 </div>
               )},
-              { key: 'sharedBy', label: 'Shared By', render: (item) => (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[8px] font-bold flex items-center justify-center">
+              { key: 'sharedBy', label: 'Shared by', render: (item) => (
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9.5px] font-semibold flex items-center justify-center">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-text-secondary text-[12px]">{String(item.sharedBy)}</span>
+                  <span className="text-text-secondary text-[12.5px]">{String(item.sharedBy)}</span>
                 </div>
               )},
-              { key: 'sharedAt', label: 'Date', width: '120px', render: (item) => (
-                <span className="text-text-muted text-[12px]">{String(item.sharedAt)}</span>
+              { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-1">
-                  <ActionTooltip label="Download"><button onClick={() => addToast({ type: 'success', message: `Downloading ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5404,15 +5851,15 @@ export default function ReportsView({
               )
             : SHARED_REPORTS;
           return (
-          <div className="w-full flex-1 bg-white rounded-xl border border-border-light overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-light bg-surface-2/50">
+          <div className="w-full flex-1">
+            <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={sharedGridSearch}
                   onChange={e => setSharedGridSearch(e.target.value)}
                   placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {sharedGridSearch && (
                   <button
@@ -5423,45 +5870,51 @@ export default function ReportsView({
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
                 <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
                 <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
               </div>
             </div>
             {filteredSharedReports.length === 0 ? (
-              <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
-                <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-3">
-                  <Share2 size={18} className="text-text-muted/50" />
-                </div>
-                <div className="text-[13px] font-medium text-text-secondary">
+              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
+                <Share2 size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
+                <div className="text-[13px] text-text-secondary max-w-[280px]">
                   {SHARED_REPORTS.length === 0
-                    ? 'No reports have been shared with you yet.'
+                    ? 'Nothing shared with you yet. Reports your team shares will land here.'
                     : 'No shared reports match your search.'}
                 </div>
               </div>
             ) : (
-            <div className="w-full p-4 grid grid-cols-3 gap-4 items-start">
+            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
               {filteredSharedReports.map((r, i) => (
-                <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  className="glass-card rounded-xl p-4 hover:border-primary/20 transition-all group cursor-pointer flex flex-col"
+                <motion.div
+                  key={r.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center justify-center shrink-0" style={{ width: '42px', height: '42px', background: 'rgba(106,18,205,0.04)', borderRadius: '8px' }}><FileText size={20} style={{ color: '#6a12cd' }} /></div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'success', message: `Downloading ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Download"><Download size={15} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="hover:text-primary transition-colors cursor-pointer" style={{ color: 'rgba(38,6,74,0.4)' }} title="Share"><Share2 size={15} /></button>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-evidence-700">
+                      Shared with {r.sharedWith}
+                    </div>
+                    <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
                     </div>
                   </div>
-                  <div className="font-medium text-[13px] text-text group-hover:text-primary transition-colors leading-snug mb-1 line-clamp-2 min-h-[36px]" title={r.name}>{r.name}</div>
-                  <div className="text-[11px] text-text-muted mb-3">{r.queries} queries · {r.pages} pages · {r.sharedAt}</div>
-                  <div className="mt-auto flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center px-2 h-5 text-[10px] font-semibold whitespace-nowrap" style={{ borderRadius: '8px', background: 'rgba(106,18,205,0.08)', color: '#6a12cd' }}>{r.sharedWith}</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: 'rgba(106,18,205,0.12)', color: '#6a12cd' }}>
+                  <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
+                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                    {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
+                  </div>
+                  <div className="mt-auto pt-4 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0">
                         {r.sharedBy.split(' ').map(n => n[0]).join('')}
                       </div>
-                      <span className="text-[11px] text-text-secondary truncate">{r.sharedBy}</span>
+                      <span className="text-[11.5px] text-text-secondary truncate">{r.sharedBy}</span>
                     </div>
+                    <span className="font-mono text-[11px] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
                   </div>
                 </motion.div>
               ))}
@@ -5475,78 +5928,83 @@ export default function ReportsView({
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
+            const eyebrowTone = color.split(' ')[0];
+            const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
             return (
               <motion.div
                 key={rt.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className={`glass-card rounded-2xl p-5 hover:shadow-primary/5 hover:border-primary/20 active:scale-[0.98] transition-all duration-300 group cursor-pointer flex flex-col ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className={`bg-white border border-border-light rounded-xl p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => setPreviewingTemplate(rt)}
               >
-                <div className="mb-3 flex-1">
-                  <div className="flex items-start gap-2.5 mb-2">
-                    <div className={`p-2 shrink-0 ${color} transition-colors`} style={{ borderRadius: '8px' }}><Icon size={16} /></div>
-                    <h3 className="font-semibold text-text group-hover:text-primary transition-colors flex-1 min-w-0" style={{ fontSize: '13px', lineHeight: '18px' }}>{rt.name}</h3>
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-md ${tintBg}`}>
+                    <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
-                  <p className="text-[12px] text-text-secondary leading-relaxed">{rt.desc}</p>
+                  <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
+                    {rt.category}
+                  </div>
                 </div>
-                <div className="flex items-center justify-start pt-3 border-t border-border-light">
-                  <div className="flex gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }} className="text-text-muted hover:text-primary font-medium flex items-center gap-0.5 cursor-pointer" style={{ fontSize: '12px', lineHeight: '20px' }}>
-                      <Settings size={11} /> Customize
-                    </button>
-                    <span className="text-border-light mx-1">|</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToast({ type: 'info', message: `Generating "${rt.name}"...` });
-                        setTimeout(() => {
-                          const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                          const sectionsCount = rt.sections?.length ?? 0;
-                          const tagFromTemplate = rt.category === 'Risk' ? 'Bulk Audit' : 'Internal Audit';
-                          const newReport: GeneratedReport = {
-                            id: `gr-gen-${Date.now()}`,
-                            templateId: rt.id,
-                            name: `${rt.name} — ${today}`,
-                            tag: tagFromTemplate,
-                            generatedBy: 'You',
-                            generatedAt: today,
-                            status: 'draft',
-                            pages: Math.max(1, sectionsCount),
-                            queries: 0,
-                            isEmpty: true,
-                          };
-                          setGeneratedReports(prev => [newReport, ...prev]);
-                          setViewingReport(newReport);
-                          addToast({ type: 'success', message: 'Report generated!' });
-                        }, 1200);
-                      }}
-                      className="text-primary font-semibold flex items-center gap-0.5 cursor-pointer"
-                      style={{ fontSize: '12px', lineHeight: '20px' }}
-                    >
-                      Generate <ArrowRight size={11} />
-                    </button>
-                  </div>
+                <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
+                <p className="text-[12.5px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
+                <div className="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-border-light/60">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }}
+                    className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
+                  >
+                    <Settings size={12} /> Customize
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast({ type: 'info', message: `Generating "${rt.name}"...` });
+                      setTimeout(() => {
+                        const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        const sectionsCount = rt.sections?.length ?? 0;
+                        const tagFromTemplate = rt.category === 'Risk' ? 'Bulk Audit' : 'Internal Audit';
+                        const newReport: GeneratedReport = {
+                          id: `gr-gen-${Date.now()}`,
+                          templateId: rt.id,
+                          name: `${rt.name} — ${today}`,
+                          tag: tagFromTemplate,
+                          generatedBy: 'You',
+                          generatedAt: today,
+                          status: 'draft',
+                          pages: Math.max(1, sectionsCount),
+                          queries: 0,
+                          isEmpty: true,
+                        };
+                        setGeneratedReports(prev => [newReport, ...prev]);
+                        setViewingReport(newReport);
+                        addToast({ type: 'success', message: 'Report generated!' });
+                      }, 1200);
+                    }}
+                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
+                  >
+                    Generate
+                    <ArrowRight size={12} className="transition-transform duration-200 group-hover/gen:translate-x-[1.5px]" />
+                  </button>
                 </div>
               </motion.div>
             );
           };
 
           return (
-            <div className="space-y-8">
+            <div className="space-y-10">
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-3">Standard Templates</h2>
+                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
                 <div className="grid grid-cols-3 gap-4">
                   {REPORT_TEMPLATES.map((rt, i) => renderCard(rt, i, false))}
                 </div>
               </section>
 
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-3">Custom Templates</h2>
+                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
                 {customTemplates.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border-light p-8 text-center text-[13px] text-text-muted">
-                    No custom templates yet. Create one from an existing report or upload a file.
+                  <div className="py-10 text-[13px] text-text-muted max-w-[420px]">
+                    No custom templates yet. Generate one from an existing report or upload a file to get started.
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">

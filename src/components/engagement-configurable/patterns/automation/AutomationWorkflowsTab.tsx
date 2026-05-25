@@ -139,7 +139,7 @@ export default function AutomationWorkflowsTab({ engagement, inputData, setup, r
         <WorkflowDetailView wf={wf} runs={wfRuns} onBack={() => setDetailId(null)} onRun={() => { if (!wfIds.includes(wf.id)) toggleWorkflow(wf.id); setShowBulkModal(true); }} />
         <AnimatePresence>
           {showBulkModal && (
-            <BulkExecuteModal selectedWorkflows={libraryWorkflows} onClose={() => setShowBulkModal(false)} onContinue={() => handleBulkModalComplete()} />
+            <BulkExecuteModal selectedWorkflows={libraryWorkflows} onClose={() => setShowBulkModal(false)} onContinue={() => handleBulkModalComplete()} defaultAuditName={engagement.name} defaultAuditDescription={engagement.description} />
           )}
         </AnimatePresence>
       </>
@@ -255,7 +255,7 @@ export default function AutomationWorkflowsTab({ engagement, inputData, setup, r
       {/* BulkExecuteModal */}
       <AnimatePresence>
         {showBulkModal && (
-          <BulkExecuteModal selectedWorkflows={libraryWorkflows} onClose={() => setShowBulkModal(false)} onContinue={() => handleBulkModalComplete()} />
+          <BulkExecuteModal selectedWorkflows={libraryWorkflows} onClose={() => setShowBulkModal(false)} onContinue={() => handleBulkModalComplete()} defaultAuditName={engagement.name} defaultAuditDescription={engagement.description} />
         )}
       </AnimatePresence>
     </div>
