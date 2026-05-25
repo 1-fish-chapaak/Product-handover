@@ -3694,66 +3694,78 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setWfSaved(false);
     setWfDraftAttachments([]);
 
-    const intro = `I've analyzed your prompt and built the **${draft.name}** workflow. Before I begin, a few quick clarifications — pick what fits below.`;
+    // Upload-first flow: introduce the workflow, push the Upload card,
+    // and auto-open the data picker. Clarification only happens AFTER the
+    // user has attached files — that way the questions are answered with
+    // real source context, not abstract guesses.
+    const intro = `I've analyzed your prompt and built the **${draft.name}** workflow. To begin, drop the required data files in the upload window — I'll ask a few quick clarifications right after.`;
     setIsTyping(false);
     wfPushAssistant(intro);
-    const questions = wfGetClarify(draft);
-    wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
-  }, [wfPushAssistant, wfPushClarify]);
-
-  // Effect — once the workflow draft exists and the latest clarify card is
-  // fully answered/skipped, advance to the upload step. Uses the message
-  // list as the source of truth so each transition is reactive.
-  const wfHasPushedUploadRef = useRef(false);
-  useEffect(() => {
-    if (!wfWorkflow) { wfHasPushedUploadRef.current = false; return; }
-    if (wfHasPushedUploadRef.current) return;
-    const clarifyMsg = [...messages].reverse().find(m => m.richType === 'workflow-clarify');
-    if (!clarifyMsg) return;
-    const data = clarifyMsg.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string> };
-    if (data.phase !== 'initial') return;
-    if (data.index < data.questions.length) return;
-    // All initial questions resolved → push the upload card once.
-    wfHasPushedUploadRef.current = true;
-    wfPushAssistant('Got it — locked those in. Drop the required data files into the upload window so I can map them.');
     wfPushCard('workflow-upload');
-    // Auto-open the upload modal once per workflow id. NOTE: do NOT return
-    // a cleanup that clearTimeout's this — the effect re-runs the moment
-    // messages updates (the wfPushAssistant call above triggers it), and
-    // the cleanup would cancel the timeout before it can fire. The ref
-    // guard above already prevents a duplicate schedule.
-    if (wfUploadModalSeededFor.current !== wfWorkflow.id) {
-      wfUploadModalSeededFor.current = wfWorkflow.id;
+    if (wfUploadModalSeededFor.current !== draft.id) {
+      wfUploadModalSeededFor.current = draft.id;
       window.setTimeout(() => setWfUploadModalOpen(true), 400);
     }
-  }, [messages, wfWorkflow, wfPushAssistant, wfPushCard]);
+  }, [wfPushAssistant, wfPushCard]);
 
-  // Upload → Map advance — fires once every required input has at least
-  // one file. The previous onClose handler on UploadDataModal read stale
-  // wfFiles via closure, so the Map card never pushed; this reactive
-  // effect watches wfFiles instead. Guarded by a ref + the upload card
-  // already being in the thread so it doesn't run before the user lands
-  // on Step 2.
-  const wfHasPushedMapRef = useRef(false);
+  // Upload → Clarify advance — once every required input has at least
+  // one file, push the 4 initial clarify questions. The previous order
+  // (Clarify-then-Upload) was inverted on user feedback so the user
+  // answers questions with the actual data context already attached.
+  const wfHasPushedClarifyRef = useRef(false);
   useEffect(() => {
-    if (!wfWorkflow) { wfHasPushedMapRef.current = false; return; }
-    if (wfHasPushedMapRef.current) return;
+    if (!wfWorkflow) { wfHasPushedClarifyRef.current = false; return; }
+    if (wfHasPushedClarifyRef.current) return;
     const hasUploadCard = messages.some(m => m.richType === 'workflow-upload');
     if (!hasUploadCard) return;
     const required = wfWorkflow.inputs.filter(i => i.required);
     const allFilled = required.every(i => (wfFiles[i.id] ?? []).length > 0);
     if (!allFilled) return;
+    wfHasPushedClarifyRef.current = true;
+    wfPushAssistant('Got it — files received. Now a few quick clarifications before I map and run.');
+    const questions = wfGetClarify(wfWorkflow);
+    wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
+  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushClarify]);
+
+  // If the user closes the upload modal WITHOUT attaching anything for
+  // any required input, surface a gentle nudge prompting them to upload.
+  // Fires once per workflow.id and only when the modal transitions from
+  // open → closed with empty required inputs.
+  const wfNudgeUploadRef = useRef<string | null>(null);
+  const wfPrevModalOpenRef = useRef(false);
+  useEffect(() => {
+    const wasOpen = wfPrevModalOpenRef.current;
+    wfPrevModalOpenRef.current = wfUploadModalOpen;
+    if (!wfWorkflow) return;
+    if (!wasOpen || wfUploadModalOpen) return; // only on open → closed transition
+    if (wfNudgeUploadRef.current === wfWorkflow.id) return;
+    const required = wfWorkflow.inputs.filter(i => i.required);
+    const anyFilled = required.some(i => (wfFiles[i.id] ?? []).length > 0);
+    if (anyFilled) return; // user attached something; no nudge needed
+    wfNudgeUploadRef.current = wfWorkflow.id;
+    wfPushAssistant("Looks like nothing was attached — pick at least one source per required input via **Open upload window** so I can move to the next step.");
+  }, [wfUploadModalOpen, wfWorkflow, wfFiles, wfPushAssistant]);
+
+  // Clarify → Map advance — fires once the initial clarify card has
+  // been fully answered/skipped (index >= questions.length). Pushes the
+  // Map card + opens the workspace artifact panel.
+  const wfHasPushedMapRef = useRef(false);
+  useEffect(() => {
+    if (!wfWorkflow) { wfHasPushedMapRef.current = false; return; }
+    if (wfHasPushedMapRef.current) return;
+    const clarifyMsg = [...messages].reverse().find(m => {
+      if (m.richType !== 'workflow-clarify') return false;
+      const d = m.richData as { phase?: string; questions?: ClarifyQuestion[]; index?: number };
+      return d.phase === 'initial' && (d.questions?.length ?? 0) > 0 && (d.index ?? 0) >= (d.questions?.length ?? 0);
+    });
+    if (!clarifyMsg) return;
     wfHasPushedMapRef.current = true;
-    wfPushAssistant('Files verified — moving to data mapping.');
+    wfPushAssistant('Clarifications locked in — moving to data mapping.');
     wfPushCard('workflow-map');
-    // Open the workspace artifact panel alongside the Map step — the
-    // original journey paired the mapping card with a right-side workspace
-    // showing per-source detail. Without this the chat embed feels half-
-    // configured at Step 3.
     setArtifactMode('workflow');
     setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
     setShowArtifacts(true);
-  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType, setShowArtifacts]);
+  }, [wfWorkflow, messages, wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType, setShowArtifacts]);
 
   // Validate-phase completion — fires after the user finishes the
   // matching-logic + tolerance clarify cards pushed from StepReviewRun.
@@ -6043,10 +6055,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         setWfAlignments({});
                         setWfResult(null);
                         setWfSaved(false);
-                        wfHasPushedUploadRef.current = false;
+                        wfHasPushedClarifyRef.current = false;
                         wfHasPushedMapRef.current = false;
                         wfValidateCompleteRef.current = null;
                         wfUploadModalSeededFor.current = null;
+                        wfNudgeUploadRef.current = null;
                       }}
                       className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer"
                     >
