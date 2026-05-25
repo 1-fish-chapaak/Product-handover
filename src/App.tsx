@@ -43,6 +43,7 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/admin/PlatformUsageView';
@@ -278,10 +279,12 @@ export default function App() {
   const renderArtifactPanel = () => {
     if (!state.showArtifacts) return null;
 
-    // Both workflow and query modes render the same ArtifactPanel so
-    // the side surface is visually identical (Plan / Code / Sources /
-    // Output tabs, identical chrome, identical content shape).
-    const inner = (
+    const inner = state.artifactMode === 'workflow' ? (
+      <ChatWorkflowWorkspace
+        onClose={() => setShowArtifacts(false)}
+        workflowType={state.workflowType ?? undefined}
+      />
+    ) : (
       <ArtifactPanel
         activeTab={state.activeArtifactTab}
         setActiveTab={setActiveArtifactTab}
