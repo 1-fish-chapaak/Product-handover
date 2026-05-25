@@ -3715,12 +3715,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   }, [wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType]);
 
   // Upload → Clarify advance — fires as soon as the user attaches at
-  // least one source for any required input. Previously gated on
-  // "every required input filled", which silently stalled the flow
-  // when the workflow had more required inputs than the user uploaded.
-  // The clarify step is non-destructive: missing inputs are surfaced
-  // via the modal-close nudge and the Map card can still re-open the
-  // upload modal.
+  // least one source for any required input. Shows a brief file-
+  // processing experience in the chat (thinking trail) so the user
+  // sees that the assistant is reading their data before clarify
+  // questions appear.
   const wfHasPushedClarifyRef = useRef(false);
   useEffect(() => {
     if (!wfWorkflow) { wfHasPushedClarifyRef.current = false; return; }
@@ -3731,16 +3729,49 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     const someFilled = required.some(i => (wfFiles[i.id] ?? []).length > 0);
     if (!someFilled) return;
     wfHasPushedClarifyRef.current = true;
-    wfPushAssistant('Got it — files received. Now a few quick clarifications before I map and run.');
-    const questions = wfGetClarify(wfWorkflow);
-    wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
-    // Open the workspace artifact panel as soon as the files land. The
-    // panel shows the per-source schema + plan, which helps the user
-    // ground their clarify answers against the actual data shape.
+
+    // Step 1: surface a processing experience — thinking trail showing
+    // what the assistant is doing with the attached files.
+    const sourceNames = required
+      .filter(i => (wfFiles[i.id] ?? []).length > 0)
+      .map(i => i.name);
+    const processingSteps = [
+      `Reading ${sourceNames.length} data source${sourceNames.length === 1 ? '' : 's'}: ${sourceNames.join(', ')}`,
+      'Inferring column types and ranges',
+      'Profiling row counts and null ratios',
+      `Aligning to ${wfWorkflow.name} schema`,
+    ];
+    const processingId = wfMakeId();
+    setIsTyping(true);
+    setMessages(m => [...m, {
+      id: processingId,
+      role: 'assistant',
+      text: 'Verifying your data sources…',
+      thinking: processingSteps,
+      timestamp: new Date(),
+    }]);
+
+    // Open the workspace artifact panel alongside the processing
+    // experience — the user can watch the per-source schema land while
+    // the assistant runs through its steps.
     setArtifactMode('workflow');
     setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
     setShowArtifacts(true);
-  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushClarify, setArtifactMode, setWorkflowType, setShowArtifacts]);
+
+    // Step 2: after a brief delay, swap the processing message for a
+    // confirmation and push the clarify card. NOTE: no cleanup return
+    // here — the messages-change re-fire would cancel the schedule.
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => m.map(msg =>
+        msg.id === processingId
+          ? { ...msg, text: 'Files verified — schema profiled and aligned. Now a few quick clarifications before I map and run.' }
+          : msg,
+      ));
+      const questions = wfGetClarify(wfWorkflow);
+      wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
+    }, 2400);
+  }, [wfWorkflow, wfFiles, messages, wfPushClarify, setArtifactMode, setWorkflowType, setShowArtifacts]);
 
   // If the user closes the upload modal without filling every required
   // input, push a clear nudge naming what's still missing. Without this

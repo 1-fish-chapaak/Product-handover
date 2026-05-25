@@ -48,7 +48,12 @@ test('upload-first workflow build', async ({ page }) => {
   await page.waitForTimeout(800);
   await snap(page, 'B-after-attach');
 
-  // 3. Clarify cards should appear AFTER upload (docked above composer)
+  // 3a. Processing experience: thinking trail with file-processing steps
+  //     appears immediately after attach, BEFORE the clarify card.
+  await expect(page.getByText(/Verifying your data sources/i)).toBeVisible({ timeout: 3000 });
+  await snap(page, 'B2-file-processing');
+
+  // 3b. Clarify cards should appear AFTER the processing wait (docked above composer)
   await expect(page.getByRole('option', { name: /Last 30 days/i })).toBeVisible({ timeout: 6000 });
   await snap(page, 'C-clarify-after-upload');
   for (let i = 1; i <= 4; i++) {
