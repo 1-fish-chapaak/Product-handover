@@ -4740,17 +4740,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <ul className="flex flex-col gap-2">
                     {SAMPLE_WORKFLOWS.map((w) => (
                       <li key={w.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // Seed the composer with the template description
-                            // so the user can hit Send to enter the journey.
-                            setInput(w.description);
-                            textareaRef.current?.focus();
-                            requestAnimationFrame(() => handleTextareaInput());
-                          }}
-                          className="w-full text-left group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors cursor-pointer"
-                        >
+                        <div className="flex items-center gap-4 bg-canvas-elevated border border-canvas-border rounded-2xl px-4 py-3">
                           <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                             <Workflow size={16} className="text-brand-600" />
                           </div>
@@ -4775,23 +4765,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 px-3 py-1.5">
-                              <Settings2 size={12} />
-                              Configure
-                            </span>
-                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold px-3 py-1.5">
-                              <Play size={12} />
-                              Run
-                            </span>
-                          </div>
-                        </button>
+                        </div>
                       </li>
                     ))}
 
                     {WORKFLOWS.map((w) => (
                       <li key={w.id}>
-                        <div className="group flex items-center gap-4 bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-2xl px-4 py-3 transition-colors">
+                        <div className="flex items-center gap-4 bg-canvas-elevated border border-canvas-border rounded-2xl px-4 py-3">
                           <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                             <FileText size={16} className="text-brand-600" />
                           </div>
@@ -4822,22 +4802,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 {w.steps.length} steps
                               </span>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas text-[12px] font-semibold text-ink-600 px-3 py-1.5 transition-colors cursor-pointer"
-                            >
-                              <Settings2 size={12} />
-                              Configure
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
-                            >
-                              <Play size={12} />
-                              Run
-                            </button>
                           </div>
                         </div>
                       </li>
