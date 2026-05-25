@@ -3728,6 +3728,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
   }, [messages, wfWorkflow, wfPushAssistant, wfPushCard]);
 
+  // Upload → Map advance — fires once every required input has at least
+  // one file. The previous onClose handler on UploadDataModal read stale
+  // wfFiles via closure, so the Map card never pushed; this reactive
+  // effect watches wfFiles instead. Guarded by a ref + the upload card
+  // already being in the thread so it doesn't run before the user lands
+  // on Step 2.
+  const wfHasPushedMapRef = useRef(false);
+  useEffect(() => {
+    if (!wfWorkflow) { wfHasPushedMapRef.current = false; return; }
+    if (wfHasPushedMapRef.current) return;
+    const hasUploadCard = messages.some(m => m.richType === 'workflow-upload');
+    if (!hasUploadCard) return;
+    const required = wfWorkflow.inputs.filter(i => i.required);
+    const allFilled = required.every(i => (wfFiles[i.id] ?? []).length > 0);
+    if (!allFilled) return;
+    wfHasPushedMapRef.current = true;
+    wfPushAssistant('Files verified — moving to data mapping.');
+    wfPushCard('workflow-map');
+  }, [wfWorkflow, wfFiles, messages, wfPushAssistant, wfPushCard]);
+
   // Validate-phase completion — fires after the user finishes the
   // matching-logic + tolerance clarify cards pushed from StepReviewRun.
   // Derives a percentage from the tolerance-preset answer, narrates the
@@ -3750,8 +3770,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfPushCard('workflow-tolerance');
     // Auto-fire the run after a short beat so the user sees the card
     // settle before the run kicks off. The card's onRun handler also
-    // works manually for re-runs at different tolerances.
-    const t = setTimeout(async () => {
+    // works manually for re-runs at different tolerances. NOTE: do NOT
+    // return a cleanup that clearTimeout's this — pushing the tolerance
+    // card above triggers a messages-change re-render, and the cleanup
+    // would cancel the run before it ever fires. The ref guard handles
+    // dedup.
+    window.setTimeout(async () => {
       if (!wfWorkflow) return;
       setWfRunning(true);
       const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
@@ -3760,7 +3784,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows, ${res.stats.find(s => s.label === 'Records Scanned')?.value ?? '—'} records scanned.`);
       wfPushCard('workflow-view-preview');
     }, 700);
-    return () => clearTimeout(t);
   }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
 
   const wfAnswerClarify = useCallback((msgId: string, answerOrSkip: string | null) => {
@@ -6005,6 +6028,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         setWfResult(null);
                         setWfSaved(false);
                         wfHasPushedUploadRef.current = false;
+                        wfHasPushedMapRef.current = false;
                         wfValidateCompleteRef.current = null;
                         wfUploadModalSeededFor.current = null;
                       }}
