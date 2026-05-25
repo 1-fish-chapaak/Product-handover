@@ -1545,154 +1545,98 @@ function WorkflowOutputPreviewCard({
   onConfirm: () => void;
   onViewWorkspace: () => void;
 }) {
-  // Synthesize preview content. KPIs render as a 2x2 mini-card grid so
-  // the most-important metrics dominate the surface; Charts list with a
-  // mini chart-glyph; Tables list with a table icon + size hint.
-  const kpis: { label: string; sample: string; trend?: string; tone: 'primary' | 'risk' | 'warning' | 'ok' }[] = [
-    { label: 'Records Scanned', sample: `12.2K`, trend: `across ${workflow.inputs.length} source${workflow.inputs.length === 1 ? '' : 's'}`, tone: 'primary' },
-    { label: 'Flags Raised', sample: '8', trend: 'by every active rule', tone: 'risk' },
-    { label: 'Amount at Risk', sample: '₹6.16L', trend: 'currency-normalised', tone: 'warning' },
-    { label: 'Match Confidence', sample: '94%', trend: 'after auto-mapping', tone: 'ok' },
+  // Mirrors the query OutputConfigTab — same KpiTile (canonical Dashboard
+  // KPI tile), same plain section header style, same grid sizing. Charts
+  // and Tables follow the same simple, unornamented list pattern.
+  const kpis = [
+    { label: 'Records scanned', value: '12.2K' },
+    { label: 'Flags raised',    value: '8' },
+    { label: 'Amount at risk',  value: '₹6.16L' },
+    { label: 'Match confidence',value: '94%' },
   ];
-  const charts: { label: string; type: 'donut' | 'line' | 'bar'; detail: string }[] = [
-    { label: 'Exception Severity', type: 'donut', detail: 'Breakdown of flagged records by High / Medium / Low severity.' },
-    { label: 'Trend over Time', type: 'line', detail: 'Daily exception count across the selected date range.' },
-    { label: 'Top Vendors by Risk', type: 'bar', detail: 'Highest-risk vendors ranked by aggregate flagged amount.' },
+  const charts = [
+    { label: 'Exception Severity', type: 'donut' as const, detail: 'Breakdown of flagged records by High / Medium / Low severity.' },
+    { label: 'Trend over Time',    type: 'line' as const,  detail: 'Daily exception count across the selected date range.' },
+    { label: 'Top Vendors by Risk',type: 'bar' as const,   detail: 'Highest-risk vendors ranked by aggregate flagged amount.' },
   ];
-  const tables: { label: string; rows: string; detail: string }[] = [
-    { label: 'Detailed Exception Report', rows: '~120 rows', detail: 'Full row-level output with join keys, amounts, dates, and the rule each row tripped.' },
+  const tables = [
+    { label: 'Detailed Exception Report', detail: 'Full row-level output with the join keys, amounts, dates, and the rule each row tripped.' },
     ...workflow.inputs.slice(0, 2).map(i => ({
       label: `Unmatched ${i.name} rows`,
-      rows: '12–40 rows',
       detail: `${i.name} records with no counterpart after the configured matching logic.`,
     })),
-    { label: 'Rule Audit Trail', rows: `${workflow.steps.length} rules`, detail: 'Per-rule rows evaluated, flagged, runtime, confidence.' },
+    { label: 'Rule Audit Trail', detail: 'For each rule: rows evaluated, rows flagged, runtime, confidence.' },
   ];
 
-  const toneStyles = (tone: 'primary' | 'risk' | 'warning' | 'ok') => {
-    switch (tone) {
-      case 'risk':    return { iconWrap: 'bg-risk-50 text-risk-700', value: 'text-risk-700' };
-      case 'warning': return { iconWrap: 'bg-amber-50 text-amber-700', value: 'text-amber-700' };
-      case 'ok':      return { iconWrap: 'bg-compliant-50 text-compliant-700', value: 'text-compliant-700' };
-      default:        return { iconWrap: 'bg-brand-50 text-brand-700', value: 'text-brand-700' };
-    }
-  };
-
   return (
-    <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_0_rgba(15,8,30,0.04),0_18px_42px_-22px_rgba(15,8,30,0.18)]">
-      {/* Header — gradient strip + title + workflow name */}
-      <div className="px-5 pt-4 pb-4 border-b border-canvas-border bg-gradient-to-br from-brand-50/60 via-canvas-elevated to-canvas-elevated">
-        <div className="flex items-start gap-3">
-          <span className="w-9 h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center shrink-0 shadow-[0_4px_12px_-4px_rgba(106,18,205,0.4)]">
-            <LayoutDashboard size={16} strokeWidth={2.25} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-[15px] font-semibold text-ink-900 tracking-tight leading-tight">
-                Output preview
-              </h3>
-              <span className="text-[10.5px] font-bold tracking-[0.10em] uppercase rounded-md px-1.5 py-0.5 bg-brand-100 text-brand-700">
-                {workflow.output?.type ?? 'flags'}
-              </span>
-            </div>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">
-              Run <span className="font-semibold text-ink-700">{workflow.name}</span> and you'll see {kpis.length} KPIs, {charts.length} charts, and {tables.length} tables.
+    <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+      <div className="px-5 py-5 space-y-6">
+        {/* KPIs — same KpiTile + grid sizing as the query OutputConfigTab */}
+        <section>
+          <header className="mb-4">
+            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Dashboard KPIs</h3>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">
+              Sample values from a representative run of {workflow.name}
             </p>
+          </header>
+          <div className={`grid gap-4 ${kpis.length >= 4 ? 'grid-cols-2' : kpis.length === 3 ? 'grid-cols-3' : kpis.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {kpis.map((k, i) => (
+              <KpiTile key={`${k.label}-${i}`} label={k.label} value={k.value} index={i} />
+            ))}
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* KPIs — 2x2 grid of mini cards with the projected sample value */}
-      <section className="px-5 pt-4">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <Sparkles size={12} strokeWidth={2.25} className="text-brand-600 shrink-0" />
-          <h4 className="text-[11.5px] font-bold uppercase tracking-[0.10em] text-ink-700">
-            KPIs you will see
-          </h4>
-          <span className="text-[11px] text-ink-400 font-medium">· sample values</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {kpis.map((k, i) => {
-            const tone = toneStyles(k.tone);
-            return (
-              <div
-                key={i}
-                className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5 hover:border-brand-200 transition-colors"
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${tone.iconWrap}`}>
-                    <BarChart3 size={10} strokeWidth={2.5} />
+        {/* Charts */}
+        <section>
+          <header className="mb-3">
+            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Charts</h3>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">Visuals that will appear on the dashboard</p>
+          </header>
+          <ul className="flex flex-col gap-2">
+            {charts.map((c, i) => {
+              const ChartIcon = c.type === 'donut' ? PieChart : c.type === 'line' ? LineChart : BarChart3;
+              return (
+                <li
+                  key={i}
+                  className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
+                >
+                  <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                    <ChartIcon size={14} />
                   </span>
-                  <span className={`text-[15px] font-bold tabular-nums ${tone.value}`}>{k.sample}</span>
-                </div>
-                <div className="text-[12px] font-semibold text-ink-800 leading-tight truncate">{k.label}</div>
-                {k.trend && <div className="text-[11px] text-ink-400 mt-0.5 truncate">{k.trend}</div>}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold text-ink-900 truncate">{c.label}</div>
+                    <div className="text-[12px] text-ink-500 truncate">{c.detail}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
 
-      {/* Charts — list with chart-type icon and mini glyph */}
-      <section className="px-5 pt-4">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <PieChart size={12} strokeWidth={2.25} className="text-brand-600 shrink-0" />
-          <h4 className="text-[11.5px] font-bold uppercase tracking-[0.10em] text-ink-700">
-            Charts you will see
-          </h4>
-        </div>
-        <ul className="flex flex-col gap-1.5">
-          {charts.map((c, i) => {
-            const ChartIcon = c.type === 'donut' ? PieChart : c.type === 'line' ? LineChart : BarChart3;
-            return (
+        {/* Tables */}
+        <section>
+          <header className="mb-3">
+            <h3 className="text-[14px] font-semibold text-ink-800 leading-tight">Tables</h3>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">Row-level reports produced by the run</p>
+          </header>
+          <ul className="flex flex-col gap-2">
+            {tables.map((t, i) => (
               <li
                 key={i}
-                className="rounded-lg border border-canvas-border bg-canvas px-3 py-2 flex items-center gap-2.5 hover:border-brand-200 transition-colors"
+                className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5 flex items-center gap-3 hover:border-brand-200 transition-colors"
               >
-                <span className="w-7 h-7 rounded bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                  <ChartIcon size={13} strokeWidth={2} />
+                <span className="w-8 h-8 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                  <FileText size={14} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[13px] font-semibold text-ink-800 truncate">{c.label}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">{c.type}</span>
-                  </div>
-                  <div className="text-[11.5px] text-ink-500 truncate">{c.detail}</div>
+                  <div className="text-[13px] font-semibold text-ink-900 truncate">{t.label}</div>
+                  <div className="text-[12px] text-ink-500 truncate">{t.detail}</div>
                 </div>
               </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      {/* Tables — list with table icon + size hint */}
-      <section className="px-5 pt-4 pb-5">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <FileText size={12} strokeWidth={2.25} className="text-brand-600 shrink-0" />
-          <h4 className="text-[11.5px] font-bold uppercase tracking-[0.10em] text-ink-700">
-            Tables you will see
-          </h4>
-        </div>
-        <ul className="flex flex-col gap-1.5">
-          {tables.map((t, i) => (
-            <li
-              key={i}
-              className="rounded-lg border border-canvas-border bg-canvas px-3 py-2 flex items-center gap-2.5 hover:border-brand-200 transition-colors"
-            >
-              <span className="w-7 h-7 rounded bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                <FileText size={13} strokeWidth={2} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-semibold text-ink-800 truncate">{t.label}</span>
-                  <span className="text-[10.5px] font-mono text-ink-500 shrink-0">{t.rows}</span>
-                </div>
-                <div className="text-[11.5px] text-ink-500 truncate">{t.detail}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+            ))}
+          </ul>
+        </section>
+      </div>
 
       {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-canvas-border bg-canvas/40">
@@ -1707,7 +1651,7 @@ function WorkflowOutputPreviewCard({
         <button
           type="button"
           onClick={onConfirm}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer shadow-[0_4px_12px_-4px_rgba(106,18,205,0.4)]"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
         >
           <CheckCircle size={13} />
           Confirm &amp; Proceed
