@@ -5399,7 +5399,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           setFiles={setWfFiles}
                           view="list-only"
                           onOpenUploadModal={() => setWfUploadModalOpen(true)}
-                          onViewWorkspace={() => setShowArtifacts(true)}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
                         />
                       ) : null
                     ) : msg.richType === 'workflow-map' ? (
@@ -5415,7 +5415,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             wfPushAssistant('Mappings confirmed — opening review.');
                             wfPushCard('workflow-review');
                           }}
-                          onViewWorkspace={() => setShowArtifacts(true)}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
                         />
                       ) : null
                     ) : msg.richType === 'workflow-review' ? (
@@ -5453,7 +5453,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             ], 'validate', 'Step 4 · Validate Workflow');
                           }}
                           validateDisabled={wfRunning || !!wfResult}
-                          onViewWorkspace={() => setShowArtifacts(true)}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
                         />
                       ) : null
                     ) : msg.richType === 'workflow-tolerance' ? (
