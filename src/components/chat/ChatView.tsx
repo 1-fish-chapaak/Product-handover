@@ -3717,12 +3717,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     wfHasPushedUploadRef.current = true;
     wfPushAssistant('Got it — locked those in. Drop the required data files into the upload window so I can map them.');
     wfPushCard('workflow-upload');
-    // Auto-open the upload modal once per workflow id (guarded so it doesn't
-    // re-fire if the user closes the modal and the effect re-runs).
+    // Auto-open the upload modal once per workflow id. NOTE: do NOT return
+    // a cleanup that clearTimeout's this — the effect re-runs the moment
+    // messages updates (the wfPushAssistant call above triggers it), and
+    // the cleanup would cancel the timeout before it can fire. The ref
+    // guard above already prevents a duplicate schedule.
     if (wfUploadModalSeededFor.current !== wfWorkflow.id) {
       wfUploadModalSeededFor.current = wfWorkflow.id;
-      const t = window.setTimeout(() => setWfUploadModalOpen(true), 400);
-      return () => window.clearTimeout(t);
+      window.setTimeout(() => setWfUploadModalOpen(true), 400);
     }
   }, [messages, wfWorkflow, wfPushAssistant, wfPushCard]);
 
