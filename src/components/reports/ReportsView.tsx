@@ -1333,7 +1333,7 @@ function parseNumeric(v: string): number {
 }
 
 function computeQueryKpis(query: QueryShape) {
-  const firstVal = parseNumeric(query.kpis[0]?.value ?? '0');
+  const firstVal = parseNumeric((query.kpis ?? [])[0]?.value ?? '0');
   const total = firstVal > 0 ? firstVal : 40 + (query.id.charCodeAt(query.id.length - 1) % 120);
   const closed = Math.max(0, Math.round(total * (0.45 + ((query.id.charCodeAt(0) % 10) / 40))));
   const open = Math.max(0, total - closed);
