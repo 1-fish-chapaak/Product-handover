@@ -155,7 +155,7 @@ function describeColumn(name: string): string {
   return COLUMN_DESCRIPTIONS[name] ?? 'Source field';
 }
 
-type PanelTab = 'input' | 'plan' | 'output' | 'preview';
+type PanelTab = 'input' | 'plan' | 'preview';
 
 const STEP_BADGE: Record<
   StepSpec['type'],
@@ -381,7 +381,7 @@ export default function DataSourcePanel({
     if (result && !resultLandedRef.current) {
       resultLandedRef.current = true;
       if (!previewRevealed) {
-        setTab('output');
+        setTab('preview');
       }
     }
     if (!result) resultLandedRef.current = false;
@@ -536,7 +536,6 @@ export default function DataSourcePanel({
   }[] = [
     { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone, icon: Database },
     { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: Sparkles },
-    { id: 'output', label: 'Output Config', badge: outputBadge, tone: outputTone, icon: FileOutput },
     { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
   ];
 
@@ -847,160 +846,6 @@ export default function DataSourcePanel({
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {tab === 'output' && (
-          <div className="flex flex-col gap-3">
-            {/* Header */}
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                <ArrowRight size={14} />
-              </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
-                Output Configuration
-              </span>
-              <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
-                {visibleColumnCount} column{visibleColumnCount === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <p className="text-[12px] text-ink-500 px-1 -mt-1">
-              Each output column shows the input it's mapped to or the rule that derives it.
-            </p>
-
-            {/* Column list — each row carries its input mapping. */}
-            <ul className="grid grid-cols-2 gap-2 items-start">
-              {outputColumns.map((col) => {
-                const resolved = resolveSources(col.sources, workflow);
-                return (
-                  <li
-                    key={col.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5 hover:border-brand-200 transition-colors min-w-0"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-ink-300 shrink-0 cursor-grab" aria-hidden>
-                        <GripVertical size={13} />
-                      </span>
-                      <span className="text-[13px] font-semibold text-ink-800 truncate">
-                        {col.name}
-                      </span>
-                      <span
-                        className={[
-                          'text-[12px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 border shrink-0',
-                          typeBadgeClasses(col.type),
-                        ].join(' ')}
-                      >
-                        {col.type}
-                      </span>
-                      {col.required && (
-                        <span className="inline-flex items-center gap-1 text-[12px] font-semibold rounded-md px-1.5 py-0.5 bg-brand-50 text-brand-700 border border-brand-200/70 shrink-0">
-                          <Lock size={9} />
-                          Required
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => !col.required && toggleColumnVisibility(col.id)}
-                        aria-label={col.visible ? `Hide ${col.name}` : `Show ${col.name}`}
-                        aria-pressed={col.visible}
-                        disabled={col.required}
-                        className={[
-                          'ml-auto w-7 h-7 rounded-md flex items-center justify-center transition-colors shrink-0',
-                          col.required
-                            ? 'text-ink-300 cursor-not-allowed'
-                            : col.visible
-                              ? 'text-brand-600 hover:bg-brand-50 cursor-pointer'
-                              : 'text-ink-400 hover:bg-canvas hover:text-ink-700 cursor-pointer',
-                        ].join(' ')}
-                      >
-                        {col.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                      </button>
-                    </div>
-
-                    {(resolved.length > 0 || col.formula) && (
-                      <div className="mt-1.5 ml-[18px] flex items-start gap-1.5 flex-wrap">
-                        <ArrowRight
-                          size={11}
-                          className="text-ink-400 mt-[3px] shrink-0 -scale-x-100"
-                        />
-                        {resolved.map((s, i) => (
-                          <span
-                            key={`${s.inputName}-${s.column}-${i}`}
-                            className="inline-flex items-center gap-1 text-[12px] rounded-md px-1.5 py-0.5 bg-canvas border border-canvas-border text-ink-600"
-                          >
-                            <span className="font-semibold text-ink-700">
-                              {s.inputName}
-                            </span>
-                            <span className="text-ink-400">·</span>
-                            <span>{s.column}</span>
-                          </span>
-                        ))}
-                        {col.formula && (
-                          <span className="text-[12px] text-ink-500 italic leading-snug">
-                            {resolved.length > 0 ? '· ' : ''}
-                            {col.formula}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/* AI Suggestions */}
-            <section className="rounded-xl border border-brand-200/70 bg-brand-50/40 p-3 mt-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-7 h-7 rounded-lg bg-white text-brand-600 flex items-center justify-center shrink-0 border border-brand-200/70">
-                  <Sparkles size={13} />
-                </span>
-                <span className="text-[13px] font-semibold text-ink-800">AI Suggestions</span>
-                <span className="text-[12px] font-bold tracking-wider rounded-md px-1.5 py-0.5 bg-brand-100 text-brand-700 shrink-0">
-                  SMART
-                </span>
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {AI_OUTPUT_SUGGESTIONS.map((s) => {
-                  const accepted = acceptedSuggestions.has(s.id);
-                  return (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleSuggestion(s.id)}
-                        aria-pressed={accepted}
-                        className={[
-                          'w-full text-left flex items-start gap-2.5 rounded-lg px-3 py-2 border transition-colors cursor-pointer',
-                          accepted
-                            ? 'bg-canvas-elevated border-brand-300'
-                            : 'bg-white/60 border-transparent hover:border-brand-200 hover:bg-white',
-                        ].join(' ')}
-                      >
-                        <span
-                          className={[
-                            'mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors',
-                            accepted
-                              ? 'bg-brand-600 border-brand-600 text-white'
-                              : 'bg-white border-canvas-border text-transparent',
-                          ].join(' ')}
-                          aria-hidden
-                        >
-                          <CheckCircle2 size={10} />
-                        </span>
-                        <span
-                          className={[
-                            'text-[13px] leading-snug',
-                            accepted ? 'font-semibold text-brand-700' : 'text-ink-700',
-                          ].join(' ')}
-                        >
-                          {s.label}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
           </div>
         )}
 
