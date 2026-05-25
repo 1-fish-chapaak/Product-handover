@@ -87,13 +87,12 @@ test('in-chat workflow build — empty state to upload', async ({ page }) => {
   await snap(page, '05-upload-modal');
   console.log('upload modal visible:', modalVisible);
 
-  // 7. Close modal — click Cancel (Escape doesn't dismiss it; that's a finding)
-  const cancelBtn = page.getByRole('button', { name: 'Cancel' }).last();
-  if (await cancelBtn.isVisible().catch(() => false)) {
-    await cancelBtn.click();
-  }
+  // 7. Close modal — Escape now dismisses (added in this commit)
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   await snap(page, '06-after-modal-close');
+  // Modal should be gone — drop zone "Choose files" button no longer present
+  await expect(page.getByRole('button', { name: /Choose files/i })).toHaveCount(0);
 
   // 8. Context chip above composer should reference the workflow + current step
   await expect(page.getByText(/Step (1|2) ·/)).toBeVisible({ timeout: 4000 });

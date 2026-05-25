@@ -194,6 +194,20 @@ export default function UploadDataModal({
     setDragOver(false);
   }, [open]);
 
+  // Dismiss the modal on Escape — matches the wider app's keybinding
+  // convention (Esc cancels overlays and clears in-flight intent).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   const filesCount = useMemo(
     () => ALL_ASSETS.filter((a) => a.kind === 'file' || a.kind === 'session').length,
     [],
