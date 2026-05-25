@@ -38,7 +38,6 @@ import StepReviewRun from '../concierge-workflow-builder/StepReviewRun';
 import StepOutputView from '../concierge-workflow-builder/StepOutputView';
 import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
 import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
-import Stepper, { type JourneyStep } from '../concierge-workflow-builder/Stepper';
 import { ToleranceAdjustCard, ViewPreviewCard, type ToleranceCardState } from '../concierge-workflow-builder/AIAssistantPanel';
 import {
   generateWorkflow as wfGenerate,
@@ -5090,27 +5089,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </Button>
           </div>
         </header>
-
-        {/* Workflow journey stepper — fixed strip just under the chat
-            header so it stays visible without eating the message-list
-            real estate, and never overlaps message content. Renders only
-            while a workflow build is active in this thread. */}
-        {buildWorkflowMode && wfWorkflow && (() => {
-          const has = (t: string) => messages.some(m => m.richType === t);
-          const completed = new Set<JourneyStep>();
-          let current: JourneyStep = 1;
-          if (has('workflow-upload')) { completed.add(1); current = 2; }
-          if (has('workflow-map')) { completed.add(2); current = 3; }
-          if (has('workflow-review')) { completed.add(3); current = 4; }
-          if (has('workflow-output')) { completed.add(4); }
-          return (
-            <div className="shrink-0 px-4 sm:px-6 py-3 border-b border-canvas-border bg-canvas-elevated/40">
-              <div className="max-w-[52.5rem] mx-auto flex items-center justify-center">
-                <Stepper current={current} completed={completed} />
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Pending Dashboard Banner */}
         {pendingDashboard && (
