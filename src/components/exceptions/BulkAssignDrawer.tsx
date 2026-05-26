@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { X, UserPlus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { X, UserPlus, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { RISK_OWNERS, type GrcException, type GrcExceptionStatus } from '../../data/mockData';
+import { CustomDatePicker } from '../shared/CustomDatePicker';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 // ─── Styling vocab — mirrors the table chips so the preview reads
 //     identically to the main Exceptions table. ───────────────────────────
@@ -24,6 +26,7 @@ export type BulkAssignPayload = {
   caseIds: string[];
   assignees: { name: string; initials: string }[];
   note?: string;
+  triageDueDate?: string;
 };
 
 interface Props {
@@ -54,10 +57,25 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
   const [freeEmailEntries, setFreeEmailEntries] = useState<{ name: string; initials: string }[]>([]);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [note, setNote] = useState('');
+  const [triageDueDate, setTriageDueDate] = useState('');
   const assigneeRef = useRef<HTMLDivElement | null>(null);
   const assigneeInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Focus trap — keeps Tab/Shift+Tab inside the drawer; ESC routes through onClose.
+  useFocusTrap(drawerRef, true, onClose);
+
+  // Count of checked cases that already have an assignee — drives the
+  // reassignment warning banner above the Cases Preview.
+  const reassignedCount = useMemo(() => {
+    return cases.filter(c => {
+      if (!checked.has(c.id)) return false;
+      return (c.assignees && c.assignees.length > 0) || !!c.assignedTo;
+    }).length;
+  }, [cases, checked]);
 
   // Esc / scroll-lock / outside-click — match BulkClassifyModal patterns.
   useEffect(() => {
@@ -195,6 +213,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
       caseIds: Array.from(checked),
       assignees: resolvedAssignees,
       note: note.trim() || undefined,
+      triageDueDate: triageDueDate || undefined,
     });
   };
 
@@ -244,13 +263,16 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
         onClick={onClose}
       />
       <motion.aside
+        ref={drawerRef}
         initial={{ x: 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[640px] bg-canvas-elevated shadow-xl border-l border-canvas-border z-[60] flex flex-col"
         role="dialog"
+        aria-modal="true"
         aria-label="Bulk Assign"
+        tabIndex={-1}
       >
         {/* Header */}
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
@@ -278,6 +300,22 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {/* Reassignment warning — only renders when any checked case already has owners */}
+          {reassignedCount > 0 && (
+            <div
+              role="status"
+              className="flex items-start gap-2.5 px-3 py-2.5 bg-mitigated-50 border border-mitigated-200 rounded-[10px] text-[12.5px] text-mitigated-800"
+            >
+              <AlertTriangle size={15} className="text-mitigated-700 shrink-0 mt-px" aria-hidden="true" />
+              <span className="leading-snug">
+                <span className="font-semibold tabular-nums">{reassignedCount}</span>{' '}
+                {reassignedCount === 1 ? 'case already has' : 'cases already have'} an owner.
+                Confirming will replace the current owner{reassignedCount === 1 ? '' : 's'}.
+                Uncheck rows to skip them.
+              </span>
+            </div>
+          )}
+
           {/* Cases Preview */}
           <section>
             <h3 className="text-[12.5px] font-semibold text-ink-800 mb-3">Cases Preview</h3>
@@ -392,7 +430,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
             </div>
           </section>
 
-          {/* Assigned to + Note — two-column grid */}
+          {/* Assigned to + Triage by + Note — two-column grid; Note spans both columns on row 2 */}
           <section className="grid grid-cols-2 gap-5">
             <div>
               <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
@@ -501,6 +539,16 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
               </div>
             </div>
             <div>
+              <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
+                Triage by <span className="text-ink-400 font-normal">(Optional)</span>
+              </label>
+              <CustomDatePicker
+                value={triageDueDate}
+                onChange={setTriageDueDate}
+                minDate={todayIso}
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
                 Assignment Note <span className="text-ink-400 font-normal">(Optional)</span>
               </label>

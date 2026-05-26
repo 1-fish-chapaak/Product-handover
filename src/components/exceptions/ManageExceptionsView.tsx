@@ -14,7 +14,7 @@ import {
   History,
   UserPlus,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, ACTION_HUB_SUMMARY, type GrcException, type GrcExceptionSeverity, type GrcExceptionStatus } from '../../data/mockData';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, ACTION_HUB_SUMMARY, type GrcException, type GrcExceptionSeverity, type GrcExceptionStatus, type GrcActivityEntry } from '../../data/mockData';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
@@ -755,17 +755,44 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             cases={exceptions.filter(e => selected.has(e.id))}
             onClose={() => setBulkAssignOpen(false)}
             onApply={(payload: BulkAssignPayload) => {
-              const primary = payload.assignees[0];
-              if (!primary) return;
+              if (payload.assignees.length === 0) return;
+              const today = new Date().toISOString().slice(0, 10);
+              // Update the exceptions — assignees only; assignedTo is no longer
+              // written by new flows (kept on the type for back-compat reads).
               updateExceptions(prev => prev.map(e =>
                 payload.caseIds.includes(e.id)
-                  ? { ...e, assignedTo: primary, assignees: payload.assignees, lastUpdated: new Date().toISOString().slice(0, 10) }
+                  ? {
+                      ...e,
+                      assignees: payload.assignees,
+                      triageDueDate: payload.triageDueDate ?? e.triageDueDate,
+                      lastUpdated: today,
+                    }
                   : e
               ));
+              // Append an activity-log entry per assigned case so the
+              // assignment + note + triage date are auditable in the Review
+              // drawer's Activity Log.
+              const assigneeNames = payload.assignees.map(a => a.name).join(', ');
+              const dateSuffix = payload.triageDueDate ? ` · triage by ${payload.triageDueDate}` : '';
+              const nowIso = new Date().toISOString();
+              payload.caseIds.forEach(caseId => {
+                const detail = GRC_CASE_DETAILS[caseId];
+                if (!detail) return;
+                const entry: GrcActivityEntry = {
+                  id: `act-assign-${caseId}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Auditor',
+                  timestamp: nowIso,
+                  message: `Assigned to ${assigneeNames}${dateSuffix}`,
+                  comment: payload.note,
+                };
+                detail.activityLog = [entry, ...detail.activityLog];
+              });
+              const firstName = payload.assignees[0].name;
               const assigneeLabel =
                 payload.assignees.length === 1
-                  ? primary.name
-                  : `${primary.name} and ${payload.assignees.length - 1} other${payload.assignees.length - 1 === 1 ? '' : 's'}`;
+                  ? firstName
+                  : `${firstName} and ${payload.assignees.length - 1} other${payload.assignees.length - 1 === 1 ? '' : 's'}`;
               addToast({
                 type: 'success',
                 message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
