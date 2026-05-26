@@ -764,16 +764,14 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   ? {
                       ...e,
                       assignees: payload.assignees,
-                      triageDueDate: payload.triageDueDate ?? e.triageDueDate,
                       lastUpdated: today,
                     }
                   : e
               ));
               // Append an activity-log entry per assigned case so the
-              // assignment + note + triage date are auditable in the Review
-              // drawer's Activity Log.
+              // assignment + note are auditable in the Review drawer's
+              // Activity Log.
               const assigneeNames = payload.assignees.map(a => a.name).join(', ');
-              const dateSuffix = payload.triageDueDate ? ` · triage by ${payload.triageDueDate}` : '';
               const nowIso = new Date().toISOString();
               payload.caseIds.forEach(caseId => {
                 const detail = GRC_CASE_DETAILS[caseId];
@@ -783,7 +781,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   author: 'You',
                   role: 'Auditor',
                   timestamp: nowIso,
-                  message: `Assigned to ${assigneeNames}${dateSuffix}`,
+                  message: `Assigned to ${assigneeNames}`,
                   comment: payload.note,
                 };
                 detail.activityLog = [entry, ...detail.activityLog];

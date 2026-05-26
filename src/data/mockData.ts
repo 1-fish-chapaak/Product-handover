@@ -376,9 +376,6 @@ export interface GrcException {
   /** Action-plan due date set during classification (ISO YYYY-MM-DD).
    *  When today > dueDate, the row is computed as overdue. */
   dueDate?: string;
-  /** Triage-by date set during assignment (ISO YYYY-MM-DD). Independent of
-   *  the action-plan dueDate which is set later during classification. */
-  triageDueDate?: string;
 }
 
 export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner';

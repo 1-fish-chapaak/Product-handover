@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { X, UserPlus, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { RISK_OWNERS, type GrcException, type GrcExceptionStatus } from '../../data/mockData';
-import { CustomDatePicker } from '../shared/CustomDatePicker';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 // ─── Styling vocab — mirrors the table chips so the preview reads
@@ -26,7 +25,6 @@ export type BulkAssignPayload = {
   caseIds: string[];
   assignees: { name: string; initials: string }[];
   note?: string;
-  triageDueDate?: string;
 };
 
 interface Props {
@@ -57,13 +55,11 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
   const [freeEmailEntries, setFreeEmailEntries] = useState<{ name: string; initials: string }[]>([]);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [note, setNote] = useState('');
-  const [triageDueDate, setTriageDueDate] = useState('');
   const assigneeRef = useRef<HTMLDivElement | null>(null);
   const assigneeInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   // Focus trap — keeps Tab/Shift+Tab inside the drawer; ESC routes through onClose.
   useFocusTrap(drawerRef, true, onClose);
@@ -213,7 +209,6 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
       caseIds: Array.from(checked),
       assignees: resolvedAssignees,
       note: note.trim() || undefined,
-      triageDueDate: triageDueDate || undefined,
     });
   };
 
@@ -430,7 +425,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
             </div>
           </section>
 
-          {/* Assigned to + Triage by + Note — two-column grid; Note spans both columns on row 2 */}
+          {/* Assigned to + Note — two-column grid */}
           <section className="grid grid-cols-2 gap-5">
             <div>
               <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
@@ -539,16 +534,6 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
               </div>
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
-                Triage by <span className="text-ink-400 font-normal">(Optional)</span>
-              </label>
-              <CustomDatePicker
-                value={triageDueDate}
-                onChange={setTriageDueDate}
-                minDate={todayIso}
-              />
-            </div>
-            <div className="col-span-2">
               <label className="block text-[12px] font-medium text-ink-700 mb-1.5">
                 Assignment Note <span className="text-ink-400 font-normal">(Optional)</span>
               </label>
