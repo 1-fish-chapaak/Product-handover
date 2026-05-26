@@ -2011,13 +2011,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         title="Remove Query Card?"
-        description="This will permanently remove this query card from the report. This action cannot be undone."
+        description="Remove this query card from the report?"
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
           setShowDeleteConfirm(false);
           onDelete?.();
-          addToast({ type: 'success', message: 'Query card removed.' });
         }}
       />
 
@@ -5154,7 +5153,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         index={i}
                         sectionProps={sectionProps}
                         onOpenQuery={onOpenQuery}
-                        onDelete={() => removeSection(section.id)}
+                        onDelete={() => {
+                          // Snapshot the card and its position so Undo restores both.
+                          const snapshot = sections.find(s => s.id === section.id);
+                          const snapshotIndex = sections.findIndex(s => s.id === section.id);
+                          setSections(prev => prev.filter(s => s.id !== section.id));
+                          addToast({
+                            type: 'success',
+                            message: 'Query card removed.',
+                            action: snapshot ? {
+                              label: 'Undo',
+                              onClick: () => {
+                                setSections(prev => {
+                                  if (prev.some(s => s.id === snapshot.id)) return prev;
+                                  const next = [...prev];
+                                  next.splice(Math.max(0, snapshotIndex), 0, snapshot);
+                                  return next;
+                                });
+                              },
+                            } : undefined,
+                          });
+                        }}
                         comments={comments}
                         onAddComment={addComment}
                       />
