@@ -253,6 +253,8 @@ export function AddToReportModal({
               <button
                 type="button"
                 role="tab"
+                id="add-rpt-existing-tab"
+                aria-controls="add-rpt-existing-panel"
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
                 className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
@@ -264,6 +266,8 @@ export function AddToReportModal({
               <button
                 type="button"
                 role="tab"
+                id="add-rpt-new-tab"
+                aria-controls="add-rpt-new-panel"
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
                 className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
@@ -276,7 +280,12 @@ export function AddToReportModal({
             </div>
 
             {mode === 'existing' ? (
-              <div className="space-y-3">
+              <div
+                role="tabpanel"
+                id="add-rpt-existing-panel"
+                aria-labelledby="add-rpt-existing-tab"
+                className="space-y-3"
+              >
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
                   <input
@@ -395,7 +404,12 @@ export function AddToReportModal({
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div
+                role="tabpanel"
+                id="add-rpt-new-panel"
+                aria-labelledby="add-rpt-new-tab"
+                className="space-y-3"
+              >
                 <div>
                   <label htmlFor="new-rpt-name" className="text-[12px] font-medium text-ink-700 mb-1 block">Report Name</label>
                   <input
