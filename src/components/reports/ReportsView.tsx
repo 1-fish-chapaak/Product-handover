@@ -128,7 +128,7 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
 export const CUSTOM_TEMPLATES = [
   {
     id: 'ct-custom-01',
-    name: 'Custom Template - 01',
+    name: 'Third-Party Vendor Risk Scorecard',
     desc: 'Custom scorecard for third-party vendors with risk tiers, control gaps, and remediation SLAs.',
     category: 'Risk',
     icon: 'alert-triangle',
@@ -141,7 +141,7 @@ export const CUSTOM_TEMPLATES = [
   },
   {
     id: 'ct-custom-02',
-    name: 'Custom Template - 02',
+    name: 'Quarterly Audit Snapshot',
     desc: 'One-page executive snapshot of quarterly audit findings and status.',
     category: 'Audit',
     icon: 'file-text',
