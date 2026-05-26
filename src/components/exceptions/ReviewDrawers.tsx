@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { motion } from 'motion/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Paperclip,
@@ -13,7 +13,9 @@ import {
   User,
   Pencil,
   Trash2,
+  Check,
 } from 'lucide-react';
+import { CustomDatePicker } from '../shared/CustomDatePicker';
 import {
   GRC_CASE_DETAILS,
   GRC_BULK_ACTIONS,
@@ -655,6 +657,28 @@ export function ClassifyExceptionDrawer({
   const [actionName, setActionName] = useState('');
   const [actionTaken, setActionTaken] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [classificationOpen, setClassificationOpen] = useState(false);
+  const classificationRef = useRef<HTMLDivElement>(null);
+
+  // Block any due-date earlier than today.
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Close the classification dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!classificationOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (!classificationRef.current?.contains(e.target as Node)) setClassificationOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setClassificationOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [classificationOpen]);
 
   const requiresActionPlan = ACTIONABLE_CLASSIFICATIONS.has(classification);
 
@@ -727,18 +751,56 @@ export function ClassifyExceptionDrawer({
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>
           </label>
-          <div className="relative">
-            <select
-              value={classification}
-              onChange={(e) => setClassification(e.target.value)}
-              className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
+          <div ref={classificationRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setClassificationOpen(o => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={classificationOpen}
+              className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
             >
-              <option value="">Select classification...</option>
-              {CLASSIFY_OPTIONS.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+              <span className={classification ? 'text-ink-800' : 'text-ink-400'}>
+                {classification || 'Select classification…'}
+              </span>
+              <ChevronDown
+                size={14}
+                className={`text-ink-400 transition-transform duration-150 ${classificationOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            <AnimatePresence>
+              {classificationOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                  role="listbox"
+                  className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-[8px] shadow-lg overflow-hidden py-1"
+                >
+                  {CLASSIFY_OPTIONS.map(c => {
+                    const selected = classification === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => {
+                          setClassification(c);
+                          setClassificationOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center justify-between cursor-pointer transition-colors ${
+                          selected ? 'bg-brand-50 text-brand-700' : 'text-ink-800 hover:bg-[#FAFAFB]'
+                        }`}
+                      >
+                        <span>{c}</span>
+                        {selected && <Check size={14} className="text-brand-700 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           {classification && !requiresActionPlan && (
             <span className="mt-2 inline-block text-[11.5px] text-ink-500">No action plan required.</span>
@@ -825,14 +887,8 @@ export function ClassifyExceptionDrawer({
               <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
                 Due Date <span className="text-risk">*</span>
               </label>
-              <div className="relative w-[220px]">
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                />
-                <Calendar size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+              <div className="w-[220px]">
+                <CustomDatePicker value={dueDate} onChange={setDueDate} minDate={todayIso} />
               </div>
             </div>
           </motion.div>

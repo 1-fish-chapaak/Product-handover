@@ -26,6 +26,11 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   expandable?: (item: T) => ReactNode;
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
+  /** Fully custom empty-state body. When provided, replaces the default
+   *  icon + message + clear-search chrome with this node. Caller owns layout.
+   *  Can be a function that receives the table's internal search state so the
+   *  caller can render a Clear-search affordance alongside other filter clears. */
+  emptyContent?: ReactNode | ((ctx: { search: string; clearSearch: () => void }) => ReactNode);
   className?: string;
   headerExtra?: ReactNode;
   animateRows?: boolean;
@@ -62,6 +67,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   expandable,
   onRowClick,
   emptyMessage = 'No results found',
+  emptyContent,
   className = '',
   headerExtra,
   animateRows = true,
@@ -199,17 +205,23 @@ export default function SmartTable<T extends Record<string, unknown>>({
             <tbody>
               <tr>
                 <td colSpan={columns.length + (expandable ? 1 : 0)} className="px-4 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
-                      <Search size={18} className="text-text-muted/50" />
+                  {emptyContent ? (
+                    typeof emptyContent === 'function'
+                      ? emptyContent({ search, clearSearch: () => setSearch('') })
+                      : emptyContent
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
+                        <Search size={18} className="text-text-muted/50" />
+                      </div>
+                      <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
+                      {search && (
+                        <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
+                          Clear search
+                        </button>
+                      )}
                     </div>
-                    <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
-                    {search && (
-                      <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
-                        Clear search
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </td>
               </tr>
             </tbody>

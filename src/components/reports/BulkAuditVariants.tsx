@@ -8,14 +8,22 @@
 
 import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2 } from 'lucide-react';
+import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
+import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import { useToast, type ToastType } from '../shared/Toast';
+import EmptyState from '../shared/EmptyState';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { KpiCountUp } from '../shared/KpiTile';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './ReportsView';
+import AddObservationModal, {
+  computeNextObservationId,
+  type EditingObservationInput,
+  type ObservationAttachment,
+} from './AddObservationModal';
+import ObservationCard, { type ObservationCardData } from './ObservationCard';
 
 // ─────────────────────────────────────────────────────────────────────
 // Output catalog — what the "Add output" modal can attach to a workflow.
@@ -82,6 +90,128 @@ export function BulkAuditVariantView({
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
 
+  // ─── Report-level observations (parity with Internal Audit reports) ───
+  const [observations, setObservations] = useState<ObservationCardData[]>([]);
+  const [showAddObservation, setShowAddObservation] = useState(false);
+  const [editingObservation, setEditingObservation] = useState<EditingObservationInput | null>(null);
+  const [pendingDeleteObs, setPendingDeleteObs] = useState<ObservationCardData | null>(null);
+
+  // Track the index of the most recently removed observation / workflow so
+  // that "Undo" on the success toast restores them to their original slot in
+  // the report rather than appending to the tail.
+  const removedObsIndexRef = useRef<number | null>(null);
+  const removedWfIndexRef = useRef<number | null>(null);
+
+  const nextObservationId = () => computeNextObservationId(observations.map(o => o.obsId));
+
+  const openAddObservation = () => {
+    setEditingObservation(null);
+    setShowAddObservation(true);
+  };
+  const openEditObservation = (obs: ObservationCardData) => {
+    setEditingObservation({
+      id: obs.id,
+      obsId: obs.obsId,
+      name: obs.title,
+      description: obs.description,
+      attachments: obs.attachments,
+    });
+    setShowAddObservation(true);
+  };
+  const closeAddObservation = () => {
+    setShowAddObservation(false);
+    setEditingObservation(null);
+  };
+
+  const handleObservationSave = ({ name, description, attachments }: { name: string; description: string; attachments?: ObservationAttachment[] }) => {
+    if (editingObservation) {
+      setObservations(prev => prev.map(o =>
+        o.id === editingObservation.id
+          ? { ...o, title: name, description, attachments }
+          : o
+      ));
+      addToast({ type: 'success', message: `${editingObservation.obsId} updated.` });
+    } else {
+      const obsId = nextObservationId();
+      const newObs: ObservationCardData = {
+        id: `bulk-obs-${Date.now()}`,
+        obsId,
+        title: name,
+        description,
+        attachments,
+      };
+      setObservations(prev => [...prev, newObs]);
+      addToast({ type: 'success', message: `${obsId} added.` });
+    }
+    closeAddObservation();
+  };
+
+  const toggleObservationAttachment = (id: string) => {
+    setObservations(prev => prev.map(o =>
+      o.id === id ? { ...o, attachmentHidden: !o.attachmentHidden } : o
+    ));
+  };
+
+  const confirmDeleteObservation = () => {
+    if (!pendingDeleteObs) return;
+    const removed = pendingDeleteObs;
+    let restored = false;
+    setObservations(prev => {
+      const idx = prev.findIndex(o => o.id === removed.id);
+      // Remember position so undo restores order, not appends to the tail.
+      removedObsIndexRef.current = idx >= 0 ? idx : prev.length;
+      return prev.filter(o => o.id !== removed.id);
+    });
+    addToast({
+      type: 'success',
+      message: `${removed.obsId} removed.`,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          if (restored) return;
+          restored = true;
+          setObservations(prev => {
+            if (prev.some(o => o.id === removed.id)) return prev;
+            const insertAt = Math.min(removedObsIndexRef.current ?? prev.length, prev.length);
+            const next = [...prev];
+            next.splice(insertAt, 0, removed);
+            return next;
+          });
+        },
+      },
+    });
+    setPendingDeleteObs(null);
+  };
+
+  // ─── Contents inline rename ───
+  const [contentsEditingId, setContentsEditingId] = useState<string | null>(null);
+  const [contentsDraft, setContentsDraft] = useState('');
+
+  const handleStartContentsRename = (id: string, current: string) => {
+    setContentsEditingId(id);
+    setContentsDraft(current);
+  };
+  const handleCancelContentsRename = () => {
+    setContentsEditingId(null);
+    setContentsDraft('');
+  };
+  const handleSaveContentsRename = () => {
+    const id = contentsEditingId;
+    const newTitle = contentsDraft.trim();
+    if (!id || !newTitle) {
+      handleCancelContentsRename();
+      return;
+    }
+    // Try workflow first, then observation.
+    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, name: newTitle } : w));
+    setObservations(prev => prev.map(o => o.id === id ? { ...o, title: newTitle } : o));
+    handleCancelContentsRename();
+  };
+
+  const scrollToContent = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   // Failed runs (errored / skipped) are excluded from the report body and only
   // surfaced via a callout in the Executive Summary. The body renders the
   // successful runs. When *every* run failed, swap the layout for a dedicated
@@ -97,8 +227,31 @@ export function BulkAuditVariantView({
   const handleRequestDelete = (w: WorkflowResult) => setPendingDelete(w);
   const handleConfirmDelete = () => {
     if (!pendingDelete) return;
-    setWorkflows(prev => prev.filter(w => w.id !== pendingDelete.id));
-    addToast({ type: 'success', message: `${pendingDelete.workflowId} removed from report.` });
+    const removed = pendingDelete;
+    let restored = false;
+    setWorkflows(prev => {
+      const idx = prev.findIndex(w => w.id === removed.id);
+      removedWfIndexRef.current = idx >= 0 ? idx : prev.length;
+      return prev.filter(w => w.id !== removed.id);
+    });
+    addToast({
+      type: 'success',
+      message: `${removed.workflowId} removed from report.`,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          if (restored) return;
+          restored = true;
+          setWorkflows(prev => {
+            if (prev.some(w => w.id === removed.id)) return prev;
+            const insertAt = Math.min(removedWfIndexRef.current ?? prev.length, prev.length);
+            const next = [...prev];
+            next.splice(insertAt, 0, removed);
+            return next;
+          });
+        },
+      },
+    });
     setPendingDelete(null);
   };
 
@@ -114,7 +267,30 @@ export function BulkAuditVariantView({
         <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} />
       ) : (
         <>
-          {variant === 'editorial' && <EditorialLayout report={report} workflows={successfulWorkflows} failedWorkflows={failedWorkflows} totals={totals} onOpenWorkflow={handleOpenWorkflow} onRequestDelete={handleRequestDelete} />}
+          {variant === 'editorial' && (
+            <EditorialLayout
+              report={report}
+              workflows={successfulWorkflows}
+              failedWorkflows={failedWorkflows}
+              totals={totals}
+              onOpenWorkflow={handleOpenWorkflow}
+              onRequestDelete={handleRequestDelete}
+              onReorderWorkflows={setWorkflows}
+              observations={observations}
+              onAddObservation={openAddObservation}
+              onEditObservation={openEditObservation}
+              onToggleObservationAttachment={toggleObservationAttachment}
+              onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
+              onReorderObservations={setObservations}
+              contentsEditingId={contentsEditingId}
+              contentsDraft={contentsDraft}
+              onDraftChange={setContentsDraft}
+              onStartContentsRename={handleStartContentsRename}
+              onSaveContentsRename={handleSaveContentsRename}
+              onCancelContentsRename={handleCancelContentsRename}
+              onScrollToContent={scrollToContent}
+            />
+          )}
           {variant === 'forensic' && <ForensicLayout report={report} workflows={successfulWorkflows} totals={totals} />}
           {variant === 'minimal' && <MinimalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
           {variant === 'architectural' && <ArchitecturalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
@@ -129,22 +305,43 @@ export function BulkAuditVariantView({
         />,
         document.body,
       )}
+
+      {pendingDeleteObs && createPortal(
+        <DeleteObservationConfirm
+          obsId={pendingDeleteObs.obsId}
+          title={pendingDeleteObs.title}
+          onCancel={() => setPendingDeleteObs(null)}
+          onConfirm={confirmDeleteObservation}
+        />,
+        document.body,
+      )}
+
+      <AddObservationModal
+        open={showAddObservation}
+        editing={editingObservation}
+        nextObsId={nextObservationId()}
+        onClose={closeAddObservation}
+        onSave={handleObservationSave}
+      />
     </motion.div>
   );
 }
 
-function DeleteWorkflowConfirm({
-  workflow,
+function DeleteObservationConfirm({
+  obsId,
+  title,
   onCancel,
   onConfirm,
 }: {
-  workflow: WorkflowResult;
+  obsId: string;
+  title: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef, true, onCancel);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
       if (e.key === 'Enter') onConfirm();
     };
     window.addEventListener('keydown', handler);
@@ -154,7 +351,7 @@ function DeleteWorkflowConfirm({
       window.removeEventListener('keydown', handler);
       document.body.style.overflow = prev;
     };
-  }, [onCancel, onConfirm]);
+  }, [onConfirm]);
 
   return (
     <AnimatePresence>
@@ -167,15 +364,93 @@ function DeleteWorkflowConfirm({
         className="fixed inset-0 z-[1050] bg-ink-900/55 backdrop-blur-[2px] flex items-center justify-center p-6"
       >
         <motion.div
+          ref={dialogRef}
           initial={{ opacity: 0, y: 6, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 4, scale: 0.98 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-obs-title"
+          tabIndex={-1}
           className="w-full max-w-[420px] bg-white border border-border-light rounded-2xl shadow-2xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
-            <h3 className="text-[15px] font-semibold text-text mb-2">Remove workflow from this report?</h3>
+            <h3 id="delete-obs-title" className="text-[15px] font-semibold text-text mb-2">Remove observation?</h3>
+            <p className="text-[13px] text-text-secondary leading-relaxed">
+              <span className="font-semibold text-text">{obsId}</span> · {title} will be removed from this report.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
+            <button
+              onClick={onCancel}
+              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            >
+              Remove observation
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function DeleteWorkflowConfirm({
+  workflow,
+  onCancel,
+  onConfirm,
+}: {
+  workflow: WorkflowResult;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef, true, onCancel);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') onConfirm();
+    };
+    window.addEventListener('keydown', handler);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handler);
+      document.body.style.overflow = prev;
+    };
+  }, [onConfirm]);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onCancel}
+        className="fixed inset-0 z-[1050] bg-ink-900/55 backdrop-blur-[2px] flex items-center justify-center p-6"
+      >
+        <motion.div
+          ref={dialogRef}
+          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-wf-title"
+          tabIndex={-1}
+          className="w-full max-w-[420px] bg-white border border-border-light rounded-2xl shadow-2xl overflow-hidden"
+        >
+          <div className="px-6 pt-6 pb-5">
+            <h3 id="delete-wf-title" className="text-[15px] font-semibold text-text mb-2">Remove workflow from this report?</h3>
             <p className="text-[13px] text-text-secondary leading-relaxed">
               <span className="font-semibold text-text">{workflow.workflowId}</span> · {workflow.name} will be removed from the report.
               The underlying workflow definition is not affected.
@@ -184,13 +459,13 @@ function DeleteWorkflowConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove workflow
             </button>
@@ -326,7 +601,7 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
           >
             <ArrowLeft size={14} /> Back to Reports
           </button>
@@ -335,11 +610,19 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
             <div className="relative">
               <button
                 onClick={() => setShowApplyTemplate(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                disabled={applyingTemplate}
+                aria-busy={applyingTemplate || undefined}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 style={{ borderRadius: '8px' }}
               >
-                <Layout size={13} />
-                <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
+                {applyingTemplate ? (
+                  <Loader2 size={13} className="animate-spin text-primary" />
+                ) : (
+                  <Layout size={13} />
+                )}
+                <span className="truncate max-w-[220px]">
+                  {applyingTemplate ? 'Applying…' : (appliedTemplate?.name ?? 'Apply Template')}
+                </span>
                 <motion.span
                   animate={{ rotate: showApplyTemplate ? 180 : 0 }}
                   transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -364,7 +647,7 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
             {onShare && (
               <button
                 onClick={onShare}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 style={{ borderRadius: '8px' }}
               >
                 <Share2 size={13} /> Share
@@ -374,7 +657,7 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
             <div className="relative">
               <button
                 onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white"
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 style={{ borderRadius: '8px' }}
               >
                 <Download size={13} /> Download <ChevronDown size={11} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
@@ -474,13 +757,31 @@ function AllFailedEmpty({ report, failedWorkflows }: {
   );
 }
 
-function EditorialLayout({ report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete }: {
+function EditorialLayout({
+  report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete, onReorderWorkflows,
+  observations, onAddObservation, onEditObservation, onToggleObservationAttachment, onDeleteObservation, onReorderObservations,
+  contentsEditingId, contentsDraft, onDraftChange, onStartContentsRename, onSaveContentsRename, onCancelContentsRename, onScrollToContent,
+}: {
   report: Report;
   workflows: WorkflowResult[];
   failedWorkflows: WorkflowResult[];
   totals: Totals;
   onOpenWorkflow: (w: WorkflowResult) => void;
   onRequestDelete: (w: WorkflowResult) => void;
+  onReorderWorkflows: (next: WorkflowResult[]) => void;
+  observations: ObservationCardData[];
+  onAddObservation: () => void;
+  onEditObservation: (obs: ObservationCardData) => void;
+  onToggleObservationAttachment: (id: string) => void;
+  onDeleteObservation: (obs: ObservationCardData) => void;
+  onReorderObservations: (next: ObservationCardData[]) => void;
+  contentsEditingId: string | null;
+  contentsDraft: string;
+  onDraftChange: (v: string) => void;
+  onStartContentsRename: (id: string, current: string) => void;
+  onSaveContentsRename: () => void;
+  onCancelContentsRename: () => void;
+  onScrollToContent: (id: string) => void;
 }) {
   const { addToast } = useToast();
   return (
@@ -545,7 +846,23 @@ function EditorialLayout({ report, workflows, failedWorkflows, totals, onOpenWor
 
       {/* Editorial body — white card attached to the header (no gap) */}
       <article className="bg-white border-x border-b border-border-light rounded-b-2xl px-8 py-8">
-        <EditorialContents workflows={workflows} />
+        <EditorialContents
+          workflows={workflows}
+          observations={observations}
+          onAddObservation={onAddObservation}
+          onReorderWorkflows={onReorderWorkflows}
+          onRequestDeleteWorkflow={onRequestDelete}
+          onReorderObservations={onReorderObservations}
+          onEditObservation={onEditObservation}
+          onDeleteObservation={onDeleteObservation}
+          contentsEditingId={contentsEditingId}
+          contentsDraft={contentsDraft}
+          onDraftChange={onDraftChange}
+          onStartContentsRename={onStartContentsRename}
+          onSaveContentsRename={onSaveContentsRename}
+          onCancelContentsRename={onCancelContentsRename}
+          onScrollToContent={onScrollToContent}
+        />
 
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
@@ -571,6 +888,26 @@ function EditorialLayout({ report, workflows, failedWorkflows, totals, onOpenWor
             onRequestDelete={() => onRequestDelete(w)}
           />
         ))}
+
+        {/* Observations — added at report level via the "Add Observation" button. */}
+        {observations.length > 0 && (
+          <>
+            <hr className="mt-10 mb-4 border-0 border-t border-ink-900/15" />
+            <div className="space-y-0">
+              {observations.map((o, i) => (
+                <div key={o.id} id={`bulk-observation-${o.id}`} className="scroll-mt-6">
+                  <ObservationCard
+                    obs={o}
+                    index={i}
+                    onEdit={() => onEditObservation(o)}
+                    onToggleAttachment={() => onToggleObservationAttachment(o.id)}
+                    onDelete={() => onDeleteObservation(o)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </article>
     </div>
   );
@@ -588,33 +925,229 @@ function workflowStatus(w: WorkflowResult): 'pass' | 'fail' {
 // report's sections and smooth-scrolls to each on click. Anchors live on
 // #bulk-exec-summary, #bulk-workflow-status, and #workflow-chapter-${id}
 // (the per-chapter anchor EditorialChapter already renders).
-function EditorialContents({ workflows }: { workflows: WorkflowResult[] }) {
-  const entries = [
-    { id: 'bulk-exec-summary', label: 'Executive Summary' },
-    ...(workflows.length > 0 ? [{ id: 'bulk-workflow-status', label: 'Workflow Status' }] : []),
-    ...workflows.map(w => ({ id: `workflow-chapter-${w.id}`, label: `${w.workflowId} · ${w.name}` })),
+function EditorialContents({
+  workflows,
+  observations,
+  onAddObservation,
+  onReorderWorkflows,
+  onRequestDeleteWorkflow,
+  onReorderObservations,
+  onEditObservation,
+  onDeleteObservation,
+  contentsEditingId,
+  contentsDraft,
+  onDraftChange,
+  onStartContentsRename,
+  onSaveContentsRename,
+  onCancelContentsRename,
+  onScrollToContent,
+}: {
+  workflows: WorkflowResult[];
+  observations: ObservationCardData[];
+  onAddObservation: () => void;
+  onReorderWorkflows: (next: WorkflowResult[]) => void;
+  onRequestDeleteWorkflow: (w: WorkflowResult) => void;
+  onReorderObservations: (next: ObservationCardData[]) => void;
+  onEditObservation: (obs: ObservationCardData) => void;
+  onDeleteObservation: (obs: ObservationCardData) => void;
+  contentsEditingId: string | null;
+  contentsDraft: string;
+  onDraftChange: (v: string) => void;
+  onStartContentsRename: (id: string, current: string) => void;
+  onSaveContentsRename: () => void;
+  onCancelContentsRename: () => void;
+  onScrollToContent: (id: string) => void;
+}) {
+  // Pinned rows above the reorderable groups. Derived from workflow data so
+  // they don't get drag/edit/delete chrome — same as IA reports treat their
+  // cover/summary pins.
+  const fixedRows: { id: string; label: string; anchor: string }[] = [
+    { id: 'fixed-exec-summary', label: 'Executive Summary', anchor: 'bulk-exec-summary' },
+    ...(workflows.length > 0
+      ? [{ id: 'fixed-workflow-status', label: 'Workflow Status', anchor: 'bulk-workflow-status' }]
+      : []),
   ];
+
+  let runningIndex = 0;
+  const fixedStart = runningIndex; runningIndex += fixedRows.length;
+  const workflowsStart = runningIndex; runningIndex += workflows.length;
+  const observationsStart = runningIndex;
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-6">
-        <List size={16} className="text-primary" />
-        <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2">
+          <List size={16} className="text-primary" />
+          <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+        </div>
+        <button
+          onClick={onAddObservation}
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        >
+          <Plus size={13} />
+          Add Observation
+        </button>
       </div>
+
+      {/* Fixed header rows — Exec Summary, Workflow Status */}
       <ol className="list-none p-0 m-0 space-y-0.5">
-        {entries.map((e, i) => (
-          <li key={e.id}>
+        {fixedRows.map((r, i) => (
+          <li key={r.id}>
             <button
               type="button"
-              onClick={() => document.getElementById(e.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              onClick={() => onScrollToContent(r.anchor)}
               className="flex items-center gap-2 w-full py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors text-left cursor-pointer"
             >
-              <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-              <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{e.label}</span>
+              <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(fixedStart + i + 1).padStart(2, '0')}</span>
+              <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{r.label}</span>
             </button>
           </li>
         ))}
       </ol>
+
+      {/* Workflow chapters — reorderable, inline rename, delete */}
+      {workflows.length > 0 && (
+        <Reorder.Group
+          axis="y"
+          values={workflows}
+          onReorder={onReorderWorkflows}
+          as="ol"
+          className="list-none p-0 m-0 space-y-0.5"
+        >
+          {workflows.map((w, i) => (
+            <BulkContentsRow
+              key={w.id}
+              value={w}
+              displayId={workflowsStart + i + 1}
+              label={`${w.workflowId} · ${w.name}`}
+              isEditing={contentsEditingId === w.id}
+              draftValue={contentsDraft}
+              onDraftChange={onDraftChange}
+              onStartEdit={() => onStartContentsRename(w.id, w.name)}
+              onSaveEdit={onSaveContentsRename}
+              onCancelEdit={onCancelContentsRename}
+              onScroll={() => onScrollToContent(`workflow-chapter-${w.id}`)}
+              onDelete={() => onRequestDeleteWorkflow(w)}
+            />
+          ))}
+        </Reorder.Group>
+      )}
+
+      {/* Observations — reorderable, inline rename (modal also available via Edit button), delete */}
+      {observations.length > 0 && (
+        <Reorder.Group
+          axis="y"
+          values={observations}
+          onReorder={onReorderObservations}
+          as="ol"
+          className="list-none p-0 m-0 space-y-0.5"
+        >
+          {observations.map((o, i) => (
+            <BulkContentsRow
+              key={o.id}
+              value={o}
+              displayId={observationsStart + i + 1}
+              label={`${o.obsId} · ${o.title}`}
+              isEditing={contentsEditingId === o.id}
+              draftValue={contentsDraft}
+              onDraftChange={onDraftChange}
+              onStartEdit={() => onEditObservation(o)}
+              onSaveEdit={onSaveContentsRename}
+              onCancelEdit={onCancelContentsRename}
+              onScroll={() => onScrollToContent(`bulk-observation-${o.id}`)}
+              onDelete={() => onDeleteObservation(o)}
+            />
+          ))}
+        </Reorder.Group>
+      )}
     </div>
+  );
+}
+
+// Reorderable contents row with drag handle, inline rename (active when
+// `isEditing`), and hover-revealed edit + delete actions. Generic over the
+// item type so workflows and observations share the same chrome.
+function BulkContentsRow<T extends { id: string }>({
+  value,
+  displayId,
+  label,
+  isEditing,
+  draftValue,
+  onDraftChange,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onScroll,
+  onDelete,
+}: {
+  value: T;
+  displayId: number;
+  label: string;
+  isEditing: boolean;
+  draftValue: string;
+  onDraftChange: (v: string) => void;
+  onStartEdit: () => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onScroll: () => void;
+  onDelete: () => void;
+}) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={value}
+      dragControls={controls}
+      dragListener={false}
+      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
+    >
+      <button
+        onPointerDown={(e) => { controls.start(e); }}
+        aria-label="Drag to reorder"
+        className="shrink-0 p-1 text-text-muted/40 hover:text-text-muted cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
+      >
+        <GripVertical size={13} />
+      </button>
+      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(displayId).padStart(2, '0')}</span>
+      {isEditing ? (
+        <input
+          value={draftValue}
+          onChange={(e) => onDraftChange(e.target.value)}
+          onBlur={onSaveEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSaveEdit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+          }}
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[12.5px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
+        />
+      ) : (
+        <button
+          onClick={onScroll}
+          className="flex-1 min-w-0 text-left text-[12.5px] text-text-secondary truncate transition-colors cursor-pointer"
+        >
+          {label}
+        </button>
+      )}
+      {!isEditing && (
+        <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/crow:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+            aria-label="Edit"
+            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+          >
+            <Edit3 size={13} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            aria-label="Delete"
+            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
+    </Reorder.Item>
   );
 }
 
@@ -794,7 +1327,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             onClick={() => setMenuOpen(o => !o)}
             title="More options"
             aria-label="More options"
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <MoreVertical size={15} />
           </button>
@@ -880,20 +1413,36 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
       {/* Findings */}
       <div className="mb-6">
         <h4 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">Findings</h4>
-        <ul className="space-y-2.5">
-          {workflow.findings.map((f, i) => (
-            <li key={i} className="flex gap-2.5 text-[13px] text-text leading-relaxed">
-              <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
-              {f}
-            </li>
-          ))}
-        </ul>
+        {workflow.findings.length === 0 ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="No findings"
+            body="This workflow ran clean — no exceptions to record."
+            size="compact"
+          />
+        ) : (
+          <ul className="space-y-2.5">
+            {workflow.findings.map((f, i) => (
+              <li key={i} className="flex gap-2.5 text-[13px] text-text leading-relaxed">
+                <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
+                {f}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Observations */}
-      {workflow.observations.length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">Observations</h4>
+      <div className="mb-6">
+        <h4 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">Observations</h4>
+        {workflow.observations.length === 0 ? (
+          <EmptyState
+            icon={StickyNote}
+            title="No observations"
+            body="Add an observation if there's something the team should know about this workflow."
+            size="compact"
+          />
+        ) : (
           <ul className="space-y-2.5">
             {workflow.observations.map((o, i) => (
               <li key={i} className="flex gap-2.5 text-[13px] text-text leading-relaxed">
@@ -902,8 +1451,8 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Attached outputs (KPIs / Graphs / Tables added via "Add output") */}
       {attached.length > 0 && (
@@ -937,6 +1486,21 @@ function AttachedOutputsBlock({
   const kpis = attached.filter(a => a.kind === 'kpi');
   const graphs = attached.filter(a => a.kind === 'graph');
   const tables = attached.filter(a => a.kind === 'table');
+
+  // Defensive empty state — if a query had outputs requested but everything
+  // was removed, surface that instead of an empty rail of nothing.
+  if (kpis.length === 0 && graphs.length === 0 && tables.length === 0) {
+    return (
+      <div className="mt-8">
+        <EmptyState
+          icon={BarChart3}
+          title="No insights yet for this query."
+          body="Add a KPI, graph, or table to surface what this run found."
+          size="compact"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mt-8 space-y-6">
@@ -1106,17 +1670,16 @@ function AddOutputModal({
 }) {
   const [tab, setTab] = useState<'kpi' | 'graph' | 'table'>('kpi');
   const [selection, setSelection] = useState<Set<string>>(() => new Set(attached.map(a => `${a.kind}:${a.id}`)));
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef, true, onClose);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
 
   const toggle = (kind: AttachedOutput['kind'], id: string) => {
     const key = `${kind}:${id}`;
@@ -1154,16 +1717,21 @@ function AddOutputModal({
         className="fixed inset-0 z-[1050] bg-ink-900/55 backdrop-blur-[2px] flex items-center justify-center p-6"
       >
         <motion.div
+          ref={dialogRef}
           initial={{ opacity: 0, y: 6, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 4, scale: 0.98 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-output-title"
+          tabIndex={-1}
           className="w-full max-w-[840px] max-h-[calc(100vh-48px)] bg-white border border-border-light rounded-[16px] shadow-2xl overflow-hidden flex flex-col"
         >
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
             <div>
-              <h3 className="text-[16px] font-bold text-text tracking-tight">Add output to report</h3>
+              <h3 id="add-output-title" className="text-[16px] font-bold text-text tracking-tight">Add output to report</h3>
               <p className="text-[12.5px] text-text-secondary mt-1">
                 <span className="font-bold text-primary uppercase tracking-wider text-[11px]">Workflow · {workflow.workflowId}</span>
                 <span className="mx-1.5 text-text-muted">·</span>
@@ -1173,7 +1741,7 @@ function AddOutputModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               <X size={17} />
             </button>
@@ -1294,14 +1862,14 @@ function AddOutputModal({
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAttach}
                 disabled={selection.size === 0}
-                className={`inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer ${selection.size === 0 ? 'bg-primary/40 text-white/85 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover text-white'}`}
+                className={`inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-primary/40 text-white/85 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover text-white'}`}
               >
                 Add to report
               </button>

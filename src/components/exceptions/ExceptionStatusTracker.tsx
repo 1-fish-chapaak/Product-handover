@@ -203,7 +203,11 @@ function ActionGroupRow({
                           <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
                         </td>
                         <td className="px-3 py-2.5 align-middle">
-                          <AvatarChip name={ex.assignedTo.name} initials={ex.assignedTo.initials} />
+                          {ex.assignedTo ? (
+                            <AvatarChip name={ex.assignedTo.name} initials={ex.assignedTo.initials} />
+                          ) : (
+                            <span className="text-ink-500 text-[12px] italic">Unassigned</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 align-middle text-ink-600 text-[12px]">
                           {last ? truncate(last.message, 42) : '—'}
@@ -422,7 +426,7 @@ function ExceptionPreviewDrawer({ exception, onClose }: { exception: GrcExceptio
                 <Pill className={STATUS_STYLE[exception.status]}>{STATUS_LABEL[exception.status]}</Pill>
                 <Pill className={CLASSIFICATION_STYLE[exception.classification]}>{exception.classification}</Pill>
               </div>
-              <span className="text-[12.5px] text-ink-700">{exception.assignedTo.name}</span>
+              <span className="text-[12.5px] text-ink-700">{exception.assignedTo?.name ?? 'Unassigned'}</span>
             </div>
           </div>
         </div>
