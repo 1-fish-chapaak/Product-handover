@@ -222,10 +222,10 @@ export function AddToReportModal({
             <FileText size={15} className="text-violet-700" />
           </div>
           <div>
-            <h2 id={titleId} className="text-[15px] font-semibold text-ink-800">
+            <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink-800">
               {step === 'pick' ? 'Add to Report' : 'Choose What to Include'}
             </h2>
-            <p id={descId} className="text-[11px] text-ink-500">
+            <p id={descId} className="text-[0.6875rem] text-ink-500">
               {step === 'pick' ? 'Choose a draft report or create a new one'
                 : 'Select individual KPIs, charts, and columns'}
             </p>
@@ -255,7 +255,7 @@ export function AddToReportModal({
                 role="tab"
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
-                className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
                   mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -266,7 +266,7 @@ export function AddToReportModal({
                 role="tab"
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
-                className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
                   mode === 'new' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -288,7 +288,7 @@ export function AddToReportModal({
                     aria-controls="rpt-list"
                     aria-activedescendant={navigableIds[highlight] ? `rpt-row-${navigableIds[highlight]}` : undefined}
                     disabled={loading || !!loadError || noReportsAtAll}
-                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
+                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
                   />
                 </div>
 
@@ -364,20 +364,20 @@ export function AddToReportModal({
                             {isFinal ? <Lock size={14} className="text-ink-400" /> : <FileText size={14} className="text-violet-700" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[13px] font-medium text-ink-800 truncate">
+                            <div className="text-[0.8125rem] font-medium text-ink-800 truncate">
                               <Highlighted text={r.name} query={searchTrim} />
                             </div>
-                            <div className="text-[11px] text-ink-500">
+                            <div className="text-[0.6875rem] text-ink-500">
                               {r.status === 'draft' ? 'Draft' : 'Final (locked)'}
                               {r.generatedBy && ` by ${r.generatedBy}`}
                             </div>
                           </div>
                           {alreadyAdded ? (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0">
+                            <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0">
                               Already added
                             </span>
                           ) : (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                            <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
                               isFinal ? 'bg-ink-100 text-ink-500' : 'bg-amber-50 text-amber-700'
                             }`}>
                               {isFinal ? 'Locked' : 'Draft'}
@@ -397,7 +397,7 @@ export function AddToReportModal({
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label htmlFor="new-rpt-name" className="text-[12px] font-medium text-ink-700 mb-1 block">Report Name</label>
+                  <label htmlFor="new-rpt-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Report Name</label>
                   <input
                     id="new-rpt-name"
                     ref={nameRef}
@@ -411,23 +411,23 @@ export function AddToReportModal({
                     aria-invalid={!!nameError}
                     aria-describedby={nameError ? 'new-rpt-name-error' : 'new-rpt-name-hint'}
                     maxLength={NAME_MAX}
-                    className={`w-full h-10 px-3 rounded-lg border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 transition-all ${
+                    className={`w-full h-10 px-3 rounded-lg border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 transition-all ${
                       nameError
                         ? 'border-risk/40 focus:ring-risk/20 focus:border-risk'
                         : 'border-canvas-border focus:ring-violet-200 focus:border-violet-300'
                     }`}
                   />
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    <span id={nameError ? 'new-rpt-name-error' : 'new-rpt-name-hint'} className={`text-[11px] truncate ${
+                    <span id={nameError ? 'new-rpt-name-error' : 'new-rpt-name-hint'} className={`text-[0.6875rem] truncate ${
                       nameError ? 'text-risk-700' : nameNotice ? 'text-mitigated-700' : 'text-ink-400'
                     }`}>
                       {nameError ?? nameNotice ?? 'Saved as a draft you can edit later.'}
                     </span>
-                    <span className="text-[11px] text-ink-400 tabular-nums shrink-0">{newName.length}/{NAME_MAX}</span>
+                    <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{newName.length}/{NAME_MAX}</span>
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="new-rpt-desc" className="text-[12px] font-medium text-ink-700 mb-1 block">
+                  <label htmlFor="new-rpt-desc" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">
                     Description <span className="text-ink-400 font-normal">(optional)</span>
                   </label>
                   <textarea
@@ -437,10 +437,10 @@ export function AddToReportModal({
                     placeholder="What this report covers..." rows={2}
                     maxLength={DESC_MAX}
                     aria-describedby="new-rpt-desc-counter"
-                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all resize-none"
+                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all resize-none"
                   />
                   <div className="flex justify-end mt-1">
-                    <span id="new-rpt-desc-counter" className={`text-[11px] tabular-nums ${
+                    <span id="new-rpt-desc-counter" className={`text-[0.6875rem] tabular-nums ${
                       newDesc.length >= DESC_SOFT ? 'text-mitigated-700' : 'text-ink-400'
                     }`}>
                       {newDesc.length}/{DESC_MAX}
@@ -466,7 +466,7 @@ export function AddToReportModal({
               <>
                 {/* Step 2 header — global all/none + selection count */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-ink-500" aria-live="polite">
+                  <p className="text-[0.6875rem] text-ink-500" aria-live="polite">
                     {totalSelected === 0
                       ? 'Select at least one item to add.'
                       : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
@@ -479,7 +479,7 @@ export function AddToReportModal({
                         setAll(resultData.charts.map(c => c.id), true, setSelCharts);
                         setAll(resultData.table.columns, true, setSelCols);
                       }}
-                      className="text-[11px] font-medium text-violet-600 hover:text-violet-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                      className="text-[0.6875rem] font-medium text-violet-600 hover:text-violet-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                     >
                       Select all
                     </button>
@@ -490,7 +490,7 @@ export function AddToReportModal({
                         setSelCharts(new Set());
                         setSelCols(new Set());
                       }}
-                      className="text-[11px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                      className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                     >
                       Clear
                     </button>
@@ -580,7 +580,7 @@ export function AddToReportModal({
             type="button"
             onClick={() => { setSubmitError(null); setStep('pick'); }}
             disabled={submitting}
-            className="text-[12px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            className="text-[0.75rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
           >
             Back
           </button>
@@ -595,7 +595,7 @@ export function AddToReportModal({
             <button
               type="button"
               onClick={stop}
-              className="min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
             >
               Stop
             </button>
@@ -604,7 +604,7 @@ export function AddToReportModal({
               type="button"
               onClick={handleClose}
               disabled={submitting}
-              className="min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               Cancel
             </button>
@@ -614,7 +614,7 @@ export function AddToReportModal({
               type="button"
               disabled={!canProceed}
               onClick={() => setStep('sections')}
-              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
             >
               Next <ChevronRight size={13} />
             </button>
@@ -623,7 +623,7 @@ export function AddToReportModal({
               type="button"
               disabled={totalSelected === 0 || submitting}
               onClick={handleConfirm}
-              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
             >
               {submitting ? <ButtonSpinner /> : <FileText size={13} />}
               {submitError && !submitting ? 'Retry' : submitting ? 'Adding…' : 'Add to Report'}

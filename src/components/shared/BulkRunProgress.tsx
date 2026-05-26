@@ -180,7 +180,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
           >
             <div className="flex items-center gap-2 px-4 py-3">
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                <span className="text-[14px] font-semibold text-text truncate">
+                <span className="text-[0.875rem] font-semibold text-text truncate">
                   {run.name} {isComplete ? 'Complete' : 'Running'}
                 </span>
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isComplete ? 'bg-compliant' : 'bg-primary animate-pulse'}`} />
@@ -210,9 +210,9 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
                     <div key={w.id} className="flex items-start gap-2.5">
                       <LayersPlus size={15} className="text-primary shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12.5px] text-text truncate">{w.name}</div>
+                        <div className="text-[0.75rem] text-text truncate">{w.name}</div>
                         {w.businessProcess && (
-                          <div className="text-[10.5px] text-text-muted mt-0.5 truncate">{w.businessProcess}</div>
+                          <div className="text-[0.75rem] text-text-muted mt-0.5 truncate">{w.businessProcess}</div>
                         )}
                       </div>
                       <div className="mt-0.5 shrink-0">
@@ -228,7 +228,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
                   ))}
                   <div className="flex items-center gap-2.5 pt-0.5">
                     <FileText size={15} className="text-text-muted shrink-0" />
-                    <span className="flex-1 text-[12.5px] text-text">Generating Report</span>
+                    <span className="flex-1 text-[0.75rem] text-text">Generating Report</span>
                     {isComplete && (
                       <span className="w-4 h-4 rounded-full bg-compliant text-white flex items-center justify-center shrink-0">
                         <Check size={10} strokeWidth={3} />
@@ -238,7 +238,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
                 </div>
 
                 <div className="border-t border-border-light px-4 py-3 flex items-center gap-3">
-                  <span className="text-[11.5px] text-text-muted shrink-0">
+                  <span className="text-[0.75rem] text-text-muted shrink-0">
                     {isComplete ? 'Complete' : 'Processing'}
                   </span>
                   <div className="flex-1 h-1.5 rounded-full bg-surface-2 overflow-hidden">
@@ -247,7 +247,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
                       style={{ width: `${run.progress}%` }}
                     />
                   </div>
-                  <span className="text-[11.5px] font-mono font-semibold text-text shrink-0 tabular-nums w-9 text-right">
+                  <span className="text-[0.75rem] font-mono font-semibold text-text shrink-0 tabular-nums w-9 text-right">
                     {Math.round(run.progress)}%
                   </span>
                 </div>

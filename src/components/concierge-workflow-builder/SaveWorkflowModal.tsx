@@ -72,10 +72,10 @@ export default function SaveWorkflowModal({
                     <Save size={17} />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-[15px] font-semibold text-ink-800 leading-tight">
+                    <h2 className="text-[0.9375rem] font-semibold text-ink-800 leading-tight">
                       Save as workflow
                     </h2>
-                    <p className="text-[12px] text-ink-500 leading-relaxed mt-0.5">
+                    <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5">
                       Turn this query result into a re-runnable workflow.
                     </p>
                   </div>
@@ -98,7 +98,7 @@ export default function SaveWorkflowModal({
                     size={15}
                     className="text-amber-700 mt-0.5 shrink-0"
                   />
-                  <p className="text-[12.5px] text-amber-900 leading-relaxed">
+                  <p className="text-[0.75rem] text-amber-900 leading-relaxed">
                     This chat will switch to{' '}
                     <strong className="font-semibold">workflow mode</strong>. You won't be
                     able to switch back to query mode in this chat — start a new chat for
@@ -108,17 +108,17 @@ export default function SaveWorkflowModal({
 
                 {/* Workflow name */}
                 <div>
-                  <label className="block text-[12.5px] font-semibold text-ink-800 mb-1.5">
+                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">
                     Workflow name <span className="text-risk">*</span>
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                    className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                     placeholder="e.g. Duplicate Invoice Detection — Q1 ±3 days"
                   />
-                  <p className="text-[11.5px] text-ink-400 mt-1">
+                  <p className="text-[0.75rem] text-ink-400 mt-1">
                     IRA pre-filled this from your query. Edit if needed.
                   </p>
                 </div>
@@ -126,7 +126,7 @@ export default function SaveWorkflowModal({
                 {/* Business process + RACM */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[12.5px] font-semibold text-ink-800 mb-1.5">
+                    <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">
                       Business process <span className="text-risk">*</span>
                     </label>
                     <select
@@ -135,7 +135,7 @@ export default function SaveWorkflowModal({
                         setBpId(e.target.value);
                         setRacmId('');
                       }}
-                      className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[13px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all cursor-pointer"
+                      className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all cursor-pointer"
                     >
                       <option value="">Select…</option>
                       {BUSINESS_PROCESSES.map((bp) => (
@@ -146,14 +146,14 @@ export default function SaveWorkflowModal({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-semibold text-ink-800 mb-1.5">
+                    <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">
                       RACM <span className="text-risk">*</span>
                     </label>
                     <select
                       value={racmId}
                       onChange={(e) => setRacmId(e.target.value)}
                       disabled={!bpId}
-                      className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[13px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all cursor-pointer disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-400"
+                      className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all cursor-pointer disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-400"
                     >
                       <option value="">
                         {bpId
@@ -173,17 +173,17 @@ export default function SaveWorkflowModal({
 
                 {/* Description */}
                 <div>
-                  <label className="block text-[12.5px] font-semibold text-ink-800 mb-1.5">
+                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">
                     Description
                   </label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={3}
-                    className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all resize-none"
+                    className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all resize-none"
                     placeholder="What does this workflow do?"
                   />
-                  <p className="text-[11.5px] text-ink-400 mt-1">
+                  <p className="text-[0.75rem] text-ink-400 mt-1">
                     Optional. IRA pre-filled this from your query.
                   </p>
                 </div>
@@ -194,7 +194,7 @@ export default function SaveWorkflowModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center justify-center rounded-lg text-[12.5px] font-semibold px-4 py-2 text-ink-600 hover:bg-canvas-elevated transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center rounded-lg text-[0.75rem] font-semibold px-4 py-2 text-ink-600 hover:bg-canvas-elevated transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -214,7 +214,7 @@ export default function SaveWorkflowModal({
                       description: description.trim(),
                     });
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                  className="inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   <Save size={13} />
                   Save & switch to workflow

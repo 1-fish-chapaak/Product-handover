@@ -38,7 +38,7 @@ export default function LegendSection({ showLegend, onShowLegendChange, legendPo
           <div className="size-[18px] rounded-[4px] flex items-center justify-center">
             <Type className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Legend</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Legend</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -56,7 +56,7 @@ export default function LegendSection({ showLegend, onShowLegendChange, legendPo
       {isOpen && (
         <div className="p-3 bg-[#fafafa] space-y-3">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-semibold text-[#26064a]">Position</label>
+            <label className="text-[0.6875rem] font-semibold text-[#26064a]">Position</label>
             <WhiteDropdown
               value={pos}
               onChange={v => { setLocalPos(v); onLegendPositionChange?.(v); }}
@@ -70,7 +70,7 @@ export default function LegendSection({ showLegend, onShowLegendChange, legendPo
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-semibold text-[#26064a]">Legend Format</label>
+            <label className="text-[0.6875rem] font-semibold text-[#26064a]">Legend Format</label>
             <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
               <button
                 onClick={() => { setLocalBold(!isBold); onLegendBoldChange?.(!isBold); }}

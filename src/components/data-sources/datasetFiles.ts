@@ -2,7 +2,7 @@
 // Only file-type sources (`f-*`) have entries; database/api/cloud/session sources
 // surface their detail differently (out of scope for the file-list iteration).
 
-export type FileFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOC';
+export type FileFormat = 'PDF' | 'CSV' | 'XLSX';
 export type FileStatus = 'processed' | 'processing' | 'failed';
 
 export interface DatasetFile {
@@ -12,7 +12,7 @@ export interface DatasetFile {
   /** Bytes — formatted at render time. */
   sizeBytes: number;
   uploadedAt: string; // ISO date
-  /** Pages for PDF/DOC; rows for CSV/XLSX. */
+  /** Pages for PDF; rows for CSV/XLSX. */
   pages?: number;
   rows?: number;
   status: FileStatus;
@@ -95,7 +95,6 @@ export const FORMAT_TONES: Record<FileFormat, { bg: string; text: string }> = {
   PDF:  { bg: 'bg-risk-50',      text: 'text-risk' },
   CSV:  { bg: 'bg-compliant-50', text: 'text-compliant' },
   XLSX: { bg: 'bg-brand-50',     text: 'text-brand-700' },
-  DOC:  { bg: 'bg-evidence-50',  text: 'text-evidence-700' },
 };
 
 // ─── Integration configs (database / api / cloud sources) ────────────────────

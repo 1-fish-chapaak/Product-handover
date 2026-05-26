@@ -339,8 +339,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-primary/10 text-primary rounded-xl"><Upload size={16} /></div>
             <div>
-              <h3 className="text-[15px] font-semibold text-text">Upload Template</h3>
-              <p className="text-[11px] text-text-muted">Convert a document into a report template</p>
+              <h3 className="text-[0.9375rem] font-semibold text-text">Upload Template</h3>
+              <p className="text-[0.6875rem] text-text-muted">Convert a document into a report template</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
@@ -358,8 +358,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                   <Upload size={28} className="text-primary/50 group-hover:text-primary transition-colors" />
                 </div>
                 <div className="text-center">
-                  <p className="text-[13px] font-medium text-text">Drop your template file here or click to browse</p>
-                  <p className="text-[11px] text-text-muted mt-1">Supports .docx, .pdf, .xlsx</p>
+                  <p className="text-[0.8125rem] font-medium text-text">Drop your template file here or click to browse</p>
+                  <p className="text-[0.6875rem] text-text-muted mt-1">Supports .docx, .pdf, .xlsx</p>
                 </div>
               </button>
             </motion.div>
@@ -371,14 +371,14 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-xl">
                 <div className="p-2 bg-primary/10 rounded-lg"><FileText size={18} className="text-primary" /></div>
                 <div className="flex-1">
-                  <p className="text-[13px] font-semibold text-text">SOX_Report_Template.docx</p>
-                  <p className="text-[11px] text-text-muted">2.4 MB</p>
+                  <p className="text-[0.8125rem] font-semibold text-text">SOX_Report_Template.docx</p>
+                  <p className="text-[0.6875rem] text-text-muted">2.4 MB</p>
                 </div>
                 <CheckCircle2 size={18} className="text-compliant-700" />
               </div>
               <button
                 onClick={() => setStep('converting')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer" style={{ borderRadius: '8px' }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer" style={{ borderRadius: '8px' }}
               >
                 <Sparkles size={14} /> Convert to Template
               </button>
@@ -395,8 +395,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                 <Sparkles size={32} className="text-primary" />
               </motion.div>
               <div className="text-center">
-                <p className="text-[14px] font-semibold text-text">Analyzing document structure...</p>
-                <p className="text-[11px] text-text-muted mt-1">Detecting sections, headers, and formatting</p>
+                <p className="text-[0.875rem] font-semibold text-text">Analyzing document structure...</p>
+                <p className="text-[0.6875rem] text-text-muted mt-1">Detecting sections, headers, and formatting</p>
               </div>
               <div className="w-48 h-1.5 bg-surface-2 rounded-full overflow-hidden">
                 <motion.div
@@ -415,13 +415,13 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-xl">
                 <CheckCircle2 size={20} className="text-compliant-700" />
                 <div>
-                  <p className="text-[13px] font-semibold text-primary">Template converted!</p>
-                  <p className="text-[11px] text-primary/70">6 sections detected</p>
+                  <p className="text-[0.8125rem] font-semibold text-primary">Template converted!</p>
+                  <p className="text-[0.6875rem] text-primary/70">6 sections detected</p>
                 </div>
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold text-text mb-2 block">Detected Sections</label>
+                <label className="text-[0.75rem] font-semibold text-text mb-2 block">Detected Sections</label>
                 <div className="space-y-1.5">
                   {DETECTED_SECTIONS.map((section, i) => (
                     <motion.div
@@ -431,19 +431,19 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                       transition={{ delay: i * 0.08 }}
                       className="flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-lg"
                     >
-                      <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">{i + 1}</div>
-                      <span className="text-[12px] text-text font-medium">{section}</span>
+                      <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[0.625rem] font-bold">{i + 1}</div>
+                      <span className="text-[0.75rem] text-text font-medium">{section}</span>
                     </motion.div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold text-text mb-2 block">Template Name</label>
+                <label className="text-[0.75rem] font-semibold text-text mb-2 block">Template Name</label>
                 <input
                   value={templateName}
                   onChange={e => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" style={{ borderRadius: '8px' }}
+                  className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" style={{ borderRadius: '8px' }}
                 />
               </div>
             </motion.div>
@@ -452,10 +452,10 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 
         {step === 'converted' && (
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 text-[0.75rem] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
             <button
               onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library!` }); onClose(); }}
-              className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+              className="px-5 py-2 bg-primary text-white text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
             >
               Save Template
             </button>
@@ -486,18 +486,18 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
           <div className="flex items-center gap-2.5">
             <div className={`p-2 rounded-xl ${color}`}><Icon size={16} /></div>
             <div>
-              <h3 className="text-[15px] font-semibold text-text">{template.name}</h3>
-              <p className="text-[11px] text-text-muted">{template.category} template</p>
+              <h3 className="text-[0.9375rem] font-semibold text-text">{template.name}</h3>
+              <p className="text-[0.6875rem] text-text-muted">{template.category} template</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <p className="text-[12.5px] text-text-secondary leading-relaxed">{template.desc}</p>
+          <p className="text-[0.75rem] text-text-secondary leading-relaxed">{template.desc}</p>
 
           <div>
-            <label className="text-[12px] font-semibold text-text mb-3 block">Template Structure</label>
+            <label className="text-[0.75rem] font-semibold text-text mb-3 block">Template Structure</label>
             <div className="space-y-2">
               {(template.sections || []).map((section, i) => {
                 const SectionIcon = SECTION_ICONS[section.icon] || FileText;
@@ -512,8 +512,8 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
                     <div className="p-1.5 rounded-lg bg-white border border-border-light shadow-sm">
                       <SectionIcon size={14} className="text-primary" />
                     </div>
-                    <span className="text-[13px] text-text font-medium">{section.name}</span>
-                    <span className="ml-auto text-[10px] text-text-muted font-medium">Section {i + 1}</span>
+                    <span className="text-[0.8125rem] text-text font-medium">{section.name}</span>
+                    <span className="ml-auto text-[0.625rem] text-text-muted font-medium">Section {i + 1}</span>
                   </motion.div>
                 );
               })}
@@ -524,13 +524,13 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         <div className="px-6 py-4 border-t border-border-light flex justify-between shrink-0">
           <button
             onClick={() => { onClose(); onEdit(); }}
-            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-[0.75rem] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
           >
             <Edit3 size={12} /> Edit Template
           </button>
           <button
             onClick={onUse}
-            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             <Sparkles size={12} /> Use This Template
           </button>
@@ -578,8 +578,8 @@ function ChooseReportModal({
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-primary/10 text-primary rounded-xl"><PackageOpen size={16} /></div>
             <div>
-              <h3 className="text-[15px] font-semibold text-text">Choose Report</h3>
-              <p className="text-[12px] text-text-muted">Select an existing report or create a new report</p>
+              <h3 className="text-[0.9375rem] font-semibold text-text">Choose Report</h3>
+              <p className="text-[0.75rem] text-text-muted">Select an existing report or create a new report</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
@@ -594,14 +594,14 @@ function ChooseReportModal({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search Report"
-              className="flex-1 bg-transparent text-[13px] text-text placeholder:text-text-muted focus:outline-none"
+              className="flex-1 bg-transparent text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none"
             />
           </div>
 
           {/* Report list */}
           <div className="space-y-2">
             {filtered.length === 0 && (
-              <div className="px-3 py-6 text-center text-[12px] text-text-muted">No reports match your search</div>
+              <div className="px-3 py-6 text-center text-[0.75rem] text-text-muted">No reports match your search</div>
             )}
             {filtered.map(r => {
               const isSelected = selectedId === r.id;
@@ -620,10 +620,10 @@ function ChooseReportModal({
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[13px] font-semibold text-text truncate">{r.name}</span>
-                      <span className="text-[11px] text-text-muted shrink-0">{r.generatedAt}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text truncate">{r.name}</span>
+                      <span className="text-[0.6875rem] text-text-muted shrink-0">{r.generatedAt}</span>
                     </div>
-                    <div className="text-[11px] text-text-muted truncate mt-0.5">{r.tag}</div>
+                    <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{r.tag}</div>
                   </div>
                 </button>
               );
@@ -633,7 +633,7 @@ function ChooseReportModal({
           {/* Add New Report */}
           <button
             onClick={onAddNew}
-            className="w-full px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
+            className="w-full px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-[0.8125rem] font-semibold transition-colors cursor-pointer"
           >
             + Add New Report
           </button>
@@ -643,14 +643,14 @@ function ChooseReportModal({
         <div className="px-6 py-4 border-t border-border-light flex items-center gap-3 shrink-0">
           <button
             onClick={onCancel}
-            className="flex-1 px-5 py-2.5 rounded-lg border border-border-light text-text-secondary text-[13px] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
+            className="flex-1 px-5 py-2.5 rounded-lg border border-border-light text-text-secondary text-[0.8125rem] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
           >
             Back
           </button>
           <button
             onClick={() => { if (selected) onContinue(selected); }}
             disabled={!selected}
-            className="flex-1 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
+            className="flex-1 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
             title={`Apply "${template.name}"`}
           >
             Continue
@@ -671,7 +671,7 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
       className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-xl shadow-xl border border-border-light z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-light">
-        <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
+        <span className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
         {REPORT_TEMPLATES.map(rt => {
@@ -686,8 +686,8 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-medium text-text truncate">{rt.name}</div>
-                <div className="text-[10px] text-text-muted">{rt.category}</div>
+                <div className="text-[0.75rem] font-medium text-text truncate">{rt.name}</div>
+                <div className="text-[0.625rem] text-text-muted">{rt.category}</div>
               </div>
             </button>
           );
@@ -726,8 +726,8 @@ function TemplateSectionRow({
       <div className="p-1 rounded-md bg-white border border-border-light shadow-sm">
         <SectionIcon size={12} className="text-primary" />
       </div>
-      <span className="text-[12px] text-text font-medium">{section.name}</span>
-      <span className="ml-auto text-[10px] text-text-muted font-medium">Section {index + 1}</span>
+      <span className="text-[0.75rem] text-text font-medium">{section.name}</span>
+      <span className="ml-auto text-[0.625rem] text-text-muted font-medium">Section {index + 1}</span>
       <button
         onClick={onDelete}
         aria-label={`Delete ${section.name}`}
@@ -763,8 +763,8 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-primary/10 text-primary rounded-xl"><Settings size={16} /></div>
             <div>
-              <h3 className="text-[15px] font-semibold text-text">Edit Template</h3>
-              <p className="text-[11px] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
+              <h3 className="text-[0.9375rem] font-semibold text-text">Edit Template</h3>
+              <p className="text-[0.6875rem] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
@@ -775,24 +775,24 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           {isCopy ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Template Name</label>
-                <input value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><FileText size={13} /> Template Name</label>
+                <input value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
               <div>
-                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-                <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
+                <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
             </div>
           ) : (
             <div>
-              <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-              <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+              <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
+              <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
             </div>
           )}
 
           {/* Theme */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Palette size={13} /> Color Theme</label>
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Palette size={13} /> Color Theme</label>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { name: 'Purple & White', colors: ['#6a12cd', '#f8f9fc'] },
@@ -804,7 +804,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                   <div className="flex gap-1 justify-center mb-1.5">
                     {t.colors.map((c, i) => <div key={i} className="w-5 h-5 rounded-full border border-white shadow-sm" style={{ background: c }} />)}
                   </div>
-                  <span className="text-[9px] font-medium text-text">{t.name}</span>
+                  <span className="text-[0.5625rem] font-medium text-text">{t.name}</span>
                 </button>
               ))}
             </div>
@@ -812,25 +812,25 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
 
           {/* Header */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Type size={13} /> Header Text</label>
-            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Type size={13} /> Header Text</label>
+            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Footer */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Layout size={13} /> Footer Text</label>
-            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Layout size={13} /> Footer Text</label>
+            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Page Layout Preview */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Page Layout Preview</label>
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><FileText size={13} /> Page Layout Preview</label>
             <div className="border border-border-light rounded-xl p-4 bg-surface-2">
               <div className="bg-white rounded-lg shadow-sm border border-border-light overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-2.5 bg-primary/5 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-primary">{brand}</span>
-                  <span className="text-[10px] text-text-muted">{headerText}</span>
+                  <span className="text-[0.6875rem] font-bold text-primary">{brand}</span>
+                  <span className="text-[0.625rem] text-text-muted">{headerText}</span>
                 </div>
                 {/* Section list */}
                 <Reorder.Group axis="y" values={sections} onReorder={setSections} className="p-3 space-y-1.5 flex-1">
@@ -845,7 +845,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                 </Reorder.Group>
                 {/* Footer */}
                 <div className="px-4 py-2 bg-surface-2 flex items-center justify-center border-t border-border-light">
-                  <span className="text-[10px] text-text-muted">{footerText}</span>
+                  <span className="text-[0.625rem] text-text-muted">{footerText}</span>
                 </div>
               </div>
             </div>
@@ -853,7 +853,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         </div>
 
         <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-[0.75rem] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer">Cancel</button>
           <button
             onClick={() => {
               if (isCopy && onSaveCopy) {
@@ -874,7 +874,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
               }
               onClose();
             }}
-            className="px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="px-5 py-2 bg-primary text-white rounded-xl text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >{isCopy ? 'Save Copy' : 'Save Template'}</button>
         </div>
       </motion.div>
@@ -906,24 +906,24 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Section nav */}
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Executive Summary */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
-          <p className="text-[12px] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
+          <p className="text-[0.75rem] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
         </div>
         {/* Control Testing Results — Excel-style */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light flex items-center justify-between">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
-            <span className="text-[10px] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
+            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
+            <span className="text-[0.625rem] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="bg-paper-50 border-b border-border-light">
                   {['Control ID', 'Control Name', 'Process', 'Type', 'Frequency', 'Owner', 'Result', 'Exceptions'].map(h => (
@@ -937,24 +937,24 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                     <td className="px-4 py-2.5 font-mono font-semibold text-primary">{c.id}</td>
                     <td className="px-4 py-2.5 font-medium text-text">{c.name}</td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.process}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.type === 'Preventive' ? 'text-evidence-700 bg-evidence-50' : 'text-brand-700 bg-brand-50'}`}>{c.type}</span></td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${c.type === 'Preventive' ? 'text-evidence-700 bg-evidence-50' : 'text-brand-700 bg-brand-50'}`}>{c.type}</span></td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.freq}</td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.owner}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resultColor(c.result)}`}>{c.result}</span></td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${resultColor(c.result)}`}>{c.result}</span></td>
                     <td className="px-4 py-2.5 text-center font-semibold">{c.exceptions > 0 ? <span className="text-risk-700">{c.exceptions}</span> : <span className="text-text-muted">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-3 border-t border-border-light bg-paper-50/50 flex items-center justify-between text-[10px] text-text-muted">
+          <div className="px-5 py-3 border-t border-border-light bg-paper-50/50 flex items-center justify-between text-[0.625rem] text-text-muted">
             <span>Showing {controls.length} of 54 tested controls</span>
             <span>8 Effective · 2 Deficient · 0 Pending</span>
           </div>
         </div>
         {/* Deficiency Detail */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
               { id: 'DEF-001', control: 'CTR-003', title: 'Vendor Master Change — Missing Dual Approval', severity: 'Significant', status: 'In Remediation', due: 'Mar 31, 2026', owner: 'Deepak Bansal', desc: '7 vendor master changes processed without dual-approval. Includes 3 bank account modifications.' },
@@ -962,13 +962,13 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
             ].map(d => (
               <div key={d.id} className="rounded-xl border border-border-light p-4 hover:shadow-sm transition-shadow">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-md bg-risk">{d.id}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
-                  <span className="text-[10px] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
+                  <span className="text-[0.625rem] font-bold text-white px-2 py-0.5 rounded-md bg-risk">{d.id}</span>
+                  <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
+                  <span className="text-[0.625rem] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
                 </div>
-                <h4 className="text-[12px] font-semibold text-text mb-1">{d.title}</h4>
-                <p className="text-[11px] text-text-secondary leading-relaxed mb-2">{d.desc}</p>
-                <div className="flex items-center gap-3 text-[10px] text-text-muted">
+                <h4 className="text-[0.75rem] font-semibold text-text mb-1">{d.title}</h4>
+                <p className="text-[0.6875rem] text-text-secondary leading-relaxed mb-2">{d.desc}</p>
+                <div className="flex items-center gap-3 text-[0.625rem] text-text-muted">
                   <span>Control: <span className="font-mono font-semibold text-primary">{d.control}</span></span>
                   <span>Due: <span className="font-semibold">{d.due}</span></span>
                   <span>Owner: {d.owner}</span>
@@ -1003,36 +1003,36 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Risk Heatmap */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
           <div className="flex gap-6">
             <div className="flex-1">
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
+              <div className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
               <div className="grid grid-cols-5 gap-1">
                 {[5,4,3,2,1].map(likelihood => (
                   [1,2,3,4,5].map(impact => {
                     const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact);
                     return (
-                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-lg flex items-center justify-center text-[9px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
+                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-lg flex items-center justify-center text-[0.5625rem] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
                         {risksInCell.length > 0 ? risksInCell.map(r => r.id.split('-')[1]).join(',') : ''}
                       </div>
                     );
                   })
                 ))}
               </div>
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
+              <div className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
             </div>
             <div className="w-48">
-              <div className="text-[10px] font-semibold text-text mb-2">Legend</div>
+              <div className="text-[0.625rem] font-semibold text-text mb-2">Legend</div>
               <div className="space-y-1.5">
                 {[{ c: 'bg-risk', l: 'Critical (12-25)' }, { c: 'bg-high', l: 'High (8-11)' }, { c: 'bg-mitigated', l: 'Medium (4-7)' }, { c: 'bg-compliant', l: 'Low (1-3)' }].map(item => (
-                  <div key={item.l} className="flex items-center gap-2 text-[10px] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
+                  <div key={item.l} className="flex items-center gap-2 text-[0.625rem] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
                 ))}
               </div>
             </div>
@@ -1041,9 +1041,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Risk Register */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
+            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
           </div>
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Risk ID', 'Description', 'Process', 'L', 'I', 'Score', 'Controls', 'Status'].map(h => (
@@ -1059,9 +1059,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 text-text-secondary">{r.process}</td>
                   <td className="px-4 py-2.5 text-center">{r.likelihood}</td>
                   <td className="px-4 py-2.5 text-center">{r.impact}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
+                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-md text-[0.625rem] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
                   <td className="px-4 py-2.5 text-center font-semibold">{r.controls}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1083,8 +1083,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
@@ -1092,14 +1092,14 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         <div className="grid grid-cols-4 gap-3">
           {processes.map(p => (
             <div key={p.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
-              <div className="text-[11px] font-semibold text-text-muted mb-2">{p.name}</div>
-              <div className="text-[28px] font-bold text-text leading-none">{p.rate}%</div>
-              <div className="text-[10px] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
+              <div className="text-[0.6875rem] font-semibold text-text-muted mb-2">{p.name}</div>
+              <div className="text-[1.75rem] font-bold text-text leading-none">{p.rate}%</div>
+              <div className="text-[0.625rem] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
               {/* Progress bar */}
               <div className="h-2 bg-paper-50 rounded-full overflow-hidden mb-2">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${(p.tested / p.total) * 100}%` }} transition={{ delay: 0.3, duration: 0.6 }} className="h-full rounded-full bg-primary" />
               </div>
-              <div className="flex justify-between text-[9px] text-text-muted">
+              <div className="flex justify-between text-[0.5625rem] text-text-muted">
                 <span>{p.tested}/{p.total} tested</span>
                 <span>{p.deficient} deficient</span>
               </div>
@@ -1109,9 +1109,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Gap Analysis Table */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
+            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
           </div>
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Process', 'Untested', 'Deadline', 'Priority', 'Assigned To'].map(h => (
@@ -1130,7 +1130,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 font-semibold text-text">{g.process}</td>
                   <td className="px-4 py-2.5 font-bold text-risk-700">{g.untested}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{g.deadline}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.priority === 'High' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{g.priority}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${g.priority === 'High' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{g.priority}</span></td>
                   <td className="px-4 py-2.5 text-text-secondary">{g.assignee}</td>
                 </tr>
               ))}
@@ -1139,12 +1139,12 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         </div>
         {/* Improvement Plan */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
           <div className="space-y-2">
             {['Automate 5 manual detective controls in P2P — target: 98% effectiveness', 'Accelerate S2C control testing — hire 1 contractor for April-June sprint', 'Deploy AI anomaly detection on R2R reconciliation — reduce deficiency rate by 50%', 'Implement continuous monitoring for all preventive controls by Q2'].map((item, i) => (
               <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-lg">
-                <span className="text-[9px] font-bold text-primary bg-primary/10 w-5 h-5 rounded-md flex items-center justify-center shrink-0">{i + 1}</span>
-                <span className="text-[11px] text-text-secondary leading-relaxed">{item}</span>
+                <span className="text-[0.5625rem] font-bold text-primary bg-primary/10 w-5 h-5 rounded-md flex items-center justify-center shrink-0">{i + 1}</span>
+                <span className="text-[0.6875rem] text-text-secondary leading-relaxed">{item}</span>
               </div>
             ))}
           </div>
@@ -1165,8 +1165,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
@@ -1175,17 +1175,17 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           {workflows.map(w => (
             <div key={w.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[12px] font-semibold text-text">{w.name}</h4>
-                <span className="text-[10px] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
+                <h4 className="text-[0.75rem] font-semibold text-text">{w.name}</h4>
+                <span className="text-[0.625rem] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
               </div>
               <div className="flex items-end gap-4 mb-3">
                 <div>
-                  <div className="text-[20px] font-bold text-text">{w.runs}</div>
-                  <div className="text-[9px] text-text-muted uppercase">Runs</div>
+                  <div className="text-[1.25rem] font-bold text-text">{w.runs}</div>
+                  <div className="text-[0.5625rem] text-text-muted uppercase">Runs</div>
                 </div>
                 <div>
-                  <div className="text-[20px] font-bold text-compliant-700">{w.savings}</div>
-                  <div className="text-[9px] text-text-muted uppercase">Saved</div>
+                  <div className="text-[1.25rem] font-bold text-compliant-700">{w.savings}</div>
+                  <div className="text-[0.5625rem] text-text-muted uppercase">Saved</div>
                 </div>
                 <div className="flex-1">
                   <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none">
@@ -1200,9 +1200,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Exception Breakdown */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
+            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
           </div>
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Exception', 'Workflow', 'Type', 'Resolution', 'Time', 'Status'].map(h => (
@@ -1224,7 +1224,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 text-text-secondary">{e.type}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{e.resolution}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{e.time}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${e.status === 'Closed' ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{e.status}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${e.status === 'Closed' ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{e.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1240,8 +1240,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
@@ -1253,16 +1253,16 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
             { label: 'Audit Progress', value: '58%', delta: 'On track', sub: '54 of 87 controls tested', color: 'text-evidence-700' },
           ].map(m => (
             <div key={m.label} className="bg-white rounded-xl border border-border-light p-5 text-center">
-              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
-              <div className={`text-[32px] font-bold leading-none ${m.color}`}>{m.value}</div>
-              <div className="text-[11px] font-semibold text-compliant-700 mt-1">{m.delta}</div>
-              <div className="text-[10px] text-text-muted">{m.sub}</div>
+              <div className="text-[0.625rem] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
+              <div className={`text-[2rem] font-bold leading-none ${m.color}`}>{m.value}</div>
+              <div className="text-[0.6875rem] font-semibold text-compliant-700 mt-1">{m.delta}</div>
+              <div className="text-[0.625rem] text-text-muted">{m.sub}</div>
             </div>
           ))}
         </div>
         {/* Process Breakdown */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
           <div className="space-y-3">
             {[
               { name: 'P2P — Procure to Pay', progress: 72, controls: '17/24', risk: 'High' },
@@ -1271,25 +1271,25 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
               { name: 'S2C — Source to Contract', progress: 21, controls: '3/14', risk: 'Medium' },
             ].map(p => (
               <div key={p.name} className="flex items-center gap-4">
-                <div className="w-48 text-[11px] font-medium text-text">{p.name}</div>
+                <div className="w-48 text-[0.6875rem] font-medium text-text">{p.name}</div>
                 <div className="flex-1 h-3 bg-paper-50 rounded-full overflow-hidden">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${p.progress}%` }} transition={{ delay: 0.2, duration: 0.6 }} className="h-full rounded-full bg-primary" />
                 </div>
-                <span className="text-[11px] font-bold text-text w-10 text-right">{p.progress}%</span>
-                <span className="text-[10px] text-text-muted w-12">{p.controls}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.risk === 'High' ? 'text-risk-700 bg-risk-50' : p.risk === 'Medium' ? 'text-mitigated-700 bg-mitigated-50' : 'text-compliant-700 bg-compliant-50'}`}>{p.risk}</span>
+                <span className="text-[0.6875rem] font-bold text-text w-10 text-right">{p.progress}%</span>
+                <span className="text-[0.625rem] text-text-muted w-12">{p.controls}</span>
+                <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full ${p.risk === 'High' ? 'text-risk-700 bg-risk-50' : p.risk === 'Medium' ? 'text-mitigated-700 bg-mitigated-50' : 'text-compliant-700 bg-compliant-50'}`}>{p.risk}</span>
               </div>
             ))}
           </div>
         </div>
         {/* Strategic Recommendations */}
         <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
+          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
           <div className="space-y-2">
             {['Approve additional AI workflow investment for S2C process — projected 3x ROI based on P2P results', 'Remediate DEF-002 (journal entry override) before March 31 — material weakness impacting filing', 'Reallocate Tushar Goel from P2P to S2C support in April — P2P is 72% complete, S2C needs acceleration', 'Expand vendor master monitoring to O2C process — similar risk profile to P2P where it saved 2.4L'].map((rec, i) => (
               <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-lg border border-primary/5">
-                <span className="text-[9px] font-bold text-white bg-primary w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                <span className="text-[11px] text-text leading-relaxed">{rec}</span>
+                <span className="text-[0.5625rem] font-bold text-white bg-primary w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                <span className="text-[0.6875rem] text-text leading-relaxed">{rec}</span>
               </div>
             ))}
           </div>
@@ -1303,8 +1303,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
     <div className="space-y-5">
       <div className="flex gap-2 flex-wrap">
         {sections.map((s, i) => (
-          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-            <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
+          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
+            <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
           </div>
         ))}
       </div>
@@ -1312,8 +1312,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         const SIcon = SECTION_ICONS[s.icon] || FileText;
         return (
           <div key={s.name} className="bg-white rounded-xl border border-border-light p-5">
-            <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
-            <div className="h-16 bg-paper-50 rounded-lg flex items-center justify-center text-[11px] text-text-muted border border-dashed border-border-light">
+            <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
+            <div className="h-16 bg-paper-50 rounded-lg flex items-center justify-center text-[0.6875rem] text-text-muted border border-dashed border-border-light">
               Section content generated from {report.name} data
             </div>
           </div>
@@ -1412,7 +1412,7 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-text-secondary hover:text-primary cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-text-secondary hover:text-primary cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
@@ -1431,7 +1431,7 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       disabled={launching}
       title="Review & classify exceptions · opens in a new tab"
       aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[12px] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
+      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
         launching ? 'scale-[0.97] shadow-[0_0_0_4px_rgba(106,18,205,0.25),0_4px_14px_rgba(106,18,205,0.35)]' : 'hover:-translate-y-[1px] active:translate-y-0'
       }`}
       style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
@@ -1476,7 +1476,7 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       {launching && (
         <span
           aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[10.5px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+          className="absolute -top-[32px] left-1/2 text-[0.75rem] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
           style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
         >
           <ArrowRight size={10} className="-rotate-45" />
@@ -1514,7 +1514,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
       aria-label={isOn ? 'Generating cases' : 'Generate cases'}
       onClick={handleToggle}
       disabled={isOn}
-      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[12px] font-semibold text-text-secondary bg-white border border-border rounded-[8px] cursor-pointer hover:border-primary/40 hover:text-primary transition-colors"
+      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold text-text-secondary bg-white border border-border rounded-[8px] cursor-pointer hover:border-primary/40 hover:text-primary transition-colors"
     >
       <span
         className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 ${
@@ -1593,18 +1593,18 @@ function ConfirmDialog({
           >
             <X size={16} />
           </button>
-          <h3 id={titleId} className="text-[16px] font-bold text-text tracking-tight mb-2">{title}</h3>
-          <div id={descId} className="text-[13px] text-text-secondary leading-relaxed mb-6 pr-4">{description}</div>
+          <h3 id={titleId} className="text-[1rem] font-bold text-text tracking-tight mb-2">{title}</h3>
+          <div id={descId} className="text-[0.8125rem] text-text-secondary leading-relaxed mb-6 pr-4">{description}</div>
           <div className="flex items-center justify-end gap-2.5">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               {cancelLabel}
             </button>
             <button
               onClick={onConfirm}
-              className={`inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white rounded-[8px] transition-colors cursor-pointer ${
+              className={`inline-flex items-center justify-center h-9 px-5 text-[0.8125rem] font-semibold text-white rounded-[8px] transition-colors cursor-pointer ${
                 destructive ? 'bg-risk hover:bg-risk-700' : 'bg-primary hover:bg-primary-hover'
               }`}
             >
@@ -1671,8 +1671,8 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           className="mb-4"
         >
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10.5px] font-semibold uppercase tracking-wider">
-              <span className="font-mono text-[12px] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[0.75rem] font-semibold uppercase tracking-wider">
+              <span className="font-mono text-[0.75rem] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="text-text-muted shrink-0">{query.risk}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
@@ -1699,7 +1699,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   >
                     <MessageSquare size={14} className="shrink-0" />
                     {myComments > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[9px] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
+                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
                         {myComments}
                       </span>
                     )}
@@ -1722,21 +1722,21 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                         setMenuOpen(false);
                         onOpenQuery?.({ id: query.id, title: query.title });
                       }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
                       <ExternalLink size={13} />
                       Open Query
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
                       <LayoutGrid size={13} />
                       Add Widgets
                     </button>
                     <button
                       onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
                       <Download size={13} />
                       Download
@@ -1744,7 +1744,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     <div className="my-1 border-t border-border-light" />
                     <button
                       onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
                     >
                       <Trash2 size={13} />
                       Delete Query
@@ -1763,7 +1763,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="font-display text-[20px] text-text leading-[1.3] tracking-[-0.005em] mb-4"
+          className="font-display text-[1.25rem] text-text leading-[1.3] tracking-[-0.005em] mb-4"
         >
           {query.title}
         </motion.h3>
@@ -1784,10 +1784,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
                   className="flex items-baseline gap-2"
                 >
-                  <span className="text-[16px] font-semibold text-text leading-none">
+                  <span className="text-[1rem] font-semibold text-text leading-none">
                     <KpiCountUp value={k.value} delay={120 + ki * 80} />
                   </span>
-                  <span className="text-[12px] text-text-muted font-medium">{k.label}</span>
+                  <span className="text-[0.75rem] text-text-muted font-medium">{k.label}</span>
                 </motion.span>
               ))}
             </div>
@@ -1804,7 +1804,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider">
                 <BarChart3 size={12} />
                 {g.title}
               </div>
@@ -1839,7 +1839,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider">
                 <LayoutGrid size={12} />
                 Results Table
               </div>
@@ -1859,7 +1859,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     {queryTable.columns.map(c => (
                       <th
                         key={c}
-                        className="px-3 py-2 text-left text-[10.5px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
+                        className="px-3 py-2 text-left text-[0.75rem] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
                       >
                         {c}
                       </th>
@@ -1870,7 +1870,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   {queryTable.rows.map((row, ri) => (
                     <tr key={ri} className="border-b border-border-light last:border-b-0">
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2 text-[12px] text-text-secondary whitespace-nowrap">
+                        <td key={ci} className="px-3 py-2 text-[0.75rem] text-text-secondary whitespace-nowrap">
                           {cell}
                         </td>
                       ))}
@@ -2023,11 +2023,11 @@ function QueryWidgetModal({
                 <FileText size={16} className="text-primary" />
               </div>
               <div className="min-w-0">
-                <h3 id="query-widget-title" className="text-[16px] font-bold text-text tracking-tight">
+                <h3 id="query-widget-title" className="text-[1rem] font-bold text-text tracking-tight">
                   Choose What to Include
                 </h3>
-                <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">
-                  <span className="font-mono text-[11px] text-primary">{queryId}</span>
+                <p className="text-[0.75rem] text-text-secondary mt-0.5 truncate">
+                  <span className="font-mono text-[0.6875rem] text-primary">{queryId}</span>
                   <span className="mx-1.5 text-text-muted">·</span>
                   {queryTitle}
                 </p>
@@ -2049,13 +2049,13 @@ function QueryWidgetModal({
                 <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mb-3">
                   <BarChart3 size={20} className="text-text-muted" />
                 </div>
-                <p className="text-[13px] font-semibold text-text mb-1">Nothing to add for this query yet</p>
+                <p className="text-[0.8125rem] font-semibold text-text mb-1">Nothing to add for this query yet</p>
               </div>
             ) : (
               <div className="space-y-5">
                 {/* Selection summary + all/none */}
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[12px] text-text-muted" aria-live="polite">
+                  <p className="text-[0.75rem] text-text-muted" aria-live="polite">
                     {totalSelected === 0
                       ? 'Select what to show on the card.'
                       : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
@@ -2064,14 +2064,14 @@ function QueryWidgetModal({
                     <button
                       type="button"
                       onClick={selectAll}
-                      className="text-[11.5px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
+                      className="text-[0.75rem] font-semibold text-primary hover:text-primary-hover cursor-pointer"
                     >
                       Select all
                     </button>
                     <button
                       type="button"
                       onClick={clearAll}
-                      className="text-[11.5px] font-semibold text-text-muted hover:text-text cursor-pointer"
+                      className="text-[0.75rem] font-semibold text-text-muted hover:text-text cursor-pointer"
                     >
                       Clear
                     </button>
@@ -2138,7 +2138,7 @@ function QueryWidgetModal({
                             >
                               <div className="flex items-center gap-2 mb-2">
                                 <Checkbox checked={on} accent="brand" />
-                                <span className="text-[12.5px] font-semibold text-text truncate">{g.title}</span>
+                                <span className="text-[0.75rem] font-semibold text-text truncate">{g.title}</span>
                               </div>
                               <div className="h-[150px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
                                 <ConfigurableChart
@@ -2191,13 +2191,13 @@ function QueryWidgetModal({
           <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-light bg-paper-50/40">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
             >
               <FileText size={13} />
               Add to Card
@@ -2288,13 +2288,13 @@ function CommentDrawer({
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-medium cursor-pointer transition-colors ${
+                  className={`relative inline-flex items-center gap-1.5 h-9 px-3 text-[0.8125rem] font-medium cursor-pointer transition-colors ${
                     isActive ? 'text-primary' : 'text-text-muted hover:text-text'
                   }`}
                 >
                   <Icon size={14} className="shrink-0" />
                   {tab.label}
-                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10.5px] font-semibold rounded-full tabular-nums ${
+                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.75rem] font-semibold rounded-full tabular-nums ${
                     isActive ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-text-muted'
                   }`}>
                     {tab.count}
@@ -2321,10 +2321,10 @@ function CommentDrawer({
 
         {/* Tab header (title + sub-text) */}
         <header className="shrink-0 px-6 py-5 border-b border-border-light">
-          <h2 className="text-[16px] font-semibold text-text leading-tight">
+          <h2 className="text-[1rem] font-semibold text-text leading-tight">
             {activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
           </h2>
-          <p className="text-[12.5px] text-text-muted mt-0.5 leading-snug">
+          <p className="text-[0.75rem] text-text-muted mt-0.5 leading-snug">
             {activeTab === 'comments' ? 'Commenting on ' : 'Files used to build '}
             <span className="font-mono font-semibold text-primary">{query.id}</span> — {query.title}
           </p>
@@ -2340,7 +2340,7 @@ function CommentDrawer({
                   onChange={(e) => setText(e.target.value)}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-border-light rounded-[8px] text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+                  className="w-full resize-none p-3 pr-[72px] bg-white border border-border-light rounded-[8px] text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                 />
                 <input
                   ref={fileInputRef}
@@ -2379,11 +2379,11 @@ function CommentDrawer({
               </div>
               {attachment && (
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11.5px] font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[0.75rem] font-medium rounded-full">
                     <Paperclip size={11} />
                     {attachment}
                   </span>
-                  <button onClick={() => setAttachment(null)} className="text-[11px] text-text-muted hover:text-risk-700 cursor-pointer">remove</button>
+                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-text-muted hover:text-risk-700 cursor-pointer">remove</button>
                 </div>
               )}
             </section>
@@ -2391,23 +2391,23 @@ function CommentDrawer({
             {/* Shared activity log */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Activity log</h3>
-                <span className="text-[11px] text-text-muted tabular-nums">
+                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">Activity log</h3>
+                <span className="text-[0.6875rem] text-text-muted tabular-nums">
                   {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
                 </span>
               </div>
               {queryGroups.length === 0 ? (
-                <p className="text-[13px] text-text-muted italic">No comments yet. Be the first to share a note.</p>
+                <p className="text-[0.8125rem] text-text-muted italic">No comments yet. Be the first to share a note.</p>
               ) : (
                 <div className="space-y-4">
                   {queryGroups.map(group => (
                     <section key={group.queryId} className="border border-border-light rounded-[10px] overflow-hidden">
                       <header className={`px-3 py-2 bg-paper-50 border-b border-border-light flex items-center justify-between ${group.queryId === query.id ? 'bg-primary/5' : ''}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11.5px] font-bold text-primary shrink-0">{group.queryId}</span>
-                          <span className="text-[11.5px] text-text-muted truncate">{group.queryTitle}</span>
+                          <span className="font-mono text-[0.75rem] font-bold text-primary shrink-0">{group.queryId}</span>
+                          <span className="text-[0.75rem] text-text-muted truncate">{group.queryTitle}</span>
                         </div>
-                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">
+                        <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">
                           {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
                         </span>
                       </header>
@@ -2415,20 +2415,20 @@ function CommentDrawer({
                         {group.items.slice().reverse().map(c => (
                           <li key={c.id} className="px-3 py-3">
                             <div className="flex items-start gap-2.5">
-                              <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold tracking-wider">
+                              <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
                                 {c.initials}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums whitespace-nowrap">
+                                  <span className="text-[0.75rem] font-semibold text-text">{c.author}</span>
+                                  <span className="inline-flex items-center gap-1 text-[0.6875rem] text-text-muted tabular-nums whitespace-nowrap">
                                     <ClockIcon size={10} />
                                     {c.timestamp}
                                   </span>
                                 </div>
-                                <p className="text-[12.5px] text-text leading-relaxed">{c.text}</p>
+                                <p className="text-[0.75rem] text-text leading-relaxed">{c.text}</p>
                                 {c.attachment && (
-                                  <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
+                                  <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[0.6875rem] font-medium rounded-full">
                                     <Paperclip size={10} />
                                     {c.attachment}
                                   </span>
@@ -2452,7 +2452,7 @@ function CommentDrawer({
                   <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-3">
                     <FileText size={18} className="text-text-muted/50" />
                   </div>
-                  <p className="text-[13px] font-medium text-text-secondary">No source files attached to this query yet.</p>
+                  <p className="text-[0.8125rem] font-medium text-text-secondary">No source files attached to this query yet.</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-border-light border border-border-light rounded-[10px] overflow-hidden">
@@ -2467,10 +2467,10 @@ function CommentDrawer({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-mono text-[12.5px] font-semibold text-text truncate">{f.name}</span>
-                            <span className={`inline-flex items-center h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider rounded ${pillClass}`}>{f.type}</span>
+                            <span className="font-mono text-[0.75rem] font-semibold text-text truncate">{f.name}</span>
+                            <span className={`inline-flex items-center h-5 px-1.5 text-[0.625rem] font-semibold uppercase tracking-wider rounded ${pillClass}`}>{f.type}</span>
                           </div>
-                          <div className="text-[11.5px] text-text-muted tabular-nums">
+                          <div className="text-[0.75rem] text-text-muted tabular-nums">
                             {f.size} · {f.rows.toLocaleString()} rows · {f.source} · {f.modified}
                           </div>
                         </div>
@@ -2494,7 +2494,7 @@ function CommentDrawer({
                 </ul>
               )}
             </div>
-            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[11.5px] text-text-muted tabular-nums">
+            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[0.75rem] text-text-muted tabular-nums">
               {sourceFiles.length} files
             </footer>
           </>
@@ -2575,8 +2575,8 @@ function ReportActivityLogDrawer({
               <History size={18} />
             </div>
             <div>
-              <h2 className="text-[16px] font-semibold text-text leading-tight">Report Activity Log</h2>
-              <p className="text-[12.5px] text-text-muted mt-0.5 leading-snug">
+              <h2 className="text-[1rem] font-semibold text-text leading-tight">Report Activity Log</h2>
+              <p className="text-[0.75rem] text-text-muted mt-0.5 leading-snug">
                 All actions and comments across every query card on this report.
               </p>
             </div>
@@ -2598,7 +2598,7 @@ function ReportActivityLogDrawer({
               onChange={(e) => setText(e.target.value)}
               placeholder="Add a comment to the report activity log…"
               rows={3}
-              className="w-full resize-none p-3 pr-10 bg-white border border-border-light rounded-[8px] text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+              className="w-full resize-none p-3 pr-10 bg-white border border-border-light rounded-[8px] text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
             />
             <input
               ref={fileInputRef}
@@ -2620,7 +2620,7 @@ function ReportActivityLogDrawer({
             </button>
           </div>
           {attachment && (
-            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11.5px] font-medium rounded-full">
+            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[0.75rem] font-medium rounded-full">
               <Paperclip size={11} />
               {attachment}
               <button onClick={() => setAttachment(null)} className="hover:text-primary/70 cursor-pointer" aria-label="Remove attachment">
@@ -2632,7 +2632,7 @@ function ReportActivityLogDrawer({
             <button
               onClick={handlePost}
               disabled={!text.trim()}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-semibold rounded-[8px] transition-colors ${
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-[8px] transition-colors ${
                 text.trim()
                   ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer'
                   : 'bg-primary/40 text-white/80 cursor-not-allowed'
@@ -2647,28 +2647,28 @@ function ReportActivityLogDrawer({
         {/* Activity feed */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {sorted.length === 0 ? (
-            <p className="text-center text-[12.5px] text-text-muted py-10">No activity recorded yet.</p>
+            <p className="text-center text-[0.75rem] text-text-muted py-10">No activity recorded yet.</p>
           ) : (
             <ol className="space-y-4">
               {sorted.map(c => (
                 <li key={c.id} className="flex gap-3">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[0.6875rem] font-semibold">
                     {c.initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3 mb-0.5">
-                      <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
-                      <span className="text-[11px] text-text-muted tabular-nums whitespace-nowrap">{c.timestamp}</span>
+                      <span className="text-[0.75rem] font-semibold text-text">{c.author}</span>
+                      <span className="text-[0.6875rem] text-text-muted tabular-nums whitespace-nowrap">{c.timestamp}</span>
                     </div>
-                    <div className="text-[11px] text-text-muted mb-1.5">
+                    <div className="text-[0.6875rem] text-text-muted mb-1.5">
                       <span className="inline-flex items-center h-4 px-1.5 font-mono font-medium bg-primary/5 text-primary rounded">
                         {c.queryId}
                       </span>{' '}
                       <span className="ml-1 line-clamp-1">{c.queryTitle}</span>
                     </div>
-                    <p className="text-[12.5px] text-text leading-relaxed">{c.text}</p>
+                    <p className="text-[0.75rem] text-text leading-relaxed">{c.text}</p>
                     {c.attachment && (
-                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11.5px] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
+                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[0.75rem] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
                         <Paperclip size={11} />
                         {c.attachment}
                       </button>
@@ -2724,7 +2724,7 @@ function ContentsRow({
       >
         <GripVertical size={13} />
       </button>
-      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[0.75rem] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -2736,12 +2736,12 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[12.5px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
+          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[0.75rem] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[12.5px] text-text-secondary truncate transition-colors cursor-pointer"
+          className="flex-1 min-w-0 text-left text-[0.75rem] text-text-secondary truncate transition-colors cursor-pointer"
         >
           {section.title}
         </button>
@@ -2848,7 +2848,7 @@ function ObservationActionsMenu({
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
           >
             <Edit3 size={13} />
             Edit observation
@@ -2856,7 +2856,7 @@ function ObservationActionsMenu({
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
             >
               {attachmentHidden ? <Eye size={13} /> : <EyeOff size={13} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
@@ -2865,7 +2865,7 @@ function ObservationActionsMenu({
           <div className="my-1 border-t border-border-light/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
           >
             <Trash2 size={13} />
             Delete observation
@@ -2936,7 +2936,7 @@ function ObservationCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
             <span className="font-bold text-primary uppercase tracking-wider shrink-0">{obs.obsId}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">Observation</span>
@@ -2955,7 +2955,7 @@ function ObservationCard({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[15px] font-semibold text-text leading-[1.5] mb-5"
+          className="text-[0.9375rem] font-semibold text-text leading-[1.5] mb-5"
         >
           {obs.title}
         </motion.h3>
@@ -2966,7 +2966,7 @@ function ObservationCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: baseDelay + 0.4, duration: 0.4 }}
-            className="text-[13px] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
+            className="text-[0.8125rem] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
           >
             {obs.description}
           </motion.p>
@@ -3012,8 +3012,8 @@ function ObservationCard({
                   className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-md hover:border-primary/40 hover:bg-white transition-colors group"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
-                  <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
-                  <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[0.75rem] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
+                  <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -3072,7 +3072,7 @@ function ObservationCard({
             onClick={(e) => e.stopPropagation()}
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
           />
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[0.75rem] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
             <span className="text-white/40">·</span>
             <span>{imageAttachments[lightboxIndex].name}</span>
@@ -3152,7 +3152,7 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
             <span className="font-bold text-primary uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
             {workflow.businessProcess && (
               <>
@@ -3185,7 +3185,7 @@ function WorkflowResultCard({
                       navigator.clipboard?.writeText(workflow.workflowId);
                       addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
                     }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                   >
                     <Copy size={13} />
                     Copy Workflow ID
@@ -3195,7 +3195,7 @@ function WorkflowResultCard({
                       <div className="my-1 border-t border-border-light" />
                       <button
                         onClick={() => { setMenuOpen(false); onDelete(); }}
-                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
                       >
                         <Trash2 size={13} />
                         Delete
@@ -3215,12 +3215,12 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
           className="mb-5"
         >
-          <h3 className="text-[15px] font-semibold text-text leading-[1.5] mb-2">
+          <h3 className="text-[0.9375rem] font-semibold text-text leading-[1.5] mb-2">
             {workflow.name}
           </h3>
 
           {/* Risk owner — inline editable. Filled state renders as initials chip + name; empty state stays understated. */}
-          <div className="flex items-center gap-2 text-[12px]">
+          <div className="flex items-center gap-2 text-[0.75rem]">
             <span className="text-text-muted">Risk owner</span>
             {editingOwner ? (
               <input
@@ -3233,14 +3233,14 @@ function WorkflowResultCard({
                   if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
                 }}
                 placeholder="e.g., Priya Mehta"
-                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[0.75rem] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
               />
             ) : workflow.riskOwner ? (
               <button
                 onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
                 className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-primary-xlight transition-colors cursor-pointer"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold tabular-nums">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[0.625rem] font-bold tabular-nums">
                   {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
                 <span className="text-text font-medium">{workflow.riskOwner}</span>
@@ -3263,16 +3263,16 @@ function WorkflowResultCard({
             { title: 'Observations', items: workflow.observations, emptyCopy: 'No observations recorded for this workflow yet.' },
           ].map(section => (
             <div key={section.title}>
-              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider mb-3">
                 <span>{section.title}</span>
                 {section.items.length > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[0.625rem] font-semibold tabular-nums">
                     {section.items.length}
                   </span>
                 )}
               </h4>
               {section.items.length === 0 ? (
-                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
+                <p className="text-[0.75rem] text-text-muted italic">{section.emptyCopy}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {section.items.map((item, i) => (
@@ -3281,7 +3281,7 @@ function WorkflowResultCard({
                       initial={{ opacity: 0, x: -4 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: baseDelay + 0.4 + i * 0.05, duration: 0.3 }}
-                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
+                      className="flex gap-2.5 text-[0.8125rem] text-text leading-relaxed"
                     >
                       <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
                       {item}
@@ -3295,20 +3295,20 @@ function WorkflowResultCard({
           {/* Output table */}
           {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
             <div>
-              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider mb-3">
                 <span>Output</span>
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[0.625rem] font-semibold tabular-nums">
                   {workflow.outputTable.rows.length}
                 </span>
               </h4>
               <div className="border border-border-light rounded-xl overflow-hidden">
-                <table className="w-full border-collapse text-[12.5px]">
+                <table className="w-full border-collapse text-[0.75rem]">
                   <thead>
                     <tr className="bg-paper-50/70">
                       {workflow.outputTable.columns.map((col, ci) => (
                         <th
                           key={col}
-                          className={`px-3 py-2 text-[10.5px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                          className={`px-3 py-2 text-[0.75rem] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
                         >
                           {col}
                         </th>
@@ -3329,11 +3329,11 @@ function WorkflowResultCard({
                           return (
                             <td
                               key={ci}
-                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[12px] text-text-secondary tabular-nums' : ''}`}
+                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[0.75rem] text-text-secondary tabular-nums' : ''}`}
                             >
                               {isSeverity ? (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold ${
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[0.75rem] font-semibold ${
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
@@ -3362,7 +3362,7 @@ function WorkflowResultCard({
                     ))}
                   </tbody>
                 </table>
-                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[11px] text-text-muted">
+                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[0.6875rem] text-text-muted">
                   <span>{workflow.outputTable.rows.length} {workflow.outputTable.rows.length === 1 ? 'record' : 'records'}</span>
                   <button
                     onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
@@ -3453,11 +3453,11 @@ function AttachedQueryCard({ query, index, onRemove }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
-            <span className="text-[10.5px] text-text-muted">·</span>
-            <span className="text-[10.5px] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
+            <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
+            <span className="text-[0.75rem] text-text-muted">·</span>
+            <span className="text-[0.75rem] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
           </div>
-          <h3 className="text-[14.5px] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
+          <h3 className="text-[0.75rem] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
         </div>
         <button
           onClick={() => onRemove(query.id)}
@@ -3479,8 +3479,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             <Loader2 size={14} className="text-primary animate-spin shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold text-primary mb-0.5">Data syncing</p>
-              <p className="text-[11.5px] text-text-muted">Running query against your data — preview will appear in a moment.</p>
+              <p className="text-[0.75rem] font-semibold text-primary mb-0.5">Data syncing</p>
+              <p className="text-[0.75rem] text-text-muted">Running query against your data — preview will appear in a moment.</p>
             </div>
           </motion.div>
         )}
@@ -3495,8 +3495,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             {/* Summary */}
             <div>
-              <div className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
-              <p className="text-[12.5px] leading-relaxed text-text">{resolved.summary}</p>
+              <div className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
+              <p className="text-[0.75rem] leading-relaxed text-text">{resolved.summary}</p>
             </div>
 
             {/* Findings */}
@@ -3504,13 +3504,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Lightbulb size={12} className="text-evidence-700" />
-                  <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
-                  <span className="text-[10.5px] text-text-muted">·</span>
-                  <span className="text-[10.5px] text-text-muted">{resolved.findings.length}</span>
+                  <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
+                  <span className="text-[0.75rem] text-text-muted">·</span>
+                  <span className="text-[0.75rem] text-text-muted">{resolved.findings.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.findings.map((f, i) => (
-                    <li key={i} className="flex gap-2 text-[12px] text-text leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[0.75rem] text-text leading-relaxed">
                       <span className="text-evidence-700 shrink-0 mt-1">•</span>
                       <span>{f}</span>
                     </li>
@@ -3524,13 +3524,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye size={12} className="text-primary" />
-                  <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
-                  <span className="text-[10.5px] text-text-muted">·</span>
-                  <span className="text-[10.5px] text-text-muted">{resolved.observations.length}</span>
+                  <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
+                  <span className="text-[0.75rem] text-text-muted">·</span>
+                  <span className="text-[0.75rem] text-text-muted">{resolved.observations.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.observations.map((o, i) => (
-                    <li key={i} className="flex gap-2 text-[12px] text-text leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[0.75rem] text-text leading-relaxed">
                       <span className="text-primary shrink-0 mt-1">•</span>
                       <span>{o}</span>
                     </li>
@@ -3551,8 +3551,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             <PackageOpen size={14} className="text-text-muted shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold text-text mb-0.5">Preview not available</p>
-              <p className="text-[11.5px] text-text-muted">
+              <p className="text-[0.75rem] font-semibold text-text mb-0.5">Preview not available</p>
+              <p className="text-[0.75rem] text-text-muted">
                 {query.kind === 'upload'
                   ? 'Uploaded files render once the parser finishes — wire your data pipeline to enable preview.'
                   : query.kind === 'source'
@@ -3654,7 +3654,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-4 border-b border-canvas-border">
-              <h2 className="text-[16px] font-bold text-ink-900 shrink-0">Add Query</h2>
+              <h2 className="text-[1rem] font-bold text-ink-900 shrink-0">Add Query</h2>
               <div className="flex-1 mx-5 relative">
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
@@ -3662,7 +3662,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={activeTab === 'upload' ? 'Drop files below to upload...' : 'Search...'}
-                  className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                  className="w-full pl-10 pr-4 py-2 text-[0.8125rem] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                 />
               </div>
               <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
@@ -3683,13 +3683,13 @@ function AddQueryModal({ open, onClose, onAttach }: {
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setSelectedQuery(null); setSelectedSource(null); }}
-                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[13px] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[0.8125rem] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
                     activeTab === tab.id ? 'text-brand-700' : 'text-ink-400 hover:text-ink-600'
                   }`}
                 >
                   <tab.icon size={14} />
                   {tab.label}
-                  {tab.count > 0 && <span className="text-[11px] text-ink-400 font-normal">{tab.count}</span>}
+                  {tab.count > 0 && <span className="text-[0.6875rem] text-ink-400 font-normal">{tab.count}</span>}
                   {activeTab === tab.id && (
                     <motion.div layoutId="add-query-tab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-600 rounded-full" />
                   )}
@@ -3712,7 +3712,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                             if (filtered.length === 0) return null;
                             return (
                               <div key={group.group || 'ungrouped'}>
-                                {group.group && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
+                                {group.group && <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
                                 <div className="space-y-2">
                                   {filtered.map(q => (
                                     <button
@@ -3725,7 +3725,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                                       {activeTab === 'recent'
                                         ? <MessageSquare size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />
                                         : <Star size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
-                                      <span className={`text-[13px] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
+                                      <span className={`text-[0.8125rem] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -3736,10 +3736,10 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           {activeTab === 'recent' ? <MessageSquare size={32} className="text-ink-200 mb-3" /> : <Star size={32} className="text-ink-200 mb-3" />}
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">
                             {activeTab === 'recent' ? 'No chats found' : 'No favourites found'}
                           </p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.75rem] text-ink-400">
                             {search ? 'Try a different search term.' : activeTab === 'recent' ? 'Start a new chat to see it here.' : 'Star a chat to add it to favourites.'}
                           </p>
                         </div>
@@ -3773,13 +3773,13 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       {uploadedFile ? (
                         <div>
                           <CloudUpload size={28} className="text-green-600 mx-auto mb-3" />
-                          <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
-                          <p className="text-[13px] text-compliant font-medium mb-1">
+                          <h3 className="text-[0.9375rem] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
+                          <p className="text-[0.8125rem] text-compliant font-medium mb-1">
                             {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
                           </p>
                           <button
                             onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
-                            className="text-[12px] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
+                            className="text-[0.75rem] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
                           >
                             Remove file
                           </button>
@@ -3787,16 +3787,16 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <>
                           <Upload size={28} className="text-ink-300 mb-3" />
-                          <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
-                          <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
+                          <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Drop files here</h3>
+                          <p className="text-[0.8125rem] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('add-query-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-lg transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-lg transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
                           </button>
-                          <p className="text-[11px] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
+                          <p className="text-[0.6875rem] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
                         </>
                       )}
                     </div>
@@ -3827,8 +3827,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
                                   <Icon size={14} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-[13px] font-medium text-ink-900 truncate">{source.name}</div>
-                                  <div className="text-[11px] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
+                                  <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{source.name}</div>
+                                  <div className="text-[0.6875rem] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
                                 </div>
                                 {isSelected && <Check size={16} className="text-brand-600 shrink-0" />}
                               </button>
@@ -3838,8 +3838,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <Search size={32} className="text-ink-200 mb-3" />
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
+                          <p className="text-[0.75rem] text-ink-400">
                             {search ? 'Try a different search term.' : `No ${tabLabel} available.`}
                           </p>
                         </div>
@@ -3852,8 +3852,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
-              <p className="text-[12px] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
-              <button onClick={handleClose} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+              <p className="text-[0.75rem] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
+              <button onClick={handleClose} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
                 Cancel
               </button>
               {(() => {
@@ -3865,7 +3865,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                   <button
                     onClick={handleAttach}
                     disabled={!enabled}
-                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                       enabled ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
@@ -3965,29 +3965,29 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             rows={2}
             placeholder="Add a description for this report…"
             autoFocus
-            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-white text-[13px] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
+            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-white text-[0.8125rem] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={saveEditDesc}
-              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[11.5px] font-semibold rounded-md hover:bg-white/90 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[0.75rem] font-semibold rounded-md hover:bg-white/90 transition-colors cursor-pointer"
             >
               <Check size={12} /> Save
             </button>
             <button
               onClick={cancelEditDesc}
-              className="h-7 px-2.5 text-white/75 text-[11.5px] font-medium hover:text-white transition-colors cursor-pointer"
+              className="h-7 px-2.5 text-white/75 text-[0.75rem] font-medium hover:text-white transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <span className="text-white/40 text-[10.5px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
+            <span className="text-white/40 text-[0.75rem] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
           </div>
         </div>
       );
     }
     return (
       <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
-        <p className="text-white/65 text-[13px] leading-snug pl-0.5">
+        <p className="text-white/65 text-[0.8125rem] leading-snug pl-0.5">
           {displayDescription || <span className="italic text-white/40">No description</span>}
         </p>
         <button
@@ -4476,11 +4476,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-2">
             <List size={16} className="text-primary" />
-            <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+            <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">Contents</h3>
           </div>
           <button
             onClick={openAddObservation}
-            className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
           >
             <Plus size={13} />
             Add Observation
@@ -4553,14 +4553,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       <div className="mx-auto px-8 py-6 max-w-6xl">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-text-secondary hover:text-primary transition-colors cursor-pointer">
             <ArrowLeft size={14} /> Back to Reports
           </button>
           <div className="flex items-center gap-2 relative">
             <div className="relative">
               <button
                 onClick={() => setShowApplyTemplate(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
               >
                 <Layout size={13} />
                 <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
@@ -4585,14 +4585,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               </AnimatePresence>
             </div>
             {onShare && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}>
+              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}>
                 <Share2 size={13} /> Share
               </button>
             )}
             <div className="relative">
               <button
                 onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
               >
                 <Download size={13} /> Download <ChevronDown size={11} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
               </button>
@@ -4607,7 +4607,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <button
                       key={ext}
                       onClick={() => { startReportDownload(addToast, updateToast, report.name, ext); setShowDownloadDropdown(false); }}
-                      className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
                     >
                       {label}
                     </button>
@@ -4633,7 +4633,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-2xl shadow-lg"
               >
                 <Loader2 size={20} className="text-primary animate-spin" />
-                <span className="text-[14px] font-semibold text-text">Applying template...</span>
+                <span className="text-[0.875rem] font-semibold text-text">Applying template...</span>
               </motion.div>
             </motion.div>
           )}
@@ -4646,10 +4646,10 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               <div className="relative z-10 px-8 py-7">
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 {reportTemplate && (
-                  <p className="text-white/60 text-[13px] mb-3">{reportTemplate.desc}</p>
+                  <p className="text-white/60 text-[0.8125rem] mb-3">{reportTemplate.desc}</p>
                 )}
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[13px]">
+                  <div className="flex items-center gap-2 text-[0.8125rem]">
                     <span className="font-semibold text-white">{report.generatedBy}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{report.generatedAt}</span>
@@ -4657,7 +4657,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
                     {report.tag && (
                       <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
                         style={{
                           borderRadius: '8px',
                           background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
@@ -4670,7 +4670,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   </div>
                   <button
                     onClick={() => setAddQueryOpen(true)}
-                    className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                    className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
                   >
                     <Plus size={13} />
                     Add Query
@@ -4706,9 +4706,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         >
                           <div className="flex items-center gap-2.5 px-1">
                             <Icon size={16} className="text-primary" />
-                            <h3 className="text-[14.5px] font-bold text-text tracking-tight">{section.name}</h3>
-                            <span className="text-[10.5px] text-text-muted">·</span>
-                            <span className="text-[10.5px] text-text-muted">{attached.length}</span>
+                            <h3 className="text-[0.75rem] font-bold text-text tracking-tight">{section.name}</h3>
+                            <span className="text-[0.75rem] text-text-muted">·</span>
+                            <span className="text-[0.75rem] text-text-muted">{attached.length}</span>
                           </div>
                           <AnimatePresence>
                             {attached.map((q, qi) => (
@@ -4734,10 +4734,10 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       >
                         <div className="flex items-center gap-2.5 mb-3">
                           <Icon size={16} className="text-primary" />
-                          <h3 className="text-[14.5px] font-bold text-text tracking-tight">{section.name}</h3>
+                          <h3 className="text-[0.75rem] font-bold text-text tracking-tight">{section.name}</h3>
                         </div>
                         <div className="border border-dashed border-border-light rounded-[10px] bg-paper-50/40 px-6 py-7 text-center">
-                          <p className="text-[12.5px] text-text-muted/80">
+                          <p className="text-[0.75rem] text-text-muted/80">
                             {attached.length > 0
                               ? `${section.name} will be generated from your attached queries.`
                               : `Section content generated from ${report.name} data`}
@@ -4752,9 +4752,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <div className="space-y-3">
                       <div className="flex items-center gap-2.5 px-1">
                         <MessageSquare size={16} className="text-primary" />
-                        <h3 className="text-[14.5px] font-bold text-text tracking-tight">Attached Queries</h3>
-                        <span className="text-[10.5px] text-text-muted">·</span>
-                        <span className="text-[10.5px] text-text-muted">{attached.length}</span>
+                        <h3 className="text-[0.75rem] font-bold text-text tracking-tight">Attached Queries</h3>
+                        <span className="text-[0.75rem] text-text-muted">·</span>
+                        <span className="text-[0.75rem] text-text-muted">{attached.length}</span>
                       </div>
                       <AnimatePresence>
                         {attached.map((q, qi) => (
@@ -4771,7 +4771,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
                   {(!reportTemplate || sections.length === 0) && (
                     <div className="bg-white border border-border-light rounded-2xl px-6 py-12 text-center">
-                      <p className="text-[13px] text-text-muted">This template has no sections defined.</p>
+                      <p className="text-[0.8125rem] text-text-muted">This template has no sections defined.</p>
                     </div>
                   )}
                 </div>
@@ -4799,7 +4799,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 <EditableDescription />
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[13px]">
+                  <div className="flex items-center gap-2 text-[0.8125rem]">
                     <span className="font-semibold text-white">{report.generatedBy}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{report.generatedAt}</span>
@@ -4807,7 +4807,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
                     {report.tag && (
                       <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                        className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
                         style={{
                           borderRadius: '8px',
                           background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
@@ -4817,7 +4817,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         {report.tag}
                       </span>
                     )}
-                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
+                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[0.6875rem] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                       {appliedTemplate.name}
                     </span>
                   </div>
@@ -4841,11 +4841,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 <div className="flex items-center justify-between gap-3 mb-6">
                   <div className="flex items-center gap-2">
                     <List size={16} className="text-primary" />
-                    <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
+                    <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">Contents</h3>
                   </div>
                   <button
                     onClick={openAddObservation}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
                   >
                     <Plus size={13} />
                     Add Observation
@@ -4860,8 +4860,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 >
                   {appliedTemplate.sections.map((s, i) => (
                     <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{s.name}</span>
+                      <span className="shrink-0 w-6 text-[0.75rem] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[0.75rem] text-text-secondary truncate">{s.name}</span>
                     </li>
                   ))}
                   {appliedObservations.map((o, i) => {
@@ -4900,7 +4900,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
                   <div>
                     <div className="text-xl font-bold text-text">{stat.value}</div>
-                    <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
+                    <div className="text-[0.625rem] text-text-muted tracking-wide">{stat.label}</div>
                   </div>
                 </div>
               ))}
@@ -4970,7 +4970,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                             <EditableDescription />
                             <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 text-[13px]">
+                              <div className="flex items-center gap-2 text-[0.8125rem]">
                                 <span className="font-semibold text-white">{report.generatedBy}</span>
                                 <span className="text-white/30 mx-0.5">|</span>
                                 <span className="text-white/70">{report.generatedAt}</span>
@@ -4985,7 +4985,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 })()}
                                 {report.tag && (
                                   <span
-                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                                    className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
                                     style={{
                                       borderRadius: '8px',
                                       background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
@@ -5022,13 +5022,13 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                           <div className="flex items-center justify-between gap-3 mb-6">
                             <div className="flex items-center gap-2">
                               <FileText size={16} className="text-primary" />
-                              <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
+                              <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">{section.title}</h3>
                             </div>
                             {hasQueries && (
                               <button
                                 onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
                               >
                                 <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
                                 Regenerate
@@ -5049,12 +5049,12 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                   <div className="text-xl font-bold text-text leading-none mb-1">
                                     <KpiCountUp value={stat.value} delay={120 + si * 80} />
                                   </div>
-                                  <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
+                                  <div className="text-[0.6875rem] text-text-muted tracking-wide">{stat.label}</div>
                                 </div>
                               </motion.div>
                             ))}
                           </div>
-                          <p className="text-[13px] text-text-secondary leading-relaxed">{section.content}</p>
+                          <p className="text-[0.8125rem] text-text-secondary leading-relaxed">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5069,7 +5069,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                               <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
                               <div>
                                 <div className="text-xl font-bold text-text">{stat.value}</div>
-                                <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
+                                <div className="text-[0.625rem] text-text-muted tracking-wide">{stat.label}</div>
                               </div>
                             </div>
                           ))}
@@ -5112,10 +5112,10 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     return (
                       <Reorder.Item {...sectionProps}>
                         <div className="border-x border-b border-border-light bg-white p-5">
-                          <div className="flex items-center gap-2 mb-2.5 text-[11px] text-text-muted font-semibold uppercase tracking-wider">
+                          <div className="flex items-center gap-2 mb-2.5 text-[0.6875rem] text-text-muted font-semibold uppercase tracking-wider">
                             <StickyNote size={12} className="text-primary" /> {section.title}
                           </div>
-                          <p className="text-[13px] text-text leading-relaxed">{section.content}</p>
+                          <p className="text-[0.8125rem] text-text leading-relaxed">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5225,8 +5225,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 >
                   <div className="text-center">
                     <CloudUpload size={28} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
-                    <div className="text-[14px] font-semibold text-primary">Drop to attach files</div>
-                    <div className="text-[11px] text-text-secondary mt-1">PNG, JPG, PDF, CSV, XLSX, DOC</div>
+                    <div className="text-[0.875rem] font-semibold text-primary">Drop to attach files</div>
+                    <div className="text-[0.6875rem] text-text-secondary mt-1">PNG, JPG, PDF, CSV, XLSX</div>
                   </div>
                 </motion.div>
               )}
@@ -5237,40 +5237,40 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               >
                 <X size={16} />
               </button>
-              <h3 id="add-observation-title" className="text-[16px] font-bold text-text tracking-tight mb-5">{editingObservationId ? 'Edit observation' : 'Add observation'}</h3>
+              <h3 id="add-observation-title" className="text-[1rem] font-bold text-text tracking-tight mb-5">{editingObservationId ? 'Edit observation' : 'Add observation'}</h3>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
+                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
                   <input
                     type="text"
                     value={editingObservationObsId ?? nextObservationId()}
                     readOnly
-                    className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[13px] font-mono text-text tabular-nums cursor-default"
+                    className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[0.8125rem] font-mono text-text tabular-nums cursor-default"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Name <span className="text-risk normal-case font-normal">*</span></label>
+                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Name <span className="text-risk normal-case font-normal">*</span></label>
                   <input
                     type="text"
                     value={obsForm.name}
                     onChange={(e) => setObsForm(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g. Vendor master review gap"
                     autoFocus
-                    className="w-full bg-white border border-border-light rounded-[8px] px-3 py-2 text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
+                    className="w-full bg-white border border-border-light rounded-[8px] px-3 py-2 text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
+                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
                   <div className="bg-white border border-border-light rounded-[8px] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-all overflow-hidden">
                     <textarea
                       value={obsForm.description}
                       onChange={(e) => setObsForm(prev => ({ ...prev, description: e.target.value }))}
                       placeholder="Add observation details, evidence, and recommended actions."
                       rows={4}
-                      className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-text focus:outline-none focus:ring-0 resize-none"
+                      className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[0.8125rem] text-text focus:outline-none focus:ring-0 resize-none"
                     />
                     {obsForm.attachments.length > 0 && (
                       <ul className="px-3 pb-2 space-y-1.5">
@@ -5292,8 +5292,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 </div>
                               )}
                               <div className="min-w-0 flex-1">
-                                <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                                <div className="text-[10.5px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                                <div className="text-[0.75rem] text-text font-medium truncate">{att.name}</div>
+                                <div className="text-[0.75rem] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
                               </div>
                               <button
                                 type="button"
@@ -5310,8 +5310,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     )}
                     <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
                       <label
-                        title="Attach files (PNG, JPG, PDF, CSV, XLSX, DOC)"
-                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[11.5px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+                        title="Attach files (PNG, JPG, PDF, CSV, XLSX)"
+                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[0.75rem] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
                       >
                         <Paperclip size={13} />
                         <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
@@ -5328,7 +5328,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         />
                       </label>
                       {obsForm.attachments.length > 0 && (
-                        <span className="text-[10.5px] text-text-muted tabular-nums pr-1">
+                        <span className="text-[0.75rem] text-text-muted tabular-nums pr-1">
                           {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
                         </span>
                       )}
@@ -5340,14 +5340,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               <div className="flex items-center justify-end gap-2.5 mt-6">
                 <button
                   onClick={closeAddObservation}
-                  className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveObservation}
                   disabled={!obsForm.name.trim()}
-                  className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center h-9 px-5 text-[0.8125rem] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   {editingObservationId ? 'Update observation' : 'Save observation'}
                 </button>
@@ -5503,7 +5503,7 @@ export default function ReportsView({
     <div className="relative">
       <button
         onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
+        className="h-7 flex items-center gap-1.5 px-2.5 text-[0.6875rem] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
         style={{ borderRadius: '8px' }}
       >
         {tagFilter === 'All' ? 'All Tags' : tagFilter}
@@ -5515,7 +5515,7 @@ export default function ReportsView({
             <button
               key={t}
               onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
-              className={`w-full text-left px-3 py-2 text-[12px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
+              className={`w-full text-left px-3 py-2 text-[0.75rem] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
             >
               {tagFilter === t && <span className="text-primary">✓</span>}
               {tagFilter !== t && <span className="w-3" />}
@@ -5530,7 +5530,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -5575,42 +5575,42 @@ export default function ReportsView({
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
           {/* Header */}
           <div className="mb-6">
-            <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
+            <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
               Reports · {activeTab === 'my-reports' ? 'My Reports' : activeTab === 'shared-reports' ? 'Shared Reports' : 'Templates'}
             </div>
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
+            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
           </div>
 
           {/* Tabs */}
           <div className="flex gap-0">
           <button
             onClick={() => setActiveTab('my-reports')}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <BookOpen size={14} />
               My Reports
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'my-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{generatedReports.length}</span>
+              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'my-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{generatedReports.length}</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('shared-reports')}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'shared-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'shared-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <Share2 size={14} />
               Shared Reports
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'shared-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{SHARED_REPORTS.length}</span>
+              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'shared-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{SHARED_REPORTS.length}</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('templates')}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'templates' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'templates' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <FileText size={14} />
               Templates
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'templates' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{REPORT_TEMPLATES.length + customTemplates.length}</span>
+              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'templates' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{REPORT_TEMPLATES.length + customTemplates.length}</span>
             </span>
           </button>
           </div>
@@ -5645,7 +5645,7 @@ export default function ReportsView({
             }
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[11px] text-text-muted tabular-nums">
+                <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">
                   {String(i + 1).padStart(2, '0')}
                 </span>
               )},
@@ -5657,7 +5657,7 @@ export default function ReportsView({
                     if (report) setViewingReport(report);
                   }}>
                     {Boolean(item.tag) && (
-                      <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
+                      <div className={`text-[0.75rem] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
                         {String(item.tag)}
                       </div>
                     )}
@@ -5667,9 +5667,9 @@ export default function ReportsView({
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
                           <span className="relative group/nt inline-flex min-w-0">
-                            <span className="text-[14px] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
+                            <span className="text-[0.875rem] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
-                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
+                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[0.6875rem] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
                               </span>
                             )}
@@ -5677,19 +5677,19 @@ export default function ReportsView({
                         );
                       })()}
                       {reportAppliedTemplates[String(item.id)] && (
-                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
+                        <span className="text-[0.625rem] font-medium text-primary inline-flex items-center gap-1 shrink-0">
                           <Layout size={9} /> {reportAppliedTemplates[String(item.id)].name}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                    <div className="text-[0.75rem] text-text-muted font-mono tabular-nums mt-1">
                       {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
                     </div>
                   </div>
                 );
               }},
               { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
+                <span className="font-mono text-[0.75rem] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -5711,7 +5711,7 @@ export default function ReportsView({
                   value={gridSearch}
                   onChange={e => setGridSearch(e.target.value)}
                   placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {gridSearch && (
                   <button
@@ -5733,7 +5733,7 @@ export default function ReportsView({
             {filteredReports.length === 0 ? (
               <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
                 <FileText size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[13px] text-text-secondary max-w-[280px]">
+                <div className="text-[0.8125rem] text-text-secondary max-w-[280px]">
                   {generatedReports.length === 0
                     ? 'No reports yet. Generate one from a template to see it here.'
                     : tagFilter !== 'All'
@@ -5756,7 +5756,7 @@ export default function ReportsView({
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       {r.tag ? (
-                        <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
+                        <div className={`text-[0.75rem] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
                           {r.tag}
                         </div>
                       ) : <span />}
@@ -5766,12 +5766,12 @@ export default function ReportsView({
                         <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={13} /></button>
                       </div>
                     </div>
-                    <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                    <div className="text-[0.875rem] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
+                    <div className="text-[0.75rem] text-text-muted font-mono tabular-nums">
                       {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
                     </div>
                     <div className="mt-auto pt-4 flex items-center justify-end">
-                      <span className="font-mono text-[11px] text-text-muted tabular-nums">{r.generatedAt}</span>
+                      <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">{r.generatedAt}</span>
                     </div>
                   </motion.div>
                 );
@@ -5805,31 +5805,31 @@ export default function ReportsView({
             }
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[11px] text-text-muted tabular-nums">
+                <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">
                   {String(i + 1).padStart(2, '0')}
                 </span>
               )},
               { key: 'name', label: 'Report', render: (item) => (
                 <div className="min-w-0">
-                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
+                  <div className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
                     Shared report
                   </div>
-                  <div className="text-[14px] text-text font-medium truncate">{String(item.name)}</div>
-                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                  <div className="text-[0.875rem] text-text font-medium truncate">{String(item.name)}</div>
+                  <div className="text-[0.75rem] text-text-muted font-mono tabular-nums mt-1">
                     {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'} · shared with {String(item.sharedWith)}
                   </div>
                 </div>
               )},
               { key: 'sharedBy', label: 'Shared by', render: (item) => (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9.5px] font-semibold flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[0.75rem] font-semibold flex items-center justify-center">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-text-secondary text-[12.5px]">{String(item.sharedBy)}</span>
+                  <span className="text-text-secondary text-[0.75rem]">{String(item.sharedBy)}</span>
                 </div>
               )},
               { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
-                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
+                <span className="font-mono text-[0.75rem] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -5859,7 +5859,7 @@ export default function ReportsView({
                   value={sharedGridSearch}
                   onChange={e => setSharedGridSearch(e.target.value)}
                   placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {sharedGridSearch && (
                   <button
@@ -5878,7 +5878,7 @@ export default function ReportsView({
             {filteredSharedReports.length === 0 ? (
               <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
                 <Share2 size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[13px] text-text-secondary max-w-[280px]">
+                <div className="text-[0.8125rem] text-text-secondary max-w-[280px]">
                   {SHARED_REPORTS.length === 0
                     ? 'Nothing shared with you yet. Reports your team shares will land here.'
                     : 'No shared reports match your search.'}
@@ -5895,7 +5895,7 @@ export default function ReportsView({
                   className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-evidence-700">
+                    <div className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-evidence-700">
                       Shared with {r.sharedWith}
                     </div>
                     <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -5903,18 +5903,18 @@ export default function ReportsView({
                       <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
                     </div>
                   </div>
-                  <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                  <div className="text-[0.875rem] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
+                  <div className="text-[0.75rem] text-text-muted font-mono tabular-nums">
                     {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
                   </div>
                   <div className="mt-auto pt-4 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[0.5625rem] font-semibold bg-primary/10 text-primary shrink-0">
                         {r.sharedBy.split(' ').map(n => n[0]).join('')}
                       </div>
-                      <span className="text-[11.5px] text-text-secondary truncate">{r.sharedBy}</span>
+                      <span className="text-[0.75rem] text-text-secondary truncate">{r.sharedBy}</span>
                     </div>
-                    <span className="font-mono text-[11px] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
+                    <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
                   </div>
                 </motion.div>
               ))}
@@ -5943,16 +5943,16 @@ export default function ReportsView({
                   <div className={`inline-flex items-center justify-center w-9 h-9 rounded-md ${tintBg}`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
-                  <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
+                  <div className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
                     {rt.category}
                   </div>
                 </div>
-                <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
-                <p className="text-[12.5px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
+                <h3 className="text-[0.9375rem] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
+                <p className="text-[0.75rem] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
                 <div className="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-border-light/60">
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }}
-                    className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
+                    className="inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
                   >
                     <Settings size={12} /> Customize
                   </button>
@@ -5981,7 +5981,7 @@ export default function ReportsView({
                         addToast({ type: 'success', message: 'Report generated!' });
                       }, 1200);
                     }}
-                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
+                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
                   >
                     Generate
                     <ArrowRight size={12} className="transition-transform duration-200 group-hover/gen:translate-x-[1.5px]" />
@@ -5994,16 +5994,16 @@ export default function ReportsView({
           return (
             <div className="space-y-10">
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
+                <h2 className="font-display text-[1.25rem] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
                 <div className="grid grid-cols-3 gap-4">
                   {REPORT_TEMPLATES.map((rt, i) => renderCard(rt, i, false))}
                 </div>
               </section>
 
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
+                <h2 className="font-display text-[1.25rem] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
                 {customTemplates.length === 0 ? (
-                  <div className="py-10 text-[13px] text-text-muted max-w-[420px]">
+                  <div className="py-10 text-[0.8125rem] text-text-muted max-w-[420px]">
                     No custom templates yet. Generate one from an existing report or upload a file to get started.
                   </div>
                 ) : (
@@ -6093,8 +6093,8 @@ export default function ReportsView({
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 bg-primary/10 text-primary rounded-xl"><FileText size={16} /></div>
                   <div>
-                    <h3 className="text-[15px] font-semibold text-text">New Report</h3>
-                    <p className="text-[11px] text-text-muted">Set up your report</p>
+                    <h3 className="text-[0.9375rem] font-semibold text-text">New Report</h3>
+                    <p className="text-[0.6875rem] text-text-muted">Set up your report</p>
                   </div>
                 </div>
                 <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
@@ -6103,29 +6103,29 @@ export default function ReportsView({
               {/* Form */}
               <div className="p-6 space-y-5">
                 <div>
-                  <label className="block text-[12px] font-semibold text-text mb-1.5">Report <span className="text-risk">*</span></label>
+                  <label className="block text-[0.75rem] font-semibold text-text mb-1.5">Report <span className="text-risk">*</span></label>
                   <input
                     value={newReportName}
                     onChange={e => setNewReportName(e.target.value)}
                     placeholder="Report 01 — April 23, 2026"
-                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-text mb-1.5">Description</label>
+                  <label className="block text-[0.75rem] font-semibold text-text mb-1.5">Description</label>
                   <textarea
                     value={newReportDesc}
                     onChange={e => setNewReportDesc(e.target.value)}
                     placeholder="Report Description goes here"
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" style={{ borderRadius: '8px' }}
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[12px] font-semibold text-text">Template</label>
+                    <label className="block text-[0.75rem] font-semibold text-text">Template</label>
                     {newReportTemplatePrefilled && newReportTemplate && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[0.625rem] font-semibold">
                         <Sparkles size={10} /> Pre-filled from selection
                       </span>
                     )}
@@ -6133,7 +6133,7 @@ export default function ReportsView({
                   <select
                     value={newReportTemplate}
                     onChange={e => { setNewReportTemplate(e.target.value); setNewReportTemplatePrefilled(false); }}
-                    className={`w-full px-3 py-2.5 border text-[13px] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white ${
+                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white ${
                       newReportTemplatePrefilled && newReportTemplate ? 'border-primary/50' : 'border-border-light'
                     }`}
                     style={{ borderRadius: '8px', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
@@ -6182,7 +6182,7 @@ export default function ReportsView({
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
                 >
                   Continue <ArrowRight size={14} />
                 </button>

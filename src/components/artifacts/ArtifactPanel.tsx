@@ -46,7 +46,7 @@ function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, a
           type="button"
           onClick={() => setOpen(p => !p)}
           aria-expanded={open}
-          className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="flex-1 flex items-center gap-2 text-[0.875rem] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <Icon size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">{title}</span>
@@ -128,7 +128,7 @@ function PlanStepNode({ status, index }: { status: PlanStepStatus; index: number
     return <X size={12} strokeWidth={2.75} className="text-risk-700" aria-hidden />;
   }
   return (
-    <span className="text-[10px] font-mono tabular-nums text-ink-400" aria-hidden>{index + 1}</span>
+    <span className="text-[0.625rem] font-mono tabular-nums text-ink-400" aria-hidden>{index + 1}</span>
   );
 }
 
@@ -182,10 +182,10 @@ function PlanTab({
             <Sparkles size={13} className="text-brand-600" />
           </div>
           <div className="flex-1 min-w-0 text-left">
-            <h3 className="text-[13.5px] font-semibold text-ink-900 leading-tight tracking-tight">Query Execution Plan</h3>
+            <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Query Execution Plan</h3>
           </div>
           <span
-            className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10.5px] font-medium tabular-nums ${
+            className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.75rem] font-medium tabular-nums ${
               hasFailed ? 'bg-risk-50 text-risk-700'
                 : hasRunning ? 'bg-brand-50 text-brand-700'
                   : allDone ? 'bg-compliant-50 text-compliant-700'
@@ -229,7 +229,7 @@ function PlanTab({
                     <span className="inline-flex items-center justify-center w-4 h-[18px] shrink-0">
                       <PlanStepNode status={s.status} index={i} />
                     </span>
-                    <p className="text-[12.5px] leading-[18px] min-w-0 flex-1">
+                    <p className="text-[0.75rem] leading-[18px] min-w-0 flex-1">
                       <span className="font-medium text-ink-900">{s.title}</span>
                       <span className="text-ink-300 mx-1.5" aria-hidden>—</span>
                       <span className="text-ink-500">{s.detail}</span>
@@ -261,8 +261,8 @@ function PlanTab({
                 <AlertTriangle size={13} className="text-brand-600" />
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <h3 className="text-[13.5px] font-semibold text-ink-900 leading-tight tracking-tight">Assumptions</h3>
-                <p className="text-[11.5px] text-ink-500 mt-px leading-tight">
+                <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Assumptions</h3>
+                <p className="text-[0.75rem] text-ink-500 mt-px leading-tight">
                   {assumptions.length} defaults applied to this query
                 </p>
               </div>
@@ -272,7 +272,7 @@ function PlanTab({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleEditAssumptions(); }}
                 title="Edit assumptions in chat"
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Pencil size={11} strokeWidth={2.25} />
                 Edit
@@ -313,10 +313,10 @@ function PlanTab({
                       key={a.key}
                       className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md hover:bg-paper-50/70 transition-colors"
                     >
-                      <dt className="text-[12.5px] font-medium text-ink-500 leading-[1.45] self-start">
+                      <dt className="text-[0.75rem] font-medium text-ink-500 leading-[1.45] self-start">
                         {a.key}
                       </dt>
-                      <dd className="text-[13px] text-ink-900 leading-[1.5]">{a.value}</dd>
+                      <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">{a.value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -381,7 +381,7 @@ ORDER BY
     <div className="space-y-3 pt-4">
       <CollapsibleSection title="Generated SQL Query" icon={FileCode}>
         <div className="mt-3 relative">
-          <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[12px] font-mono overflow-x-auto leading-relaxed">
+          <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[0.75rem] font-mono overflow-x-auto leading-relaxed">
             <code>{sql}</code>
           </pre>
           <div className="absolute top-2 right-2 flex items-center gap-1">
@@ -563,8 +563,8 @@ function SourceCard({
           <Icon size={16} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold text-ink-900 truncate">{source.name}</div>
-          <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+          <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{source.name}</div>
+          <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
             {source.subtype} · <span className="text-ink-400">{formatDate(source.createdAt)}</span>
           </div>
         </div>
@@ -574,11 +574,11 @@ function SourceCard({
           the column picker popover anchored to it. */}
       {available.length > 0 && (
         <div className="relative border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
-          <span className="text-[11px] text-ink-500 shrink-0">
+          <span className="text-[0.6875rem] text-ink-500 shrink-0">
             Using <span className="font-mono tabular-nums text-ink-700">{columnsUsed.length}</span> of{' '}
             <span className="font-mono tabular-nums text-ink-700">{available.length}</span>:
           </span>
-          <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
+          <span className="text-[0.6875rem] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
             {columnsUsed.join(', ') || '(none)'}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -589,7 +589,7 @@ function SourceCard({
               aria-expanded={pickerOpen}
               aria-label={`Pick columns from ${source.name}`}
               title="Pick columns"
-              className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <ListChecks size={11} strokeWidth={2.25} />
               Pick
@@ -599,7 +599,7 @@ function SourceCard({
               onClick={handleDescribeInChat}
               aria-label={`Describe column change for ${source.name} in chat`}
               title="Describe in chat"
-              className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <MessageSquare size={11} strokeWidth={2.25} />
               Chat
@@ -753,8 +753,8 @@ function ColumnPicker({
         {/* Header — tight: selected count + dirty badge + close.
             Source name is implicit (user just clicked Pick on that card). */}
         <div className="flex items-center gap-2 px-3.5 h-10 border-b border-canvas-border">
-          <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500">Columns</span>
-          <span className="inline-flex items-center h-[20px] px-1.5 rounded-full bg-paper-50 border border-canvas-border text-[11px] tabular-nums shrink-0">
+          <span className="text-[0.6875rem] uppercase tracking-[0.08em] font-semibold text-ink-500">Columns</span>
+          <span className="inline-flex items-center h-[20px] px-1.5 rounded-full bg-paper-50 border border-canvas-border text-[0.6875rem] tabular-nums shrink-0">
             <span className="text-ink-800 font-semibold">{selected.size}</span>
             <span className="text-ink-400">/{available.length}</span>
           </span>
@@ -766,7 +766,7 @@ function ColumnPicker({
                 animate={{ opacity: 1, scale: 1, x: 0 }}
                 exit={{ opacity: 0, scale: 0.7, x: -4 }}
                 transition={{ type: 'spring', stiffness: 560, damping: 26 }}
-                className="inline-flex items-center gap-1 px-1.5 h-[20px] rounded-full bg-brand-50 text-brand-700 text-[10.5px] font-medium shrink-0"
+                className="inline-flex items-center gap-1 px-1.5 h-[20px] rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium shrink-0"
               >
                 <span className="size-1.5 rounded-full bg-brand-500" aria-hidden />
                 {addCount + removeCount} change{addCount + removeCount === 1 ? '' : 's'}
@@ -798,7 +798,7 @@ function ColumnPicker({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={`Search ${available.length} columns…`}
-              className="no-focus-ring w-full pl-8 pr-8 h-9 text-[12.5px] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-md outline-none focus:border-brand-400 transition-colors"
+              className="no-focus-ring w-full pl-8 pr-8 h-9 text-[0.75rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-md outline-none focus:border-brand-400 transition-colors"
             />
             {query ? (
               <button
@@ -810,7 +810,7 @@ function ColumnPicker({
                 <X size={11} />
               </button>
             ) : (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-ink-300 pointer-events-none">{available.length}</span>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[0.625rem] font-mono text-ink-300 pointer-events-none">{available.length}</span>
             )}
           </div>
         </div>
@@ -820,7 +820,7 @@ function ColumnPicker({
             even at 100+ columns. */}
         <div className="max-h-[320px] overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="px-3 py-8 text-[12px] text-ink-500 text-center">
+            <div className="px-3 py-8 text-[0.75rem] text-ink-500 text-center">
               <Search size={16} className="mx-auto mb-2 text-ink-300" />
               No columns match "<span className="font-medium text-ink-700">{query}</span>"
             </div>
@@ -863,7 +863,7 @@ function ColumnPicker({
                 />
               ))}
               {query && filtered.length < available.length && (
-                <div className="px-4 py-2 text-[11px] text-ink-400 text-center border-t border-canvas-border/70">
+                <div className="px-4 py-2 text-[0.6875rem] text-ink-400 text-center border-t border-canvas-border/70">
                   Showing {filtered.length} of {available.length} · clear search to see all
                 </div>
               )}
@@ -874,7 +874,7 @@ function ColumnPicker({
         {/* Footer */}
         <div className="border-t border-canvas-border px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] tabular-nums flex items-center gap-1.5 min-w-0">
+            <span className="text-[0.6875rem] tabular-nums flex items-center gap-1.5 min-w-0">
               <AnimatePresence mode="wait" initial={false}>
                 {dirty ? (
                   <motion.span
@@ -911,7 +911,7 @@ function ColumnPicker({
               <button
                 type="button"
                 onClick={onClose}
-                className="h-7 px-2.5 text-[11.5px] font-medium text-ink-600 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="h-7 px-2.5 text-[0.75rem] font-medium text-ink-600 hover:bg-paper-100 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Cancel
               </button>
@@ -921,7 +921,7 @@ function ColumnPicker({
                 disabled={!dirty || selected.size === 0}
                 whileTap={dirty && selected.size > 0 ? { scale: 0.96 } : undefined}
                 transition={{ type: 'spring', stiffness: 520, damping: 28 }}
-                className="h-7 px-3 text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="h-7 px-3 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Apply
               </motion.button>
@@ -952,15 +952,15 @@ function SectionHeading({
       transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.55 }}
       className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm border-b border-canvas-border/70 px-4 py-1.5 flex items-center gap-1.5"
     >
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</span>
-      <span className="font-mono text-[10px] tabular-nums text-ink-400">
+      <span className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</span>
+      <span className="font-mono text-[0.625rem] tabular-nums text-ink-400">
         {showTotal && totalCount !== undefined ? `${count}/${totalCount}` : count}
       </span>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
-          className="ml-auto h-5 px-1.5 text-[10.5px] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="ml-auto h-5 px-1.5 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           {action.label}
         </button>
@@ -1000,7 +1000,7 @@ function ColumnRow({
           <Check size={12} strokeWidth={3} className="text-white" />
         </motion.span>
       </span>
-      <span className={`text-[12.5px] truncate transition-colors flex-1 ${isChecked ? 'text-ink-900 font-medium' : 'text-ink-700'}`}>
+      <span className={`text-[0.75rem] truncate transition-colors flex-1 ${isChecked ? 'text-ink-900 font-medium' : 'text-ink-700'}`}>
         {col}
       </span>
       {isChanged && (
@@ -1080,7 +1080,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
       <button
         type="button"
         onClick={() => { addToast({ type: 'info', message: `Improving: "${preview}"` }); setPopover(null); window.getSelection()?.removeAllRanges(); }}
-        className="inline-flex items-center gap-1 px-2 h-7 rounded-md text-[12px] font-medium hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="inline-flex items-center gap-1 px-2 h-7 rounded-md text-[0.75rem] font-medium hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <Wand2 size={13} />
         <span>Improve</span>
@@ -1088,7 +1088,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
       <button
         type="button"
         onClick={() => { addToast({ type: 'info', message: `Explaining: "${preview}"` }); setPopover(null); window.getSelection()?.removeAllRanges(); }}
-        className="inline-flex items-center gap-1 px-2 h-7 rounded-md text-[12px] font-medium hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="inline-flex items-center gap-1 px-2 h-7 rounded-md text-[0.75rem] font-medium hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <HelpCircle size={13} />
         <span>Explain</span>
@@ -1130,7 +1130,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                 title={tab.label}
-                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[13px] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[0.8125rem] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                   isActive
                     ? 'text-brand-700 font-semibold'
                     : 'text-ink-500 font-medium hover:text-brand-700 hover:bg-brand-50'
@@ -1152,7 +1152,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
                 </span>
                 {typeof tab.count === 'number' && (
                   <span
-                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-mono tabular-nums leading-none transition-colors ${
+                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[0.75rem] font-mono tabular-nums leading-none transition-colors ${
                       isActive
                         ? 'bg-brand-100 text-brand-700'
                         : 'bg-paper-100 text-ink-500 group-hover:bg-brand-100 group-hover:text-brand-700'

@@ -188,7 +188,7 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   };
   const s = map[severity];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap`}>
       <AlertTriangle size={10} />
       {severity}
     </span>
@@ -204,7 +204,7 @@ function StatusBadge({ status }: { status: Status }) {
   };
   const s = map[status];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap ${s.pulse ? 'animate-pulse' : ''}`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap ${s.pulse ? 'animate-pulse' : ''}`}>
       {s.icon}
       {status}
     </span>
@@ -265,7 +265,7 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           ].map(card => (
             <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
               <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-              <div className="text-[12px] text-text-muted uppercaser">{card.label}</div>
+              <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
             </div>
           ))}
         </div>
@@ -276,14 +276,14 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             <button
               key={f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[12px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[0.75rem] font-medium transition-all cursor-pointer ${
                 activeFilter === f.key
                   ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary/20'
                   : 'border-border-light bg-white text-text-secondary hover:shadow-md hover:border-primary/20 active:scale-[0.98]'
               }`}
             >
               {f.label}
-              <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${
                 activeFilter === f.key ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500'
               }`}>
                 {f.count}
@@ -300,18 +300,18 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             placeholder="Search findings by ID, title, workflow, attribute, or owner..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-[13px] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
+            className="w-full pl-9 pr-4 py-2.5 text-[0.8125rem] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
           />
         </div>
 
         {/* Findings Table */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="border-b border-border-light bg-surface-2/50">
                   {['', 'Finding ID', 'Engagement', 'Control', 'Workflow', 'Failed Attribute', 'Severity', 'Status', 'Aging'].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-[12px] font-semibold text-text-muted uppercaser">
+                    <th key={h} className="px-3 py-3 text-left text-[0.75rem] font-semibold text-text-muted uppercaser">
                       {h}
                     </th>
                   ))}
@@ -341,26 +341,26 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           />
                         </td>
                         <td className="px-3 py-3">
-                          <span className="font-mono text-[12px] text-primary font-semibold">{row.id}</span>
+                          <span className="font-mono text-[0.75rem] text-primary font-semibold">{row.id}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-text-secondary font-mono text-[12px] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
+                          <span className="text-text-secondary font-mono text-[0.75rem] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex flex-col">
-                            <span className="text-text-secondary font-mono text-[11px]">{row.control}</span>
-                            <span className="text-text font-medium text-[12px]">{row.controlName}</span>
+                            <span className="text-text-secondary font-mono text-[0.6875rem]">{row.control}</span>
+                            <span className="text-text font-medium text-[0.75rem]">{row.controlName}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             <Workflow size={10} className="text-indigo-500" />
-                            <span className="text-[11px] text-indigo-700 font-medium">{row.workflowName}</span>
-                            <span className="text-[10px] text-text-muted">{row.workflowVersion}</span>
+                            <span className="text-[0.6875rem] text-indigo-700 font-medium">{row.workflowName}</span>
+                            <span className="text-[0.625rem] text-text-muted">{row.workflowVersion}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md">
+                          <span className="text-[0.75rem] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md">
                             {row.failedAttribute}
                           </span>
                         </td>
@@ -371,7 +371,7 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           <StatusBadge status={row.status} />
                         </td>
                         <td className="px-3 py-3">
-                          <span className={`text-[12px] font-semibold ${isOverdue ? 'text-red-600' : isClosed ? 'text-gray-400' : 'text-text-secondary'}`}>
+                          <span className={`text-[0.75rem] font-semibold ${isOverdue ? 'text-red-600' : isClosed ? 'text-gray-400' : 'text-text-secondary'}`}>
                             {row.aging}
                           </span>
                         </td>
@@ -397,34 +397,34 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                   >
                     <div className="px-10 py-5">
                       {/* Title */}
-                      <h3 className="text-[13px] font-bold text-text mb-4">{row.title}</h3>
+                      <h3 className="text-[0.8125rem] font-bold text-text mb-4">{row.title}</h3>
 
                       <div className="grid grid-cols-3 gap-6">
                         {/* Failure Detail */}
                         <div className="space-y-3">
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
                               <Target size={10} />
                               Failed Attribute
                             </h4>
-                            <p className="text-[12px] font-semibold text-red-700 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100">
+                            <p className="text-[0.75rem] font-semibold text-red-700 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100">
                               {row.failedAttribute}
                             </p>
                           </div>
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
                               <Filter size={10} />
                               Failed Sample
                             </h4>
-                            <p className="text-[12px] text-text-secondary font-mono bg-gray-50 px-2.5 py-1.5 rounded-lg">{row.failedSample}</p>
-                            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">{row.sampleDetail}</p>
+                            <p className="text-[0.75rem] text-text-secondary font-mono bg-gray-50 px-2.5 py-1.5 rounded-lg">{row.failedSample}</p>
+                            <p className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">{row.sampleDetail}</p>
                           </div>
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5 flex items-center gap-1">
                               <Workflow size={10} />
                               Workflow Logic
                             </h4>
-                            <p className="text-[11px] font-mono text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100 leading-relaxed">
+                            <p className="text-[0.6875rem] font-mono text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100 leading-relaxed">
                               {row.workflowLogic}
                             </p>
                           </div>
@@ -433,26 +433,26 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                         {/* Remediation */}
                         <div className="space-y-3">
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5">Remediation Plan</h4>
-                            <p className="text-[12px] text-text-secondary leading-relaxed">{row.remediationPlan}</p>
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5">Remediation Plan</h4>
+                            <p className="text-[0.75rem] text-text-secondary leading-relaxed">{row.remediationPlan}</p>
                           </div>
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5">Timeline</h4>
-                            <p className="text-[12px] text-text-secondary leading-relaxed">{row.timeline}</p>
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5">Timeline</h4>
+                            <p className="text-[0.75rem] text-text-secondary leading-relaxed">{row.timeline}</p>
                           </div>
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5">Owner</h4>
-                            <p className="text-[12px] text-text-secondary font-medium">{row.owner} &middot; Due {row.dueDate}</p>
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5">Owner</h4>
+                            <p className="text-[0.75rem] text-text-secondary font-medium">{row.owner} &middot; Due {row.dueDate}</p>
                           </div>
                         </div>
 
                         {/* Evidence & Actions */}
                         <div className="space-y-3">
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5">Supporting Evidence</h4>
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5">Supporting Evidence</h4>
                             <div className="space-y-1">
                               {row.evidenceRef.map(link => (
-                                <div key={link} className="flex items-center gap-1.5 text-[12px] text-primary hover:underline cursor-pointer">
+                                <div key={link} className="flex items-center gap-1.5 text-[0.75rem] text-primary hover:underline cursor-pointer">
                                   <FileText size={10} />
                                   {link}
                                 </div>
@@ -461,34 +461,34 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           </div>
 
                           <div>
-                            <h4 className="text-[11px] font-bold text-text-muted uppercase mb-1.5">Actions</h4>
+                            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-1.5">Actions</h4>
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={(e) => { e.stopPropagation(); onOpenWorkingPaper?.(row.control); }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-[11px] font-semibold hover:bg-indigo-100 transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-[0.6875rem] font-semibold hover:bg-indigo-100 transition-all cursor-pointer"
                               >
                                 <Database size={10} />
                                 Working Paper
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); onOpenWorkflow?.(row.control); }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-semibold hover:bg-violet-100 transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 text-[0.6875rem] font-semibold hover:bg-violet-100 transition-all cursor-pointer"
                               >
                                 <Workflow size={10} />
                                 Workflow
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); onOpenTrace?.(row.control); }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-[11px] font-semibold hover:bg-purple-100 transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-[0.6875rem] font-semibold hover:bg-purple-100 transition-all cursor-pointer"
                               >
                                 <Shield size={10} />
                                 Full Trace
                               </button>
-                              <button className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 transition-all cursor-pointer">
+                              <button className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-[0.6875rem] font-semibold hover:bg-amber-100 transition-all cursor-pointer">
                                 <Bell size={10} />
                                 Remind
                               </button>
-                              <button className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[11px] font-semibold hover:bg-red-100 transition-all cursor-pointer">
+                              <button className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[0.6875rem] font-semibold hover:bg-red-100 transition-all cursor-pointer">
                                 <AlertTriangle size={10} />
                                 Escalate
                               </button>
@@ -505,11 +505,11 @@ export default function FindingsView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
 
           {/* Table Footer */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-            <span className="text-[12px] text-text-muted">
+            <span className="text-[0.75rem] text-text-muted">
               Showing {filtered.length} of {FINDINGS.length} findings
             </span>
             <div className="flex items-center gap-1">
-              <span className="text-[12px] text-text-muted">Page 1 of 1</span>
+              <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
               <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer">
                 <ChevronRight size={14} />
               </button>

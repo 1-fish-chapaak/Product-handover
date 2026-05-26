@@ -418,7 +418,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{active.label}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {charts.length > 1 && !useDropdown && (
@@ -432,7 +432,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => setActiveId(c.id)}
-                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         isActive
                           ? 'bg-brand-50 text-brand-700 border-brand-200'
                           : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -455,7 +455,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   onClick={() => setSelectorOpen(o => !o)}
                   aria-haspopup="menu"
                   aria-expanded={selectorOpen}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-w-[220px]"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-w-[220px]"
                 >
                   {(() => { const I = chartIcon(active.id); return <I size={13} className="text-brand-600 shrink-0" />; })()}
                   <span className="truncate">{active.label}</span>
@@ -476,7 +476,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                           aria-checked={isActive}
                           onClick={() => { setActiveId(c.id); setSelectorOpen(false); }}
                           title={c.label}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left transition-colors cursor-pointer ${
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-[0.75rem] text-left transition-colors cursor-pointer ${
                             isActive ? 'bg-brand-50/60 text-brand-700 font-medium' : 'text-ink-800 hover:bg-paper-50'
                           }`}
                         >
@@ -559,7 +559,7 @@ function FullscreenChartModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{active.label}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {charts.length > 1 && (
@@ -573,7 +573,7 @@ function FullscreenChartModal({
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => onActiveChange(c.id)}
-                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         isActive
                           ? 'bg-brand-50 text-brand-700 border-brand-200'
                           : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -774,15 +774,15 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
-            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
+            <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="inline-flex items-center gap-1">
               <button
                 onClick={handleOpenInNewTab}
                 title="Open in new tab"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <ExternalLink size={13} className="text-ink-400" />
                 <span>Open</span>
@@ -794,7 +794,7 @@ function ResultsTable({
                   aria-haspopup="menu"
                   aria-expanded={downloadOpen}
                   title="Download"
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <Download size={13} className="text-ink-400" />
                   <span>Download</span>
@@ -817,7 +817,7 @@ function ResultsTable({
                         type="button"
                         role="menuitem"
                         onClick={() => { setDownloadOpen(false); handleCsvDownload(); }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
                       >
                         <FileText size={13} className="text-ink-400 shrink-0" />
                         <span>CSV</span>
@@ -826,7 +826,7 @@ function ResultsTable({
                         type="button"
                         role="menuitem"
                         onClick={() => { setDownloadOpen(false); handleExcelDownload(); }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
                       >
                         <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
                         <span>Excel</span>
@@ -854,11 +854,11 @@ function ResultsTable({
             Only the first PREVIEW_ROW_COUNT rows render — any additional
             rows live in the fullscreen modal / new tab. */}
         <div className="overflow-x-auto overflow-y-hidden" style={{ height: 390 }}>
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="border-b border-canvas-border/70 bg-paper-50/40">
                 {columns.map(c => (
-                  <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[10.5px] whitespace-nowrap">{c}</th>
+                  <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.75rem] whitespace-nowrap">{c}</th>
                 ))}
               </tr>
             </thead>
@@ -881,14 +881,14 @@ function ResultsTable({
           const hidden = Math.max(0, totalRows - visible);
           return (
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border/70 bg-paper-50/40">
-              <span className="text-[11px] text-ink-500 tabular-nums">
+              <span className="text-[0.6875rem] text-ink-500 tabular-nums">
                 Showing <span className="font-medium text-ink-800">{visible}</span>
                 <span className="text-ink-400"> of {totalRows}</span>
               </span>
               {hidden > 0 && (
                 <button
                   onClick={openFullscreen}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
                 >
                   View all
                   <ArrowRight size={11} strokeWidth={2.5} />
@@ -972,8 +972,8 @@ function FullscreenTableModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{title}</span>
-            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div ref={downloadMenuRef} className="relative">
@@ -983,7 +983,7 @@ function FullscreenTableModal({
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -1003,7 +1003,7 @@ function FullscreenTableModal({
                       type="button"
                       role="menuitem"
                       onClick={() => { setDownloadOpen(false); onDownloadCsv(); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       <FileText size={13} className="text-ink-400 shrink-0" />
                       <span>CSV</span>
@@ -1012,7 +1012,7 @@ function FullscreenTableModal({
                       type="button"
                       role="menuitem"
                       onClick={() => { setDownloadOpen(false); onDownloadExcel(); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
                       <span>Excel</span>
@@ -1033,11 +1033,11 @@ function FullscreenTableModal({
 
         {/* Table body — full row set, sticky header */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[0.8125rem]">
             <thead className="sticky top-0 z-10 bg-canvas-elevated">
               <tr className="border-b border-canvas-border/80 bg-paper-50/60">
                 {columns.map(c => (
-                  <th key={c} className="text-left px-5 py-3 font-semibold text-ink-500 uppercase tracking-wide text-[11px] whitespace-nowrap">{c}</th>
+                  <th key={c} className="text-left px-5 py-3 font-semibold text-ink-500 uppercase tracking-wide text-[0.6875rem] whitespace-nowrap">{c}</th>
                 ))}
               </tr>
             </thead>
@@ -1055,10 +1055,10 @@ function FullscreenTableModal({
 
         {/* Footer count */}
         <div className="flex items-center justify-between px-5 py-2 border-t border-canvas-border/60 shrink-0">
-          <span className="text-[11px] text-ink-500 tabular-nums">
+          <span className="text-[0.6875rem] text-ink-500 tabular-nums">
             Showing <span className="font-medium text-ink-700">{rows.length}</span> of <span className="font-medium text-ink-700">{totalRows}</span>
           </span>
-          <span className="text-[11px] text-ink-400">Press Esc to close</span>
+          <span className="text-[0.6875rem] text-ink-400">Press Esc to close</span>
         </div>
       </motion.div>
     </motion.div>
@@ -1086,7 +1086,7 @@ function ThinkingTrail({ summary, steps, defaultOpen = false }: {
   return (
     <button
       onClick={() => setOpen(p => !p)}
-      className="group inline-flex items-start gap-1.5 text-left text-[12px] text-ink-500 hover:text-ink-700 transition-colors cursor-pointer mb-2"
+      className="group inline-flex items-start gap-1.5 text-left text-[0.75rem] text-ink-500 hover:text-ink-700 transition-colors cursor-pointer mb-2"
     >
       <ChevronRight size={12} className={`mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       <span className="flex-1">
@@ -1183,7 +1183,7 @@ function ClarificationBlock({
 
   if (data.status === 'submitted') {
     return (
-      <div className="text-[13px] text-ink-700 leading-relaxed">
+      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
         Got it. Running with these inputs.
       </div>
     );
@@ -1234,7 +1234,7 @@ function ClarificationBlock({
               with an ellipsis for very long content; full text in the
               native tooltip. */}
           <p
-            className="text-[15px] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
+            className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
             title={viewQ.question}
           >
             {viewQ.question}
@@ -1284,7 +1284,7 @@ function ClarificationBlock({
                   }`}
                 />
                 <span
-                  className={`inline-flex items-center justify-center size-6 rounded-md text-[11.5px] font-semibold tabular-nums shrink-0 transition-colors ${
+                  className={`inline-flex items-center justify-center size-6 rounded-md text-[0.75rem] font-semibold tabular-nums shrink-0 transition-colors ${
                     isPicked
                       ? 'bg-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.10)]'
                       : isHighlighted
@@ -1295,14 +1295,14 @@ function ClarificationBlock({
                 >
                   {isPicked ? <Check size={12} strokeWidth={2.75} /> : idx + 1}
                 </span>
-                <span className={`flex-1 text-[14px] leading-snug transition-colors ${
+                <span className={`flex-1 text-[0.875rem] leading-snug transition-colors ${
                   isPicked ? 'text-ink-900 font-medium' : isHighlighted ? 'text-ink-900' : 'text-ink-800'
                 }`}>
                   {opt}
                 </span>
                 {isHighlighted && !isPicked && (
-                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-ink-400 shrink-0">
-                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[10px] leading-none">
+                  <span className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-ink-400 shrink-0">
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[0.625rem] leading-none">
                       <CornerDownLeft size={11} strokeWidth={2.25} />
                     </kbd>
                   </span>
@@ -1333,12 +1333,12 @@ function ClarificationBlock({
                 }
               }}
               placeholder="Type something else…"
-              className="no-focus-ring flex-1 bg-transparent text-[14px] text-ink-800 placeholder:text-ink-400 outline-none h-7"
+              className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-7"
             />
             {customInput.trim() ? (
               <button
                 onClick={() => selectOption(customInput.trim())}
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Use this
                 <CornerDownLeft size={11} strokeWidth={2.25} />
@@ -1346,7 +1346,7 @@ function ClarificationBlock({
             ) : (
               <button
                 onClick={skipCurrent}
-                className="h-7 px-2.5 text-[12px] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="h-7 px-2.5 text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Skip
               </button>
@@ -1434,7 +1434,7 @@ function InlineAuditLoader({
     <div
       ref={rootRef}
       style={{ scrollMarginBottom: 24 }}
-      className="flex items-center gap-2 text-[13px] text-ink-600"
+      className="flex items-center gap-2 text-[0.8125rem] text-ink-600"
     >
       <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
         <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
@@ -1457,7 +1457,7 @@ function SaveWorkflowButton() {
     );
   }
   return (
-    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
       <Save size={12} /> Save to Library
     </button>
   );
@@ -1551,7 +1551,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
   }, [bpOpen, subOpen]);
 
   const pillCls = (active: boolean) =>
-    `inline-flex items-center h-7 px-3 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+    `inline-flex items-center h-7 px-3 rounded-full text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
       active
         ? 'bg-brand-600 border-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
         : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/60'
@@ -1591,8 +1591,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               <Save size={16} className="text-brand-600" />
             </div>
             <div>
-              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-ink-900">Save as workflow</h2>
-              <p className="text-[12px] text-ink-500 mt-0.5">Turn this query result into a re-runnable workflow.</p>
+              <h2 id="save-as-wf-title" className="text-[0.9375rem] font-semibold text-ink-900">Save as workflow</h2>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Turn this query result into a re-runnable workflow.</p>
             </div>
           </div>
           <button
@@ -1607,7 +1607,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         {/* Warning */}
         <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200/60 flex gap-2 items-start">
           <Lightbulb size={13} className="text-brand-600 mt-0.5 shrink-0" />
-          <p className="text-[12px] leading-relaxed text-ink-700">
+          <p className="text-[0.75rem] leading-relaxed text-ink-700">
             This chat will switch to <strong className="text-brand-700">workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
           </p>
         </div>
@@ -1616,23 +1616,23 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         <div className="px-6 pb-5 flex-1 overflow-y-auto space-y-4">
           {/* Workflow name */}
           <div>
-            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+            <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
               Workflow name <span className="text-brand-500" aria-hidden>*</span>
             </label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="no-focus-ring w-full h-10 px-3 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
+              className="no-focus-ring w-full h-10 px-3 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
               placeholder="e.g., Duplicate Invoice Detection: Q1 ±3 days"
             />
-            <p className="text-[11px] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
           </div>
 
           {/* Two-column row: BP + Sub-process (custom dropdowns matching app theme) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="wf-bp-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+              <label htmlFor="wf-bp-trigger" className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
                 Business process <span className="text-brand-500" aria-hidden>*</span>
               </label>
               <div ref={bpRef} className="relative">
@@ -1642,7 +1642,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                   onClick={() => { setBpOpen(o => !o); setSubOpen(false); }}
                   aria-haspopup="listbox"
                   aria-expanded={bpOpen}
-                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[0.8125rem] text-left border rounded-lg bg-canvas-elevated transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                     bpOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
                   }`}
                 >
@@ -1678,7 +1678,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                             role="option"
                             aria-selected={isSelected}
                             onClick={() => { setBpId(bp.id); setSubProcessId(''); setBpOpen(false); }}
-                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                               isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
                             }`}
                           >
@@ -1693,7 +1693,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               </div>
             </div>
             <div>
-              <label htmlFor="wf-sub-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+              <label htmlFor="wf-sub-trigger" className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
                 Sub-process <span className="text-brand-500" aria-hidden>*</span>
               </label>
               <div ref={subRef} className="relative">
@@ -1704,7 +1704,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                   onClick={() => { setSubOpen(o => !o); setBpOpen(false); }}
                   aria-haspopup="listbox"
                   aria-expanded={subOpen}
-                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[0.8125rem] text-left border rounded-lg bg-canvas-elevated transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                     !bpId
                       ? 'border-canvas-border text-ink-400 cursor-not-allowed bg-paper-50/40'
                       : subOpen
@@ -1744,7 +1744,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                             role="option"
                             aria-selected={isSelected}
                             onClick={() => { setSubProcessId(sp.id); setSubOpen(false); }}
-                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                               isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
                             }`}
                           >
@@ -1762,26 +1762,26 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
 
           {/* Description */}
           <div>
-            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">Description</label>
+            <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">Description</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={3}
-              className="no-focus-ring w-full px-3 py-2 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
+              className="no-focus-ring w-full px-3 py-2 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
               placeholder="One-line summary of what this workflow does."
             />
-            <p className="text-[11px] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
           </div>
 
           {/* Audit run frequency — mirrors Workflow Library > Configuration tab */}
           <div>
-            <label className="text-[12px] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
+            <label className="text-[0.75rem] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
               <Calendar size={12} className="text-brand-600" />
               Audit run frequency
             </label>
             <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-4 grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Frequency</label>
+                <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Frequency</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Hourly', 'Daily', 'Weekly', 'Monthly'] as const).map(f => (
                     <button key={f} type="button" onClick={() => setFrequency(f)} className={pillCls(frequency === f)}>{f}</button>
@@ -1789,19 +1789,19 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                 </div>
               </div>
               <div>
-                <label htmlFor="wf-run-time" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Run Time</label>
+                <label htmlFor="wf-run-time" className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Run Time</label>
                 <input
                   id="wf-run-time"
                   type="time"
                   value={runTime}
                   onChange={e => setRunTime(e.target.value)}
-                  className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
+                  className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                 />
               </div>
 
               {frequency === 'Weekly' && (
                 <div className="col-span-2">
-                  <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Day of the week</label>
+                  <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Day of the week</label>
                   <div className="flex flex-wrap gap-1.5">
                     {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(d => (
                       <button key={d} type="button" onClick={() => setDayOfWeek(d)} className={pillCls(dayOfWeek === d)}>{d}</button>
@@ -1812,19 +1812,19 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
 
               {frequency === 'Monthly' && (
                 <div>
-                  <label htmlFor="wf-monthly-date" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
+                  <label htmlFor="wf-monthly-date" className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
                   <input
                     id="wf-monthly-date"
                     type="date"
                     value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
-                    className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
+                    className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Trigger On</label>
+                <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Trigger On</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Schedule', 'Data Change', 'Manual'] as const).map(t => (
                     <button key={t} type="button" onClick={() => setTriggerOn(t)} className={pillCls(triggerOn === t)}>{t}</button>
@@ -1832,7 +1832,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
                 </div>
               </div>
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Retry on Failure</label>
+                <label className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Retry on Failure</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Off', '1x', '3x', '5x'] as const).map(r => (
                     <button key={r} type="button" onClick={() => setRetry(r)} className={pillCls(retry === r)}>{r}</button>
@@ -1847,7 +1847,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
         <div className="border-t border-canvas-border px-6 py-3.5 flex items-center justify-end gap-2 bg-canvas-elevated">
           <button
             onClick={onCancel}
-            className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Cancel
           </button>
@@ -1867,7 +1867,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               },
             })}
             disabled={!canConfirm}
-            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
           </button>
@@ -1940,11 +1940,11 @@ function InlineEditBubble({
           onKeyDown={onKey}
           rows={1}
           aria-label="Edit message"
-          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 py-2.5 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
+          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 py-2.5 text-[0.9375rem] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
         />
       </div>
       <div className="mt-2 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-1.5 text-[12px] text-ink-500 leading-snug min-w-0 pt-1.5">
+        <div className="flex items-start gap-1.5 text-[0.75rem] text-ink-500 leading-snug min-w-0 pt-1.5">
           <Info size={13} className="shrink-0 mt-0.5 text-ink-400" aria-hidden="true" />
           <span>Saving will start a new conversation from here. Use the arrows below the message to switch between versions.</span>
         </div>
@@ -1952,7 +1952,7 @@ function InlineEditBubble({
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex items-center h-8 px-3 rounded-md text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center h-8 px-3 rounded-md text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Cancel
           </button>
@@ -1960,7 +1960,7 @@ function InlineEditBubble({
             type="button"
             onClick={onSave}
             disabled={!canSave}
-            className="inline-flex items-center h-8 px-3.5 rounded-md text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center h-8 px-3.5 rounded-md text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Save
           </button>
@@ -2404,7 +2404,7 @@ ${transcriptHtml}
               type="button"
               role="menuitem"
               onClick={() => { setOpen(false); handlePdf(); }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
             >
               <FileText size={13} className="text-ink-400 shrink-0" />
               <span>PDF</span>
@@ -2413,12 +2413,12 @@ ${transcriptHtml}
               type="button"
               role="menuitem"
               onClick={() => { setOpen(false); handleExcel(); }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
             >
               <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
               <span>Excel</span>
             </button>
-            <div className="border-t border-canvas-border/70 mt-1 pt-1 px-2.5 pb-1 text-[10.5px] text-ink-400 whitespace-nowrap">
+            <div className="border-t border-canvas-border/70 mt-1 pt-1 px-2.5 pb-1 text-[0.75rem] text-ink-400 whitespace-nowrap">
               Full query result
             </div>
           </motion.div>
@@ -3979,7 +3979,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           <div style={{ width: CHAT_HISTORY_W }} className="h-full flex flex-col">
             {/* Header */}
             <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-canvas-border">
-              <h3 className="text-[13px] font-semibold text-ink-900 tracking-tight">Chat history</h3>
+              <h3 className="text-[0.8125rem] font-semibold text-ink-900 tracking-tight">Chat history</h3>
               <button
                 type="button"
                 onClick={toggleChatHistory}
@@ -3997,7 +3997,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 type="button"
                 onClick={handleNewChatFromSidebar}
                 title="New chat (⌘⇧O)"
-                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Plus size={14} strokeWidth={2.25} />
                 New chat
@@ -4029,13 +4029,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <MessageSquare size={12} strokeWidth={2.25} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className={`text-[13px] truncate tracking-tight ${
+                        <div className={`text-[0.8125rem] truncate tracking-tight ${
                           isActive ? 'font-semibold text-brand-800' : 'font-medium text-ink-900'
                         }`}>
                           {chat.title}
                         </div>
-                        <div className="text-[11.5px] text-ink-500 truncate mt-0.5">{chat.preview}</div>
-                        <div className="text-[11px] text-ink-400 mt-1 tabular-nums">{chat.timestamp}</div>
+                        <div className="text-[0.75rem] text-ink-500 truncate mt-0.5">{chat.preview}</div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-1 tabular-nums">{chat.timestamp}</div>
                       </div>
                     </div>
                   </motion.button>
@@ -4049,7 +4049,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => { toggleChatHistory(); setView('recents'); }}
-                  className="w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[0.75rem] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Browse all in Recents
                   <ArrowRight size={12} strokeWidth={2.25} />
@@ -4098,8 +4098,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <BarChart3 size={14} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-brand-900">Creating: {pendingDashboard.name}</p>
-                  <p className="text-[11px] text-brand-600">Run a query, then add results to your dashboard</p>
+                  <p className="text-[0.8125rem] font-semibold text-brand-900">Creating: {pendingDashboard.name}</p>
+                  <p className="text-[0.6875rem] text-brand-600">Run a query, then add results to your dashboard</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -4108,7 +4108,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
                     onAddToDashboard?.(mockFields);
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   <BarChart3 size={12} />
                   Add to Dashboard
@@ -4137,7 +4137,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 />
               </div>
 
-              <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
+              <h1 className="text-[2.125rem] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
                 Audit smarter.{' '}
                 <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
                   Not harder.
@@ -4147,7 +4147,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 2.5, duration: 0.6 }}
-                className="text-[15px] text-ink-500 mb-10"
+                className="text-[0.9375rem] text-ink-500 mb-10"
               >
                 Your AI copilot already knows what to look for. Just ask.
               </motion.p>
@@ -4156,7 +4156,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               {workflowEngagementContext && (
                 <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
                   <Workflow size={15} className="text-primary shrink-0" />
-                  <span className="text-[13px] text-text-secondary">
+                  <span className="text-[0.8125rem] text-text-secondary">
                     Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
                   </span>
                 </div>
@@ -4181,7 +4181,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
                       className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
                     >
-                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <div className="flex items-center gap-2 text-[0.8125rem] font-medium text-brand-700">
                         <Paperclip size={14} />
                         <span>Drop to attach</span>
                       </div>
@@ -4197,9 +4197,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`src-${i}`}
                           title={s.name}
-                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
-                          <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                          <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                           <span className="truncate max-w-[10rem]">{s.name}</span>
                           <button
                             type="button"
@@ -4214,7 +4214,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <div
                         key={`file-${i}`}
                         title={f.name}
-                        className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                        className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                       >
                         <FileText size={12} className="text-ink-500" />
                         <span className="truncate max-w-[6.25rem]">{f.name}</span>
@@ -4242,7 +4242,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   onPaste={handleComposerPaste}
                   placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Message Ira…'}
                   aria-label="Message IRA"
-                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
+                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[0.9375rem] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
                   rows={1}
                 />
 
@@ -4271,7 +4271,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       aria-label="Build a workflow"
                       title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
                       onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[0.8125rem] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         buildWorkflowMode
                           ? 'text-brand-700 hover:bg-brand-50'
                           : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
@@ -4297,7 +4297,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               </div>
 
               {/* Disclaimer — quiet trust line: 10px, very muted, mt-1, no own bottom margin. */}
-              <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
+              <p className="mt-2 text-center text-[0.75rem] leading-tight text-ink-300">
                 Irame.ai may display inaccurate info, including about people, so double-check its responses.
               </p>
             </motion.div>
@@ -4353,7 +4353,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   setEditingTitle(false);
                 }
               }}
-              className="max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
+              className="max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
             />
           ) : (
             <button
@@ -4362,7 +4362,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               title="Click for history · Double-click to rename"
               aria-label="Chat history"
               aria-expanded={showChatHistory}
-              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
+              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
             >
               <span className="truncate">{currentChatTitle || 'New chat'}</span>
               <motion.span
@@ -4423,8 +4423,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <BarChart3 size={14} className="text-brand-700" />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-ink-800 truncate">Creating: {pendingDashboard.name}</p>
-                <p className="text-[12px] text-ink-500">Run a query, then add results to your dashboard.</p>
+                <p className="text-[0.8125rem] font-semibold text-ink-800 truncate">Creating: {pendingDashboard.name}</p>
+                <p className="text-[0.75rem] text-ink-500">Run a query, then add results to your dashboard.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -4507,13 +4507,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     {msg.richType === 'clarification' ? (
                       <div className="max-w-[66ch]">
                         {(msg.richData as unknown as ClarificationData).status === 'submitted' ? (
-                          <div className="text-[13px] text-ink-700 leading-relaxed">
+                          <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
                             {(msg.richData as unknown as ClarificationData).purpose === 'save-workflow'
                               ? 'Got it. Saving as workflow with these settings.'
                               : 'Got it. Running with these inputs.'}
                           </div>
                         ) : (
-                          <div className="text-[15px] leading-[1.65] text-ink-800">
+                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800">
                             {(msg.richData as unknown as ClarificationData).intro}
                           </div>
                         )}
@@ -4523,20 +4523,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       // Revise drops the plan and returns control to the composer.
                       <div className="space-y-3 w-full">
                         {(msg.richData as { planText?: string })?.planText && (
-                          <div className="text-[14px] leading-[1.6] text-ink-700">
+                          <div className="text-[0.875rem] leading-[1.6] text-ink-700">
                             {(msg.richData as { planText?: string }).planText}
                           </div>
                         )}
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => handleApprovePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                           >
                             <CheckCircle size={13} /> Approve & run
                           </button>
                           <button
                             onClick={() => handleRevisePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[12px] font-semibold text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[0.75rem] font-semibold text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
                           >
                             <Pencil size={12} /> Revise
                           </button>
@@ -4561,7 +4561,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <div className="space-y-4 w-full">
                         {/* Body text */}
                         {msg.text && (
-                          <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
+                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
                         )}
 
                         {/* Affordance: link inline result to the auto-opened panel.
@@ -4747,7 +4747,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         };
                         return (
                           <div>
-                            <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                            <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
                               {data.intro.split('**').map((part, i) =>
                                 i % 2 === 1 ? <strong key={i} className="font-semibold text-text">{part}</strong> : part
                               )}
@@ -4781,9 +4781,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       }`}>
                                         {isSelected && <CheckCircle size={10} className="text-white" />}
                                       </div>
-                                      <span className="text-[12.5px] font-semibold">{opt.label}</span>
+                                      <span className="text-[0.75rem] font-semibold">{opt.label}</span>
                                     </div>
-                                    <p className={`text-[11.5px] mt-1 ml-6 ${isSelected ? 'text-primary/80' : 'text-text-muted'}`}>{opt.detail}</p>
+                                    <p className={`text-[0.75rem] mt-1 ml-6 ${isSelected ? 'text-primary/80' : 'text-text-muted'}`}>{opt.detail}</p>
                                   </button>
                                 );
                               })}
@@ -4792,19 +4792,19 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               <div className="mt-3 flex items-center gap-2">
                                 <button
                                   onClick={() => submitCheckpoint(msg.id)}
-                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                                 >
                                   <CheckCircle size={13} /> Confirm parameters
                                 </button>
                                 <button
                                   onClick={() => submitCheckpoint(msg.id)}
-                                  className="text-[12px] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                                  className="text-[0.75rem] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                                 >
                                   Skip: keep all fixed
                                 </button>
                               </div>
                             ) : (
-                              <div className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                              <div className="mt-3 inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted">
                                 <CheckCircle size={12} className="text-primary" /> Parameters confirmed
                               </div>
                             )}
@@ -4816,12 +4816,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div className="glass-card rounded-xl p-4 border border-primary/10 max-w-md">
                           <div className="flex items-center gap-2 mb-2">
                             <Save size={13} className="text-primary" />
-                            <span className="text-[12px] font-semibold text-text">Save Workflow</span>
+                            <span className="text-[0.75rem] font-semibold text-text">Save Workflow</span>
                           </div>
-                          <p className="text-[12px] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
+                          <p className="text-[0.75rem] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
                           <div className="flex gap-2">
                             <SaveWorkflowButton />
-                            <button className="px-3 py-2 text-[12px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
+                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
                               Continue editing
                             </button>
                           </div>
@@ -4841,8 +4841,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 <X size={14} className="text-risk" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-[13px] font-semibold text-ink-800">Couldn't finish that one</div>
-                                <p className="mt-1 text-[13px] text-ink-600 leading-relaxed">
+                                <div className="text-[0.8125rem] font-semibold text-ink-800">Couldn't finish that one</div>
+                                <p className="mt-1 text-[0.8125rem] text-ink-600 leading-relaxed">
                                   {data.message || "Something went wrong on our end."}
                                 </p>
                                 {data.retryQuery && (
@@ -4890,7 +4890,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           </AnimatePresence>
                         ) : (
                           <>
-                            <div className="px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[14px] leading-[1.6] whitespace-pre-wrap break-words">
+                            <div className="px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[0.875rem] leading-[1.6] whitespace-pre-wrap break-words">
                               {msg.text}
                             </div>
                             {/* Below the pill: branch arrows + edit pencil.
@@ -4915,7 +4915,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                     >
                                       <ChevronLeft size={13} />
                                     </button>
-                                    <span className="px-0.5 text-[11px] tabular-nums font-medium text-ink-500" aria-live="polite">
+                                    <span className="px-0.5 text-[0.6875rem] tabular-nums font-medium text-ink-500" aria-live="polite">
                                       {current + 1} / {total}
                                     </span>
                                     <button
@@ -4940,7 +4940,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   <Pencil size={13} />
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/edit:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/edit:opacity-100 transition-opacity z-10">
                                   Edit
                                 </span>
                               </span>
@@ -4960,7 +4960,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/bookmark:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/bookmark:opacity-100 transition-opacity z-10">
                                   {bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
                                 </span>
                               </span>
@@ -4974,7 +4974,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/usercopy:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/usercopy:opacity-100 transition-opacity z-10">
                                   {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
                                 </span>
                               </span>
@@ -4983,10 +4983,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   tooltip below (matches Claude's date-tooltip
                                   direction). */}
                               <span className="relative group/ts ml-1 inline-flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity">
-                                <span className="text-[11px] tabular-nums text-ink-400 cursor-default">
+                                <span className="text-[0.6875rem] tabular-nums text-ink-400 cursor-default">
                                   {formatChatTime(msg.timestamp)}
                                 </span>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
                                   {msg.timestamp.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                 </span>
                               </span>
@@ -5000,7 +5000,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         // reads as conversation, not document. Any ```fenced```
                         // code segments are extracted into a CodeBlock toolbar
                         // panel by renderAssistantText.
-                        <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                        <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
                           {renderAssistantText(msg.text)}
                         </div>
                       )
@@ -5013,7 +5013,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         Renders only on assistant messages whose generation
                         was halted by the user via Esc / Stop. */}
                     {msg.role === 'assistant' && msg.stopped && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                      <div className="mt-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
                         <Square size={9} className="text-ink-500" fill="currentColor" />
                         <span>Stopped</span>
                       </div>
@@ -5047,7 +5047,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
                             {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
                           </span>
                         </span>
@@ -5067,7 +5067,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <ThumbsUp size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
                             Give positive feedback
                           </span>
                         </span>
@@ -5087,7 +5087,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <ThumbsDown size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
                             Give negative feedback
                           </span>
                         </span>
@@ -5103,7 +5103,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <RotateCcw size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
                             Retry
                           </span>
                         </span>
@@ -5118,7 +5118,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
                     {/* "Thanks" confirmation after feedback submitted. */}
                     {msg.role === 'assistant' && feedbackSubmittedIds.has(msg.id) && (!feedbackPopover || feedbackPopover.msgId !== msg.id) && (
-                      <p className="mt-1.5 text-[11px] text-ink-400">Feedback sent. Thank you.</p>
+                      <p className="mt-1.5 text-[0.6875rem] text-ink-400">Feedback sent. Thank you.</p>
                     )}
                     </div>
 
@@ -5139,7 +5139,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                          className="mb-2 text-[12px] font-medium tracking-normal text-ink-900"
+                          className="mb-2 text-[0.75rem] font-medium tracking-normal text-ink-900"
                         >
                           What next?
                         </motion.h3>
@@ -5186,7 +5186,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 scale: 0.985,
                                 transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
                               }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.8125rem] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                                 isSelected
                                   ? 'bg-brand-50 text-brand-700 border border-brand-200'
                                   : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -5226,7 +5226,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div className="mb-2">
                           <div className="pl-3 border-l border-canvas-border space-y-1">
                             {thinkingSteps.map((step, i) => (
-                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[12px] text-ink-500 flex items-center gap-1.5">
+                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[0.75rem] text-ink-500 flex items-center gap-1.5">
                                 <div className={`w-1.5 h-1.5 rounded-full ${i === thinkingSteps.length - 1 ? 'bg-primary' : 'bg-brand-200'}`} />
                                 {step}
                               </motion.div>
@@ -5319,7 +5319,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               {workflowEngagementContext && (
                 <div className="mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary-xlight/50 border border-primary/15">
                   <Workflow size={14} className="text-primary shrink-0" />
-                  <span className="text-[12.5px] text-text-secondary">
+                  <span className="text-[0.75rem] text-text-secondary">
                     Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
                   </span>
                 </div>
@@ -5340,11 +5340,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     className="overflow-hidden"
                   >
                     <div className="mb-2 flex items-center gap-2.5 px-1">
-                      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 uppercase tracking-[0.08em] shrink-0">
+                      <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 uppercase tracking-[0.08em] shrink-0">
                         <Lock size={11} strokeWidth={2.5} />
                         Workflow mode
                       </span>
-                      <span className="text-[12.5px] text-ink-500 flex-1 truncate">
+                      <span className="text-[0.75rem] text-ink-500 flex-1 truncate">
                         Switched at save. Start a new chat for a query.
                       </span>
                     </div>
@@ -5373,7 +5373,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
                       className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
                     >
-                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <div className="flex items-center gap-2 text-[0.8125rem] font-medium text-brand-700">
                         <Paperclip size={14} />
                         <span>Drop to attach</span>
                       </div>
@@ -5392,11 +5392,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`src-${i}`}
                           title={s.kind === 'source' ? s.name : undefined}
-                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
                           {s.kind === 'source' && (
                             <>
-                              <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                              <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                               <span className="truncate max-w-[10rem]">{s.name}</span>
                             </>
                           )}
@@ -5412,7 +5412,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`file-${i}`}
                           title={f.name}
-                          className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[13px] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[0.8125rem] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
                           <span className="inline-flex items-center justify-center size-6 rounded bg-brand-50 text-brand-700 shrink-0">
                             <FileText size={13} />
@@ -5440,7 +5440,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onPaste={handleComposerPaste}
                     placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
                     aria-label="Message IRA"
-                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
+                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
                   />
 
@@ -5482,7 +5482,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 : 'Query mode — locked. Use Save as workflow to convert this chat.'
                             }
                             onClick={() => { /* locked; no-op */ }}
-                            className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium text-ink-400 cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[0.8125rem] font-medium text-ink-400 cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             <Lock size={11} strokeWidth={2.25} className="shrink-0" />
                             {buildWorkflowMode ? 'Workflow' : 'Query'}
@@ -5521,7 +5521,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               keyboard-hint trio centered (Claude pattern). Otherwise the
               standard "may display inaccurate info" disclaimer. */}
           {openClarification ? (
-            <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-ink-400">
+            <div className="mt-2 flex items-center justify-center gap-2 text-[0.75rem] text-ink-400">
               <span><span className="text-ink-500">↑↓</span> to navigate</span>
               <span aria-hidden="true" className="text-canvas-border">·</span>
               <span><span className="text-ink-500">Enter</span> to select</span>
@@ -5529,7 +5529,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               <span>or type below</span>
             </div>
           ) : (
-            <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
+            <p className="mt-2 text-center text-[0.75rem] leading-tight text-ink-300">
               Irame.ai may display inaccurate info, including about people, so double-check its responses.
             </p>
           )}
@@ -5591,10 +5591,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <h2 id="feedback-modal-title" className="text-[15px] font-semibold text-ink-800 mb-1">
+                  <h2 id="feedback-modal-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-1">
                     {feedbackPopover.kind === 'up' ? 'What did you like about this response?' : 'What was unsatisfying about this response?'}
                   </h2>
-                  <p className="text-[12px] text-ink-500">Your feedback helps Ira improve. Optional.</p>
+                  <p className="text-[0.75rem] text-ink-500">Your feedback helps Ira improve. Optional.</p>
                 </div>
                 <button
                   type="button"
@@ -5609,7 +5609,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <div className="mb-3">
                   <label
                     htmlFor="feedback-reason-trigger"
-                    className="block text-[11px] font-semibold text-ink-500 uppercase tracking-[0.08em] mb-1.5"
+                    className="block text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.08em] mb-1.5"
                   >
                     What type of issue do you wish to report?
                   </label>
@@ -5625,7 +5625,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       onClick={() => setFeedbackReasonOpen(o => !o)}
                       aria-haspopup="listbox"
                       aria-expanded={feedbackReasonOpen}
-                      className={`w-full flex items-center justify-between gap-2 bg-canvas-elevated border rounded-lg px-3 h-10 text-[13px] text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`w-full flex items-center justify-between gap-2 bg-canvas-elevated border rounded-lg px-3 h-10 text-[0.8125rem] text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         feedbackReasonOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
                       }`}
                     >
@@ -5668,7 +5668,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   setFeedbackReason(r);
                                   setFeedbackReasonOpen(false);
                                 }}
-                                className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                                className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                                   isSelected
                                     ? 'bg-brand-50 text-brand-800 font-medium'
                                     : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
@@ -5693,20 +5693,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 autoFocus
                 rows={4}
                 placeholder={feedbackPopover.kind === 'up' ? 'Was it accurate? Well-explained? Saved you time?' : 'Describe what was wrong (optional)'}
-                className="no-focus-ring w-full bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-lg px-3 py-2.5 text-[13px] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors resize-none"
+                className="no-focus-ring w-full bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-lg px-3 py-2.5 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors resize-none"
               />
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={cancelFeedback}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Send feedback
                 </button>
@@ -5756,10 +5756,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <AlertTriangle size={16} className="text-risk-700" />
                 </div>
                 <div>
-                  <h2 id="new-chat-confirm-title" className="text-[15px] font-semibold text-ink-900 mb-1">
+                  <h2 id="new-chat-confirm-title" className="text-[0.9375rem] font-semibold text-ink-900 mb-1">
                     Discard in-progress response?
                   </h2>
-                  <p id="new-chat-confirm-body" className="text-[12.5px] text-ink-500 leading-relaxed">
+                  <p id="new-chat-confirm-body" className="text-[0.75rem] text-ink-500 leading-relaxed">
                     Ira is still generating. Starting a new chat will stop this response and clear the thread.
                   </p>
                 </div>
@@ -5768,7 +5768,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => setNewChatConfirmAfter(null)}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Keep generating
                 </button>
@@ -5779,7 +5779,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     newChatConfirmAfter?.();
                     setNewChatConfirmAfter(null);
                   }}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
                 >
                   Discard & start new
                 </button>
@@ -5816,7 +5816,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 id="shortcuts-title" className="text-[15px] font-semibold text-ink-800">Keyboard shortcuts</h2>
+                <h2 id="shortcuts-title" className="text-[0.9375rem] font-semibold text-ink-800">Keyboard shortcuts</h2>
                 <button
                   type="button"
                   onClick={() => setShowShortcutsModal(false)}
@@ -5837,10 +5837,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   { label: 'Edit last message (when composer empty)', keys: ['↑'] },
                 ].map(({ label, keys }) => (
                   <li key={label} className="flex items-center justify-between gap-4">
-                    <span className="text-[13px] text-ink-700">{label}</span>
+                    <span className="text-[0.8125rem] text-ink-700">{label}</span>
                     <span className="inline-flex items-center gap-1">
                       {keys.map((k, i) => (
-                        <kbd key={i} className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-md bg-canvas border border-canvas-border text-[11px] font-medium font-mono text-ink-700 tabular-nums">
+                        <kbd key={i} className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-md bg-canvas border border-canvas-border text-[0.6875rem] font-medium font-mono text-ink-700 tabular-nums">
                           {k}
                         </kbd>
                       ))}
@@ -5848,7 +5848,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </li>
                 ))}
               </ul>
-              <p className="mt-4 text-[11px] text-ink-400">Cmd on Mac, Ctrl on Windows / Linux.</p>
+              <p className="mt-4 text-[0.6875rem] text-ink-400">Cmd on Mac, Ctrl on Windows / Linux.</p>
             </motion.div>
           </motion.div>
         )}

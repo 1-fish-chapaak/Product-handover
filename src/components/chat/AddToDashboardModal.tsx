@@ -285,19 +285,19 @@ export function AddToDashboardModal({
           {d.readOnly ? <ShieldOff size={14} /> : d.sharedBy ? <Users size={14} /> : <LayoutGrid size={14} />}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-ink-800 truncate">
+          <div className="text-[0.8125rem] font-medium text-ink-800 truncate">
             <Highlighted text={d.name} query={searchTrim} />
           </div>
-          <div className="text-[11px] text-ink-500 truncate">
+          <div className="text-[0.6875rem] text-ink-500 truncate">
             {d.sharedBy ? `Shared by ${d.sharedBy}` : d.description}
           </div>
         </div>
         {alreadyAdded ? (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 shrink-0">
+          <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 shrink-0">
             Already added
           </span>
         ) : d.readOnly ? (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-ink-100 text-ink-500 shrink-0">
+          <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-ink-100 text-ink-500 shrink-0">
             View only
           </span>
         ) : selectedId === d.id ? (
@@ -324,10 +324,10 @@ export function AddToDashboardModal({
             <BarChart3 size={15} className="text-brand-700" />
           </div>
           <div>
-            <h2 id={titleId} className="text-[15px] font-semibold text-ink-800">
+            <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink-800">
               {step === 'pick' ? 'Add to Dashboard' : 'Choose What to Add'}
             </h2>
-            <p id={descId} className="text-[11px] text-ink-500">
+            <p id={descId} className="text-[0.6875rem] text-ink-500">
               {step === 'pick' ? 'Choose a dashboard or create a new one'
                 : 'Select individual KPIs, charts, and columns'}
             </p>
@@ -357,7 +357,7 @@ export function AddToDashboardModal({
                 role="tab"
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
-                className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                   mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -368,7 +368,7 @@ export function AddToDashboardModal({
                 role="tab"
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
-                className={`flex-1 text-[12px] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                   mode === 'new' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -390,7 +390,7 @@ export function AddToDashboardModal({
                     aria-controls="dash-list"
                     aria-activedescendant={navigableIds[highlight] ? `dash-row-${navigableIds[highlight]}` : undefined}
                     disabled={loading || !!loadError || noDashboardsAtAll}
-                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
+                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
                   />
                 </div>
 
@@ -432,13 +432,13 @@ export function AddToDashboardModal({
                     <>
                       {myFiltered.length > 0 && (
                         <div role="group" aria-label="My dashboards" className="space-y-2">
-                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-1 pb-0.5">My Dashboards</p>
+                          <p className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider px-1 pt-1 pb-0.5">My Dashboards</p>
                           {myFiltered.map(renderDashboardRow)}
                         </div>
                       )}
                       {sharedFiltered.length > 0 && (
                         <div role="group" aria-label="Shared with me" className="space-y-2">
-                          <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 pt-3 pb-0.5">Shared with me</p>
+                          <p className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider px-1 pt-3 pb-0.5">Shared with me</p>
                           {sharedFiltered.map(renderDashboardRow)}
                         </div>
                       )}
@@ -449,7 +449,7 @@ export function AddToDashboardModal({
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label htmlFor="new-dash-name" className="text-[12px] font-medium text-ink-700 mb-1 block">Dashboard Name</label>
+                  <label htmlFor="new-dash-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Dashboard Name</label>
                   <input
                     id="new-dash-name"
                     ref={nameRef}
@@ -463,23 +463,23 @@ export function AddToDashboardModal({
                     aria-invalid={!!nameError}
                     aria-describedby={nameError ? 'new-dash-name-error' : 'new-dash-name-hint'}
                     maxLength={NAME_MAX}
-                    className={`w-full h-10 px-3 rounded-lg border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 transition-all ${
+                    className={`w-full h-10 px-3 rounded-lg border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 transition-all ${
                       nameError
                         ? 'border-risk/40 focus:ring-risk/20 focus:border-risk'
                         : 'border-canvas-border focus:ring-brand-200 focus:border-brand-300'
                     }`}
                   />
                   <div className="flex items-center justify-between mt-1 gap-2">
-                    <span id={nameError ? 'new-dash-name-error' : 'new-dash-name-hint'} className={`text-[11px] truncate ${
+                    <span id={nameError ? 'new-dash-name-error' : 'new-dash-name-hint'} className={`text-[0.6875rem] truncate ${
                       nameError ? 'text-risk-700' : nameNotice ? 'text-mitigated-700' : 'text-ink-400'
                     }`}>
                       {nameError ?? nameNotice ?? 'Visible to anyone with access.'}
                     </span>
-                    <span className="text-[11px] text-ink-400 tabular-nums shrink-0">{newName.length}/{NAME_MAX}</span>
+                    <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{newName.length}/{NAME_MAX}</span>
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="new-dash-desc" className="text-[12px] font-medium text-ink-700 mb-1 block">
+                  <label htmlFor="new-dash-desc" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">
                     Description <span className="text-ink-400 font-normal">(optional)</span>
                   </label>
                   <textarea
@@ -489,10 +489,10 @@ export function AddToDashboardModal({
                     placeholder="What this dashboard tracks..." rows={2}
                     maxLength={DESC_MAX}
                     aria-describedby="new-dash-desc-counter"
-                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all resize-none"
+                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all resize-none"
                   />
                   <div className="flex justify-end mt-1">
-                    <span id="new-dash-desc-counter" className={`text-[11px] tabular-nums ${
+                    <span id="new-dash-desc-counter" className={`text-[0.6875rem] tabular-nums ${
                       newDesc.length >= DESC_SOFT ? 'text-mitigated-700' : 'text-ink-400'
                     }`}>
                       {newDesc.length}/{DESC_MAX}
@@ -518,7 +518,7 @@ export function AddToDashboardModal({
               <>
                 {/* Step 2 header — global all/none + selection count */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-ink-500" aria-live="polite">
+                  <p className="text-[0.6875rem] text-ink-500" aria-live="polite">
                     {totalSelected === 0
                       ? 'Select at least one item to add.'
                       : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
@@ -531,7 +531,7 @@ export function AddToDashboardModal({
                         setAll(resultData.charts.map(c => c.id), true, setSelCharts);
                         setAll(resultData.table.columns, true, setSelCols);
                       }}
-                      className="text-[11px] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                      className="text-[0.6875rem] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       Select all
                     </button>
@@ -542,7 +542,7 @@ export function AddToDashboardModal({
                         setSelCharts(new Set());
                         setSelCols(new Set());
                       }}
-                      className="text-[11px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                      className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       Clear
                     </button>
@@ -637,7 +637,7 @@ export function AddToDashboardModal({
             type="button"
             onClick={() => { setSubmitError(null); setStep('pick'); }}
             disabled={submitting}
-            className="text-[12px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+            className="text-[0.75rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           >
             Back
           </button>
@@ -652,7 +652,7 @@ export function AddToDashboardModal({
             <button
               type="button"
               onClick={stop}
-              className="min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
             >
               Stop
             </button>
@@ -661,7 +661,7 @@ export function AddToDashboardModal({
               type="button"
               onClick={handleClose}
               disabled={submitting}
-              className="min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
             >
               Cancel
             </button>
@@ -671,7 +671,7 @@ export function AddToDashboardModal({
               type="button"
               disabled={!canProceed}
               onClick={() => setStep('widgets')}
-              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
             >
               Next <ChevronRight size={13} />
             </button>
@@ -680,7 +680,7 @@ export function AddToDashboardModal({
               type="button"
               disabled={totalSelected === 0 || submitting}
               onClick={handleConfirm}
-              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
             >
               {submitting ? <ButtonSpinner /> : <BarChart3 size={13} />}
               {submitError && !submitting ? 'Retry' : submitting ? 'Adding…' : 'Add to Dashboard'}

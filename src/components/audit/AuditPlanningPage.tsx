@@ -152,7 +152,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
           <div className="flex items-center gap-2 shrink-0">
             {onOpenEngagements && (
               <button onClick={onOpenEngagements}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Open the engagements list">
                 <ClipboardCheck size={13} />
                 Engagements
@@ -161,7 +161,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             )}
             {activeTab === 'timeline' && (
               <button onClick={() => setShowPlanDrawer(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                 <Plus size={14} />Plan Engagement
               </button>
             )}
@@ -174,7 +174,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             const Icon = tab.icon;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-5 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${
                   activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}>
                 <Icon size={14} />{tab.label}
@@ -190,11 +190,11 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             {/* Filters — simple pills */}
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-text-muted">Process:</span>
+                <span className="text-[0.6875rem] font-bold text-text-muted">Process:</span>
                 <div className="flex gap-1">
                   {['All', ...PROCESSES].map(p => (
                     <button key={p} onClick={() => setProcessFilter(p)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                         processFilter === p ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                       }`}>{p}</button>
                   ))}
@@ -202,11 +202,11 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
               </div>
               <div className="w-px h-5 bg-border-light" />
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-text-muted">Status:</span>
+                <span className="text-[0.6875rem] font-bold text-text-muted">Status:</span>
                 <div className="flex gap-1">
                   {['All', 'Active', 'In Progress', 'Planned', 'Review'].map(s => (
                     <button key={s} onClick={() => setStatusFilter(s)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                         statusFilter === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                       }`}>{s}</button>
                   ))}
@@ -218,17 +218,17 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             <div className="glass-card rounded-xl overflow-hidden relative">
               {/* Month header */}
               <div className="flex border-b border-border bg-surface-2/50 sticky top-0 z-10">
-                <div className="w-[200px] shrink-0 px-4 py-2.5 text-[10px] font-semibold text-text-muted uppercase">Process / Engagement</div>
+                <div className="w-[200px] shrink-0 px-4 py-2.5 text-[0.625rem] font-semibold text-text-muted uppercase">Process / Engagement</div>
                 <div className="flex-1 flex relative">
                   {MONTHS.map(m => (
-                    <div key={m} className="flex-1 text-center py-2.5 text-[10px] font-semibold text-text-muted border-l border-border/20">{m}</div>
+                    <div key={m} className="flex-1 text-center py-2.5 text-[0.625rem] font-semibold text-text-muted border-l border-border/20">{m}</div>
                   ))}
                 </div>
               </div>
 
               {/* Grouped rows */}
               {grouped.length === 0 ? (
-                <div className="px-4 py-10 text-center text-[12px] text-text-muted">No engagements match filters</div>
+                <div className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No engagements match filters</div>
               ) : (
                 grouped.map(([process, engs]) => {
                   const isCollapsed = collapsedGroups.has(process);
@@ -240,8 +240,8 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                         <div className="w-[200px] shrink-0 px-4 py-2 flex items-center gap-2">
                           <ChevronRight size={12} className={`text-ink-400 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                           <div className="w-3 h-3 rounded" style={{ background: PROCESS_COLORS[process] }} />
-                          <span className="text-[11px] font-bold text-text">{process}</span>
-                          <span className="text-[10px] text-text-muted">({engs.length})</span>
+                          <span className="text-[0.6875rem] font-bold text-text">{process}</span>
+                          <span className="text-[0.625rem] text-text-muted">({engs.length})</span>
                         </div>
                         <div className="flex-1 flex relative">
                           {MONTHS.map(m => <div key={m} className="flex-1 border-l border-border/10 h-6" />)}
@@ -260,8 +260,8 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                               <div className="w-[200px] shrink-0 px-4 py-2.5 pl-10 flex items-center gap-2 min-w-0">
                                 {eng.atRisk && <div className="w-2 h-2 rounded-full bg-risk shrink-0 animate-pulse" title="At Risk" />}
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[11px] font-medium text-text truncate">{eng.name}</div>
-                                  <div className="text-[9px] text-text-muted">{eng.owner}</div>
+                                  <div className="text-[0.6875rem] font-medium text-text truncate">{eng.name}</div>
+                                  <div className="text-[0.5625rem] text-text-muted">{eng.owner}</div>
                                 </div>
                               </div>
                               <div className="flex-1 flex items-center relative py-1.5"
@@ -289,8 +289,8 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                                   )}
                                   {/* Content */}
                                   <div className="relative flex items-center gap-1.5 px-2 h-full z-[1]">
-                                    <span className="text-[9px] font-bold text-white truncate">{eng.name.split('—')[0].trim()}</span>
-                                    {pct > 0 && <span className="text-[8px] font-bold text-white/70 tabular-nums shrink-0">{pct}%</span>}
+                                    <span className="text-[0.5625rem] font-bold text-white truncate">{eng.name.split('—')[0].trim()}</span>
+                                    {pct > 0 && <span className="text-[0.5rem] font-bold text-white/70 tabular-nums shrink-0">{pct}%</span>}
                                   </div>
                                 </div>
                               </div>
@@ -306,10 +306,10 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
               {/* Legend */}
               <div className="flex items-center gap-3 px-4 py-2 border-t border-border bg-surface-2/30">
                 {STATUSES.filter(s => engagements.some(e => e.status === s)).map(s => (
-                  <span key={s} className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${STATUS_CLS[s]}`}>{s}</span>
+                  <span key={s} className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${STATUS_CLS[s]}`}>{s}</span>
                 ))}
-                <span className="inline-flex items-center gap-1 ml-2"><div className="w-2 h-2 rounded-full bg-risk" /><span className="text-[9px] text-text-muted">At Risk</span></span>
-                <span className="ml-auto text-[10px] text-text-muted">FY: April 2025 — March 2026</span>
+                <span className="inline-flex items-center gap-1 ml-2"><div className="w-2 h-2 rounded-full bg-risk" /><span className="text-[0.5625rem] text-text-muted">At Risk</span></span>
+                <span className="ml-auto text-[0.625rem] text-text-muted">FY: April 2025 — March 2026</span>
               </div>
             </div>
 
@@ -325,7 +325,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                 <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.04 }}
                   className="glass-card rounded-xl p-3 text-center">
                   <div className={`text-lg font-bold tabular-nums ${kpi.color}`}>{kpi.value}</div>
-                  <div className="text-[10px] text-text-muted mt-0.5">{kpi.label}</div>
+                  <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
                 </motion.div>
               ))}
             </div>
@@ -336,20 +336,20 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                 <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }}
                   className="fixed z-50 pointer-events-none" style={{ left: hoverPos.x + 12, top: hoverPos.y - 90 }}>
                   <div className="bg-ink-900 text-white rounded-xl shadow-xl px-4 py-3 min-w-[220px]">
-                    <div className="text-[12px] font-semibold mb-1.5">{hoveredEng.name}</div>
-                    <div className="space-y-1 text-[10px]">
+                    <div className="text-[0.75rem] font-semibold mb-1.5">{hoveredEng.name}</div>
+                    <div className="space-y-1 text-[0.625rem]">
                       <div className="flex items-center justify-between"><span className="text-white/60">Process</span><span>{hoveredEng.process}</span></div>
                       <div className="flex items-center justify-between"><span className="text-white/60">Dates</span><span>{hoveredEng.startDate} — {hoveredEng.endDate}</span></div>
                       <div className="flex items-center justify-between"><span className="text-white/60">Owner</span><span>{hoveredEng.owner}</span></div>
                       <div className="flex items-center justify-between"><span className="text-white/60">Status</span>
                         <span className="flex items-center gap-1">
                           {hoveredEng.atRisk && <span className="w-2 h-2 rounded-full bg-risk" />}
-                          <span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${STATUS_CLS[hoveredEng.status]}`}>{hoveredEng.status}</span>
+                          <span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${STATUS_CLS[hoveredEng.status]}`}>{hoveredEng.status}</span>
                         </span>
                       </div>
                       {(hoveredEng.progress ?? 0) > 0 && <div className="flex items-center justify-between"><span className="text-white/60">Progress</span><span>{hoveredEng.progress}%</span></div>}
                     </div>
-                    <div className="text-[9px] text-white/40 mt-2">Click bar to preview</div>
+                    <div className="text-[0.5625rem] text-white/40 mt-2">Click bar to preview</div>
                   </div>
                 </motion.div>
               )}
@@ -386,9 +386,9 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-3 h-3 rounded" style={{ background: previewEng.color }} />
-                      <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_CLS[previewEng.status]}`}>{previewEng.status}</span>
+                      <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${STATUS_CLS[previewEng.status]}`}>{previewEng.status}</span>
                     </div>
-                    <h2 className="font-display text-[17px] font-semibold text-ink-900">{previewEng.name}</h2>
+                    <h2 className="font-display text-[1.0625rem] font-semibold text-ink-900">{previewEng.name}</h2>
                   </div>
                   <button onClick={() => setPreviewEng(null)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
@@ -408,17 +408,17 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                     { label: 'Duration', value: `${previewEng.duration} months` },
                   ].map(d => (
                     <div key={d.label}>
-                      <span className="text-[10px] text-ink-400 uppercase">{d.label}</span>
-                      <div className="text-[13px] font-medium text-text mt-0.5">{d.value}</div>
+                      <span className="text-[0.625rem] text-ink-400 uppercase">{d.label}</span>
+                      <div className="text-[0.8125rem] font-medium text-text mt-0.5">{d.value}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Timeline bar preview */}
                 <div>
-                  <span className="text-[10px] text-ink-400 uppercase block mb-2">Timeline Position</span>
+                  <span className="text-[0.625rem] text-ink-400 uppercase block mb-2">Timeline Position</span>
                   <div className="rounded-lg bg-surface-2 p-3">
-                    <div className="flex text-[9px] text-ink-400 mb-1">
+                    <div className="flex text-[0.5625rem] text-ink-400 mb-1">
                       {MONTHS.map(m => <div key={m} className="flex-1 text-center">{m}</div>)}
                     </div>
                     <div className="relative h-6 bg-white rounded-full overflow-hidden">
@@ -436,14 +436,14 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                 <div className="space-y-2">
                   <button onClick={() => { setPreviewEng(null); if (onNavigateToExecution) onNavigateToExecution(previewEng.id); }}
                     className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
-                    <div className="flex items-center gap-2"><Shield size={14} className="text-primary" /><span className="text-[12px] font-medium text-text">Open Execution Workspace</span></div>
+                    <div className="flex items-center gap-2"><Shield size={14} className="text-primary" /><span className="text-[0.75rem] font-medium text-text">Open Execution Workspace</span></div>
                     <ChevronRight size={14} className="text-ink-300" />
                   </button>
                 </div>
               </div>
 
               <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas">
-                <button onClick={() => setPreviewEng(null)} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+                <button onClick={() => setPreviewEng(null)} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
               </footer>
             </motion.aside>
           </>
@@ -468,9 +468,9 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
 // Plan Engagement Drawer (4-step wizard)
 // ═════════════════════════════════════════════════════════════════════════════
 
-const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 const STEP_LABELS = ['Basic Info', 'Planning', 'Scope', 'Confirm'];
 
 function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
@@ -531,8 +531,8 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2"><Calendar size={18} className="text-brand-600" /><h2 className="font-display text-[18px] font-semibold text-ink-900">Plan Engagement</h2></div>
-              <p className="text-[12px] text-ink-500 mt-0.5">Create a new audit engagement. All controls will start fresh after activation.</p>
+              <div className="flex items-center gap-2"><Calendar size={18} className="text-brand-600" /><h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Plan Engagement</h2></div>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Create a new audit engagement. All controls will start fresh after activation.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
@@ -546,35 +546,35 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
           <div className="mb-3">
             <label className={labelCls}>Audit Type *</label>
             <select value={auditType} onChange={e => setAuditType(e.target.value)} className={selectCls}>{AUDIT_TYPES_LIST.map(t => <option key={t} value={t}>{t}</option>)}</select>
-            <p className="text-[10px] text-text-muted mt-0.5 px-1">Audit type defines the nature of the audit.</p>
+            <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Audit type defines the nature of the audit.</p>
           </div>
 
           {/* Framework */}
           <div className="mb-3">
             <label className={labelCls}>Framework / Compliance Scope *</label>
             <select value={framework} onChange={e => setFramework(e.target.value)} className={selectCls}>{FRAMEWORK_LIST.map(f => <option key={f} value={f}>{f}</option>)}</select>
-            <p className="text-[10px] text-text-muted mt-0.5 px-1">Framework defines the compliance or assurance standard.</p>
+            <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Framework defines the compliance or assurance standard.</p>
           </div>
 
           {/* SOX Enforcement */}
           <div className={`mb-3 rounded-xl border px-4 py-3 ${isSox ? 'border-brand-200 bg-brand-50/40' : 'border-border bg-surface-2/50'}`}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-text-muted uppercase">SOX Enforcement</span>
+              <span className="text-[0.6875rem] font-bold text-text-muted uppercase">SOX Enforcement</span>
               {isSox
-                ? <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-bold bg-brand-100 text-brand-700">Enabled</span>
-                : <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">Disabled</span>}
+                ? <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-bold bg-brand-100 text-brand-700">Enabled</span>
+                : <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-gray-100 text-gray-500">Disabled</span>}
             </div>
             {isSox
-              ? <p className="text-[10px] text-brand-700 leading-relaxed">Reviewer approval, evidence requirements, key-control validation, and period locking will be enforced.</p>
-              : <p className="text-[10px] text-text-muted leading-relaxed">Standard engagement rules will apply.</p>}
-            <p className="text-[9px] text-text-muted mt-1 italic">SOX enforcement is driven by framework, not audit type.</p>
+              ? <p className="text-[0.625rem] text-brand-700 leading-relaxed">Reviewer approval, evidence requirements, key-control validation, and period locking will be enforced.</p>
+              : <p className="text-[0.625rem] text-text-muted leading-relaxed">Standard engagement rules will apply.</p>}
+            <p className="text-[0.5625rem] text-text-muted mt-1 italic">SOX enforcement is driven by framework, not audit type.</p>
           </div>
 
           {/* Business Process */}
           <div className="mb-3">
             <label className={labelCls}>Primary Business Process / Domain *</label>
             <select value={process} onChange={e => setProcess(e.target.value)} className={selectCls}>{PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}</select>
-            <p className="text-[10px] text-text-muted mt-0.5 px-1">Used for planning and filtering. Execution scope comes from linked RACM.</p>
+            <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Used for planning and filtering. Execution scope comes from linked RACM.</p>
           </div>
 
           {/* Audit Period */}
@@ -603,9 +603,9 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <button onClick={handleCreate} disabled={!isValid}
-            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Create Engagement
           </button>
         </footer>
@@ -692,19 +692,19 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagements..."
-              className="pl-8 pr-3 py-2 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 transition-colors w-52" />
+              className="pl-8 pr-3 py-2 text-[0.75rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 transition-colors w-52" />
           </div>
           <div className="flex gap-1">
             {(['All', 'Draft', 'Planned', 'Approved', 'Active', 'Closed'] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                   statusFilter === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                 }`}>{s}</button>
             ))}
           </div>
         </div>
         <button onClick={() => onPlanNew?.()}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
           <Plus size={14} />Plan Engagement
         </button>
       </div>
@@ -712,17 +712,17 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
       {/* Table */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
                 {['Engagement Name', 'Process', 'Audit Type', 'Framework', 'Planned Start', 'Planned End', 'Owner', 'Status', 'Linked RACM', 'Action'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-[12px] text-text-muted">No engagements match your filters.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No engagements match your filters.</td></tr>
               ) : filtered.map((row, i) => {
                 const action = getAction(row);
                 const ActionIcon = action.icon;
@@ -734,22 +734,22 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ background: row.color }} />
-                        <span className="text-[12px] font-medium text-text">{row.name}</span>
+                        <span className="text-[0.75rem] font-medium text-text">{row.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="px-2 h-5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1"
+                      <span className="px-2 h-5 rounded-full text-[0.625rem] font-bold border inline-flex items-center gap-1"
                         style={{ background: `${processColor}10`, color: processColor, borderColor: `${processColor}30` }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: processColor }} />{row.process}
                       </span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-text-secondary">{row.auditType}</span></td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-text-secondary">{row.framework}</span></td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-text-secondary tabular-nums">{row.startDate}</span></td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-text-secondary tabular-nums">{row.endDate}</span></td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-text-secondary">{row.owner.split(' ')[0]}</span></td>
-                    <td className="px-3 py-3"><span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${PLAN_STATUS_CLS[row.status]}`}>{row.status}</span></td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-brand-600 font-medium">{row.racm}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary">{row.auditType}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary">{row.framework}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary tabular-nums">{row.startDate}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary tabular-nums">{row.endDate}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary">{row.owner.split(' ')[0]}</span></td>
+                    <td className="px-3 py-3"><span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${PLAN_STATUS_CLS[row.status]}`}>{row.status}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-brand-600 font-medium">{row.racm}</span></td>
                     <td className="px-3 py-3">
                       <span onClick={e => {
                           e.stopPropagation();
@@ -757,7 +757,7 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                           else if ((row.status === 'Planned' || row.status === 'Approved') && onActivate) onActivate(row.id);
                           else setDetailRow(row);
                         }}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
+                        className={`px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
                         <ActionIcon size={10} />{action.label} <ChevronRight size={8} />
                       </span>
                     </td>
@@ -768,14 +768,14 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
           </table>
         </div>
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-          <span className="text-[11px] text-text-muted">{filtered.length} of {rows.length} engagements</span>
+          <span className="text-[0.6875rem] text-text-muted">{filtered.length} of {rows.length} engagements</span>
         </div>
       </div>
 
       {/* Helper */}
       <div className="mt-4 rounded-lg border border-canvas-border bg-canvas px-4 py-3 flex items-start gap-2.5">
         <Info size={13} className="text-ink-400 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-ink-400 leading-relaxed">Planned engagements become active and move to execution when activated. Activation creates a RACM snapshot and initializes test instances. Execution metrics are visible in the Execution workspace.</p>
+        <p className="text-[0.6875rem] text-ink-400 leading-relaxed">Planned engagements become active and move to execution when activated. Activation creates a RACM snapshot and initializes test instances. Execution metrics are visible in the Execution workspace.</p>
       </div>
 
       {/* ── Planning Detail Drawer ── */}
@@ -793,9 +793,9 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-3 h-3 rounded" style={{ background: detailRow.color }} />
-                      <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${PLAN_STATUS_CLS[detailRow.status]}`}>{detailRow.status}</span>
+                      <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${PLAN_STATUS_CLS[detailRow.status]}`}>{detailRow.status}</span>
                     </div>
-                    <h2 className="font-display text-[17px] font-semibold text-ink-900">{detailRow.name}</h2>
+                    <h2 className="font-display text-[1.0625rem] font-semibold text-ink-900">{detailRow.name}</h2>
                   </div>
                   <button onClick={() => setDetailRow(null)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
@@ -814,15 +814,15 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                     { label: 'Linked RACM', value: detailRow.racm },
                   ].map(d => (
                     <div key={d.label}>
-                      <span className="text-[10px] text-ink-400 uppercase">{d.label}</span>
-                      <div className="text-[13px] font-medium text-text mt-0.5">{d.value}</div>
+                      <span className="text-[0.625rem] text-ink-400 uppercase">{d.label}</span>
+                      <div className="text-[0.8125rem] font-medium text-text mt-0.5">{d.value}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Planning checklist */}
                 <div>
-                  <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-2">Planning Checklist</h3>
+                  <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Planning Checklist</h3>
                   <div className="space-y-1.5">
                     {[
                       { label: 'RACM linked', done: true },
@@ -833,7 +833,7 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                     ].map((c, i) => (
                       <div key={i} className="flex items-center gap-2 py-0.5">
                         {c.done ? <Shield size={12} className="text-compliant-700 shrink-0" /> : <Clock size={12} className="text-ink-300 shrink-0" />}
-                        <span className={`text-[12px] ${c.done ? 'text-text-secondary' : 'text-text-muted'}`}>{c.label}</span>
+                        <span className={`text-[0.75rem] ${c.done ? 'text-text-secondary' : 'text-text-muted'}`}>{c.label}</span>
                       </div>
                     ))}
                   </div>
@@ -844,21 +844,21 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                   {detailRow.status === 'Active' && onNavigateToExecution && (
                     <button onClick={() => { setDetailRow(null); onNavigateToExecution(detailRow.id); }}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
-                      <div className="flex items-center gap-2"><Shield size={14} className="text-primary" /><span className="text-[12px] font-medium text-text">Open Execution Workspace</span></div>
+                      <div className="flex items-center gap-2"><Shield size={14} className="text-primary" /><span className="text-[0.75rem] font-medium text-text">Open Execution Workspace</span></div>
                       <ChevronRight size={14} className="text-ink-300" />
                     </button>
                   )}
                   {(detailRow.status === 'Planned' || detailRow.status === 'Approved') && (
                     <button onClick={() => { if (onActivate) onActivate(detailRow.id); setDetailRow(null); }}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-compliant/20 bg-compliant-50/20 hover:bg-compliant-50/40 transition-all cursor-pointer">
-                      <div className="flex items-center gap-2"><Play size={14} className="text-compliant-700" /><span className="text-[12px] font-medium text-compliant-700">Activate Engagement</span></div>
+                      <div className="flex items-center gap-2"><Play size={14} className="text-compliant-700" /><span className="text-[0.75rem] font-medium text-compliant-700">Activate Engagement</span></div>
                       <ChevronRight size={14} className="text-compliant-700/50" />
                     </button>
                   )}
                   {detailRow.status === 'Draft' && (
                     <button onClick={() => { addToast({ message: `Editing "${detailRow.name}"`, type: 'info' }); }}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
-                      <div className="flex items-center gap-2"><Pencil size={14} className="text-text-muted" /><span className="text-[12px] font-medium text-text">Edit Planning Details</span></div>
+                      <div className="flex items-center gap-2"><Pencil size={14} className="text-text-muted" /><span className="text-[0.75rem] font-medium text-text">Edit Planning Details</span></div>
                       <ChevronRight size={14} className="text-ink-300" />
                     </button>
                   )}
@@ -866,7 +866,7 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
               </div>
 
               <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas">
-                <button onClick={() => setDetailRow(null)} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+                <button onClick={() => setDetailRow(null)} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
               </footer>
             </motion.aside>
           </>

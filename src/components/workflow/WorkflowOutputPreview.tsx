@@ -34,7 +34,7 @@ function DetectionOutput() {
       <div className="grid grid-cols-[4px_70px_1fr_100px_60px_70px_160px] gap-3 px-4 py-2.5 bg-surface-2 border-b border-border-light">
         <span />
         {['Flag', 'Description', 'Amount', 'Score', 'Date', 'Actions'].map(h => (
-          <span key={h} className="text-[12px] font-bold text-text-muted">{h}</span>
+          <span key={h} className="text-[0.75rem] font-bold text-text-muted">{h}</span>
         ))}
       </div>
       {rows.map((r, i) => (
@@ -46,9 +46,9 @@ function DetectionOutput() {
           className={`grid grid-cols-[4px_70px_1fr_100px_60px_70px_160px] gap-3 px-4 py-3 border-b border-border-light last:border-0 items-center ${r.severity === 'critical' ? 'bg-risk-50/30' : 'hover:bg-surface-2/30'} transition-colors`}
         >
           <div className="w-1 h-8 rounded-full" style={{ background: sevColor[r.severity] }} />
-          <span className="text-[12px] font-mono text-primary font-medium">{r.id}</span>
-          <span className="text-[12px] text-text truncate">{r.desc}</span>
-          <span className="text-[12px] font-mono font-medium text-text">{r.amount}</span>
+          <span className="text-[0.75rem] font-mono text-primary font-medium">{r.id}</span>
+          <span className="text-[0.75rem] text-text truncate">{r.desc}</span>
+          <span className="text-[0.75rem] font-mono font-medium text-text">{r.amount}</span>
           <div className="relative w-8 h-8">
             <svg width="32" height="32" viewBox="0 0 32 32">
               <circle cx="16" cy="16" r="13" fill="none" stroke="#e5e7eb" strokeWidth="2.5" />
@@ -56,13 +56,13 @@ function DetectionOutput() {
                 strokeDasharray={`${(r.score / 100) * 81.68} 81.68`} strokeLinecap="round"
                 transform="rotate(-90 16 16)" />
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold" style={{ color: sevColor[r.severity] }}>{r.score}</span>
+            <span className="absolute inset-0 flex items-center justify-center text-[0.75rem] font-bold" style={{ color: sevColor[r.severity] }}>{r.score}</span>
           </div>
-          <span className="text-[12px] text-text-muted">{r.date}</span>
+          <span className="text-[0.75rem] text-text-muted">{r.date}</span>
           <div className="flex gap-1">
-            <button className="px-2 py-1 rounded-md text-[12px] font-semibold bg-compliant-50 text-compliant-700 hover:bg-compliant-50/80 transition-colors cursor-pointer">Approve</button>
-            <button className="px-2 py-1 rounded-md text-[12px] font-semibold bg-risk-50 text-risk-700 hover:bg-risk-50/80 transition-colors cursor-pointer">Block</button>
-            <button className="px-2 py-1 rounded-md text-[12px] font-semibold bg-mitigated-50 text-mitigated-700 hover:bg-mitigated-50/80 transition-colors cursor-pointer">Escalate</button>
+            <button className="px-2 py-1 rounded-md text-[0.75rem] font-semibold bg-compliant-50 text-compliant-700 hover:bg-compliant-50/80 transition-colors cursor-pointer">Approve</button>
+            <button className="px-2 py-1 rounded-md text-[0.75rem] font-semibold bg-risk-50 text-risk-700 hover:bg-risk-50/80 transition-colors cursor-pointer">Block</button>
+            <button className="px-2 py-1 rounded-md text-[0.75rem] font-semibold bg-mitigated-50 text-mitigated-700 hover:bg-mitigated-50/80 transition-colors cursor-pointer">Escalate</button>
           </div>
         </motion.div>
       ))}
@@ -105,13 +105,13 @@ function MonitoringOutput() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[12px] font-semibold text-text">{e.title}</span>
-                <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${sc.bg} ${e.status === 'red' ? 'text-risk-700' : e.status === 'amber' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{sc.label}</span>
+                <span className="text-[0.75rem] font-semibold text-text">{e.title}</span>
+                <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${sc.bg} ${e.status === 'red' ? 'text-risk-700' : e.status === 'amber' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{sc.label}</span>
               </div>
-              <p className="text-[12px] text-text-muted leading-relaxed mb-1.5">{e.detail}</p>
+              <p className="text-[0.75rem] text-text-muted leading-relaxed mb-1.5">{e.detail}</p>
               <div className="flex items-center gap-3">
-                <span className="text-[12px] font-mono text-text-muted">{e.time} · {e.date}</span>
-                <button className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${e.ack ? 'bg-compliant-50 text-compliant-700' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
+                <span className="text-[0.75rem] font-mono text-text-muted">{e.time} · {e.date}</span>
+                <button className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${e.ack ? 'bg-compliant-50 text-compliant-700' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
                   {e.ack ? <><CheckCircle2 size={9} /> Acknowledged</> : <><Eye size={9} /> Acknowledge</>}
                 </button>
               </div>
@@ -153,22 +153,22 @@ function ComplianceOutput() {
               transform="rotate(-90 50 50)" />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[20px] font-bold font-mono text-text">{pct}%</span>
-            <span className="text-[12px] text-text-muted">Compliant</span>
+            <span className="text-[1.25rem] font-bold font-mono text-text">{pct}%</span>
+            <span className="text-[0.75rem] text-text-muted">Compliant</span>
           </div>
         </div>
         <div className="flex-1 grid grid-cols-3 gap-4">
           <div>
-            <div className="text-[12px] text-text-muted mb-0.5">Passed</div>
-            <div className="text-[20px] font-bold font-mono text-compliant-700">{passCount}</div>
+            <div className="text-[0.75rem] text-text-muted mb-0.5">Passed</div>
+            <div className="text-[1.25rem] font-bold font-mono text-compliant-700">{passCount}</div>
           </div>
           <div>
-            <div className="text-[12px] text-text-muted mb-0.5">Failed</div>
-            <div className="text-[20px] font-bold font-mono text-risk-700">{total - passCount}</div>
+            <div className="text-[0.75rem] text-text-muted mb-0.5">Failed</div>
+            <div className="text-[1.25rem] font-bold font-mono text-risk-700">{total - passCount}</div>
           </div>
           <div>
-            <div className="text-[12px] text-text-muted mb-0.5">Total Checks</div>
-            <div className="text-[20px] font-bold font-mono text-text">{total}</div>
+            <div className="text-[0.75rem] text-text-muted mb-0.5">Total Checks</div>
+            <div className="text-[1.25rem] font-bold font-mono text-text">{total}</div>
           </div>
         </div>
       </div>
@@ -188,10 +188,10 @@ function ComplianceOutput() {
               : <XCircle size={15} className="text-risk-700 shrink-0" />
             }
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-medium text-text">{c.rule}</div>
+              <div className="text-[0.75rem] font-medium text-text">{c.rule}</div>
             </div>
-            <span className="text-[12px] font-mono font-semibold text-text-muted bg-surface-2 px-2 py-0.5 rounded-full shrink-0">{c.ref}</span>
-            <span className={`text-[12px] font-bold font-mono w-10 text-right ${c.status === 'pass' ? 'text-compliant-700' : 'text-risk-700'}`}>{c.score}%</span>
+            <span className="text-[0.75rem] font-mono font-semibold text-text-muted bg-surface-2 px-2 py-0.5 rounded-full shrink-0">{c.ref}</span>
+            <span className={`text-[0.75rem] font-bold font-mono w-10 text-right ${c.status === 'pass' ? 'text-compliant-700' : 'text-risk-700'}`}>{c.score}%</span>
           </motion.div>
         ))}
       </div>
@@ -229,30 +229,30 @@ function ReconciliationOutput() {
           >
             {/* PO Side */}
             <div className="p-4 bg-white">
-              <div className="text-[12px] font-bold text-text-muted mb-1">Purchase Order</div>
-              <div className="text-[13px] font-mono font-semibold text-primary">{m.po}</div>
-              <div className="text-[12px] font-mono text-text mt-0.5">{m.poAmt}</div>
+              <div className="text-[0.75rem] font-bold text-text-muted mb-1">Purchase Order</div>
+              <div className="text-[0.8125rem] font-mono font-semibold text-primary">{m.po}</div>
+              <div className="text-[0.75rem] font-mono text-text mt-0.5">{m.poAmt}</div>
             </div>
 
             {/* Center match indicator */}
             <div className={`w-20 flex flex-col items-center justify-center gap-1 ${ss.bg}`}>
               <ArrowRightLeft size={14} className={ss.text} />
-              <span className={`text-[12px] font-bold ${ss.text} uppercase`}>{ss.label}</span>
+              <span className={`text-[0.75rem] font-bold ${ss.text} uppercase`}>{ss.label}</span>
               {m.variance !== '₹0' && m.variance !== 'Missing' && (
-                <span className="text-[12px] font-mono font-semibold text-mitigated-700">{m.variance}</span>
+                <span className="text-[0.75rem] font-mono font-semibold text-mitigated-700">{m.variance}</span>
               )}
               {m.variance === 'Missing' && (
-                <span className="text-[12px] font-mono font-semibold text-risk-700">No Invoice</span>
+                <span className="text-[0.75rem] font-mono font-semibold text-risk-700">No Invoice</span>
               )}
             </div>
 
             {/* Invoice Side */}
             <div className="p-4 bg-white">
-              <div className="text-[12px] font-bold text-text-muted mb-1">Invoice</div>
-              <div className={`text-[13px] font-mono font-semibold ${m.inv === '—' ? 'text-risk-700' : 'text-primary'}`}>{m.inv}</div>
-              <div className={`text-[12px] font-mono mt-0.5 ${m.inv === '—' ? 'text-text-muted' : 'text-text'}`}>{m.invAmt}</div>
+              <div className="text-[0.75rem] font-bold text-text-muted mb-1">Invoice</div>
+              <div className={`text-[0.8125rem] font-mono font-semibold ${m.inv === '—' ? 'text-risk-700' : 'text-primary'}`}>{m.inv}</div>
+              <div className={`text-[0.75rem] font-mono mt-0.5 ${m.inv === '—' ? 'text-text-muted' : 'text-text'}`}>{m.invAmt}</div>
               {m.grn !== '—' && (
-                <div className="text-[12px] text-text-muted mt-0.5">GRN: {m.grn} · {m.grnAmt}</div>
+                <div className="text-[0.75rem] text-text-muted mt-0.5">GRN: {m.grn} · {m.grnAmt}</div>
               )}
             </div>
           </motion.div>
@@ -279,13 +279,13 @@ export default function WorkflowOutputPreview({ workflowId: _workflowId, workflo
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h3 className="text-[13px] font-semibold text-text">Output Preview — <span className="text-primary">{layoutLabel}</span></h3>
-          <span className="text-[12px] font-bold text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">{workflowName}</span>
+          <h3 className="text-[0.8125rem] font-semibold text-text">Output Preview — <span className="text-primary">{layoutLabel}</span></h3>
+          <span className="text-[0.75rem] font-bold text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">{workflowName}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => addToast({ message: 'Layout customization panel coming soon', type: 'info' })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light text-[12px] font-medium text-text-muted hover:border-primary/30 hover:text-primary transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light text-[0.75rem] font-medium text-text-muted hover:border-primary/30 hover:text-primary transition-colors cursor-pointer"
           >
             <Settings2 size={11} /> Customize Layout
           </button>
@@ -298,7 +298,7 @@ export default function WorkflowOutputPreview({ workflowId: _workflowId, workflo
               <button
                 key={exp.label}
                 onClick={() => addToast({ message: `Exporting as ${exp.label}...`, type: 'success' })}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-text-muted hover:bg-white hover:text-primary hover:shadow-sm transition-all cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[0.75rem] font-medium text-text-muted hover:bg-white hover:text-primary hover:shadow-sm transition-all cursor-pointer"
               >
                 <exp.icon size={10} />
                 {exp.label}
@@ -307,7 +307,7 @@ export default function WorkflowOutputPreview({ workflowId: _workflowId, workflo
           </div>
           <button
             onClick={() => addToast({ message: 'Downloading full output...', type: 'success' })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             <Download size={11} /> Export
           </button>
@@ -323,12 +323,12 @@ export default function WorkflowOutputPreview({ workflowId: _workflowId, workflo
       {/* Footer summary */}
       <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-surface-2/50 border border-border-light/50">
         <div className="flex items-center gap-4">
-          <span className="text-[12px] text-text-muted">Last generated: <span className="font-semibold text-text">Mar 20, 2026 · 2:45 PM</span></span>
-          <span className="text-[12px] text-text-muted">Processing time: <span className="font-semibold text-text">1.8s</span></span>
+          <span className="text-[0.75rem] text-text-muted">Last generated: <span className="font-semibold text-text">Mar 20, 2026 · 2:45 PM</span></span>
+          <span className="text-[0.75rem] text-text-muted">Processing time: <span className="font-semibold text-text">1.8s</span></span>
         </div>
         <div className="flex items-center gap-1.5">
           <Shield size={10} className="text-compliant-700" />
-          <span className="text-[12px] font-medium text-compliant-700">Audit trail recorded</span>
+          <span className="text-[0.75rem] font-medium text-compliant-700">Audit trail recorded</span>
         </div>
       </div>
     </div>

@@ -63,8 +63,8 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
-            <h2 className="text-[16px] font-bold text-text">Link Workflows</h2>
-            <p className="text-[12.5px] text-text-secondary mt-0.5">
+            <h2 className="text-[1rem] font-bold text-text">Link Workflows</h2>
+            <p className="text-[0.75rem] text-text-secondary mt-0.5">
               Attach existing workflows to <span className="font-semibold text-text">{engagementName}</span>, or build a new one.
             </p>
           </div>
@@ -83,15 +83,15 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
               <Sparkles size={16} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold text-text">Create a new workflow</div>
-              <div className="text-[11.5px] text-text-secondary mt-0.5">Build one from scratch with Ask IRA — opens the workflow builder chat.</div>
+              <div className="text-[0.75rem] font-semibold text-text">Create a new workflow</div>
+              <div className="text-[0.75rem] text-text-secondary mt-0.5">Build one from scratch with Ask IRA — opens the workflow builder chat.</div>
             </div>
             <Plus size={16} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
           </button>
 
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-border-light" />
-            <span className="text-[10.5px] uppercase tracking-wider font-semibold text-text-muted">or link from catalog</span>
+            <span className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted">or link from catalog</span>
             <div className="flex-1 h-px bg-border-light" />
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search workflows by name, process, or control…"
-              className="w-full pl-9 pr-3 py-2.5 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-full pl-9 pr-3 py-2.5 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
         {/* Catalog list */}
         <div className="flex-1 overflow-y-auto px-6 py-3 min-h-[160px]">
           {results.length === 0 ? (
-            <div className="py-10 text-center text-[12.5px] text-text-muted">
+            <div className="py-10 text-center text-[0.75rem] text-text-muted">
               {search.trim() ? `No workflows match “${search}”.` : 'All catalog workflows are already linked.'}
             </div>
           ) : (
@@ -135,8 +135,8 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
                     </span>
                     <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><WorkflowIcon size={13} className="text-brand-600" /></div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-text truncate">{w.name}</div>
-                      <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
+                      <div className="text-[0.8125rem] font-medium text-text truncate">{w.name}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5 flex items-center gap-1.5">
                         <span className="font-mono">{w.controlId}</span>
                         <span className="text-border">·</span>
                         <span>{w.businessProcess}</span>
@@ -159,20 +159,20 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border-light bg-surface-1/40">
-          <span className="text-[12px] text-text-secondary">
+          <span className="text-[0.75rem] text-text-secondary">
             <span className="font-semibold text-text">{selected.size}</span> selected
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[13px] font-semibold text-text-secondary transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={handleLink}
               disabled={selected.size === 0}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />
               Link {selected.size > 0 ? `${selected.size} ` : ''}Workflow{selected.size === 1 ? '' : 's'}

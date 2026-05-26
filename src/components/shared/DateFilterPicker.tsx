@@ -94,7 +94,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     <div className="relative">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-medium transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-3 h-9 rounded-md border text-[0.75rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
             : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
@@ -117,12 +117,12 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                   <button
                     key={p.id}
                     onClick={() => onApply({ kind: 'preset', id: p.id })}
-                    className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[12.5px] cursor-pointer transition-colors ${
+                    className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[0.75rem] cursor-pointer transition-colors ${
                       isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'
                     }`}
                   >
                     <span>{p.label}</span>
-                    {isCurrent && <span className="text-[10px] font-semibold uppercase tracking-wide">Active</span>}
+                    {isCurrent && <span className="text-[0.625rem] font-semibold uppercase tracking-wide">Active</span>}
                   </button>
                 );
               })}
@@ -131,34 +131,34 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
             {/* Divider + custom range */}
             <div className="border-t border-canvas-border my-1" />
             <div className="px-3 pt-2 pb-1">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 mb-2">Custom range</div>
+              <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Custom range</div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10.5px] font-medium text-ink-500 mb-1">From</label>
+                  <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">From</label>
                   <input
                     type="date"
                     value={from}
                     max={to || todayIso}
                     onChange={(e) => setFrom(e.target.value)}
-                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
+                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10.5px] font-medium text-ink-500 mb-1">To</label>
+                  <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">To</label>
                   <input
                     type="date"
                     value={to}
                     min={from || undefined}
                     max={todayIso}
                     onChange={(e) => setTo(e.target.value)}
-                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
+                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />
                 </div>
               </div>
               <button
                 onClick={() => canApplyCustom && onApply({ kind: 'custom', from, to })}
                 disabled={!canApplyCustom}
-                className="w-full mt-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 disabled:bg-paper-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                className="w-full mt-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 disabled:bg-paper-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 Apply custom range
               </button>

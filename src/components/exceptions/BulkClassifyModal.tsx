@@ -58,7 +58,7 @@ export interface BulkClassifyPayload {
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="block text-[12.5px] font-medium text-ink-800 mb-1.5">
+    <label className="block text-[0.75rem] font-medium text-ink-800 mb-1.5">
       {children}
       {required && <span className="text-risk ml-0.5">*</span>}
     </label>
@@ -134,8 +134,8 @@ export default function BulkClassifyModal({
               <Tag size={18} />
             </div>
             <div>
-              <h2 className="text-[17px] font-semibold text-ink-900 leading-tight">Bulk Classify</h2>
-              <p className="text-[12.5px] text-ink-500 mt-1 leading-snug">
+              <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">Bulk Classify</h2>
+              <p className="text-[0.75rem] text-ink-500 mt-1 leading-snug">
                 Apply the same classification and action plan to{' '}
                 <span className="font-semibold text-ink-800 tabular-nums">{selectedCases.length}</span>{' '}
                 selected case{selectedCases.length === 1 ? '' : 's'}.
@@ -156,17 +156,17 @@ export default function BulkClassifyModal({
           {/* Actionable ID + Selected cases pill row */}
           <section className="bg-brand-50/60 border border-brand-100 rounded-[12px] p-4">
             <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2 text-[12.5px] text-ink-700">
+              <div className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                 <LinkIcon size={13} className="text-brand-700" />
                 <span>Actionable ID</span>
               </div>
-              <span className="font-mono text-[13px] font-semibold text-brand-700">{actionableId}</span>
+              <span className="font-mono text-[0.8125rem] font-semibold text-brand-700">{actionableId}</span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {selectedCases.map(c => (
                 <span
                   key={c.id}
-                  className="inline-flex items-center h-6 px-2 text-[11px] font-mono font-medium bg-canvas-elevated border border-canvas-border text-ink-700 rounded-full"
+                  className="inline-flex items-center h-6 px-2 text-[0.6875rem] font-mono font-medium bg-canvas-elevated border border-canvas-border text-ink-700 rounded-full"
                 >
                   {c.id}
                 </span>
@@ -186,7 +186,7 @@ export default function BulkClassifyModal({
                     key={s}
                     type="button"
                     onClick={() => setSeverity(s)}
-                    className={`h-10 text-[13px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                    className={`h-10 text-[0.8125rem] font-medium rounded-[8px] border transition-colors cursor-pointer ${
                       selected ? tone.active : `bg-canvas-elevated border-canvas-border ${tone.base} hover:border-brand-200`
                     }`}
                   >
@@ -204,7 +204,7 @@ export default function BulkClassifyModal({
               <select
                 value={classification}
                 onChange={(e) => setClassification(e.target.value as GrcExceptionClassification | '')}
-                className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
+                className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
               >
                 <option value="">Select classification…</option>
                 {CLASSIFICATION_OPTIONS.map(c => (
@@ -215,11 +215,11 @@ export default function BulkClassifyModal({
             </div>
             {classification && (
               <div className="mt-2">
-                <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full ${CLASSIFICATION_PILL[classification]}`}>
+                <span className={`inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-medium rounded-full ${CLASSIFICATION_PILL[classification]}`}>
                   {classification}
                 </span>
                 {!requiresActionPlan && (
-                  <span className="ml-2 text-[11.5px] text-ink-500">No action plan required.</span>
+                  <span className="ml-2 text-[0.75rem] text-ink-500">No action plan required.</span>
                 )}
               </div>
             )}
@@ -236,7 +236,7 @@ export default function BulkClassifyModal({
               {/* Grouped Action Plan card with shared edit/delete toolbar */}
               <div className="border border-canvas-border rounded-[10px] p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
+                  <span className="text-[0.75rem] uppercase tracking-wider font-semibold text-ink-500">
                     Action Plan
                   </span>
                   <div className="flex items-center gap-1">
@@ -271,7 +271,7 @@ export default function BulkClassifyModal({
                     value={actionName}
                     onChange={(e) => setActionName(e.target.value)}
                     placeholder="e.g. MFA enforcement for executive accounts"
-                    className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
                 </div>
 
@@ -283,7 +283,7 @@ export default function BulkClassifyModal({
                       onChange={(e) => setActionTaken(e.target.value)}
                       rows={4}
                       placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                      className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                      className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                     />
                     <button
                       type="button"
@@ -304,7 +304,7 @@ export default function BulkClassifyModal({
                     type="date"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
                   <Calendar size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
                 </div>
@@ -321,7 +321,7 @@ export default function BulkClassifyModal({
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Add a comment for this bulk classification..."
                 rows={4}
-                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
               />
               <button
                 type="button"
@@ -336,15 +336,15 @@ export default function BulkClassifyModal({
           {/* Activity Log */}
           <section className="border border-canvas-border rounded-[12px] p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-500">
                 Activity Log
               </div>
-              <span className="text-[11px] text-ink-500 tabular-nums">
+              <span className="text-[0.6875rem] text-ink-500 tabular-nums">
                 {activity.length} event{activity.length === 1 ? '' : 's'} across {selectedCases.length} case{selectedCases.length === 1 ? '' : 's'}
               </span>
             </div>
             {activity.length === 0 ? (
-              <p className="text-[12.5px] text-ink-500">No prior activity for the selected cases.</p>
+              <p className="text-[0.75rem] text-ink-500">No prior activity for the selected cases.</p>
             ) : (
               <>
                 <ol className="space-y-3">
@@ -354,30 +354,30 @@ export default function BulkClassifyModal({
                       <li key={ev.id} className="flex gap-3">
                         <div className={`shrink-0 w-7 h-7 rounded-full ${avatar.bg} ${avatar.fg} flex items-center justify-center`}>
                           {ev.role === 'Ira (AI)' ? (
-                            <span className="text-[9.5px] font-semibold tracking-wider">AI</span>
+                            <span className="text-[0.75rem] font-semibold tracking-wider">AI</span>
                           ) : (
                             <User size={13} />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-3 mb-0.5">
-                            <div className="text-[12.5px] text-ink-800">
+                            <div className="text-[0.75rem] text-ink-800">
                               <span className="font-semibold">{ev.actor}</span>{' '}
                               <span className="text-ink-500">[{ev.role}]</span>
-                              <span className="ml-2 inline-flex items-center h-4 px-1.5 text-[10px] font-mono font-medium bg-brand-50 text-brand-700 rounded">
+                              <span className="ml-2 inline-flex items-center h-4 px-1.5 text-[0.625rem] font-mono font-medium bg-brand-50 text-brand-700 rounded">
                                 {ev.exceptionId}
                               </span>
                             </div>
-                            <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{ev.date} · {ev.time}</span>
+                            <span className="text-[0.6875rem] text-ink-500 tabular-nums whitespace-nowrap">{ev.date} · {ev.time}</span>
                           </div>
-                          <p className="text-[12.5px] text-ink-700 leading-snug">{ev.message}</p>
+                          <p className="text-[0.75rem] text-ink-700 leading-snug">{ev.message}</p>
                           {ev.comment && (
-                            <div className="mt-1.5 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12px] text-ink-700 leading-relaxed">
+                            <div className="mt-1.5 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[0.75rem] text-ink-700 leading-relaxed">
                               {ev.comment}
                             </div>
                           )}
                           {ev.attachment && (
-                            <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[11.5px] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
+                            <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[0.75rem] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
                               <Paperclip size={11} />
                               {ev.attachment.name}
                             </button>
@@ -390,7 +390,7 @@ export default function BulkClassifyModal({
                 {activity.length > 3 && (
                   <button
                     onClick={() => setShowAllActivity(v => !v)}
-                    className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                    className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                   >
                     <CaretDown size={12} className={showAllActivity ? 'rotate-180' : ''} />
                     {showAllActivity ? 'Show less' : `Show ${activity.length - 3} more`}
@@ -405,7 +405,7 @@ export default function BulkClassifyModal({
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -423,7 +423,7 @@ export default function BulkClassifyModal({
               });
             }}
             disabled={!canApply}
-            className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
+            className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors ${
               canApply
                 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                 : 'bg-brand-600/50 text-white/80 cursor-not-allowed'

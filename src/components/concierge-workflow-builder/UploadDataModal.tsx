@@ -319,7 +319,7 @@ export default function UploadDataModal({
             <div className="pointer-events-auto w-full max-w-[840px] h-[680px] max-h-[86vh] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-2xl flex flex-col overflow-hidden">
               {/* Header — title + inline search */}
               <div className="flex items-center gap-4 px-5 py-3 border-b border-canvas-border">
-                <h2 className="text-[15px] font-semibold text-ink-800 shrink-0">
+                <h2 className="text-[0.9375rem] font-semibold text-ink-800 shrink-0">
                   Add data
                 </h2>
                 <div className="relative flex-1 max-w-[560px]">
@@ -338,7 +338,7 @@ export default function UploadDataModal({
                     }
                     disabled={tab === 'upload'}
                     className={[
-                      'w-full rounded-full border px-9 py-1.5 text-[13px] focus:outline-none transition-all',
+                      'w-full rounded-full border px-9 py-1.5 text-[0.8125rem] focus:outline-none transition-all',
                       tab === 'upload'
                         ? 'border-canvas-border bg-paper-50 text-ink-400 placeholder:text-ink-400 cursor-default'
                         : 'border-canvas-border bg-canvas text-ink-800 placeholder:text-ink-400 focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30',
@@ -366,7 +366,7 @@ export default function UploadDataModal({
                       type="button"
                       onClick={() => setTab(t.id)}
                       className={[
-                        'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer',
+                        'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-[0.8125rem] font-semibold transition-colors cursor-pointer',
                         active
                           ? 'text-brand-700'
                           : 'text-ink-500 hover:text-ink-800',
@@ -377,7 +377,7 @@ export default function UploadDataModal({
                       {typeof t.count === 'number' && (
                         <span
                           className={[
-                            'text-[11px] font-semibold tabular-nums',
+                            'text-[0.6875rem] font-semibold tabular-nums',
                             active ? 'text-brand-600' : 'text-ink-400',
                           ].join(' ')}
                         >
@@ -428,21 +428,21 @@ export default function UploadDataModal({
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 text-ink-400">
                         <UploadCloud size={32} strokeWidth={1.5} />
                       </div>
-                      <div className="text-[15px] font-semibold text-ink-800">
+                      <div className="text-[0.9375rem] font-semibold text-ink-800">
                         Drop files here
                       </div>
-                      <div className="text-[12.5px] text-ink-500 mt-1">
+                      <div className="text-[0.75rem] text-ink-500 mt-1">
                         or pick from your computer
                       </div>
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer"
+                        className="mt-4 inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer"
                       >
                         <UploadCloud size={13} />
                         Choose files
                       </button>
-                      <div className="text-[11.5px] text-ink-400 mt-3">
+                      <div className="text-[0.75rem] text-ink-400 mt-3">
                         CSV · Excel · PDF · ≤ 50 MB each
                       </div>
                     </div>
@@ -458,10 +458,10 @@ export default function UploadDataModal({
                               <FileText size={13} />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="text-[12.5px] font-semibold text-ink-800 truncate">
+                              <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
                                 {f.name}
                               </div>
-                              <div className="text-[11px] text-ink-400">
+                              <div className="text-[0.6875rem] text-ink-400">
                                 {f.size > 1024 * 1024
                                   ? `${(f.size / (1024 * 1024)).toFixed(1)} MB`
                                   : f.size > 1024
@@ -487,10 +487,10 @@ export default function UploadDataModal({
                 {(tab === 'all' || tab === 'files' || tab === 'db') && (
                   visibleAssets.length === 0 ? (
                     <div className="flex flex-col items-center justify-center text-center py-16">
-                      <div className="text-[13px] font-semibold text-ink-700">
+                      <div className="text-[0.8125rem] font-semibold text-ink-700">
                         {search ? `No matches for “${search}”.` : 'No sources available'}
                       </div>
-                      <div className="text-[11.5px] text-ink-400 mt-1">
+                      <div className="text-[0.75rem] text-ink-400 mt-1">
                         {search
                           ? 'Try a different keyword.'
                           : 'Connect a data source to see it listed here.'}
@@ -532,14 +532,14 @@ export default function UploadDataModal({
                                 <Icon size={14} className={styles.icon} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-[13px] font-semibold text-ink-800 truncate">
+                                <div className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                                   {a.name}
                                 </div>
-                                <div className="text-[11.5px] text-ink-400 truncate mt-0.5">
+                                <div className="text-[0.75rem] text-ink-400 truncate mt-0.5">
                                   {a.meta}
                                 </div>
                               </div>
-                              <span className="text-[11px] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
+                              <span className="text-[0.6875rem] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
                                 {kindBadgeLabel(a.kind)}
                               </span>
                             </button>
@@ -553,14 +553,14 @@ export default function UploadDataModal({
 
               {/* Footer */}
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border bg-canvas">
-                <p className="text-[12px] text-ink-500">
+                <p className="text-[0.75rem] text-ink-500">
                   Pick sources or files to attach to your message.
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={onClose}
-                    className="inline-flex items-center justify-center rounded-lg text-[12.5px] font-semibold px-4 py-2 text-ink-600 hover:bg-canvas-elevated transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center rounded-lg text-[0.75rem] font-semibold px-4 py-2 text-ink-600 hover:bg-canvas-elevated transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -568,7 +568,7 @@ export default function UploadDataModal({
                     type="button"
                     disabled={!canAttach}
                     onClick={handleAttach}
-                    className="inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                    className="inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                   >
                     <Check size={13} />
                     Attach

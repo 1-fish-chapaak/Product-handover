@@ -159,13 +159,13 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
       <div className="p-8 relative">
         <div className="flex items-start justify-between gap-6 mb-6">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">
+            <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">
               My Queue
             </div>
-            <h1 className="font-display text-[32px] font-bold text-text leading-tight">
+            <h1 className="font-display text-[2rem] font-bold text-text leading-tight">
               Welcome back, {CURRENT_USER.name}
             </h1>
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
+            <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
               Everything that&apos;s waiting on you across every engagement.
             </p>
           </div>
@@ -197,7 +197,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
             sub="Across all engagements" />
         </div>
 
-        <div className="flex items-center gap-4 mb-4 flex-wrap text-[11px]">
+        <div className="flex items-center gap-4 mb-4 flex-wrap text-[0.6875rem]">
           <div className="flex items-center gap-2">
             <Filter size={12} className="text-text-muted" />
             <span className="font-bold text-text-muted uppercase tracking-wide">Severity</span>
@@ -235,7 +235,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
               <select
                 value={engFilter}
                 onChange={e => setEngFilter(e.target.value)}
-                className="appearance-none pl-2.5 pr-7 py-1 rounded-full bg-surface-2 text-text font-semibold text-[11px] border border-border-light outline-none focus:border-primary/40 cursor-pointer"
+                className="appearance-none pl-2.5 pr-7 py-1 rounded-full bg-surface-2 text-text font-semibold text-[0.6875rem] border border-border-light outline-none focus:border-primary/40 cursor-pointer"
               >
                 <option value="All">All engagements</option>
                 {engagementOptions.map(e => (
@@ -259,7 +259,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
           </label>
           {hasFilters && (
             <button onClick={resetFilters}
-              className="ml-auto text-[11px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer"
+              className="ml-auto text-[0.6875rem] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer"
             >Clear filters</button>
           )}
         </div>
@@ -267,7 +267,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
         <div className="mb-5 flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 mr-1">
             <Wand2 size={12} className="text-primary" />
-            <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted">
+            <span className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">
               Quick Classify
             </span>
           </div>
@@ -281,7 +281,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
                     : `Applied "${t.label}" to selected`,
                   type: 'success',
                 })}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-white text-[11px] font-semibold transition-colors cursor-pointer ${t.tone}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-white text-[0.6875rem] font-semibold transition-colors cursor-pointer ${t.tone}`}
               >
                 <Icon size={11} />
                 {t.label}
@@ -294,7 +294,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
           <EmptyState hasFilters={hasFilters} onClear={resetFilters} />
         ) : (
           <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-            <div className="grid grid-cols-[120px_180px_minmax(0,1fr)_150px_130px] gap-4 px-5 py-3 border-b border-border-light text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 bg-surface-2/30">
+            <div className="grid grid-cols-[120px_180px_minmax(0,1fr)_150px_130px] gap-4 px-5 py-3 border-b border-border-light text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted/80 bg-surface-2/30">
               <div>Severity</div>
               <div>Engagement</div>
               <div>Exception</div>
@@ -318,7 +318,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
                 />
               ))}
             </AnimatePresence>
-            <div className="px-5 py-2.5 text-[11px] text-text-muted bg-surface-2/30 border-t border-border-light flex items-center justify-between">
+            <div className="px-5 py-2.5 text-[0.6875rem] text-text-muted bg-surface-2/30 border-t border-border-light flex items-center justify-between">
               <span>
                 {visible.length} item{visible.length === 1 ? '' : 's'} in your queue
                 {showResolved && ' (incl. resolved this week)'}
@@ -350,15 +350,15 @@ function KpiTile({
   return (
     <div className={`rounded-xl p-4 border ${tint}`}>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">
+        <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">
           {label}
         </span>
         <Icon size={14} className={iconCls} />
       </div>
-      <div className={`text-[28px] font-bold tabular-nums leading-none ${valueCls}`}>
+      <div className={`text-[1.75rem] font-bold tabular-nums leading-none ${valueCls}`}>
         {value}
       </div>
-      {sub && <div className="text-[11px] text-text-muted mt-1.5">{sub}</div>}
+      {sub && <div className="text-[0.6875rem] text-text-muted mt-1.5">{sub}</div>}
     </div>
   );
 }
@@ -396,7 +396,7 @@ function QueueRow({
           onClick={(e) => e.stopPropagation()}
           className="accent-primary cursor-pointer"
         />
-        <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold border ${SEV_CHIP[ex.severity]}`}>
+        <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold border ${SEV_CHIP[ex.severity]}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${SEV_DOT[ex.severity]}`} aria-hidden="true" />
           {ex.severity}
         </span>
@@ -405,7 +405,7 @@ function QueueRow({
       {/* Engagement chip — process-colored */}
       <button
         onClick={(e) => { e.stopPropagation(); onOpen(); }}
-        className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-semibold bg-white border border-border-light hover:border-primary/30 hover:bg-primary/5 transition-colors cursor-pointer min-w-0 max-w-full"
+        className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[0.6875rem] font-semibold bg-white border border-border-light hover:border-primary/30 hover:bg-primary/5 transition-colors cursor-pointer min-w-0 max-w-full"
         title={eng?.name ?? 'Open engagement'}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: processColor }} />
@@ -417,27 +417,27 @@ function QueueRow({
       {/* Exception ref + title + workflow */}
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-[11px] text-text-muted tabular-nums">{ex.ref}</span>
-          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-semibold ${STATUS_CHIP[ex.status]}`}>
+          <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">{ex.ref}</span>
+          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-semibold ${STATUS_CHIP[ex.status]}`}>
             {ex.status}
           </span>
           {ex.amount && (
-            <span className="inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary tabular-nums">
+            <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-bold bg-surface-2 text-text-secondary tabular-nums">
               {ex.amount}
             </span>
           )}
         </div>
-        <div className="text-[13px] font-semibold text-text mt-0.5 truncate" title={ex.title}>
+        <div className="text-[0.8125rem] font-semibold text-text mt-0.5 truncate" title={ex.title}>
           {ex.title}
         </div>
-        <div className="text-[11px] text-text-muted mt-0.5 truncate">
+        <div className="text-[0.6875rem] text-text-muted mt-0.5 truncate">
           {ex.workflowName} <span className="text-border">·</span> opened {ex.opened}
         </div>
       </div>
 
       {/* SLA countdown pill */}
       <div className="flex flex-col gap-1 min-w-0">
-        <span className={`inline-flex items-center self-start gap-1 px-2 h-5 rounded-full text-[10.5px] font-semibold border ${TONE_PILL[sla.tone]}`}>
+        <span className={`inline-flex items-center self-start gap-1 px-2 h-5 rounded-full text-[0.75rem] font-semibold border ${TONE_PILL[sla.tone]}`}>
           <Clock size={10} />
           {sla.label}
         </span>
@@ -453,7 +453,7 @@ function QueueRow({
         <RowButton icon={BellOff} label="Snooze" onClick={() => onAction('Snoozed for 24h')} />
         <button
           onClick={(e) => { e.stopPropagation(); onOpen(); }}
-          className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.6875rem] font-semibold transition-colors cursor-pointer"
           title="Open exception"
         >
           Open <ArrowRight size={11} />
@@ -487,10 +487,10 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
     return (
       <div className="border border-border-light rounded-xl p-14 text-center bg-white">
         <Filter size={28} className="text-text-muted mx-auto mb-3" />
-        <p className="text-[14px] font-semibold text-text mb-1">No exceptions match your filters</p>
-        <p className="text-[12px] text-text-muted mb-4">Try clearing the severity, status, or engagement filter.</p>
+        <p className="text-[0.875rem] font-semibold text-text mb-1">No exceptions match your filters</p>
+        <p className="text-[0.75rem] text-text-muted mb-4">Try clearing the severity, status, or engagement filter.</p>
         <button onClick={onClear}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
         >Clear filters</button>
       </div>
     );
@@ -502,8 +502,8 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-compliant-50 text-compliant-700 mb-3">
           <Sparkles size={22} />
         </div>
-        <p className="text-[15px] font-semibold text-text mb-1">All caught up!</p>
-        <p className="text-[12.5px] text-text-muted">
+        <p className="text-[0.9375rem] font-semibold text-text mb-1">All caught up!</p>
+        <p className="text-[0.75rem] text-text-muted">
           Nothing in your queue. Take a breath — or jump into another engagement.
         </p>
       </div>
@@ -532,10 +532,10 @@ function DelegationCard({
             <Zap size={14} />
           </div>
           <div>
-            <div className="text-[12.5px] font-semibold text-text leading-tight">
+            <div className="text-[0.75rem] font-semibold text-text leading-tight">
               Delegate while you&apos;re away
             </div>
-            <div className="text-[10.5px] text-text-muted leading-tight">
+            <div className="text-[0.75rem] text-text-muted leading-tight">
               Auto-route to a teammate
             </div>
           </div>
@@ -560,24 +560,24 @@ function DelegationCard({
           >
             <div className="pt-2 space-y-2.5">
               <div>
-                <label className="flex items-center gap-1 text-[10px] uppercase tracking-wide font-bold text-text-muted mb-1">
+                <label className="flex items-center gap-1 text-[0.625rem] uppercase tracking-wide font-bold text-text-muted mb-1">
                   <CalendarRange size={10} />
                   Range
                 </label>
                 <div className="flex items-center gap-1.5">
                   <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-                    className="flex-1 min-w-0 px-2 py-1 text-[11px] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
-                  <span className="text-text-muted text-[11px]">→</span>
+                    className="flex-1 min-w-0 px-2 py-1 text-[0.6875rem] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
+                  <span className="text-text-muted text-[0.6875rem]">→</span>
                   <input type="date" value={until} onChange={e => setUntil(e.target.value)}
-                    className="flex-1 min-w-0 px-2 py-1 text-[11px] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
+                    className="flex-1 min-w-0 px-2 py-1 text-[0.6875rem] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wide font-bold text-text-muted mb-1">
+                <label className="block text-[0.625rem] uppercase tracking-wide font-bold text-text-muted mb-1">
                   Delegate to
                 </label>
                 <select value={to} onChange={e => setTo(e.target.value)}
-                  className="w-full px-2 py-1.5 text-[11px] border border-border-light rounded-md bg-white text-text outline-none focus:border-primary/40 cursor-pointer"
+                  className="w-full px-2 py-1.5 text-[0.6875rem] border border-border-light rounded-md bg-white text-text outline-none focus:border-primary/40 cursor-pointer"
                 >
                   {PEOPLE.filter(p => p.name !== CURRENT_USER.name).map(p => (
                     <option key={p.id} value={p.name}>{p.name} — {p.role}</option>
@@ -586,7 +586,7 @@ function DelegationCard({
               </div>
               <button
                 onClick={() => onActivate({ from, until, to })}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 <Check size={12} />
                 Activate delegation

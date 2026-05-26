@@ -188,7 +188,7 @@ export default function DataPickerModal({
           >
             {/* Header — title + (search) + close. Search is suppressed in kh-add mode. */}
             <div className="flex items-center gap-3 px-5 py-3 border-b border-paper-200">
-              <h2 id="dpicker-title" className="text-[15px] font-semibold text-ink-800 shrink-0">{title}</h2>
+              <h2 id="dpicker-title" className="text-[0.9375rem] font-semibold text-ink-800 shrink-0">{title}</h2>
               {mode === 'chat' && (
                 <div className="relative flex-1 max-w-md ml-2">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -198,7 +198,7 @@ export default function DataPickerModal({
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     disabled={tab === 'upload'}
-                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:bg-paper-50 disabled:text-text-muted transition-colors"
+                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:bg-paper-50 disabled:text-text-muted transition-colors"
                   />
                 </div>
               )}
@@ -222,14 +222,14 @@ export default function DataPickerModal({
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[12.5px] font-medium transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[0.75rem] font-medium transition-colors cursor-pointer ${
                       isActive ? 'text-primary' : 'text-text-muted hover:text-text'
                     }`}
                   >
                     <Icon size={13} />
                     {t.label}
                     {t.id !== 'upload' && t.id !== 'connect' && (
-                      <span className={`tabular-nums text-[11px] ${isActive ? 'text-primary' : 'text-text-muted/60'}`}>
+                      <span className={`tabular-nums text-[0.6875rem] ${isActive ? 'text-primary' : 'text-text-muted/60'}`}>
                         {tabCounts[t.id]}
                       </span>
                     )}
@@ -278,16 +278,16 @@ export default function DataPickerModal({
             <div className="border-t border-border-light px-5 py-3 flex items-center justify-between gap-3 bg-surface-2/60">
               {mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
                 <label className="flex items-center gap-2 flex-1 min-w-0 max-w-md">
-                  <span className="text-[12px] font-medium text-text-secondary shrink-0">Group as</span>
+                  <span className="text-[0.75rem] font-medium text-text-secondary shrink-0">Group as</span>
                   <input
                     value={combinedName}
                     onChange={(e) => setCombinedName(e.target.value)}
                     placeholder="Leave empty to add as separate files"
-                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[12.5px] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
+                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[0.75rem] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
                   />
                 </label>
               ) : (
-                <div className="text-[12px] text-text-muted tabular-nums flex items-center gap-2">
+                <div className="text-[0.75rem] text-text-muted tabular-nums flex items-center gap-2">
                   {totalSelected === 0 && inFlightCount === 0 && (
                     <>Pick sources or files to attach to your message.</>
                   )}
@@ -305,14 +305,14 @@ export default function DataPickerModal({
               <div className="flex items-center gap-2">
                 <button
                   onClick={onClose}
-                  className="px-3 h-9 rounded-md text-[12.5px] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
+                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirm}
                   disabled={totalSelected === 0}
-                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
                   <Check size={13} />
                   {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}
@@ -345,14 +345,14 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
     return (
       <div className="text-center py-16 px-6">
         <Search size={24} className="mx-auto text-text-muted/60 mb-3" />
-        <p className="text-[13px] text-text-muted">
+        <p className="text-[0.8125rem] text-text-muted">
           {search ? `No sources match "${search}".` : 'No sources available.'}
         </p>
         {showRequestIntegration && !search && (
           <a
             href="mailto:support@irame.ai?subject=Database%20integration%20request"
             onClick={onRequestIntegration}
-            className="inline-flex items-center gap-2 mt-4 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 mt-4 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={13} />
             Request a DB integration
@@ -379,14 +379,14 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
         <div className="px-5 py-4 border-t border-border-light bg-surface-2/60 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <Mail size={13} className="text-text-muted shrink-0" />
-            <span className="text-[12px] text-text-muted truncate">
+            <span className="text-[0.75rem] text-text-muted truncate">
               Need another source? IT can wire it up.
             </span>
           </div>
           <a
             href="mailto:support@irame.ai?subject=Database%20integration%20request"
             onClick={onRequestIntegration}
-            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-border-light bg-white text-[12px] font-semibold text-text-secondary hover:border-primary-light transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-border-light bg-white text-[0.75rem] font-semibold text-text-secondary hover:border-primary-light transition-colors cursor-pointer shrink-0"
           >
             <Plus size={12} />
             Request a DB integration
@@ -423,16 +423,16 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
 
         {/* Name + meta */}
         <div className="flex-1 min-w-0">
-          <div className={`text-[13px] font-medium truncate ${selected ? 'text-primary' : 'text-text'}`}>
+          <div className={`text-[0.8125rem] font-medium truncate ${selected ? 'text-primary' : 'text-text'}`}>
             {source.name}
           </div>
-          <div className="text-[11px] text-text-muted mt-0.5 tabular-nums truncate">
+          <div className="text-[0.6875rem] text-text-muted mt-0.5 tabular-nums truncate">
             {source.subtype} <span className="text-text-muted/60">· {formatDate(source.createdAt)}</span>
           </div>
         </div>
 
         {/* Type label pill (subtle, right-aligned) */}
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold text-text-muted bg-surface-2">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
           {typeLabel}
         </span>
       </button>
@@ -601,8 +601,8 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         }`}
       >
         <Upload size={28} className={`mx-auto mb-3 ${isDragging ? 'text-primary' : 'text-text-muted/60'}`} />
-        <p className="text-[14px] text-text-secondary font-medium">Drop files or a folder here</p>
-        <p className="text-[12px] text-text-muted mt-1">or pick from your computer</p>
+        <p className="text-[0.875rem] text-text-secondary font-medium">Drop files or a folder here</p>
+        <p className="text-[0.75rem] text-text-muted mt-1">or pick from your computer</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -622,21 +622,21 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         <div className="inline-flex items-center gap-2 mt-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Upload size={13} />
             Choose files
           </button>
           <button
             onClick={() => folderInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-paper-300 hover:bg-paper-50 text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-paper-300 hover:bg-paper-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Folder size={13} />
             Choose folder
           </button>
         </div>
         {mode === 'kh-add' && (
-          <p className="text-[11px] text-ink-400 mt-3">PDF · CSV · XLSX · DOC</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-3">PDF · CSV · XLSX</p>
         )}
       </div>
 
@@ -646,11 +646,11 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
       {pendingUploads.length > 0 && (
         <div className="rounded-xl border border-border-light bg-white overflow-hidden">
           <div className="px-4 py-2 border-b border-border-light bg-surface-2/60 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">
               Uploads · {pendingUploads.length}
             </span>
             {pendingUploads.some(u => u.progress < 100) && (
-              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-primary">
+              <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-primary">
                 <Loader2 size={10} className="animate-spin" />
                 Uploading {pendingUploads.filter(u => u.progress < 100).length}…
               </span>
@@ -747,7 +747,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
       <div className="flex-1 px-6 py-4 space-y-4">
         {/* Engine grid — selected uses brand-50 bg + brand-600 border per DESIGN.md selected state. */}
         <section>
-          <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-ink-500 mb-2">Engine</div>
+          <div className="text-[0.6875rem] font-medium uppercase tracking-[0.06em] text-ink-500 mb-2">Engine</div>
           <div className="grid grid-cols-3 gap-2">
             {DB_TYPES.map(t => {
               const selected = dbType?.id === t.id;
@@ -768,7 +768,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
                   }`}>
                     <Database size={12} />
                   </div>
-                  <div className={`text-[12.5px] font-semibold truncate ${selected ? 'text-brand-700' : 'text-ink-800'}`}>
+                  <div className={`text-[0.75rem] font-semibold truncate ${selected ? 'text-brand-700' : 'text-ink-800'}`}>
                     {t.label}
                   </div>
                 </button>
@@ -805,23 +805,23 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
               type="button"
               onClick={runTest}
               disabled={!requiredFilled || testStatus === 'testing'}
-              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[12.5px] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:bg-paper-100 disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:bg-paper-100 disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               {testStatus === 'testing' && <Loader2 size={12} className="animate-spin" />}
               {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
             </button>
             {testStatus === 'ok' && (
-              <span className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-semibold bg-compliant-50 text-compliant-700">
+              <span className="inline-flex items-center h-6 px-2 rounded-full text-[0.75rem] font-semibold bg-compliant-50 text-compliant-700">
                 Connection successful
               </span>
             )}
             {testStatus === 'fail' && (
-              <span className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-semibold bg-risk-50 text-risk-700">
+              <span className="inline-flex items-center h-6 px-2 rounded-full text-[0.75rem] font-semibold bg-risk-50 text-risk-700">
                 Could not connect
               </span>
             )}
             {testStatus === 'idle' && (
-              <span className="text-[11.5px] text-ink-500">
+              <span className="text-[0.75rem] text-ink-500">
                 {requiredFilled ? 'Test before connecting.' : !dbType ? 'Pick an engine to begin.' : 'Fill the required fields.'}
               </span>
             )}
@@ -830,12 +830,12 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
 
       {/* Footer — paper-50 strip, helper on left, action group on right. */}
       <div className="border-t border-paper-200 px-6 py-3 flex items-center justify-between bg-paper-50">
-        <span className="text-[11.5px] text-ink-500">Credentials are stored encrypted.</span>
+        <span className="text-[0.75rem] text-ink-500">Credentials are stored encrypted.</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[12.5px] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -843,7 +843,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
             type="button"
             onClick={submit}
             disabled={!canConnect}
-            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold disabled:bg-brand-600/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold disabled:bg-brand-600/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             {connecting && <Loader2 size={13} className="animate-spin" />}
             {connecting ? 'Connecting…' : 'Connect'}
@@ -855,14 +855,14 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
 }
 
 const inputCls =
-  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 disabled:bg-paper-100 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
+  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 disabled:bg-paper-100 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
 
 function Field({
   label, required, full, children,
 }: { label: string; required?: boolean; full?: boolean; children: React.ReactNode }) {
   return (
     <label className={`flex flex-col gap-1.5 ${full ? 'col-span-2' : ''}`}>
-      <span className="text-[12px] font-medium text-ink-700">
+      <span className="text-[0.75rem] font-medium text-ink-700">
         {label}{required && <span className="text-risk ml-0.5" aria-hidden>*</span>}
       </span>
       {children}
@@ -893,21 +893,21 @@ function PendingFileRow({
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <div className="text-[13px] text-text truncate flex-1 min-w-0">
+          <div className="text-[0.8125rem] text-text truncate flex-1 min-w-0">
             {upload.name}
             {pathTag && (
-              <span className="ml-1.5 text-[11px] text-ink-400 font-normal" title={upload.path}>
+              <span className="ml-1.5 text-[0.6875rem] text-ink-400 font-normal" title={upload.path}>
                 · {pathTag}
               </span>
             )}
           </div>
           {isDone ? (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold text-compliant bg-compliant-50">
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-compliant bg-compliant-50">
               <Check size={10} />
               Ready
             </span>
           ) : (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold text-primary bg-primary-xlight">
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-primary bg-primary-xlight">
               <Loader2 size={10} className="animate-spin" />
               {upload.progress}%
             </span>
@@ -923,7 +923,7 @@ function PendingFileRow({
             />
           </div>
         )}
-        <div className={`text-[11px] tabular-nums mt-${isDone ? '0.5' : '1'} text-text-muted`}>
+        <div className={`text-[0.6875rem] tabular-nums mt-${isDone ? '0.5' : '1'} text-text-muted`}>
           {formatBytesShort(upload.sizeBytes)}
         </div>
       </div>

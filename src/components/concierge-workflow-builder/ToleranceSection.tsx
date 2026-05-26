@@ -351,7 +351,7 @@ export default function ToleranceSection() {
               e.stopPropagation();
               setColSelector(isOpen ? null : { ruleKey, side });
             }}
-            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-2 py-1 hover:border-brand-300 hover:bg-brand-50/30 transition-all cursor-pointer group w-full min-w-0"
+            className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-2 py-1 hover:border-brand-300 hover:bg-brand-50/30 transition-all cursor-pointer group w-full min-w-0"
           >
             <span
               className="w-[5px] h-[5px] rounded-full shrink-0"
@@ -379,14 +379,14 @@ export default function ToleranceSection() {
                       onChange({ ...columns, ...upd });
                       setColSelector(null);
                     }}
-                    className={`w-full text-left px-2.5 py-1.5 text-[11px] flex items-center gap-1.5 transition-colors ${selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-canvas'}`}
+                    className={`w-full text-left px-2.5 py-1.5 text-[0.6875rem] flex items-center gap-1.5 transition-colors ${selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-600 hover:bg-canvas'}`}
                   >
                     <span
                       className="w-[5px] h-[5px] rounded-full shrink-0"
                       style={{ background: dotColors[opt.dot] }}
                     />
                     <span className="flex-1 truncate">{opt.col}</span>
-                    <span className="text-[9px] text-ink-400 truncate max-w-[70px]">{opt.file}</span>
+                    <span className="text-[0.5625rem] text-ink-400 truncate max-w-[70px]">{opt.file}</span>
                   </button>
                 );
               })}
@@ -398,16 +398,16 @@ export default function ToleranceSection() {
     return (
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-ink-400">
+          <span className="text-[0.75rem] font-bold uppercase tracking-[0.12em] text-ink-400">
             Applied to
           </span>
-          <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700">
+          <span className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700">
             AI
           </span>
         </div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 px-2 py-1.5 rounded-lg bg-canvas">
           {pill('src')}
-          <span className="text-[9px] text-ink-400 font-semibold">vs</span>
+          <span className="text-[0.5625rem] text-ink-400 font-semibold">vs</span>
           {pill('tgt')}
         </div>
       </div>
@@ -478,11 +478,11 @@ export default function ToleranceSection() {
             <Icon size={13} style={{ color: tint.color }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-ink-800">{label}</div>
+            <div className="text-[0.75rem] font-semibold text-ink-800">{label}</div>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[10.5px] text-ink-400">{subtitle}</span>
+              <span className="text-[0.75rem] text-ink-400">{subtitle}</span>
               <span
-                className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
                 style={{ background: sevSt.bg, color: sevSt.color }}
               >
                 {sevSt.label}
@@ -490,15 +490,15 @@ export default function ToleranceSection() {
             </div>
             {r.columns && r.enabled && !r.expanded && (
               <div className="flex items-center gap-1 mt-1 flex-wrap">
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
+                <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
                   <span
                     className="w-[5px] h-[5px] rounded-full shrink-0"
                     style={{ background: dotColors[r.columns.srcDot] }}
                   />
                   {r.columns.src}
                 </span>
-                <span className="text-[9px] text-ink-300 font-semibold">vs</span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
+                <span className="text-[0.5625rem] text-ink-300 font-semibold">vs</span>
+                <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
                   <span
                     className="w-[5px] h-[5px] rounded-full shrink-0"
                     style={{ background: dotColors[r.columns.tgtDot] }}
@@ -576,8 +576,8 @@ export default function ToleranceSection() {
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-canvas-border">
         <SlidersHorizontal size={13} className="text-ink-400" />
-        <span className="text-[12px] font-semibold text-ink-700 flex-1">Tolerance rules</span>
-        <span className="text-[10.5px] font-semibold text-ink-400">{activeCount} active</span>
+        <span className="text-[0.75rem] font-semibold text-ink-700 flex-1">Tolerance rules</span>
+        <span className="text-[0.75rem] font-semibold text-ink-400">{activeCount} active</span>
       </div>
 
       {/* Built-in rules */}
@@ -608,17 +608,17 @@ export default function ToleranceSection() {
                   }
                 >
                   <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[11px] font-semibold"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[0.6875rem] font-semibold"
                     style={{ background: st.bg, color: st.color }}
                   >
                     {cr.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-semibold text-ink-800">{cr.name}</div>
+                    <div className="text-[0.75rem] font-semibold text-ink-800">{cr.name}</div>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className="text-[10.5px] text-ink-400">{cr.threshold}</span>
+                      <span className="text-[0.75rem] text-ink-400">{cr.threshold}</span>
                       <span
-                        className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                        className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
                         style={{ background: severityStyle.moderate.bg, color: severityStyle.moderate.color }}
                       >
                         Moderate
@@ -626,15 +626,15 @@ export default function ToleranceSection() {
                     </div>
                     {cr.columns && !cr.expanded && (
                       <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
+                        <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
                           <span
                             className="w-[5px] h-[5px] rounded-full shrink-0"
                             style={{ background: dotColors[cr.columns.srcDot] }}
                           />
                           {cr.columns.src}
                         </span>
-                        <span className="text-[9px] text-ink-300 font-semibold">vs</span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
+                        <span className="text-[0.5625rem] text-ink-300 font-semibold">vs</span>
+                        <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-ink-500 bg-canvas border border-canvas-border rounded px-1.5 py-0.5">
                           <span
                             className="w-[5px] h-[5px] rounded-full shrink-0"
                             style={{ background: dotColors[cr.columns.tgtDot] }}
@@ -672,7 +672,7 @@ export default function ToleranceSection() {
                             prev.map((p, pi) => (pi === ci ? { ...p, columns: newCols } : p)),
                           ),
                       )}
-                      <div className="text-[12.5px] font-semibold text-center py-2 text-brand-700">
+                      <div className="text-[0.75rem] font-semibold text-center py-2 text-brand-700">
                         {cr.threshold}
                       </div>
                     </div>
@@ -700,7 +700,7 @@ export default function ToleranceSection() {
             >
               <Plus size={12} color="#fff" />
             </div>
-            <span className="text-[12.5px] font-semibold flex-1 text-ink-900">Build custom rule</span>
+            <span className="text-[0.75rem] font-semibold flex-1 text-ink-900">Build custom rule</span>
             <button
               type="button"
               onClick={resetBuilder}
@@ -738,10 +738,10 @@ export default function ToleranceSection() {
             {/* Step 1: Type */}
             {builderStep === 1 && (
               <div>
-                <div className="text-[12.5px] font-semibold text-ink-800 mb-1">
+                <div className="text-[0.75rem] font-semibold text-ink-800 mb-1">
                   What type of comparison?
                 </div>
-                <div className="text-[10.5px] text-ink-400 mb-3 leading-relaxed">
+                <div className="text-[0.75rem] text-ink-400 mb-3 leading-relaxed">
                   This determines how variance is calculated between columns.
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -778,8 +778,8 @@ export default function ToleranceSection() {
                       <div className="text-lg mb-1 text-ink-700">
                         {t.iconComp ? <t.iconComp size={20} className="mx-auto" /> : t.icon}
                       </div>
-                      <div className="text-[11.5px] font-semibold text-ink-800">{t.label}</div>
-                      <div className="text-[10px] text-ink-400 mt-0.5 leading-snug">{t.desc}</div>
+                      <div className="text-[0.75rem] font-semibold text-ink-800">{t.label}</div>
+                      <div className="text-[0.625rem] text-ink-400 mt-0.5 leading-snug">{t.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -789,15 +789,15 @@ export default function ToleranceSection() {
             {/* Step 2: Columns */}
             {builderStep === 2 && builderData.type && (
               <div>
-                <div className="text-[12.5px] font-semibold text-ink-800 mb-1">
+                <div className="text-[0.75rem] font-semibold text-ink-800 mb-1">
                   Which columns to compare?
                 </div>
-                <div className="text-[10.5px] text-ink-400 mb-3">
+                <div className="text-[0.75rem] text-ink-400 mb-3">
                   Pick one source and one target column.
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <div className="text-[9.5px] font-bold text-ink-400 uppercase tracking-wide mb-1.5">
+                    <div className="text-[0.75rem] font-bold text-ink-400 uppercase tracking-wide mb-1.5">
                       Source column
                     </div>
                     {(['src1', 'src2'] as const).map((key) => {
@@ -805,7 +805,7 @@ export default function ToleranceSection() {
                       if (!grp) return null;
                       return (
                         <div key={key} className="mb-2">
-                          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-ink-500 mb-1">
+                          <div className="flex items-center gap-1.5 text-[0.625rem] font-semibold text-ink-500 mb-1">
                             <span
                               className="w-1.5 h-1.5 rounded-full"
                               style={{ background: dotColors[grp.dot] }}
@@ -825,7 +825,7 @@ export default function ToleranceSection() {
                                     srcDot: grp.dot,
                                   }))
                                 }
-                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-lg text-[0.6875rem] font-semibold border transition-all cursor-pointer"
                                 style={
                                   builderData.srcCol === c
                                     ? {
@@ -845,14 +845,14 @@ export default function ToleranceSection() {
                     })}
                   </div>
                   <div>
-                    <div className="text-[9.5px] font-bold text-ink-400 uppercase tracking-wide mb-1.5">
+                    <div className="text-[0.75rem] font-bold text-ink-400 uppercase tracking-wide mb-1.5">
                       Target column
                     </div>
                     {(() => {
                       const grp = tolColumnsByType[builderData.type!].tgt1;
                       return (
                         <div>
-                          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-ink-500 mb-1">
+                          <div className="flex items-center gap-1.5 text-[0.625rem] font-semibold text-ink-500 mb-1">
                             <span
                               className="w-1.5 h-1.5 rounded-full"
                               style={{ background: dotColors[grp.dot] }}
@@ -872,7 +872,7 @@ export default function ToleranceSection() {
                                     tgtDot: grp.dot,
                                   }))
                                 }
-                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-lg text-[0.6875rem] font-semibold border transition-all cursor-pointer"
                                 style={
                                   builderData.tgtCol === c
                                     ? {
@@ -906,8 +906,8 @@ export default function ToleranceSection() {
             {/* Step 4: Name & confirm */}
             {builderStep === 4 && (
               <div>
-                <div className="text-[12.5px] font-semibold text-ink-800 mb-1">Name this rule</div>
-                <div className="text-[10.5px] text-ink-400 mb-3">
+                <div className="text-[0.75rem] font-semibold text-ink-800 mb-1">Name this rule</div>
+                <div className="text-[0.75rem] text-ink-400 mb-3">
                   Give it a label your team will recognize.
                 </div>
                 <input
@@ -915,16 +915,16 @@ export default function ToleranceSection() {
                   value={builderData.name}
                   onChange={(e) => setBuilderData((p) => ({ ...p, name: e.target.value }))}
                   placeholder={`e.g. ${builderData.srcCol} vs ${builderData.tgtCol}`}
-                  className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[12.5px] font-semibold text-ink-800 outline-none focus:border-brand-400/60 focus:ring-2 focus:ring-brand-100 transition-all placeholder:text-ink-300"
+                  className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[0.75rem] font-semibold text-ink-800 outline-none focus:border-brand-400/60 focus:ring-2 focus:ring-brand-100 transition-all placeholder:text-ink-300"
                 />
-                <div className="flex items-center gap-1 mt-1.5 text-[10px] text-ink-400">
+                <div className="flex items-center gap-1 mt-1.5 text-[0.625rem] text-ink-400">
                   <Sparkles size={10} className="text-brand-600" />
                   <span>
                     Suggested: {builderData.srcCol} vs {builderData.tgtCol}
                   </span>
                 </div>
                 <div className="mt-3 rounded-lg p-3 bg-canvas">
-                  <div className="flex items-center gap-2 text-[11px] py-1">
+                  <div className="flex items-center gap-2 text-[0.6875rem] py-1">
                     <span className="text-ink-400 min-w-[60px] font-semibold">Type</span>
                     <span className="text-ink-700 font-semibold">
                       {
@@ -934,13 +934,13 @@ export default function ToleranceSection() {
                       }
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] py-1">
+                  <div className="flex items-center gap-2 text-[0.6875rem] py-1">
                     <span className="text-ink-400 min-w-[60px] font-semibold">Columns</span>
                     <span className="text-ink-700 font-semibold">
                       {builderData.srcCol} vs {builderData.tgtCol}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] py-1">
+                  <div className="flex items-center gap-2 text-[0.6875rem] py-1">
                     <span className="text-ink-400 min-w-[60px] font-semibold">Threshold</span>
                     <span className="text-ink-700 font-semibold">
                       {builderData.threshold ?? (builderData.type === 'exact' ? 'Exact' : '±5%')}
@@ -956,12 +956,12 @@ export default function ToleranceSection() {
                 <button
                   type="button"
                   onClick={() => setBuilderStep((s) => s - 1)}
-                  className="inline-flex items-center gap-1 rounded-md text-[11px] font-semibold px-2.5 py-1.5 text-ink-600 bg-canvas hover:bg-canvas-border/40 border border-canvas-border transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold px-2.5 py-1.5 text-ink-600 bg-canvas hover:bg-canvas-border/40 border border-canvas-border transition-colors cursor-pointer"
                 >
                   Back
                 </button>
               )}
-              <span className="flex-1 text-center text-[10.5px] text-ink-400">
+              <span className="flex-1 text-center text-[0.75rem] text-ink-400">
                 Step {builderStep} of 4
               </span>
               <button
@@ -1027,7 +1027,7 @@ export default function ToleranceSection() {
                     resetBuilder();
                   }
                 }}
-                className="inline-flex items-center gap-1 rounded-md text-[11px] font-semibold px-2.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white disabled:bg-brand-100 disabled:text-brand-300 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold px-2.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white disabled:bg-brand-100 disabled:text-brand-300 disabled:cursor-not-allowed cursor-pointer transition-colors"
               >
                 {builderStep === 4 ? 'Create rule' : 'Next'}
               </button>
@@ -1045,7 +1045,7 @@ export default function ToleranceSection() {
               setPickerOpen(!pickerOpen);
               setPickerSearch('');
             }}
-            className="w-full flex items-center justify-center gap-1.5 py-2 border-[1.5px] border-dashed rounded-xl text-[11.5px] font-semibold transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-1.5 py-2 border-[1.5px] border-dashed rounded-xl text-[0.75rem] font-semibold transition-all cursor-pointer"
             style={
               pickerOpen
                 ? {
@@ -1072,7 +1072,7 @@ export default function ToleranceSection() {
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="Search parameters…"
-                  className="flex-1 text-[11.5px] bg-transparent outline-none text-ink-700 placeholder:text-ink-300"
+                  className="flex-1 text-[0.75rem] bg-transparent outline-none text-ink-700 placeholder:text-ink-300"
                   autoFocus
                 />
               </div>
@@ -1086,7 +1086,7 @@ export default function ToleranceSection() {
                 );
                 return filtered.length > 0 ? (
                   <div className="py-1 border-b border-canvas-border">
-                    <div className="text-[9px] font-bold text-ink-400 uppercase tracking-wide px-3 py-1">
+                    <div className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wide px-3 py-1">
                       Preconfigured
                     </div>
                     {filtered.map((p) => {
@@ -1121,17 +1121,17 @@ export default function ToleranceSection() {
                           className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-canvas transition-colors"
                         >
                           <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-semibold shrink-0"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[0.6875rem] font-semibold shrink-0"
                             style={{ background: st.bg, color: st.color }}
                           >
                             {p.icon}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[11.5px] font-semibold text-ink-700 flex items-center gap-1">
+                            <div className="text-[0.75rem] font-semibold text-ink-700 flex items-center gap-1">
                               {p.name}
                               {p.tag && (
                                 <span
-                                  className="text-[8.5px] font-bold ml-0.5 px-1.5 py-0.5 rounded"
+                                  className="text-[0.75rem] font-bold ml-0.5 px-1.5 py-0.5 rounded"
                                   style={
                                     p.tagType === 'rec'
                                       ? { background: 'rgba(106,18,205,0.08)', color: '#6A12CD' }
@@ -1142,10 +1142,10 @@ export default function ToleranceSection() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-ink-400 mt-0.5">{p.desc}</div>
+                            <div className="text-[0.625rem] text-ink-400 mt-0.5">{p.desc}</div>
                           </div>
                           <span
-                            className="text-[10px] font-semibold px-2 py-1 rounded-md"
+                            className="text-[0.625rem] font-semibold px-2 py-1 rounded-md"
                             style={{ background: 'rgba(106,18,205,0.08)', color: '#6A12CD' }}
                           >
                             Add
@@ -1173,13 +1173,13 @@ export default function ToleranceSection() {
                   <Pencil size={12} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11.5px] font-semibold text-ink-700">Custom rule</div>
-                  <div className="text-[10px] text-ink-400 mt-0.5">
+                  <div className="text-[0.75rem] font-semibold text-ink-700">Custom rule</div>
+                  <div className="text-[0.625rem] text-ink-400 mt-0.5">
                     Build your own tolerance parameter from scratch
                   </div>
                 </div>
                 <span
-                  className="text-[10px] font-semibold px-2 py-1 rounded-md"
+                  className="text-[0.625rem] font-semibold px-2 py-1 rounded-md"
                   style={{ background: 'rgba(106,18,205,0.08)', color: '#6A12CD' }}
                 >
                   Build
@@ -1194,7 +1194,7 @@ export default function ToleranceSection() {
       {activeCount > 0 && impactSamples.length > 0 && (
         <div className="px-3 pb-3">
           <div className="border-t border-canvas-border pt-3">
-            <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">
+            <p className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">
               Impact preview — sample matches
             </p>
             <div className="space-y-0.5">
@@ -1208,20 +1208,20 @@ export default function ToleranceSection() {
                     key={i}
                     className="flex items-center gap-1.5 py-1.5 border-b border-canvas-border/60 last:border-b-0"
                   >
-                    <div className="flex-1 min-w-0 text-[11px] text-ink-500">
+                    <div className="flex-1 min-w-0 text-[0.6875rem] text-ink-500">
                       <span className="font-semibold text-ink-700">{a}</span>
                       <span className="mx-1">vs</span>
                       <span className="font-semibold text-ink-700">{b}</span>
-                      <span className="text-ink-400 ml-1 text-[10px]">{pct}</span>
+                      <span className="text-ink-400 ml-1 text-[0.625rem]">{pct}</span>
                     </div>
                     <span
-                      className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wide"
+                      className="text-[0.5625rem] font-bold uppercase px-1.5 py-0.5 rounded tracking-wide"
                       style={{ background: tc.bg, color: tc.color }}
                     >
                       {typeLabel}
                     </span>
                     <span
-                      className="text-[10.5px] font-bold min-w-[28px] text-right"
+                      className="text-[0.75rem] font-bold min-w-[28px] text-right"
                       style={{ color: statusColor }}
                     >
                       {status}
@@ -1260,7 +1260,7 @@ function AmountControls({
               key={m}
               type="button"
               onClick={() => onUpd({ mode: val })}
-              className="flex-1 py-1.5 text-[10.5px] font-semibold transition-all cursor-pointer"
+              className="flex-1 py-1.5 text-[0.75rem] font-semibold transition-all cursor-pointer"
               style={
                 active
                   ? { background: '#6A12CD', color: '#fff' }
@@ -1275,11 +1275,11 @@ function AmountControls({
       {r.mode === 'percentage' ? (
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[18px] font-bold tabular-nums min-w-[40px] text-brand-700">
+            <span className="text-[1.125rem] font-bold tabular-nums min-w-[40px] text-brand-700">
               {r.val}%
             </span>
             <span
-              className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+              className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
               style={{ background: sevSt.bg, color: sevSt.color }}
             >
               {sevSt.label}
@@ -1300,13 +1300,13 @@ function AmountControls({
           />
           <div className="flex justify-between mt-1">
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
             >
               0% Strict
             </span>
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(15,110,86,0.08)', color: '#0F6E56' }}
             >
               20% Relaxed
@@ -1315,12 +1315,12 @@ function AmountControls({
         </div>
       ) : (
         <div>
-          <p className="text-[10.5px] text-ink-500 font-semibold mb-2">
+          <p className="text-[0.75rem] text-ink-500 font-semibold mb-2">
             Maximum allowed difference
           </p>
           <div className="flex items-center gap-2">
             <div className="flex items-center flex-1 border border-canvas-border rounded-lg overflow-hidden focus-within:border-brand-400/50 focus-within:ring-2 focus-within:ring-brand-100 transition-all">
-              <span className="text-[11px] font-semibold text-ink-400 pl-3 pr-1 select-none">$</span>
+              <span className="text-[0.6875rem] font-semibold text-ink-400 pl-3 pr-1 select-none">$</span>
               <input
                 type="number"
                 min={0}
@@ -1329,11 +1329,11 @@ function AmountControls({
                 onChange={(e) =>
                   onUpd({ absVal: Math.max(0, Number(e.target.value) || 0) })
                 }
-                className="flex-1 py-2 pr-3 text-[13px] font-semibold bg-transparent outline-none tabular-nums text-brand-700"
+                className="flex-1 py-2 pr-3 text-[0.8125rem] font-semibold bg-transparent outline-none tabular-nums text-brand-700"
               />
             </div>
             <span
-              className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+              className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
               style={{
                 background:
                   r.absVal <= 100
@@ -1358,7 +1358,7 @@ function AmountControls({
                 key={v}
                 type="button"
                 onClick={() => onUpd({ absVal: v })}
-                className="flex-1 py-1 text-[10px] font-semibold rounded-md border transition-all cursor-pointer"
+                className="flex-1 py-1 text-[0.625rem] font-semibold rounded-md border transition-all cursor-pointer"
                 style={
                   r.absVal === v
                     ? {
@@ -1408,9 +1408,9 @@ function DateControls({
         >
           +
         </button>
-        <span className="text-[12.5px] text-ink-400 ml-1">days</span>
+        <span className="text-[0.75rem] text-ink-400 ml-1">days</span>
         <span
-          className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ml-2"
+          className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ml-2"
           style={{ background: sevSt.bg, color: sevSt.color }}
         >
           {sevSt.label}
@@ -1425,7 +1425,7 @@ function DateControls({
               key={m}
               type="button"
               onClick={() => onUpd({ dayType: val })}
-              className="flex-1 py-1.5 text-[10.5px] font-semibold transition-all cursor-pointer"
+              className="flex-1 py-1.5 text-[0.75rem] font-semibold transition-all cursor-pointer"
               style={
                 active
                   ? { background: '#6A12CD', color: '#fff' }
@@ -1454,11 +1454,11 @@ function TextControls({
     <>
       <div>
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[18px] font-bold tabular-nums min-w-[40px] text-brand-700">
+          <span className="text-[1.125rem] font-bold tabular-nums min-w-[40px] text-brand-700">
             {Math.round(r.val)}%
           </span>
           <span
-            className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+            className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
             style={{ background: sevSt.bg, color: sevSt.color }}
           >
             {sevSt.label}
@@ -1479,13 +1479,13 @@ function TextControls({
         />
         <div className="flex justify-between mt-1">
           <span
-            className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+            className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
             style={{ background: 'rgba(15,110,86,0.08)', color: '#0F6E56' }}
           >
             50% Relaxed
           </span>
           <span
-            className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+            className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
             style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
           >
             100% Strict
@@ -1493,7 +1493,7 @@ function TextControls({
         </div>
       </div>
       <div>
-        <p className="text-[10.5px] text-ink-500 font-semibold mb-1.5">Normalize before matching</p>
+        <p className="text-[0.75rem] text-ink-500 font-semibold mb-1.5">Normalize before matching</p>
         <div className="flex flex-wrap gap-1.5">
           {(
             [
@@ -1509,7 +1509,7 @@ function TextControls({
                 key={key}
                 type="button"
                 onClick={() => onUpd({ normalize: { ...r.normalize, [key]: !on } })}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10.5px] font-semibold border transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[0.75rem] font-semibold border transition-all cursor-pointer"
                 style={
                   on
                     ? {
@@ -1546,11 +1546,11 @@ function QtyControls({
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[18px] font-bold tabular-nums min-w-[40px] text-brand-700">
+        <span className="text-[1.125rem] font-bold tabular-nums min-w-[40px] text-brand-700">
           {r.val}%
         </span>
         <span
-          className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+          className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
           style={{ background: sevSt.bg, color: sevSt.color }}
         >
           {sevSt.label}
@@ -1604,12 +1604,12 @@ function BuilderThresholdStep({
 
   return (
     <div>
-      <div className="text-[12.5px] font-semibold text-ink-800 mb-1">{title}</div>
-      <div className="text-[10.5px] text-ink-400 mb-3">{subtitle}</div>
+      <div className="text-[0.75rem] font-semibold text-ink-800 mb-1">{title}</div>
+      <div className="text-[0.75rem] text-ink-400 mb-3">{subtitle}</div>
       {data.type === 'numeric' && (
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[18px] font-bold text-brand-700">{data.threshold ?? '5%'}</span>
+            <span className="text-[1.125rem] font-bold text-brand-700">{data.threshold ?? '5%'}</span>
           </div>
           <input
             type="range"
@@ -1626,13 +1626,13 @@ function BuilderThresholdStep({
           />
           <div className="flex justify-between mt-1">
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
             >
               0% Strict
             </span>
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(15,110,86,0.08)', color: '#0F6E56' }}
             >
               20% Relaxed
@@ -1663,13 +1663,13 @@ function BuilderThresholdStep({
           >
             +
           </button>
-          <span className="text-[12.5px] text-ink-400 ml-1">days</span>
+          <span className="text-[0.75rem] text-ink-400 ml-1">days</span>
         </div>
       )}
       {data.type === 'text' && (
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[18px] font-bold text-brand-700">
+            <span className="text-[1.125rem] font-bold text-brand-700">
               {data.threshold ?? '≥80%'}
             </span>
           </div>
@@ -1688,13 +1688,13 @@ function BuilderThresholdStep({
           />
           <div className="flex justify-between mt-1">
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(15,110,86,0.08)', color: '#0F6E56' }}
             >
               50% Relaxed
             </span>
             <span
-              className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+              className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
             >
               100% Strict
@@ -1705,7 +1705,7 @@ function BuilderThresholdStep({
       {data.type === 'exact' && (
         <div className="text-center py-4">
           <span className="text-2xl font-bold block mb-1 text-brand-700">==</span>
-          <span className="text-[11.5px] text-ink-500">
+          <span className="text-[0.75rem] text-ink-500">
             Values must be identical. Any difference → Flag.
           </span>
         </div>

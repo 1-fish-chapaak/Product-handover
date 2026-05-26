@@ -116,11 +116,11 @@ export default function ShareModal({ onClose, onShare }: Props) {
       >
         {/* Header */}
         <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-text">Share</h3>
+          <h3 className="text-[0.9375rem] font-semibold text-text">Share</h3>
           <div className="flex items-center gap-3">
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
             >
               <Link2 size={14} />
               Copy link
@@ -137,7 +137,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
           <div className="flex gap-2">
             <div className="flex-1 flex items-center gap-1.5 flex-wrap px-2.5 py-1.5 rounded-lg border border-border-light bg-surface-2 focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
               {inviteChips.map(chip => (
-                <span key={chip} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-white border border-border-light text-[12px] text-text">
+                <span key={chip} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-white border border-border-light text-[0.75rem] text-text">
                   {chip}
                   <button
                     onClick={() => removeChip(chip)}
@@ -155,13 +155,13 @@ export default function ShareModal({ onClose, onShare }: Props) {
                 onKeyDown={handleInputKeyDown}
                 onBlur={() => { if (email.trim()) { addChips(email); setEmail(''); } }}
                 placeholder={inviteChips.length === 0 ? 'Add comma separated emails to invite' : ''}
-                className="flex-1 min-w-[120px] bg-transparent py-1 text-[13px] text-text placeholder:text-text-muted focus:outline-none"
+                className="flex-1 min-w-[120px] bg-transparent py-1 text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none"
               />
               {inviteChips.length > 0 && (
                 <div className="relative">
                   <button
                     onClick={() => setOpenMenu(openMenu === 'invite' ? null : 'invite')}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-text-secondary hover:text-text transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[0.75rem] text-text-secondary hover:text-text transition-colors cursor-pointer"
                   >
                     {invitePermission}
                     <ChevronDown size={12} />
@@ -172,7 +172,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
                         <button
                           key={opt}
                           onClick={() => { setInvitePermission(opt); setOpenMenu(null); }}
-                          className="w-full text-left px-3 py-1.5 text-[12px] text-text hover:bg-surface-2 cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 text-[0.75rem] text-text hover:bg-surface-2 cursor-pointer"
                         >
                           {opt}
                         </button>
@@ -185,7 +185,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
             <button
               onClick={handleInvite}
               disabled={!canInvite}
-              className="px-5 py-2 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed bg-primary text-white hover:bg-primary-hover disabled:bg-gray-100 disabled:text-text-muted"
+              className="px-5 py-2 rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed bg-primary text-white hover:bg-primary-hover disabled:bg-gray-100 disabled:text-text-muted"
             >
               Invite
             </button>
@@ -193,7 +193,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
 
           {/* Who has access */}
           <div>
-            <div className="text-[12px] font-semibold text-text-muted mb-2">Who has access</div>
+            <div className="text-[0.75rem] font-semibold text-text-muted mb-2">Who has access</div>
             <div className="space-y-1">
               {/* Anyone with link */}
               <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-2 transition-colors">
@@ -201,12 +201,12 @@ export default function ShareModal({ onClose, onShare }: Props) {
                   <Globe size={15} className="text-text-muted" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-text">Anyone with link</div>
+                  <div className="text-[0.8125rem] font-medium text-text">Anyone with link</div>
                 </div>
                 <div className="relative">
                   <button
                     onClick={() => setOpenMenu(openMenu === 'anyone' ? null : 'anyone')}
-                    className="flex items-center gap-1 text-[12px] text-text-muted hover:text-text transition-colors cursor-pointer"
+                    className="flex items-center gap-1 text-[0.75rem] text-text-muted hover:text-text transition-colors cursor-pointer"
                   >
                     {anyonePermission}
                     <ChevronDown size={12} />
@@ -217,7 +217,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
                         <button
                           key={opt}
                           onClick={() => { setAnyonePermission(opt); setOpenMenu(null); }}
-                          className="w-full text-left px-3 py-1.5 text-[12px] text-text hover:bg-surface-2 cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 text-[0.75rem] text-text hover:bg-surface-2 cursor-pointer"
                         >
                           {opt}
                         </button>
@@ -229,31 +229,31 @@ export default function ShareModal({ onClose, onShare }: Props) {
 
               {/* Owner */}
               <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-2 transition-colors">
-                <div className={`w-8 h-8 rounded-full text-[12px] font-bold flex items-center justify-center shrink-0 ${OWNER.avatarClass}`}>
+                <div className={`w-8 h-8 rounded-full text-[0.75rem] font-bold flex items-center justify-center shrink-0 ${OWNER.avatarClass}`}>
                   {OWNER.initials}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-text">
+                  <div className="text-[0.8125rem] text-text">
                     <span className="font-medium">{OWNER.name}</span>
                     <span className="text-text-muted"> (you)</span>
                   </div>
                 </div>
-                <span className="text-[12px] text-text-muted">owner</span>
+                <span className="text-[0.75rem] text-text-muted">owner</span>
               </div>
 
               {/* Shared users */}
               {shared.map(user => (
                 <div key={user.email} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-2 transition-colors">
-                  <div className={`w-8 h-8 rounded-full text-[12px] font-bold flex items-center justify-center shrink-0 ${user.avatarClass}`}>
+                  <div className={`w-8 h-8 rounded-full text-[0.75rem] font-bold flex items-center justify-center shrink-0 ${user.avatarClass}`}>
                     {user.initials}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-medium text-text truncate">{user.name}</div>
+                    <div className="text-[0.8125rem] font-medium text-text truncate">{user.name}</div>
                   </div>
                   <div className="relative">
                     <button
                       onClick={() => setOpenMenu(openMenu === user.email ? null : user.email)}
-                      className="flex items-center gap-1 text-[12px] text-text-muted hover:text-text transition-colors cursor-pointer"
+                      className="flex items-center gap-1 text-[0.75rem] text-text-muted hover:text-text transition-colors cursor-pointer"
                     >
                       {permissionLabel(user.permission)}
                       <ChevronDown size={12} />
@@ -264,7 +264,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
                           <button
                             key={opt}
                             onClick={() => updatePermission(user.email, opt === 'can edit' ? 'edit' : 'view')}
-                            className="w-full text-left px-3 py-1.5 text-[12px] text-text hover:bg-surface-2 cursor-pointer"
+                            className="w-full text-left px-3 py-1.5 text-[0.75rem] text-text hover:bg-surface-2 cursor-pointer"
                           >
                             {opt}
                           </button>

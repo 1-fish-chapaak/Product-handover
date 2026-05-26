@@ -84,14 +84,14 @@ export function ModalEmptyState({
       <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center text-ink-400 mb-3">
         {icon}
       </div>
-      <p className="text-[13px] font-semibold text-ink-800">{title}</p>
-      {description && <p className="text-[12px] text-ink-500 mt-1 max-w-[320px]">{description}</p>}
+      <p className="text-[0.8125rem] font-semibold text-ink-800">{title}</p>
+      {description && <p className="text-[0.75rem] text-ink-500 mt-1 max-w-[320px]">{description}</p>}
       {(primaryAction || secondaryAction) && (
         <div className="flex items-center gap-2 mt-4">
           {primaryAction && (
             <button
               onClick={primaryAction.onClick}
-              className={`h-8 px-3 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${ACCENT_BTN[accent]}`}
+              className={`h-8 px-3 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${ACCENT_BTN[accent]}`}
             >
               {primaryAction.label}
             </button>
@@ -99,7 +99,7 @@ export function ModalEmptyState({
           {secondaryAction && (
             <button
               onClick={secondaryAction.onClick}
-              className={`h-8 px-3 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${ACCENT_LINK[accent]}`}
+              className={`h-8 px-3 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${ACCENT_LINK[accent]}`}
             >
               {secondaryAction.label}
             </button>
@@ -122,13 +122,13 @@ export function ModalErrorBanner({
     <div role="alert" className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-risk-50 border border-risk/30">
       <AlertOctagon size={14} className="text-risk mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-semibold text-risk-700">Couldn’t load</p>
-        <p className="text-[11px] text-risk-700/90 mt-0.5">{message}</p>
+        <p className="text-[0.75rem] font-semibold text-risk-700">Couldn’t load</p>
+        <p className="text-[0.6875rem] text-risk-700/90 mt-0.5">{message}</p>
       </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-[11px] font-semibold text-risk-700 hover:text-risk cursor-pointer shrink-0 px-2 py-1 rounded-md hover:bg-risk-50"
+          className="text-[0.6875rem] font-semibold text-risk-700 hover:text-risk cursor-pointer shrink-0 px-2 py-1 rounded-md hover:bg-risk-50"
         >
           Retry
         </button>
@@ -159,7 +159,7 @@ export function ModalRowSkeleton({ rows = 4 }: { rows?: number }) {
 
 export function ModalSubmitError({ message }: { message: string }) {
   return (
-    <div role="alert" className="flex items-center gap-1.5 text-[11px] text-risk-700">
+    <div role="alert" className="flex items-center gap-1.5 text-[0.6875rem] text-risk-700">
       <AlertTriangle size={12} />
       <span className="truncate">{message}</span>
     </div>
@@ -176,7 +176,7 @@ export function ButtonSpinner() {
 
 export function OfflineBanner() {
   return (
-    <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-paper-100 border border-canvas-border text-[11px] text-ink-700">
+    <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-paper-100 border border-canvas-border text-[0.6875rem] text-ink-700">
       <WifiOff size={13} className="text-ink-500 shrink-0" />
       <span className="truncate">You&rsquo;re offline. Changes will be sent when you reconnect.</span>
     </div>
@@ -201,14 +201,14 @@ export function SuccessPanel({
       }`}>
         <CheckCircle2 size={22} />
       </div>
-      <p className="text-[14px] font-semibold text-ink-800">{title}</p>
-      {description && <p className="text-[12px] text-ink-500 mt-1 max-w-[360px]">{description}</p>}
+      <p className="text-[0.875rem] font-semibold text-ink-800">{title}</p>
+      {description && <p className="text-[0.75rem] text-ink-500 mt-1 max-w-[360px]">{description}</p>}
       {(primaryAction || secondaryAction) && (
         <div className="flex items-center gap-2 mt-4">
           {primaryAction && (
             <button
               onClick={primaryAction.onClick}
-              className={`min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${ACCENT_BTN[accent]}`}
+              className={`min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${ACCENT_BTN[accent]}`}
             >
               {primaryAction.label}
             </button>
@@ -216,7 +216,7 @@ export function SuccessPanel({
           {secondaryAction && (
             <button
               onClick={secondaryAction.onClick}
-              className="min-h-[40px] px-3.5 rounded-md text-[12px] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer"
             >
               {secondaryAction.label}
             </button>

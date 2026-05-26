@@ -33,7 +33,7 @@ export default function StepOutputView({
     return (
       <div className="flex items-center gap-2 rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5">
         <Loader2 size={14} className="animate-spin text-brand-600 shrink-0" />
-        <div className="text-[12.5px] text-ink-700">
+        <div className="text-[0.75rem] text-ink-700">
           Running <b className="text-brand-700">{workflow.name}</b>…
         </div>
       </div>
@@ -115,11 +115,11 @@ export default function StepOutputView({
     >
       {/* AI Summary */}
       <section className="rounded-xl bg-brand-50/50 border border-brand-100 p-4">
-        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-700 bg-white/80 border border-brand-100 rounded-full px-2 py-1 mb-2">
+        <div className="inline-flex items-center gap-1.5 text-[0.6875rem] font-bold text-brand-700 bg-white/80 border border-brand-100 rounded-full px-2 py-1 mb-2">
           <Sparkles size={11} />
           AI SUMMARY
         </div>
-        <p className="text-[13px] text-ink-700 leading-relaxed">
+        <p className="text-[0.8125rem] text-ink-700 leading-relaxed">
           Scanned <b className="text-brand-700">12,450 invoices</b> against 6-month history.
           Identified <b className="text-brand-700">8 potential duplicates</b> totalling{' '}
           <b className="text-brand-700">₹6.10L at risk</b>. Highest confidence match: INV-4521 vs
@@ -132,7 +132,7 @@ export default function StepOutputView({
 
       {/* Key Observations */}
       <div>
-        <h2 className="text-[14px] font-semibold text-ink-900 mb-2">
+        <h2 className="text-[0.875rem] font-semibold text-ink-900 mb-2">
           Key Observations &amp; Insights
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -149,11 +149,11 @@ export default function StepOutputView({
                   >
                     <Icon size={13} />
                   </div>
-                  <div className="text-[13px] font-semibold text-ink-800">{o.title}</div>
+                  <div className="text-[0.8125rem] font-semibold text-ink-800">{o.title}</div>
                 </div>
-                <p className="text-[12px] text-ink-600 leading-relaxed mb-2">{o.body}</p>
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed mb-2">{o.body}</p>
                 <span
-                  className={`inline-flex items-center text-[11px] font-semibold rounded-md px-2 py-0.5 ${o.priorityColor}`}
+                  className={`inline-flex items-center text-[0.6875rem] font-semibold rounded-md px-2 py-0.5 ${o.priorityColor}`}
                 >
                   {o.priority}
                 </span>
@@ -169,7 +169,7 @@ export default function StepOutputView({
             type="button"
             onClick={onSave}
             disabled={saved}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             {saved ? <Check size={13} /> : <Save size={13} />}
             {saved ? savedLabel : saveLabel}

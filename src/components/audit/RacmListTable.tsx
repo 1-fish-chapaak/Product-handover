@@ -120,7 +120,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
       {actionNeededCount > 0 && (
         <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-4 py-3 flex items-center gap-3">
           <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-          <span className="text-[12px] text-amber-800 flex-1">
+          <span className="text-[0.75rem] text-amber-800 flex-1">
             <span className="font-semibold">{actionNeededCount} RACM{actionNeededCount !== 1 ? 's' : ''}</span> {actionNeededCount !== 1 ? 'require' : 'requires'} attention — complete setup before execution.
           </span>
         </div>
@@ -128,17 +128,17 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
                 {['', 'RACM', 'Status', 'Readiness', 'Process', 'Framework', 'Risks', 'Controls', ''].map((h, idx) => (
-                  <th key={h || `col-${idx}`} className={`px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap ${idx === 0 ? 'w-6' : ''}`}>{h}</th>
+                  <th key={h || `col-${idx}`} className={`px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap ${idx === 0 ? 'w-6' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={colCount} className="px-4 py-10 text-center text-[12px] text-text-muted">No RACMs found</td></tr>
+                <tr><td colSpan={colCount} className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No RACMs found</td></tr>
               ) : filtered.map((racm, i) => {
                 const status = getRacmTableStatus(racm);
                 const readiness = getRacmTableReadiness(racm);
@@ -159,38 +159,38 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1.5">
                           {racm.linkedToEngagement && <Lock size={10} className="text-gray-400 shrink-0" />}
-                          <span className="text-[12px] font-medium text-text">{racm.name}</span>
+                          <span className="text-[0.75rem] font-medium text-text">{racm.name}</span>
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center border ${STATUS_BADGE[status]}`}>{status}</span>
+                        <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center border ${STATUS_BADGE[status]}`}>{status}</span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
+                        <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{racm.process}</span>
+                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{racm.process}</span>
                       </td>
-                      <td className="px-3 py-3"><span className="text-[11px] text-gray-500">{racm.framework}</span></td>
-                      <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{racm.risks}</span></td>
-                      <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{racm.controls}</span></td>
+                      <td className="px-3 py-3"><span className="text-[0.6875rem] text-gray-500">{racm.framework}</span></td>
+                      <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.risks}</span></td>
+                      <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.controls}</span></td>
                       <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5 justify-end">
                           {onOpenInEditor && (
                             <button onClick={() => onOpenInEditor(racm)}
                               title="Open this RACM in the full-page editor"
-                              className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary text-white hover:bg-primary/90">
+                              className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary text-white hover:bg-primary/90">
                               <Pencil size={9} />Open in editor
                             </button>
                           )}
                           {isDraftRacm && onEditDraft && (
                             <button onClick={() => onEditDraft(racm)}
-                              className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary/20">
+                              className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary/20">
                               <Pencil size={9} />Edit draft
                             </button>
                           )}
                           <button onClick={toggleExpand}
-                            className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
+                            className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
                             {isExpanded ? 'Close' : 'View'}
                           </button>
                         </div>
@@ -221,7 +221,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           </table>
         </div>
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-          <span className="text-[11px] text-text-muted">{filtered.length} RACM{filtered.length !== 1 ? 's' : ''}</span>
+          <span className="text-[0.6875rem] text-text-muted">{filtered.length} RACM{filtered.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
     </div>

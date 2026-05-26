@@ -16,8 +16,8 @@ import { mapV3ExceptionsToGrc, syncGrcToV3Exception } from './exceptionAdapter';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 function futureDate(days: number): string { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -62,10 +62,10 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
   if (!hasCaseMgmt) {
     return (
       <div className="space-y-4">
-        <div><h3 className="text-[15px] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[12px] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
+        <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[0.75rem] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
         <div className="rounded-lg border border-border-light p-6 text-center space-y-2">
           <Info size={24} className="text-gray-300 mx-auto" />
-          <p className="text-[12px] text-text-muted">Case Management was not selected as an output for this project.</p>
+          <p className="text-[0.75rem] text-text-muted">Case Management was not selected as an output for this project.</p>
         </div>
       </div>
     );
@@ -74,12 +74,12 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
   if (completedRuns.length === 0) {
     return (
       <div className="space-y-4">
-        <div><h3 className="text-[15px] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[12px] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
+        <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[0.75rem] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
         <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
           <Lock size={28} className="text-gray-300 mx-auto" />
-          <h4 className="text-[14px] font-semibold text-text">No Completed Runs</h4>
-          <p className="text-[12px] text-text-muted">Complete an automation run before managing exceptions.</p>
-          <button onClick={() => onNavigateTab?.('workflows')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Workflows <ChevronRight size={12} /></button>
+          <h4 className="text-[0.875rem] font-semibold text-text">No Completed Runs</h4>
+          <p className="text-[0.75rem] text-text-muted">Complete an automation run before managing exceptions.</p>
+          <button onClick={() => onNavigateTab?.('workflows')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Workflows <ChevronRight size={12} /></button>
         </div>
       </div>
     );
@@ -88,11 +88,11 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
   if (allExceptions.length === 0) {
     return (
       <div className="space-y-4">
-        <div><h3 className="text-[15px] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[12px] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
+        <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Exceptions & Cases</h3><p className="text-[0.75rem] text-text-muted">Review workflow exceptions and manage follow-up cases.</p></div>
         <div className="rounded-lg border border-border-light p-6 text-center space-y-2">
           <Info size={24} className="text-gray-300 mx-auto" />
-          <p className="text-[12px] text-text-muted">No exceptions were generated from completed runs. All clear.</p>
-          <button onClick={() => onNavigateTab?.('reports')} className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Continue to Reports <ChevronRight size={11} /></button>
+          <p className="text-[0.75rem] text-text-muted">No exceptions were generated from completed runs. All clear.</p>
+          <button onClick={() => onNavigateTab?.('reports')} className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Continue to Reports <ChevronRight size={11} /></button>
         </div>
       </div>
     );
@@ -159,18 +159,18 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
     <div className="space-y-0 relative">
       {/* Context banner + workflow filter */}
       <div className="rounded-t-lg border border-blue-200/50 overflow-hidden mb-0">
-        <div className="flex items-start gap-2 px-4 py-2 bg-blue-50/50 text-[10px] text-blue-600">
+        <div className="flex items-start gap-2 px-4 py-2 bg-blue-50/50 text-[0.625rem] text-blue-600">
           <Info size={11} className="shrink-0 mt-0.5" />
           <span>Select exceptions, classify deficiencies, and use <strong>Mark as Case & Assign</strong> to assign owners for remediation.</span>
         </div>
         {workflowNames.length > 1 && (
           <div className="flex items-center gap-2 px-4 py-2 bg-white border-t border-border-light/50">
             <Workflow size={13} className="text-primary shrink-0" />
-            <span className="text-[11px] font-semibold text-text-muted">Filter by Workflow:</span>
+            <span className="text-[0.6875rem] font-semibold text-text-muted">Filter by Workflow:</span>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setSelectedWorkflow('')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${!selectedWorkflow ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${!selectedWorkflow ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
               >
                 All Workflows ({allExceptions.length})
               </button>
@@ -180,7 +180,7 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
                   <button
                     key={name}
                     onClick={() => setSelectedWorkflow(name)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${selectedWorkflow === name ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${selectedWorkflow === name ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                   >
                     {name.length > 25 ? name.slice(0, 24) + '…' : name} ({count})
                   </button>
@@ -250,8 +250,8 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
           <div className="px-6 py-4 border-b border-border-light bg-gradient-to-r from-purple-50 to-white">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-[15px] font-bold text-text">Mark as Case & Assign</h3>
-                <p className="text-[11px] text-text-muted mt-0.5">{selectedExceptions.length} exception{selectedExceptions.length !== 1 ? 's' : ''} selected — assign to a risk owner for remediation.</p>
+                <h3 className="text-[0.9375rem] font-bold text-text">Mark as Case & Assign</h3>
+                <p className="text-[0.6875rem] text-text-muted mt-0.5">{selectedExceptions.length} exception{selectedExceptions.length !== 1 ? 's' : ''} selected — assign to a risk owner for remediation.</p>
               </div>
               <button onClick={onCancel} className="p-1.5 rounded-lg text-gray-400 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors"><X size={16} /></button>
             </div>
@@ -259,13 +259,13 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
 
           {/* Selected exceptions preview */}
           <div className="px-6 py-3 bg-surface-2/20 border-b border-border-light/50">
-            <div className="text-[10px] text-gray-500 font-medium mb-1.5">SELECTED EXCEPTIONS</div>
+            <div className="text-[0.625rem] text-gray-500 font-medium mb-1.5">SELECTED EXCEPTIONS</div>
             <div className="space-y-1 max-h-28 overflow-y-auto">
               {selectedExceptions.map(ex => (
-                <div key={ex.id} className="flex items-center gap-2 text-[11px]">
-                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${EX_SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
+                <div key={ex.id} className="flex items-center gap-2 text-[0.6875rem]">
+                  <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${EX_SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
                   <span className="text-text font-medium flex-1 truncate">{ex.title}</span>
-                  {ex.sourceWorkflowName && <span className="text-gray-400 text-[10px] truncate max-w-[140px]">{ex.sourceWorkflowName}</span>}
+                  {ex.sourceWorkflowName && <span className="text-gray-400 text-[0.625rem] truncate max-w-[140px]">{ex.sourceWorkflowName}</span>}
                 </div>
               ))}
             </div>
@@ -293,7 +293,7 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
             </div>
 
             {validationMsg && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-[10px] text-red-600">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-[0.625rem] text-red-600">
                 <AlertCircle size={10} /><span>{validationMsg}</span>
               </div>
             )}
@@ -301,8 +301,8 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
 
           {/* Footer */}
           <div className="px-6 py-3 border-t border-border-light bg-gray-50/50 flex items-center justify-end gap-2">
-            <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-border-light text-[12px] font-medium text-text-muted hover:bg-white cursor-pointer transition-colors">Cancel</button>
-            <button onClick={handleSave} className="px-5 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+            <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-border-light text-[0.75rem] font-medium text-text-muted hover:bg-white cursor-pointer transition-colors">Cancel</button>
+            <button onClick={handleSave} className="px-5 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors">
               Assign {selectedExceptions.length} Case{selectedExceptions.length !== 1 ? 's' : ''}
             </button>
           </div>

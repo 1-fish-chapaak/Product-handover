@@ -14,9 +14,9 @@ import {
   type ObservationCategory, type ObservationSeverity, type ObservationStatus,
 } from './internalAuditObservationsData';
 
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -133,11 +133,11 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[15px] font-bold text-text mb-0.5">Observations</h3>
-          <p className="text-[12px] text-text-muted">Formalize audit findings from analysis exceptions or confirm no observations were noted.</p>
+          <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Observations</h3>
+          <p className="text-[0.75rem] text-text-muted">Formalize audit findings from analysis exceptions or confirm no observations were noted.</p>
         </div>
         <button onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors shrink-0">
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors shrink-0">
           <Plus size={12} />Create Observation
         </button>
       </div>
@@ -153,8 +153,8 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
           { label: 'No Obs.', value: summary.noObsConfirmed ? 'Yes' : '—', cls: summary.noObsConfirmed ? 'text-emerald-600' : '' },
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
-            <div className={`text-[16px] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
+            <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
+            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -162,27 +162,27 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       {/* Potential observations from analysis */}
       {/* Validation message */}
       {validationMessage && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[11px] text-red-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[0.6875rem] text-red-700">
           <AlertCircle size={13} className="shrink-0 mt-0.5" /><span>{validationMessage}</span>
         </div>
       )}
 
       {unconvertedPotObs.length > 0 && (
         <div className="rounded-lg border border-amber-200/50 bg-amber-50/20 p-4 space-y-2">
-          <h4 className="text-[11px] font-bold text-amber-700 flex items-center gap-1.5"><AlertTriangle size={12} />Potential Observations from Analysis ({unconvertedPotObs.length})</h4>
+          <h4 className="text-[0.6875rem] font-bold text-amber-700 flex items-center gap-1.5"><AlertTriangle size={12} />Potential Observations from Analysis ({unconvertedPotObs.length})</h4>
           <div className="space-y-1.5">
             {unconvertedPotObs.map(po => (
               <div key={po.id} className="flex items-center justify-between rounded-lg border border-border-light bg-white px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${SEVERITY_CLS[po.severity]}`}>{po.severity}</span>
-                    <span className="text-[11px] font-medium text-text">{po.title}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[po.severity]}`}>{po.severity}</span>
+                    <span className="text-[0.6875rem] font-medium text-text">{po.title}</span>
                   </div>
-                  <div className="text-[9px] text-gray-400 mt-0.5">{po.linkedScopeLabel} · {po.description.slice(0, 60)}...</div>
+                  <div className="text-[0.5625rem] text-gray-400 mt-0.5">{po.linkedScopeLabel} · {po.description.slice(0, 60)}...</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                  <button onClick={() => convertPotObs(po)} className="px-2 py-1 rounded text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Convert</button>
-                  <button onClick={() => dismissPotObs(po.id)} className="px-2 py-1 rounded text-[9px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
+                  <button onClick={() => convertPotObs(po)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Convert</button>
+                  <button onClick={() => dismissPotObs(po.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
                 </div>
               </div>
             ))}
@@ -228,23 +228,23 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             <tr key={obs.id} className="border-b border-border-light/50">
               <td className="px-3 py-2">
                 <div className="font-medium text-text">{obs.title}</div>
-                <div className="text-[9px] text-gray-400 mt-0.5">
+                <div className="text-[0.5625rem] text-gray-400 mt-0.5">
                   {CATEGORY_LABELS[obs.observationCategory]}
                   {!groupByControl && <> · <span className="text-primary/70 font-medium">{ctrlName}</span></>}
                   {wfName && <> · Workflow: {wfName}</>}
                 </div>
               </td>
-              <td className="px-3 py-2 text-center text-[9px] text-gray-500">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? 'Analysis' : 'Manual'}</td>
-              <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${SEVERITY_CLS[obs.severity]}`}>{obs.severity}</span></td>
+              <td className="px-3 py-2 text-center text-[0.5625rem] text-gray-500">{obs.sourceType === 'ANALYSIS_EXCEPTION' ? 'Analysis' : 'Manual'}</td>
+              <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[obs.severity]}`}>{obs.severity}</span></td>
               <td className="px-3 py-2 text-gray-500">{obs.processOwner || '—'}</td>
-              <td className="px-3 py-2 text-center text-[10px] font-mono text-gray-500">{obs.targetRemediationDate || '—'}</td>
-              <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[8px] font-bold ${STATUS_CLS[obs.status]}`}>{obs.status === 'READY_FOR_DISCUSSION' ? 'Ready' : obs.status.replace(/_/g, ' ')}</span></td>
+              <td className="px-3 py-2 text-center text-[0.625rem] font-mono text-gray-500">{obs.targetRemediationDate || '—'}</td>
+              <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${STATUS_CLS[obs.status]}`}>{obs.status === 'READY_FOR_DISCUSSION' ? 'Ready' : obs.status.replace(/_/g, ' ')}</span></td>
               <td className="px-3 py-2 text-center">
                 <div className="flex items-center justify-center gap-1">
-                  <button onClick={() => setEditingId(obs.id)} className="px-2 py-1 rounded text-[8px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Edit</button>
-                  {obs.status === 'DRAFT' && <button onClick={() => markReady(obs.id)} className="px-2 py-1 rounded text-[8px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Ready</button>}
-                  {obs.status !== 'DROPPED' && <button onClick={() => dropObs(obs.id)} className="px-2 py-1 rounded text-[8px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Drop</button>}
-                  {obs.status === 'DROPPED' && <button onClick={() => reopenObs(obs.id)} className="px-2 py-1 rounded text-[8px] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 cursor-pointer transition-colors">Reopen</button>}
+                  <button onClick={() => setEditingId(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Edit</button>
+                  {obs.status === 'DRAFT' && <button onClick={() => markReady(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Ready</button>}
+                  {obs.status !== 'DROPPED' && <button onClick={() => dropObs(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Drop</button>}
+                  {obs.status === 'DROPPED' && <button onClick={() => reopenObs(obs.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 cursor-pointer transition-colors">Reopen</button>}
                 </div>
               </td>
             </tr>
@@ -252,7 +252,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
         };
 
         const tableHeader = (
-          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[9px] font-semibold text-gray-400 uppercase">
+          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
             <th className="px-3 py-1.5 text-left">Observation</th>
             <th className="px-3 py-1.5 text-center">Source</th>
             <th className="px-3 py-1.5 text-center">Severity</th>
@@ -268,14 +268,14 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             {/* View toggle + control filter */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h4 className="text-[11px] font-bold text-text">Formal Observations ({filteredObs.length})</h4>
+                <h4 className="text-[0.6875rem] font-bold text-text">Formal Observations ({filteredObs.length})</h4>
                 <div className="flex items-center gap-1 ml-2">
                   <button onClick={() => { setGroupByControl(false); setControlFilter(''); }}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${!groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${!groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                     All
                   </button>
                   <button onClick={() => setGroupByControl(true)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${groupByControl ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                     Group by Control
                   </button>
                 </div>
@@ -283,12 +283,12 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
               {/* Control filter chips */}
               {controlNames.length > 1 && !groupByControl && (
                 <div className="flex items-center gap-1 flex-wrap">
-                  <span className="text-[9px] text-gray-400 font-medium mr-1">Control:</span>
+                  <span className="text-[0.5625rem] text-gray-400 font-medium mr-1">Control:</span>
                   <button onClick={() => setControlFilter('')}
-                    className={`px-2 py-0.5 rounded-full text-[9px] font-semibold cursor-pointer transition-colors ${!controlFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>All</button>
+                    className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${!controlFilter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>All</button>
                   {controlNames.map(cn => (
                     <button key={cn} onClick={() => setControlFilter(controlFilter === cn ? '' : cn)}
-                      className={`px-2 py-0.5 rounded-full text-[9px] font-semibold cursor-pointer transition-colors truncate max-w-[140px] ${controlFilter === cn ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors truncate max-w-[140px] ${controlFilter === cn ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                       {cn.length > 20 ? cn.slice(0, 19) + '…' : cn}
                     </button>
                   ))}
@@ -307,16 +307,16 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
                       <div className="px-4 py-2.5 border-b border-border-light bg-surface-2/20">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-[12px] font-semibold text-text">{ctrlName}</span>
-                            <span className="text-[10px] text-gray-400">{obs.length} observation{obs.length !== 1 ? 's' : ''}</span>
+                            <span className="text-[0.75rem] font-semibold text-text">{ctrlName}</span>
+                            <span className="text-[0.625rem] text-gray-400">{obs.length} observation{obs.length !== 1 ? 's' : ''}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-[9px]">
+                          <div className="flex items-center gap-2 text-[0.5625rem]">
                             {highCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 font-semibold">{highCount} High/Critical</span>}
                             {readyCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-semibold">{readyCount} Ready</span>}
                           </div>
                         </div>
                       </div>
-                      <table className="w-full text-[11px]">
+                      <table className="w-full text-[0.6875rem]">
                         {tableHeader}
                         <tbody>{obs.map(renderObsRow)}</tbody>
                       </table>
@@ -327,7 +327,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             ) : (
               /* Flat view */
               <div className="rounded-lg border border-border-light overflow-hidden">
-                <table className="w-full text-[11px]">
+                <table className="w-full text-[0.6875rem]">
                   {tableHeader}
                   <tbody>{filteredObs.map(renderObsRow)}</tbody>
                 </table>
@@ -346,22 +346,22 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       {/* No observations confirmation */}
       {canConfirmNoObs && (
         <div className="rounded-lg border border-border-light p-4 text-center space-y-2">
-          <h4 className="text-[12px] font-semibold text-text">No Observations</h4>
-          <p className="text-[11px] text-gray-500">If no audit findings were identified, confirm below.</p>
+          <h4 className="text-[0.75rem] font-semibold text-text">No Observations</h4>
+          <p className="text-[0.6875rem] text-gray-500">If no audit findings were identified, confirm below.</p>
           <button onClick={confirmNoObs}
-            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1.5">
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1.5">
             <CheckCircle2 size={13} />Confirm No Observations Noted
           </button>
         </div>
       )}
       {effectiveNoObsConfirmed && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[0.6875rem] text-emerald-700">
           <CheckCircle2 size={13} className="shrink-0 mt-0.5" />
           <span>No observations noted — confirmed by {observationsState.noObservationsConfirmedBy} on {observationsState.noObservationsConfirmedAt}.</span>
         </div>
       )}
       {activeObs.length > 0 && !effectiveNoObsConfirmed && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[10px] text-gray-500">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500">
           <Info size={11} className="shrink-0 mt-0.5" />
           <span>Cannot confirm "No observations" while active observations exist.</span>
         </div>
@@ -370,8 +370,8 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       {/* Discussion readiness */}
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <h4 className="text-[11px] font-bold text-text">Discussion Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${canProceedToDiscussion ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{canProceedToDiscussion ? 'Ready' : 'Not Ready'}</span>
+          <h4 className="text-[0.6875rem] font-bold text-text">Discussion Readiness</h4>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${canProceedToDiscussion ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{canProceedToDiscussion ? 'Ready' : 'Not Ready'}</span>
         </div>
         <div className="space-y-1">
           {[
@@ -380,14 +380,14 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
             { label: 'Observations marked ready for discussion', ok: observationsState.observations.some(o => o.status === 'READY_FOR_DISCUSSION') || effectiveNoObsConfirmed },
             { label: 'Process owners assigned', ok: activeObs.length === 0 || activeObs.every(o => o.processOwner.trim().length > 0) },
           ].map(c => (
-            <div key={c.label} className="flex items-center gap-2 text-[10px]">
+            <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
               <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
         <button onClick={() => onNavigateTab?.('discussion')} disabled={!canProceedToDiscussion}
-          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           Continue to Discussion <ChevronRight size={11} />
         </button>
       </div>
@@ -429,7 +429,7 @@ function CreateObservationForm({ engagement, cfg, onSave, onCancel }: {
 
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between"><h4 className="text-[13px] font-bold text-text">Create Observation</h4><button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
+      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create Observation</h4><button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2"><label className={labelCls}>Title <span className="text-red-400">*</span></label><input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Approval matrix not consistently followed" className={inputCls} /></div>
         <div className="col-span-2"><label className={labelCls}>Description</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Describe the finding..." className={inputCls + ' resize-none'} /></div>
@@ -443,8 +443,8 @@ function CreateObservationForm({ engagement, cfg, onSave, onCancel }: {
         <div><label className={labelCls}>Target Remediation</label><input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className={inputCls} /></div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
-        <button onClick={handleSave} disabled={!title.trim()} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
+        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
+        <button onClick={handleSave} disabled={!title.trim()} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
       </div>
     </div>
   );
@@ -462,7 +462,7 @@ function EditObservationPanel({ obs, onSave, onClose, onMarkReady }: {
   return (
     <div className="rounded-xl border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
-        <h4 className="text-[13px] font-bold text-text">Edit Observation</h4>
+        <h4 className="text-[0.8125rem] font-bold text-text">Edit Observation</h4>
         <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -477,25 +477,25 @@ function EditObservationPanel({ obs, onSave, onClose, onMarkReady }: {
         <div><label className={labelCls}>Target Remediation</label><input type="date" value={draft.targetRemediationDate} onChange={e => update('targetRemediationDate', e.target.value)} className={inputCls} /></div>
       </div>
       {missing.length > 0 && draft.status === 'DRAFT' && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
           <AlertCircle size={11} className="shrink-0 mt-0.5" /><span>Missing for discussion: {missing.join(', ')}</span>
         </div>
       )}
       {obs.history.length > 0 && (
-        <div><h6 className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">History</h6>
+        <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">History</h6>
           <div className="space-y-1">{obs.history.map(h => (
-            <div key={h.id} className="text-[9px] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}
       <div className="flex items-center gap-2">
         <button onClick={() => onSave({ ...draft, updatedAt: new Date().toISOString().slice(0, 10), history: [...draft.history, { id: `oh-${Date.now()}`, action: 'UPDATED', actor: 'Auditor', timestamp: now(), comments: '' }] })}
-          className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-semibold text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Save Draft</button>
+          className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Save Draft</button>
         {draft.status === 'DRAFT' && missing.length === 0 && (
           <button onClick={() => { onSave({ ...draft, status: 'READY_FOR_DISCUSSION', updatedAt: new Date().toISOString().slice(0, 10), history: [...draft.history, { id: `oh-${Date.now()}`, action: 'MARKED_READY', actor: 'Auditor', timestamp: now(), comments: 'Sent to process owner for discussion.' }] }); onClose(); }}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold cursor-pointer transition-colors"><Send size={11} />Send to Process Owner</button>
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors"><Send size={11} />Send to Process Owner</button>
         )}
-        <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
+        <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
       </div>
     </div>
   );

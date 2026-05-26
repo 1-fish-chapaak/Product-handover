@@ -12,9 +12,9 @@ interface Props {
   onChange: (config: EngagementConfig) => void;
 }
 
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 const checkCls = 'w-3.5 h-3.5 rounded border-border text-primary cursor-pointer accent-[#6a12cd]';
 
 export default function PatternConfigStep({ patternType, config, onChange }: Props) {
@@ -42,8 +42,8 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-[15px] font-bold text-text mb-1">Compliance Setup</h3>
-        <p className="text-[12px] text-text-muted">Configure framework, control scope, and testing approach.</p>
+        <h3 className="text-[0.9375rem] font-bold text-text mb-1">Compliance Setup</h3>
+        <p className="text-[0.75rem] text-text-muted">Configure framework, control scope, and testing approach.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -84,10 +84,10 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
       <div className="rounded-lg border border-dashed border-primary/30 bg-primary/[0.03] p-3">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-semibold text-text block">Upload RACM</span>
-            <span className="text-[10px] text-gray-400">Upload an Excel/CSV RACM file to link controls to this engagement.</span>
+            <span className="text-[0.6875rem] font-semibold text-text block">Upload RACM</span>
+            <span className="text-[0.625rem] text-gray-400">Upload an Excel/CSV RACM file to link controls to this engagement.</span>
           </div>
-          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
+          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.625rem] font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
             Choose File
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
               const file = e.target.files?.[0];
@@ -99,18 +99,18 @@ function ComplianceSetup({ config, onChange }: { config: ComplianceConfig; onCha
           </label>
         </div>
         {config.racmVersionId && (
-          <div className="mt-2 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+          <div className="mt-2 flex items-center gap-2 text-[0.625rem] text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
             <span>RACM linked: {config.racmVersionId.replace('uploaded-', '')}</span>
           </div>
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-[11px] text-gray-400 cursor-not-allowed">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-gray-400 cursor-not-allowed">
           <input type="checkbox" checked={config.reviewerRequired} disabled className={checkCls + ' opacity-50'} />
           Reviewer required
         </label>
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.requestPbcEnabled} onChange={e => update('requestPbcEnabled', e.target.checked)} className={checkCls} />
           Request PBC
         </label>
@@ -128,24 +128,24 @@ function InternalAuditSetup({ config, onChange }: { config: InternalAuditConfig;
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-[15px] font-bold text-text mb-1">Audit Assignment Setup</h3>
-        <p className="text-[12px] text-text-muted">Configure announcement, IDR, and reporting settings.</p>
+        <h3 className="text-[0.9375rem] font-bold text-text mb-1">Audit Assignment Setup</h3>
+        <p className="text-[0.75rem] text-text-muted">Configure announcement, IDR, and reporting settings.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.idrEnabled} onChange={e => update('idrEnabled', e.target.checked)} className={checkCls} />
           Enable IDR
         </label>
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.announcementRequired} onChange={e => update('announcementRequired', e.target.checked)} className={checkCls} />
           Announcement required
         </label>
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.finalReportRequired} onChange={e => update('finalReportRequired', e.target.checked)} className={checkCls} />
           Final report required
         </label>
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.actionTrackingEnabled} onChange={e => update('actionTrackingEnabled', e.target.checked)} className={checkCls} />
           Action tracking
         </label>
@@ -169,8 +169,8 @@ function AutomationProjectSetup({ config, onChange }: { config: AutomationProjec
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-[15px] font-bold text-text mb-1">Automation Project Setup</h3>
-        <p className="text-[12px] text-text-muted">Define outputs, review needs, run cadence, and optional governance references. Workflow selection and data source configuration happen inside the project workspace.</p>
+        <h3 className="text-[0.9375rem] font-bold text-text mb-1">Automation Project Setup</h3>
+        <p className="text-[0.75rem] text-text-muted">Define outputs, review needs, run cadence, and optional governance references. Workflow selection and data source configuration happen inside the project workspace.</p>
       </div>
 
       <div>
@@ -182,18 +182,18 @@ function AutomationProjectSetup({ config, onChange }: { config: AutomationProjec
             const label = ot === 'CASE_MANAGEMENT' ? 'Case Management' : ot === 'DOWNLOADABLE_FILE' ? 'Downloadable File' : ot.charAt(0) + ot.slice(1).toLowerCase();
             const isDashboard = ot === 'DASHBOARD';
             return (
-              <label key={ot} className={`flex items-center gap-2 text-[11px] ${isReport ? 'text-gray-400 cursor-not-allowed' : 'text-text cursor-pointer'}`} title={isDashboard ? 'Creates a monitoring dashboard when this project is scheduled for recurring runs.' : undefined}>
+              <label key={ot} className={`flex items-center gap-2 text-[0.6875rem] ${isReport ? 'text-gray-400 cursor-not-allowed' : 'text-text cursor-pointer'}`} title={isDashboard ? 'Creates a monitoring dashboard when this project is scheduled for recurring runs.' : undefined}>
                 <input type="checkbox" checked={checked || isReport} disabled={isReport} onChange={() => toggleOutput(ot)} className={checkCls + (isReport ? ' opacity-50' : '')} />
                 {label}
               </label>
             );
           })}
         </div>
-        <p className="text-[9px] text-gray-400 mt-1">Report is required and cannot be unchecked.</p>
+        <p className="text-[0.5625rem] text-gray-400 mt-1">Report is required and cannot be unchecked.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-[11px] text-text cursor-pointer">
+        <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
           <input type="checkbox" checked={config.reviewRequired} onChange={e => update('reviewRequired', e.target.checked)} className={checkCls} />
           Review required
         </label>

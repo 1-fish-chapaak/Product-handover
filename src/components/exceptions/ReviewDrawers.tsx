@@ -139,8 +139,8 @@ function DrawerShell({
       <header className="shrink-0 px-6 pt-5 pb-0 border-b border-canvas-border">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
-            {subtitle && <p className="text-[12.5px] text-ink-500 mt-0.5">{subtitle}</p>}
+            <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">{title}</h2>
+            {subtitle && <p className="text-[0.75rem] text-ink-500 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
@@ -158,7 +158,7 @@ function DrawerShell({
                 <button
                   key={t}
                   onClick={() => onTabChange?.(t)}
-                  className={`pb-3 text-[13px] font-medium transition-colors cursor-pointer border-b-2 ${
+                  className={`pb-3 text-[0.8125rem] font-medium transition-colors cursor-pointer border-b-2 ${
                     active ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
                   }`}
                 >
@@ -179,7 +179,7 @@ function DrawerShell({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">
+    <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-500 mb-2">
       {children}
     </div>
   );
@@ -187,7 +187,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-medium rounded-full whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -206,20 +206,20 @@ function FooterButtons({
     <>
       <button
         onClick={onCancel}
-        className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+        className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
       >
         Cancel
       </button>
       <button
         onClick={onReject}
-        className="flex-1 h-10 text-[13px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+        className="flex-1 h-10 text-[0.8125rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
       >
         <XCircle size={14} />
         Reject
       </button>
       <button
         onClick={onApprove}
-        className="flex-1 h-10 text-[13px] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+        className="flex-1 h-10 text-[0.8125rem] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
       >
         <CheckCircle2 size={14} />
         Approve
@@ -244,20 +244,20 @@ function ActivityTimeline({ entries }: { entries: GrcActivityEntry[] }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 mb-0.5">
-                <div className="text-[12.5px] text-ink-800">
+                <div className="text-[0.75rem] text-ink-800">
                   <span className="font-semibold">{entry.author}</span>{' '}
                   <span className="text-ink-500">[{entry.role}]</span>
                 </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
+                <span className="text-[0.6875rem] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
               </div>
-              <p className="text-[12.5px] text-ink-700 leading-snug">{entry.message}</p>
+              <p className="text-[0.75rem] text-ink-700 leading-snug">{entry.message}</p>
               {entry.comment && (
-                <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12px] text-ink-700 leading-relaxed">
+                <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[0.75rem] text-ink-700 leading-relaxed">
                   {entry.comment}
                 </div>
               )}
               {entry.attachment && (
-                <button className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[11.5px] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
+                <button className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[0.75rem] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
                   <Paperclip size={11} />
                   {entry.attachment.name}
                 </button>
@@ -269,7 +269,7 @@ function ActivityTimeline({ entries }: { entries: GrcActivityEntry[] }) {
       {hiddenCount > 0 && !showMore && (
         <button
           onClick={() => setShowMore(true)}
-          className="mt-4 inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+          className="mt-4 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
         >
           <ChevronDown size={13} />
           Show {hiddenCount} more
@@ -307,13 +307,13 @@ export function ReviewClassificationDrawer({
             <>
               <button
                 onClick={onClose}
-                className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+                className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={onClose}
-                className="flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 bg-brand-600 text-white hover:bg-brand-500 cursor-pointer"
+                className="flex-[2] h-10 text-[0.8125rem] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 bg-brand-600 text-white hover:bg-brand-500 cursor-pointer"
               >
                 Submit
               </button>
@@ -329,11 +329,11 @@ export function ReviewClassificationDrawer({
       >
         {bulk && (
           <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
+            <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-brand-700 mb-2">
               <LinkIcon size={13} />
               Part of Bulk Action
             </div>
-            <div className="flex items-center gap-3 text-[12.5px] text-ink-700">
+            <div className="flex items-center gap-3 text-[0.75rem] text-ink-700">
               <span>ID: <span className="font-mono font-semibold text-brand-700">{bulk.id}</span></span>
               <span className="text-ink-300">|</span>
               <span className="tabular-nums">{bulk.caseIds.length} cases grouped</span>
@@ -355,14 +355,14 @@ export function ReviewClassificationDrawer({
         </div>
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Comment</label>
+          <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">Comment</label>
           <div className="relative">
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="Add a review comment..."
               rows={4}
-              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
             <button
               type="button"
@@ -421,7 +421,7 @@ export function ReviewCaseDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -431,7 +431,7 @@ export function ReviewCaseDrawer({
                 if (canSubmit && decision) onDecision(decision);
               }}
               disabled={!canSubmit}
-              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                   : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -445,18 +445,18 @@ export function ReviewCaseDrawer({
         <>
           {bulk && (
               <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
+                <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-brand-700 mb-2">
                   <LinkIcon size={13} />
                   Part of Bulk Action
                 </div>
-                <div className="flex items-center gap-3 text-[12.5px] text-ink-700 mb-2">
+                <div className="flex items-center gap-3 text-[0.75rem] text-ink-700 mb-2">
                   <span>ID: <span className="font-mono font-semibold text-brand-700">{bulk.id}</span></span>
                   <span className="text-ink-300">|</span>
                   <span className="tabular-nums">{bulk.caseIds.length} cases grouped</span>
                 </div>
                 <button
                   onClick={() => onViewBulk(bulk.id)}
-                  className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                 >
                   View all cases in this bulk action
                   <ExternalLink size={12} />
@@ -480,15 +480,15 @@ export function ReviewCaseDrawer({
             {detail && (
               <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
                 <SectionLabel>Action Submitted</SectionLabel>
-                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1.5 leading-snug">
                   <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                   {detail.actionTitle}
                 </h3>
-                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                   <Calendar size={11} />
                   {detail.actionDueDate}
                 </div>
-                <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                <p className="text-[0.75rem] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
               </section>
             )}
 
@@ -498,13 +498,13 @@ export function ReviewCaseDrawer({
               {/* Approve / Reject toggle — hidden in Case Reviewed (view) mode */}
               {!isViewMode && (
                 <div className="mb-4">
-                  <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
+                  <label className="block text-[0.75rem] font-medium text-ink-800 mb-2">
                     Decision <span className="text-risk">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => { setDecision('approve'); }}
-                      className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                      className={`h-10 text-[0.75rem] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         decision === 'approve'
                           ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
                           : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
@@ -515,7 +515,7 @@ export function ReviewCaseDrawer({
                     </button>
                     <button
                       onClick={() => { setDecision('reject'); setImplementation(null); }}
-                      className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                      className={`h-10 text-[0.75rem] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         decision === 'reject'
                           ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
                           : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
@@ -536,7 +536,7 @@ export function ReviewCaseDrawer({
                   transition={{ duration: 0.15 }}
                   className="mb-4"
                 >
-                  <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
+                  <label className="block text-[0.75rem] font-medium text-ink-800 mb-2">
                     Implementation Status <span className="text-risk">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -546,7 +546,7 @@ export function ReviewCaseDrawer({
                         <button
                           key={status}
                           onClick={() => setImplementation(status)}
-                          className={`h-10 text-[12.5px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                          className={`h-10 text-[0.75rem] font-medium rounded-[8px] border transition-colors cursor-pointer ${
                             selected
                               ? 'bg-brand-50 border-brand-600 text-brand-700'
                               : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'
@@ -568,24 +568,24 @@ export function ReviewCaseDrawer({
                   transition={{ duration: 0.15 }}
                   className="mb-4 p-3 bg-risk-50 border border-risk/40 rounded-[8px]"
                 >
-                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
+                  <div className="flex items-center gap-2 text-[0.75rem] font-semibold text-risk-700 mb-1">
                     <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
                   </div>
-                  <p className="text-[12px] text-risk-700 leading-snug">
+                  <p className="text-[0.75rem] text-risk-700 leading-snug">
                     On submit, the case will reopen at the Risk Owner's end for further action.
                   </p>
                 </motion.div>
               )}
 
               <div>
-                <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+                <label className="block text-[0.75rem] font-medium text-ink-800 mb-2">Comment</label>
                 <div className="relative">
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     placeholder="Add a review comment..."
                     rows={4}
-                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
                   <button
                     type="button"
@@ -676,7 +676,7 @@ export function ClassifyExceptionDrawer({
           <>
             <button
               onClick={onClose}
-              className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -691,7 +691,7 @@ export function ClassifyExceptionDrawer({
                 dueDate: requiresActionPlan ? dueDate : undefined,
               })}
               disabled={!canSave}
-              className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
+              className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors ${
                 canSave
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                   : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -703,7 +703,7 @@ export function ClassifyExceptionDrawer({
         }
       >
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Severity</label>
+          <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">Severity</label>
           <div className="grid grid-cols-3 gap-2">
             {(['High', 'Medium', 'Low'] as const).map((s) => {
               const selected = severity === s;
@@ -712,7 +712,7 @@ export function ClassifyExceptionDrawer({
                 <button
                   key={s}
                   onClick={() => setSeverity(s)}
-                  className={`h-10 text-[13px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                  className={`h-10 text-[0.8125rem] font-medium rounded-[8px] border transition-colors cursor-pointer ${
                     selected ? tone.active : `bg-canvas-elevated border-canvas-border ${tone.base} hover:border-brand-200`
                   }`}
                 >
@@ -724,14 +724,14 @@ export function ClassifyExceptionDrawer({
         </div>
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+          <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>
           </label>
           <div className="relative">
             <select
               value={classification}
               onChange={(e) => setClassification(e.target.value)}
-              className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
+              className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
             >
               <option value="">Select classification...</option>
               {CLASSIFY_OPTIONS.map((c) => (
@@ -741,7 +741,7 @@ export function ClassifyExceptionDrawer({
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
           </div>
           {classification && !requiresActionPlan && (
-            <span className="mt-2 inline-block text-[11.5px] text-ink-500">No action plan required.</span>
+            <span className="mt-2 inline-block text-[0.75rem] text-ink-500">No action plan required.</span>
           )}
         </div>
 
@@ -756,7 +756,7 @@ export function ClassifyExceptionDrawer({
             {/* Grouped Action Plan card with shared edit/delete toolbar */}
             <div className="border border-canvas-border rounded-[10px] p-3 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
+                <span className="text-[0.75rem] uppercase tracking-wider font-semibold text-ink-500">
                   Action Plan
                 </span>
                 <div className="flex items-center gap-1">
@@ -785,7 +785,7 @@ export function ClassifyExceptionDrawer({
               </div>
 
               <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">
                   Action Name <span className="text-risk">*</span>
                 </label>
                 <input
@@ -793,12 +793,12 @@ export function ClassifyExceptionDrawer({
                   value={actionName}
                   onChange={(e) => setActionName(e.target.value)}
                   placeholder="e.g. MFA enforcement for executive accounts"
-                  className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                 />
               </div>
 
               <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">
                   Action Details <span className="text-risk">*</span>
                 </label>
                 <div className="relative">
@@ -807,7 +807,7 @@ export function ClassifyExceptionDrawer({
                     onChange={(e) => setActionTaken(e.target.value)}
                     rows={4}
                     placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
                   <button
                     type="button"
@@ -822,7 +822,7 @@ export function ClassifyExceptionDrawer({
             </div>
 
             <div>
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">
                 Due Date <span className="text-risk">*</span>
               </label>
               <div className="relative w-[220px]">
@@ -830,7 +830,7 @@ export function ClassifyExceptionDrawer({
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                 />
                 <Calendar size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
               </div>
@@ -839,7 +839,7 @@ export function ClassifyExceptionDrawer({
         )}
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+          <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">
             Comment <span className="text-risk">*</span>
           </label>
           <div className="relative">
@@ -848,7 +848,7 @@ export function ClassifyExceptionDrawer({
               onChange={(e) => setComment(e.target.value)}
               placeholder="Explain your classification rationale..."
               rows={5}
-              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
             <button
               type="button"
@@ -868,13 +868,13 @@ export function ClassifyExceptionDrawer({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 mb-0.5">
-                <div className="text-[12.5px] text-ink-800">
+                <div className="text-[0.75rem] text-ink-800">
                   <span className="font-semibold">Ira</span>{' '}
                   <span className="text-ink-500">(AI)</span>
                 </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">18 Apr 2026, 18:00</span>
+                <span className="text-[0.6875rem] text-ink-500 tabular-nums whitespace-nowrap">18 Apr 2026, 18:00</span>
               </div>
-              <p className="text-[12.5px] text-ink-700 leading-snug">
+              <p className="text-[0.75rem] text-ink-700 leading-snug">
                 Exception flagged by Ira (AI) with <span className="font-semibold text-brand-700 tabular-nums">94%</span> confidence
               </p>
             </div>
@@ -915,8 +915,8 @@ export function BulkActionGroupModal({
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 font-mono tabular-nums">
+            <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5 font-mono tabular-nums">
               ID: {bulk.id} · {cases.length} cases
             </p>
           </div>
@@ -930,13 +930,13 @@ export function BulkActionGroupModal({
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="border border-canvas-border rounded-[12px] overflow-hidden">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Exception ID</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Severity</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Classification</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Action Review Status</th>
+                  <th className="px-4 py-3 font-medium text-[0.75rem]">Exception ID</th>
+                  <th className="px-4 py-3 font-medium text-[0.75rem]">Severity</th>
+                  <th className="px-4 py-3 font-medium text-[0.75rem]">Classification</th>
+                  <th className="px-4 py-3 font-medium text-[0.75rem]">Action Review Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -947,7 +947,7 @@ export function BulkActionGroupModal({
                   return (
                     <tr key={c.id} className="border-b border-canvas-border last:border-b-0">
                       <td className="px-4 py-3 align-middle">
-                        <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
+                        <span className="font-mono font-medium text-brand-700 text-[0.75rem]">{c.id}</span>
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <Pill className={SEVERITY_STYLE[c.severity]}>{c.severity}</Pill>

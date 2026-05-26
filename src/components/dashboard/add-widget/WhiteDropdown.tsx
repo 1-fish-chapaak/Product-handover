@@ -138,15 +138,15 @@ export function WhiteDropdown({
   // Size variants
   const sizeClasses = {
     sm: {
-      button: "px-2.5 py-2 text-[11px]",
+      button: "px-2.5 py-2 text-[0.6875rem]",
       icon: "size-[11px]",
-      dropdown: "text-[11px]",
+      dropdown: "text-[0.6875rem]",
       checkIcon: "size-[13px]"
     },
     md: {
-      button: "px-3 py-2 text-[12px]",
+      button: "px-3 py-2 text-[0.75rem]",
       icon: "size-[13px]",
-      dropdown: "text-[12px]",
+      dropdown: "text-[0.75rem]",
       checkIcon: "size-[14px]"
     }
   };
@@ -165,7 +165,7 @@ export function WhiteDropdown({
             className={`w-full h-[32px] ${sizeClass.button} bg-white border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm flex items-center gap-2`}
           >
             <div className="size-5 rounded-[4px] border border-[#e5e7eb]" style={{ backgroundColor: value || "#6a12cd" }} />
-            <span className="text-[11px] font-medium text-[#26064a] flex-1 text-left">
+            <span className="text-[0.6875rem] font-medium text-[#26064a] flex-1 text-left">
               {value && value.startsWith("#") ? value : "#6a12cd"}
             </span>
             <ChevronDown
@@ -245,7 +245,7 @@ export function WhiteDropdown({
                     }
                   }}
                   placeholder="#6a12cd"
-                  className="flex-1 min-w-0 px-2 py-1.5 text-[11px] bg-white border border-[#e5e7eb] rounded-[4px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all font-mono"
+                  className="flex-1 min-w-0 px-2 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[4px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all font-mono"
                 />
               </div>
             </div>
@@ -253,7 +253,7 @@ export function WhiteDropdown({
             <>
               {groups.map((group) => (
                 <div key={group.label}>
-                  <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] bg-[#f8f9fa] border-b border-[#e5e7eb]">
+                  <div className="px-3 py-2 text-[0.625rem] font-bold text-[#64748b] bg-[#f8f9fa] border-b border-[#e5e7eb]">
                     {group.label}
                   </div>
                   {group.options.map((option) => {
@@ -276,12 +276,12 @@ export function WhiteDropdown({
                           </span>
                           <div className="flex items-center gap-1 shrink-0">
                             {isInXAxis && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
+                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
                                 X
                               </span>
                             )}
                             {isInYAxis && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
+                              <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
                                 Y
                               </span>
                             )}
@@ -315,12 +315,12 @@ export function WhiteDropdown({
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         {isInXAxis && (
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
+                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#6a12cd]/10 text-[#6a12cd] rounded-[3px] border border-[#6a12cd]/20">
                             X
                           </span>
                         )}
                         {isInYAxis && (
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
+                          <span className="px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-[3px] border border-[#0ea5e9]/20">
                             Y
                           </span>
                         )}

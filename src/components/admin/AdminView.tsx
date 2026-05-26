@@ -71,19 +71,19 @@ function ViewUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
       >
       <div className="w-[440px] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[14px] font-semibold text-text">User Details</h2>
+          <h2 className="text-[0.875rem] font-semibold text-text">User Details</h2>
           <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
             <X size={15} />
           </button>
         </div>
 
         <div className="px-6 py-5 flex items-center gap-4 border-b border-border-light">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center text-[16px] font-bold text-white shrink-0" style={{ background: color }}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-[1rem] font-bold text-white shrink-0" style={{ background: color }}>
             {user.initials}
           </div>
           <div>
-            <div className="text-[15px] font-semibold text-text">{user.name}</div>
-            <div className="text-[13px] text-text-muted mt-0.5">{user.email}</div>
+            <div className="text-[0.9375rem] font-semibold text-text">{user.name}</div>
+            <div className="text-[0.8125rem] text-text-muted mt-0.5">{user.email}</div>
             <div className="mt-2">
               <StatusBadge status={STATUS_MAP[user.status] || 'draft'} />
             </div>
@@ -98,24 +98,24 @@ function ViewUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
             { label: 'Account Created', value: 'Jan 15, 2026' },
           ].map(d => (
             <div key={d.label}>
-              <div className="text-[12px] text-text-muted mb-0.5">{d.label}</div>
-              <div className="text-[13px] text-text">{d.value}</div>
+              <div className="text-[0.75rem] text-text-muted mb-0.5">{d.label}</div>
+              <div className="text-[0.8125rem] text-text">{d.value}</div>
             </div>
           ))}
         </div>
 
         <div className="px-6 py-4">
-          <div className="text-[13px] font-semibold text-text mb-2">Recent Activity</div>
+          <div className="text-[0.8125rem] font-semibold text-text mb-2">Recent Activity</div>
           {recentActivity.map((a, i) => (
             <div key={i} className={`flex items-center justify-between py-2 ${i > 0 ? 'border-t border-border-light/60' : ''}`}>
-              <span className="text-[13px] text-text-secondary">{a.action}</span>
-              <span className="text-[12px] text-text-muted tabular-nums">{a.time}</span>
+              <span className="text-[0.8125rem] text-text-secondary">{a.action}</span>
+              <span className="text-[0.75rem] text-text-muted tabular-nums">{a.time}</span>
             </div>
           ))}
         </div>
 
         <div className="px-6 py-3 border-t border-border-light flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
             Close
           </button>
         </div>
@@ -140,35 +140,35 @@ function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
       >
       <div className="w-[440px] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[14px] font-semibold text-text">Edit User</h2>
+          <h2 className="text-[0.875rem] font-semibold text-text">Edit User</h2>
           <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
             <X size={15} />
           </button>
         </div>
 
         <div className="px-6 py-3 flex items-center gap-3 border-b border-border-light bg-surface-2/30">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: color }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
             {user.initials}
           </div>
           <div>
-            <div className="text-[13px] font-semibold text-text">{user.name}</div>
-            <div className="text-[12px] text-text-muted">{user.email}</div>
+            <div className="text-[0.8125rem] font-semibold text-text">{user.name}</div>
+            <div className="text-[0.75rem] text-text-muted">{user.email}</div>
           </div>
         </div>
 
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Full Name</label>
-            <input defaultValue={user.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none focus:border-primary/40 transition-colors" />
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Full Name</label>
+            <input defaultValue={user.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
           </div>
           <div>
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Email</label>
-            <input defaultValue={user.email} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none focus:border-primary/40 transition-colors" />
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Email</label>
+            <input defaultValue={user.email} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
           </div>
           <div>
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Role</label>
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Role</label>
             <div className="relative">
-              <select defaultValue={user.role} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+              <select defaultValue={user.role} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
                 <option>test role per final</option>
                 <option>test invite permission</option>
                 <option>Enabler</option>
@@ -180,9 +180,9 @@ function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
             </div>
           </div>
           <div>
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Team</label>
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Team</label>
             <div className="relative">
-              <select defaultValue={user.team} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+              <select defaultValue={user.team} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
                 <option>SOX Audit</option>
                 <option>IFC Team</option>
                 <option>Engineering</option>
@@ -192,10 +192,10 @@ function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
             </div>
           </div>
           <div>
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Status</label>
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Status</label>
             <div className="flex items-center gap-2">
               {(['Active', 'Suspended', 'Locked', 'Inactive'] as UserStatus[]).map(s => (
-                <label key={s} className={`px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-[12px] font-medium ${
+                <label key={s} className={`px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-[0.75rem] font-medium ${
                   user.status === s ? 'border-primary bg-primary-light text-primary font-semibold' : 'border-border text-text-secondary hover:bg-gray-50'
                 }`}>
                   <input type="radio" name="status" defaultChecked={user.status === s} className="sr-only" />
@@ -209,12 +209,12 @@ function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
         <div className="px-6 py-3 border-t border-border-light shrink-0">
           {deleteConfirm ? (
             <div>
-              <p className="text-[13px] text-text mb-3">Are you sure you want to remove <span className="font-semibold">{user.name}</span>? This action cannot be undone.</p>
+              <p className="text-[0.8125rem] text-text mb-3">Are you sure you want to remove <span className="font-semibold">{user.name}</span>? This action cannot be undone.</p>
               <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold transition-colors cursor-pointer">
+                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   <Trash2 size={13} />
                   Remove User
                 </button>
@@ -222,15 +222,15 @@ function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void 
             </div>
           ) : (
             <div className="flex items-center justify-between">
-              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
+              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[0.8125rem] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
                 <Trash2 size={13} />
                 Remove User
               </button>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer">
+                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   Save Changes
                 </button>
               </div>
@@ -267,12 +267,12 @@ const userColumns: Column<MockUser & Record<string, unknown>>[] = [
       const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
       return (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: color }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
             {item.initials as string}
           </div>
           <div>
-            <div className="text-[13px] font-semibold text-text">{item.name as string}</div>
-            <div className="text-[12px] text-text-muted mt-0.5">{item.email as string}</div>
+            <div className="text-[0.8125rem] font-semibold text-text">{item.name as string}</div>
+            <div className="text-[0.75rem] text-text-muted mt-0.5">{item.email as string}</div>
           </div>
         </div>
       );
@@ -293,7 +293,7 @@ const userColumns: Column<MockUser & Record<string, unknown>>[] = [
     label: 'Last Login',
     sortable: true,
     render: (item) => (
-      <span className="text-[12px] text-text-muted tabular-nums">{item.lastLogin as string}</span>
+      <span className="text-[0.75rem] text-text-muted tabular-nums">{item.lastLogin as string}</span>
     ),
   },
   {
@@ -333,7 +333,7 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
       <div className="w-[520px] max-h-[85vh] bg-paper-0 rounded-xl border border-paper-200 flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 h-14 border-b border-paper-200 shrink-0">
-          <h2 className="text-[15px] font-semibold text-ink-900" style={{ fontWeight: 600 }}>Invite User</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-ink-900" style={{ fontWeight: 600 }}>Invite User</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-paper-100 transition-colors cursor-pointer text-ink-500">
             <X size={16} />
           </button>
@@ -343,18 +343,18 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-6 space-y-5">
             <div>
-              <label className="text-[13px] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Full Name <span className="text-risk-700">*</span></label>
-              <input placeholder="Enter full name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
+              <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Full Name <span className="text-risk-700">*</span></label>
+              <input placeholder="Enter full name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[13px] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Email <span className="text-risk-700">*</span></label>
-                <input placeholder="Enter email address" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
+                <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Email <span className="text-risk-700">*</span></label>
+                <input placeholder="Enter email address" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
               </div>
               <div>
-                <label className="text-[13px] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team <span className="text-risk-700">*</span></label>
+                <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team <span className="text-risk-700">*</span></label>
                 <div className="relative">
-                  <select className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+                  <select className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
                     <option>Select teams</option>
                     <option>SOX Audit Team</option>
                     <option>IFC Team</option>
@@ -370,8 +370,8 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
 
           {/* Role selection */}
           <div className="px-6 py-5">
-            <h3 className="text-[14px] text-text mb-1" style={{ fontWeight: 600 }}>Initial Role</h3>
-            <p className="text-[13px] text-text-muted mb-4">You can assign only one role to a user.</p>
+            <h3 className="text-[0.875rem] text-text mb-1" style={{ fontWeight: 600 }}>Initial Role</h3>
+            <p className="text-[0.8125rem] text-text-muted mb-4">You can assign only one role to a user.</p>
 
             <div className="space-y-2.5">
               {AVAILABLE_ROLES.map(role => {
@@ -391,14 +391,14 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
                         {isSelected && <div className="w-2 h-2 rounded-full bg-brand-400" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] text-text" style={{ fontWeight: 600 }}>{role.name}</div>
-                        <div className="text-[12px] text-text-muted">{role.desc}</div>
+                        <div className="text-[0.8125rem] text-text" style={{ fontWeight: 600 }}>{role.name}</div>
+                        <div className="text-[0.75rem] text-text-muted">{role.desc}</div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-[12px] text-text-muted tabular-nums">{role.perms} permissions</span>
+                        <span className="text-[0.75rem] text-text-muted tabular-nums">{role.perms} permissions</span>
                         <button
                           onClick={e => { e.stopPropagation(); setPreviewRole(previewRole === role.name ? null : role.name); }}
-                          className="text-[12px] font-medium text-text-secondary hover:text-text cursor-pointer"
+                          className="text-[0.75rem] font-medium text-text-secondary hover:text-text cursor-pointer"
                         >
                           {previewRole === role.name ? 'Hide' : 'Details'}
                         </button>
@@ -409,13 +409,13 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
                         {DETAILED_PERMISSIONS.map((group, gi) => (
                           <div key={group.group}>
                             <div className={`py-2 ${gi > 0 ? 'border-t border-border mt-1' : ''}`}>
-                              <span className="text-[13px] font-semibold text-text">{group.group}</span>
+                              <span className="text-[0.8125rem] font-semibold text-text">{group.group}</span>
                             </div>
                             {group.perms.map(p => (
                               <div key={p.key} className="flex items-center justify-between py-2 pl-3 border-t border-border/30">
                                 <div>
-                                  <div className="text-[12px] font-medium text-text">{p.name}</div>
-                                  <div className="text-[12px] text-text-muted">{p.desc}</div>
+                                  <div className="text-[0.75rem] font-medium text-text">{p.name}</div>
+                                  <div className="text-[0.75rem] text-text-muted">{p.desc}</div>
                                 </div>
                                 <div className="w-9 h-[20px] rounded-full shrink-0 bg-brand-400 ml-3 relative">
                                   <div className="absolute top-[2px] left-[18px] w-4 h-4 rounded-full bg-white" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
@@ -435,7 +435,7 @@ function InviteUserModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-paper-200 flex justify-end shrink-0">
-          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[13px] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
+          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
             Invite User
           </button>
         </div>
@@ -489,7 +489,7 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
       <div className="w-[480px] max-h-[85vh] bg-paper-0 rounded-xl border border-paper-200 flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 h-14 border-b border-paper-200 shrink-0">
-          <h2 className="text-[15px] text-ink-900" style={{ fontWeight: 600 }}>Create New Team</h2>
+          <h2 className="text-[0.9375rem] text-ink-900" style={{ fontWeight: 600 }}>Create New Team</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-paper-100 transition-colors cursor-pointer text-ink-500">
             <X size={16} />
           </button>
@@ -499,8 +499,8 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto">
           {/* Team name */}
           <div className="px-6 py-5">
-            <label className="text-[13px] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team Name <span className="text-risk-700">*</span></label>
-            <input placeholder="Enter unique team name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
+            <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team Name <span className="text-risk-700">*</span></label>
+            <input placeholder="Enter unique team name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
           </div>
 
           <div className="h-px bg-paper-200" />
@@ -508,12 +508,12 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
           {/* Members */}
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[14px] text-ink-900" style={{ fontWeight: 600 }}>Add Team Members</h3>
+              <h3 className="text-[0.875rem] text-ink-900" style={{ fontWeight: 600 }}>Add Team Members</h3>
               {selected.size > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-brand-50 text-[12px] font-semibold text-brand-700 tabular-nums">{selected.size} selected</span>
+                <span className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.75rem] font-semibold text-brand-700 tabular-nums">{selected.size} selected</span>
               )}
             </div>
-            <p className="text-[13px] text-ink-500 mb-4">Select users to add to this team. You can add more members later.</p>
+            <p className="text-[0.8125rem] text-ink-500 mb-4">Select users to add to this team. You can add more members later.</p>
 
             {/* Search */}
             <div className="flex items-center gap-2 px-3 h-10 rounded-md border border-paper-200 bg-paper-50 mb-3 focus-within:border-brand-600 transition-colors">
@@ -522,7 +522,7 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
                 placeholder="Search by name or email"
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
-                className="flex-1 bg-transparent outline-none text-[13px] text-ink-900 placeholder:text-ink-400"
+                className="flex-1 bg-transparent outline-none text-[0.8125rem] text-ink-900 placeholder:text-ink-400"
                 style={{ boxShadow: 'none' }}
               />
             </div>
@@ -543,18 +543,18 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
                     <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-brand-600' : 'border border-ink-300'}`}>
                       {isChecked && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: color }}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
                       {initials}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[13px] text-ink-800 truncate" style={{ fontWeight: 520 }}>{m.name}</div>
-                      <div className="text-[12px] text-ink-500 truncate">{m.email}</div>
+                      <div className="text-[0.8125rem] text-ink-800 truncate" style={{ fontWeight: 520 }}>{m.name}</div>
+                      <div className="text-[0.75rem] text-ink-500 truncate">{m.email}</div>
                     </div>
                   </div>
                 );
               })}
               {filtered.length === 0 && (
-                <div className="px-4 py-8 text-center text-[13px] text-ink-400">No users match your search.</div>
+                <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-400">No users match your search.</div>
               )}
             </div>
           </div>
@@ -562,8 +562,8 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-paper-200 flex items-center justify-between shrink-0">
-          <span className="text-[12px] text-ink-500 tabular-nums">{selected.size} member{selected.size !== 1 ? 's' : ''} selected</span>
-          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[13px] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
+          <span className="text-[0.75rem] text-ink-500 tabular-nums">{selected.size} member{selected.size !== 1 ? 's' : ''} selected</span>
+          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
             Create Team
           </button>
         </div>
@@ -597,12 +597,12 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
           const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
           return (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: color }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
                 {item.initials as string}
               </div>
               <div>
-                <button onClick={() => setViewUser(item as unknown as MockUser)} className="text-[13px] font-semibold text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
-                <div className="text-[12px] text-text-muted mt-0.5">{item.email as string}</div>
+                <button onClick={() => setViewUser(item as unknown as MockUser)} className="text-[0.8125rem] font-semibold text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
+                <div className="text-[0.75rem] text-text-muted mt-0.5">{item.email as string}</div>
               </div>
             </div>
           );
@@ -613,7 +613,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
       return {
         ...col,
         render: (item: UserRow) => (
-          <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[13px] text-text-secondary hover:text-primary cursor-pointer group">
+          <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[0.8125rem] text-text-secondary hover:text-primary cursor-pointer group">
             {item.role as string}
             <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
@@ -633,7 +633,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
             <div className="relative" ref={isOpen ? teamDropdownRef : undefined}>
               <button
                 onClick={() => setTeamDropdown(isOpen ? null : rowId)}
-                className={`inline-flex items-center gap-1 text-[13px] cursor-pointer transition-colors ${
+                className={`inline-flex items-center gap-1 text-[0.8125rem] cursor-pointer transition-colors ${
                   teamName === '\u2014' ? 'text-text-muted hover:text-primary' : 'text-text-secondary hover:text-primary'
                 }`}
               >
@@ -646,7 +646,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
                     <button
                       key={t}
                       onClick={() => setTeamDropdown(null)}
-                      className={`w-full text-left px-3 py-1.5 text-[13px] cursor-pointer transition-colors ${
+                      className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors ${
                         t === teamName ? 'text-primary font-semibold bg-primary-light' : 'text-text hover:bg-gray-50'
                       }`}
                     >
@@ -658,7 +658,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
                       <div className="h-px bg-border-light my-1" />
                       <button
                         onClick={() => setTeamDropdown(null)}
-                        className="w-full text-left px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+                        className="w-full text-left px-3 py-1.5 text-[0.8125rem] text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
                       >
                         Remove from team
                       </button>
@@ -678,11 +678,11 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
         label: '',
         render: (item: UserRow) => (
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setViewUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[12px] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
+            <button onClick={() => setViewUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
               <Eye size={12} />
               View
             </button>
-            <button onClick={() => setEditUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[12px] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
+            <button onClick={() => setEditUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
               <Pencil size={12} />
               Edit
             </button>
@@ -722,12 +722,12 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
               <button
                 key={t.key}
                 onClick={() => setSubTab(t.key)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
                   subTab === t.key ? 'bg-white text-primary border border-border-light' : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
                 {t.label}
-                <span className={`text-[12px] tabular-nums px-1.5 rounded-full ${
+                <span className={`text-[0.75rem] tabular-nums px-1.5 rounded-full ${
                   subTab === t.key ? 'bg-primary-light text-primary font-semibold' : 'bg-gray-100 text-text-muted'
                 }`}>{t.count}</span>
               </button>
@@ -743,7 +743,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
             { label: 'Suspended', count: mockUsers.filter(u => u.status === 'Suspended').length, text: 'text-orange-700' },
             { label: 'Inactive', count: mockUsers.filter(u => u.status === 'Inactive' || u.status === 'Locked').length, text: 'text-gray-500' },
           ].filter(s => s.count > 0).map(s => (
-            <span key={s.label} className={`text-[12px] font-medium ${s.text} tabular-nums`}>
+            <span key={s.label} className={`text-[0.75rem] font-medium ${s.text} tabular-nums`}>
               {s.label}: {s.count}
             </span>
           ))}
@@ -751,11 +751,11 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
 
         {/* CTAs */}
         <div className="flex items-center gap-2">
-          <button onClick={onCreateTeam} className="flex items-center gap-2 px-4 h-8 rounded-md border border-border bg-white text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+          <button onClick={onCreateTeam} className="flex items-center gap-2 px-4 h-8 rounded-md border border-border bg-white text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
             <Plus size={13} />
             Create Team
           </button>
-          <button onClick={onInvite} className="flex items-center gap-2 px-4 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer">
+          <button onClick={onInvite} className="flex items-center gap-2 px-4 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
             <UserPlus size={13} />
             Invite User
           </button>
@@ -788,7 +788,7 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
                 onClick={() => setEditTeam(team)}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[14px] font-semibold text-text">{team.name}</h3>
+                  <h3 className="text-[0.875rem] font-semibold text-text">{team.name}</h3>
                   <button
                     onClick={e => { e.stopPropagation(); setEditTeam(team); }}
                     className="p-1 rounded hover:bg-gray-100 transition-colors cursor-pointer text-text-muted hover:text-primary"
@@ -797,18 +797,18 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
                     <Pencil size={13} />
                   </button>
                 </div>
-                <div className="text-[12px] text-text-muted mb-3 tabular-nums">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</div>
+                <div className="text-[0.75rem] text-text-muted mb-3 tabular-nums">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</div>
                 <div className="flex items-center -space-x-2">
                   {team.members.slice(0, 5).map((m, i) => {
                     const initials = m.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
                     return (
-                      <div key={i} className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold text-white border-2 border-white" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                      <div key={i} className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white border-2 border-white" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
                         {initials}
                       </div>
                     );
                   })}
                   {team.members.length > 5 && (
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-text-muted bg-gray-100 border-2 border-white tabular-nums">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold text-text-muted bg-gray-100 border-2 border-white tabular-nums">
                       +{team.members.length - 5}
                     </div>
                   )}
@@ -856,7 +856,7 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
       >
       <div className="w-[460px] max-h-[80vh] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[14px] font-semibold text-text">Edit Team</h2>
+          <h2 className="text-[0.875rem] font-semibold text-text">Edit Team</h2>
           <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
             <X size={15} />
           </button>
@@ -864,18 +864,18 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
 
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5">
-            <label className="text-[13px] font-medium text-text mb-1.5 block">Team Name</label>
-            <input defaultValue={team.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none focus:border-primary/40 transition-colors" />
+            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Team Name</label>
+            <input defaultValue={team.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
           </div>
 
           <div className="h-px bg-border-light" />
 
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[13px] font-medium text-text">Members</label>
-              <span className="text-[12px] text-text-muted tabular-nums">{members.size} selected</span>
+              <label className="text-[0.8125rem] font-medium text-text">Members</label>
+              <span className="text-[0.75rem] text-text-muted tabular-nums">{members.size} selected</span>
             </div>
-            <p className="text-[12px] text-text-muted mb-3">Add or remove members from this team.</p>
+            <p className="text-[0.75rem] text-text-muted mb-3">Add or remove members from this team.</p>
 
             <div className="flex items-center gap-2 px-3 h-9 rounded-md border border-border bg-surface-2/30 mb-3 focus-within:border-primary/50 transition-colors">
               <Search size={13} className="text-text-muted shrink-0" />
@@ -883,7 +883,7 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
                 placeholder="Search members"
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
-                className="flex-1 bg-transparent outline-none text-[13px] text-text placeholder:text-text-muted"
+                className="flex-1 bg-transparent outline-none text-[0.8125rem] text-text placeholder:text-text-muted"
               />
             </div>
 
@@ -900,10 +900,10 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
                     <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${isIn ? 'bg-primary' : 'border border-gray-300'}`}>
                       {isIn && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
                       {initials}
                     </div>
-                    <span className="text-[13px] text-text">{name}</span>
+                    <span className="text-[0.8125rem] text-text">{name}</span>
                   </div>
                 );
               })}
@@ -914,12 +914,12 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
         <div className="px-6 py-3 border-t border-border-light shrink-0">
           {deleteConfirm ? (
             <div>
-              <p className="text-[13px] text-text mb-3">Are you sure you want to delete team <span className="font-semibold">{team.name}</span>? Members will be unassigned.</p>
+              <p className="text-[0.8125rem] text-text mb-3">Are you sure you want to delete team <span className="font-semibold">{team.name}</span>? Members will be unassigned.</p>
               <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold transition-colors cursor-pointer">
+                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   <Trash2 size={13} />
                   Delete Team
                 </button>
@@ -927,15 +927,15 @@ function EditTeamModal({ team, onClose }: { team: { name: string; members: strin
             </div>
           ) : (
             <div className="flex items-center justify-between">
-              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
+              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[0.8125rem] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
                 <Trash2 size={13} />
                 Delete Team
               </button>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer">
+                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   Save Changes
                 </button>
               </div>
@@ -980,7 +980,7 @@ function ViewRoleModal({ role, onClose }: { role: MockRole; onClose: () => void 
       >
       <div className="w-[580px] max-h-[85vh] bg-white rounded-lg border border-border flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 h-12 border-b border-border shrink-0">
-          <h2 className="text-[14px] font-semibold text-text">Role Details</h2>
+          <h2 className="text-[0.875rem] font-semibold text-text">Role Details</h2>
           <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
             <X size={15} />
           </button>
@@ -990,17 +990,17 @@ function ViewRoleModal({ role, onClose }: { role: MockRole; onClose: () => void 
           {/* Role info */}
           <div className="px-6 py-5 border-b border-border">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[16px] font-semibold text-text">{role.name}</h3>
-              <span className="px-2.5 py-1 rounded-full bg-primary-light text-[12px] font-semibold text-primary tabular-nums">{role.users} users</span>
+              <h3 className="text-[1rem] font-semibold text-text">{role.name}</h3>
+              <span className="px-2.5 py-1 rounded-full bg-primary-light text-[0.75rem] font-semibold text-primary tabular-nums">{role.users} users</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-[12px] text-text-muted mb-0.5">Created By</div>
-                <div className="text-[13px] text-text">{role.createdBy}</div>
+                <div className="text-[0.75rem] text-text-muted mb-0.5">Created By</div>
+                <div className="text-[0.8125rem] text-text">{role.createdBy}</div>
               </div>
               <div>
-                <div className="text-[12px] text-text-muted mb-0.5">Permissions</div>
-                <div className="text-[13px] text-text tabular-nums">{enabledSet.size} enabled</div>
+                <div className="text-[0.75rem] text-text-muted mb-0.5">Permissions</div>
+                <div className="text-[0.8125rem] text-text tabular-nums">{enabledSet.size} enabled</div>
               </div>
             </div>
           </div>
@@ -1008,22 +1008,22 @@ function ViewRoleModal({ role, onClose }: { role: MockRole; onClose: () => void 
           {/* Permissions (read-only) */}
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[13px] font-semibold text-text">Permissions</h4>
-              <span className="text-[12px] text-text-muted tabular-nums">{enabledSet.size} enabled</span>
+              <h4 className="text-[0.8125rem] font-semibold text-text">Permissions</h4>
+              <span className="text-[0.75rem] text-text-muted tabular-nums">{enabledSet.size} enabled</span>
             </div>
             <div>
               {DETAILED_PERMISSIONS.map((group, gi) => (
                 <div key={group.group}>
                   <div className={`py-2.5 ${gi > 0 ? 'border-t border-border mt-1' : ''}`}>
-                    <span className="text-[13px] font-semibold text-text">{group.group}</span>
+                    <span className="text-[0.8125rem] font-semibold text-text">{group.group}</span>
                   </div>
                   {group.perms.map(perm => {
                     const isOn = enabledSet.has(perm.key);
                     return (
                       <div key={perm.key} className="flex items-center justify-between py-2.5 pl-3 border-t border-border/30">
                         <div>
-                          <div className="text-[13px] font-medium text-text">{perm.name}</div>
-                          <div className="text-[12px] text-text-muted">{perm.desc}</div>
+                          <div className="text-[0.8125rem] font-medium text-text">{perm.name}</div>
+                          <div className="text-[0.75rem] text-text-muted">{perm.desc}</div>
                         </div>
                         <div className={`w-10 h-[22px] rounded-full shrink-0 ml-4 relative ${isOn ? 'bg-brand-400' : 'bg-gray-200'}`}>
                           <div className={`absolute top-[3px] w-4 h-4 rounded-full bg-white ${isOn ? 'left-[22px]' : 'left-[3px]'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
@@ -1038,7 +1038,7 @@ function ViewRoleModal({ role, onClose }: { role: MockRole; onClose: () => void 
         </div>
 
         <div className="px-6 py-3 border-t border-border flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[13px] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
+          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
             Close
           </button>
         </div>
@@ -1072,7 +1072,7 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
         <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-primary-light' : 'bg-gray-100'}`}>
           <Shield size={13} className={item.type === 'System' ? 'text-primary' : 'text-text-muted'} />
         </div>
-        <span className="text-[13px] font-medium text-text">{item.name as string}</span>
+        <span className="text-[0.8125rem] font-medium text-text">{item.name as string}</span>
       </div>
     ),
   },
@@ -1082,7 +1082,7 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
     sortable: true,
     width: '12%',
     render: (item) => (
-      <span className={`inline-flex px-2 py-0.5 rounded-full text-[12px] font-medium ${
+      <span className={`inline-flex px-2 py-0.5 rounded-full text-[0.75rem] font-medium ${
         item.type === 'System' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-text-secondary'
       }`}>{item.type as string}</span>
     ),
@@ -1093,7 +1093,7 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
     sortable: true,
     width: '10%',
     render: (item) => (
-      <span className="text-[13px] tabular-nums text-text">{item.users as number}</span>
+      <span className="text-[0.8125rem] tabular-nums text-text">{item.users as number}</span>
     ),
   },
   {
@@ -1106,7 +1106,7 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
         <div className="flex-1 h-1.5 rounded-full bg-gray-100 max-w-[60px]">
           <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, ((item.permissions as number) / 48) * 100)}%` }} />
         </div>
-        <span className="text-[12px] tabular-nums text-text-muted">{item.permissions as number}</span>
+        <span className="text-[0.75rem] tabular-nums text-text-muted">{item.permissions as number}</span>
       </div>
     ),
   },
@@ -1122,7 +1122,7 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
     sortable: true,
     width: '14%',
     render: (item) => (
-      <span className="text-[12px] text-text-muted tabular-nums">{item.lastModified as string}</span>
+      <span className="text-[0.75rem] text-text-muted tabular-nums">{item.lastModified as string}</span>
     ),
   },
   {
@@ -1150,7 +1150,7 @@ function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
             <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-primary-light' : 'bg-gray-100'}`}>
               <Shield size={13} className={item.type === 'System' ? 'text-primary' : 'text-text-muted'} />
             </div>
-            <button onClick={() => setViewRole(item as unknown as MockRole)} className="text-[13px] font-medium text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
+            <button onClick={() => setViewRole(item as unknown as MockRole)} className="text-[0.8125rem] font-medium text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
           </div>
         ),
       };
@@ -1161,11 +1161,11 @@ function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
         width: '190px',
         render: (item: RoleRow) => (
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setViewRole(item as unknown as MockRole)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[12px] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
+            <button onClick={() => setViewRole(item as unknown as MockRole)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
               <Eye size={12} />
               View
             </button>
-            <button onClick={() => { setDuplicateRole(true); onCreateRole(); }} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[12px] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
+            <button onClick={() => { setDuplicateRole(true); onCreateRole(); }} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
               <CopyPlus size={12} />
               Duplicate
             </button>
@@ -1276,7 +1276,7 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
       >
       <div className="w-[520px] max-h-[90vh] bg-white rounded-lg border border-border flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 h-12 border-b border-border shrink-0">
-          <h2 className="text-[14px] font-semibold text-text">Create New Role</h2>
+          <h2 className="text-[0.875rem] font-semibold text-text">Create New Role</h2>
           <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
             <X size={15} />
           </button>
@@ -1285,12 +1285,12 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5 space-y-4">
             <div>
-              <label className="text-[13px] font-medium text-text mb-1.5 block">Role Name <span className="text-red-500">*</span></label>
-              <input placeholder="Enter role name" className="w-full h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none focus:border-primary/40 transition-colors" />
+              <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Role Name <span className="text-red-500">*</span></label>
+              <input placeholder="Enter role name" className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
             </div>
             <div>
-              <label className="text-[13px] font-medium text-text mb-1.5 block">Description <span className="text-red-500">*</span></label>
-              <textarea placeholder="Enter a description..." rows={2} className="w-full px-3 py-2 rounded-md border border-border bg-white text-[13px] text-text outline-none resize-none focus:border-primary/40 transition-colors" />
+              <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Description <span className="text-red-500">*</span></label>
+              <textarea placeholder="Enter a description..." rows={2} className="w-full px-3 py-2 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none resize-none focus:border-primary/40 transition-colors" />
             </div>
           </div>
 
@@ -1299,11 +1299,11 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
           <div className="px-6 py-5">
             {/* Header with progress */}
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[14px] font-semibold text-text">Set permissions for this role</h3>
+              <h3 className="text-[0.875rem] font-semibold text-text">Set permissions for this role</h3>
               <div className="flex items-center gap-1.5">
-                <button onClick={() => applyPreset('none')} className={`px-2.5 py-1 rounded-full text-[12px] font-medium transition-colors cursor-pointer ${enabled.size === 0 ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>None</button>
-                <button onClick={() => applyPreset('readonly')} className="px-2.5 py-1 rounded-full text-[12px] font-medium text-text-muted hover:bg-gray-50 transition-colors cursor-pointer">View Only</button>
-                <button onClick={() => applyPreset('full')} className={`px-2.5 py-1 rounded-full text-[12px] font-medium transition-colors cursor-pointer ${enabled.size === totalPerms ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>Full Access</button>
+                <button onClick={() => applyPreset('none')} className={`px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${enabled.size === 0 ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>None</button>
+                <button onClick={() => applyPreset('readonly')} className="px-2.5 py-1 rounded-full text-[0.75rem] font-medium text-text-muted hover:bg-gray-50 transition-colors cursor-pointer">View Only</button>
+                <button onClick={() => applyPreset('full')} className={`px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${enabled.size === totalPerms ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>Full Access</button>
               </div>
             </div>
 
@@ -1312,7 +1312,7 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
               <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${(enabled.size / totalPerms) * 100}%` }} />
               </div>
-              <span className="text-[12px] text-text-muted tabular-nums shrink-0">{enabled.size}/{totalPerms}</span>
+              <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">{enabled.size}/{totalPerms}</span>
             </div>
 
             {/* Permission groups */}
@@ -1321,7 +1321,7 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
                 <div key={group.group}>
                   {/* Group header */}
                   <div className={`flex items-center justify-between py-3 ${gi > 0 ? 'border-t border-border mt-2' : ''}`}>
-                    <span className="text-[14px] font-semibold text-text">{group.group}</span>
+                    <span className="text-[0.875rem] font-semibold text-text">{group.group}</span>
                   </div>
                   {/* Permissions */}
                   {group.perms.map(perm => {
@@ -1333,8 +1333,8 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
                         className="flex items-center justify-between py-3 pl-3 border-t border-border/50 cursor-pointer"
                       >
                         <div className="min-w-0">
-                          <div className="text-[13px] font-medium text-text">{perm.name}</div>
-                          <div className="text-[12px] text-text-muted">{perm.desc}</div>
+                          <div className="text-[0.8125rem] font-medium text-text">{perm.name}</div>
+                          <div className="text-[0.75rem] text-text-muted">{perm.desc}</div>
                         </div>
                         <div className={`w-10 h-[22px] rounded-full transition-colors shrink-0 ml-4 relative ${isOn ? 'bg-brand-400' : 'bg-gray-200'}`}>
                           <div className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-transform ${isOn ? 'left-[22px]' : 'left-[3px]'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
@@ -1349,12 +1349,12 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-6 py-3 border-t border-border shrink-0">
-          <div className="flex items-center gap-2 mb-3 text-[12px] text-text-muted">
+          <div className="flex items-center gap-2 mb-3 text-[0.75rem] text-text-muted">
             <Info size={13} className="shrink-0" />
             These permissions can be modified later from the role edit page.
           </div>
           <div className="flex items-center justify-end">
-            <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer">
+            <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               Create Role
             </button>
           </div>
@@ -1398,7 +1398,7 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     sortable: true,
     width: '15%',
     render: (item) => (
-      <span className="font-mono text-[12px] text-text-secondary tabular-nums">{item.timestamp as string}</span>
+      <span className="font-mono text-[0.75rem] text-text-secondary tabular-nums">{item.timestamp as string}</span>
     ),
   },
   {
@@ -1407,7 +1407,7 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     sortable: true,
     width: '13%',
     render: (item) => (
-      <span className={`text-[13px] ${item.user === 'Unknown' ? 'text-red-500 italic' : 'font-medium text-text'}`}>{item.user as string}</span>
+      <span className={`text-[0.8125rem] ${item.user === 'Unknown' ? 'text-red-500 italic' : 'font-medium text-text'}`}>{item.user as string}</span>
     ),
   },
   {
@@ -1432,8 +1432,8 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     width: '36%',
     render: (item) => (
       <div>
-        <div className="text-[13px] text-text">{item.description as string}</div>
-        <div className="text-[12px] text-text-muted mt-0.5">{item.module as string} / {item.entity as string}</div>
+        <div className="text-[0.8125rem] text-text">{item.description as string}</div>
+        <div className="text-[0.75rem] text-text-muted mt-0.5">{item.module as string} / {item.entity as string}</div>
       </div>
     ),
   },
@@ -1472,19 +1472,19 @@ function AuditLogsTab() {
     >
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center gap-2 text-[13px] text-text-muted">
+        <div className="flex items-center gap-2 text-[0.8125rem] text-text-muted">
           <Filter size={13} />
           Filters
         </div>
         <div className="relative">
-          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
             <option value="all">All Users</option>
             {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
           <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         </div>
         <div className="relative">
-          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
             <option value="all">All Actions</option>
             <option value="Create">Create</option>
             <option value="Update">Update</option>
@@ -1495,16 +1495,16 @@ function AuditLogsTab() {
           <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         </div>
         <div className="relative">
-          <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[13px] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
             <option value="all">All Results</option>
             <option value="Success">Success</option>
             <option value="Failed">Failed</option>
           </select>
           <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         </div>
-        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
-        <span className="text-[12px] text-text-muted">to</span>
-        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[13px] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
+        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
+        <span className="text-[0.75rem] text-text-muted">to</span>
+        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
       </div>
 
       <SmartTable
@@ -1536,11 +1536,11 @@ function ComingSoonTab({ tab }: { tab: Tab }) {
       <div className="w-14 h-14 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center mb-4">
         <Icon size={24} className="text-brand-500" />
       </div>
-      <h3 className="text-[18px] font-semibold text-ink-800 mb-2">{tab.label}</h3>
-      <p className="text-[13px] text-ink-500 mb-4">This section is under development.</p>
+      <h3 className="text-[1.125rem] font-semibold text-ink-800 mb-2">{tab.label}</h3>
+      <p className="text-[0.8125rem] text-ink-500 mb-4">This section is under development.</p>
       <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-50 border border-brand-100">
         <Construction size={14} className="text-brand-500" />
-        <span className="text-[12px] font-semibold text-brand-700">Coming soon</span>
+        <span className="text-[0.75rem] font-semibold text-brand-700">Coming soon</span>
       </div>
     </motion.div>
   );
@@ -1579,10 +1579,10 @@ export default function AdminView({ activeTab }: Props) {
                 <Settings size={20} className="text-white" />
               </div>
               <div>
-                <h1 className="text-[28px] font-extrabold">
+                <h1 className="text-[1.75rem] font-extrabold">
                   <span className="ai-gradient-text">Administration</span>
                 </h1>
-                <p className="text-[14px] text-text-secondary leading-relaxed">
+                <p className="text-[0.875rem] text-text-secondary leading-relaxed">
                   Manage users, teams, roles, and platform settings.
                 </p>
               </div>
@@ -1607,7 +1607,7 @@ export default function AdminView({ activeTab }: Props) {
                 <button
                   key={tab.id}
                   onClick={() => setCurrentTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-semibold transition-all cursor-pointer ${
+                  className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-[0.75rem] font-semibold transition-all cursor-pointer ${
                     isActive
                       ? 'text-violet-700'
                       : 'text-text-muted hover:text-text-secondary hover:bg-white/60'
@@ -1639,16 +1639,16 @@ export default function AdminView({ activeTab }: Props) {
           <div />
         ) : currentTab === 'roles' ? (
           <div className="flex items-center justify-between">
-            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[12px] font-semibold text-violet-700 tabular-nums">Total Roles: {mockRoles.length}</span>
-            <button onClick={() => setCreateRoleOpen(true)} className="flex items-center gap-2 px-5 h-9 rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[13px] font-semibold transition-colors cursor-pointer">
+            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[0.75rem] font-semibold text-violet-700 tabular-nums">Total Roles: {mockRoles.length}</span>
+            <button onClick={() => setCreateRoleOpen(true)} className="flex items-center gap-2 px-5 h-9 rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Plus size={14} />
               Create Role
             </button>
           </div>
         ) : currentTab === 'logs' ? (
           <div className="flex items-center justify-between">
-            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[12px] font-semibold text-violet-700 tabular-nums">Total Entries: {mockLogs.length}</span>
-            <button className="flex items-center gap-2 px-4 h-9 rounded-lg border border-paper-200 bg-paper-0 text-[13px] font-medium text-ink-700 hover:bg-paper-50 transition-colors cursor-pointer">
+            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[0.75rem] font-semibold text-violet-700 tabular-nums">Total Entries: {mockLogs.length}</span>
+            <button className="flex items-center gap-2 px-4 h-9 rounded-lg border border-paper-200 bg-paper-0 text-[0.8125rem] font-medium text-ink-700 hover:bg-paper-50 transition-colors cursor-pointer">
               <Download size={14} />
               Export CSV
             </button>

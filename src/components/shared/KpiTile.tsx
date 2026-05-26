@@ -99,10 +99,10 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, cla
     >
       {editing ?? (
         <>
-          <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate" aria-hidden="true">
+          <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate" aria-hidden="true">
             {label}
           </p>
-          <p className="text-[26px] font-bold text-ink-900 leading-none tabular-nums" aria-hidden="true">
+          <p className="text-[1.625rem] font-bold text-ink-900 leading-none tabular-nums" aria-hidden="true">
             <KpiCountUp value={value} delay={120 + index * 80} />
           </p>
           {footer && <div className="mt-2">{footer}</div>}

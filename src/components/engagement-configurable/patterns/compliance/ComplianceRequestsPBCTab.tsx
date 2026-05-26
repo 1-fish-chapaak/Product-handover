@@ -66,17 +66,17 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[15px] font-bold text-text mb-0.5">PBC / Evidence Requests</h3>
-          <p className="text-[12px] text-text-muted">Track sample, data, and evidence requests needed for compliance testing.</p>
+          <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">PBC / Evidence Requests</h3>
+          <p className="text-[0.75rem] text-text-muted">Track sample, data, and evidence requests needed for compliance testing.</p>
         </div>
         <button onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors shrink-0">
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors shrink-0">
           <Plus size={12} />Create PBC Request
         </button>
       </div>
 
       {/* Info box */}
-      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-200/50 text-[10px] text-blue-600">
+      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-200/50 text-[0.625rem] text-blue-600">
         <Info size={12} className="shrink-0 mt-0.5" />
         <span>Requests help collect sample files, source data, and evidence before testing. Received files will later be available in Samples & Evidence and Attribute Testing.</span>
       </div>
@@ -92,8 +92,8 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
           { label: 'Draft', value: summary.draft },
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
-            <div className={`text-[16px] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
+            <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
+            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -103,18 +103,18 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
         <div className="relative flex-1 max-w-[220px]">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests, controls, owner..."
-            className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40" />
+            className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40" />
         </div>
         <div className="flex items-center gap-1">
           {(['All', 'Draft', 'Pending', 'Partially Received', 'Received', 'Overdue'] as StatusFilter[]).map(f => (
             <button key={f} onClick={() => setStatusFilter(f)}
-              className={`px-2 py-1 rounded-full text-[9px] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              className={`px-2 py-1 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
               {f}
             </button>
           ))}
         </div>
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="px-2 py-1 border border-border rounded-lg text-[10px] text-text bg-white cursor-pointer outline-none">
+          className="px-2 py-1 border border-border rounded-lg text-[0.625rem] text-text bg-white cursor-pointer outline-none">
           <option>All Types</option>
           {REQUEST_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
@@ -130,9 +130,9 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
 
       {/* Request table */}
       <div className="rounded-lg border border-border-light overflow-hidden">
-        <table className="w-full text-[11px]">
+        <table className="w-full text-[0.6875rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[9px] font-semibold text-gray-400 uppercase">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
               <th className="px-3 py-2 text-left w-5"></th>
               <th className="px-3 py-2 text-left">Request</th>
               <th className="px-3 py-2 text-left">Linked To</th>
@@ -145,7 +145,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-[11px] text-gray-400">No requests match the current filter.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-[0.6875rem] text-gray-400">No requests match the current filter.</td></tr>
             ) : filtered.map(req => {
               const isExpanded = expandedId === req.id;
               const isOverdue = req.status === 'Overdue';
@@ -158,26 +158,26 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="font-mono text-gray-400 text-[10px]">{req.id}</span>
+                        <span className="font-mono text-gray-400 text-[0.625rem]">{req.id}</span>
                         <span className="font-medium text-text">{req.title}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${TYPE_CLS}`}>{req.requestType}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${PRIORITY_CLS[req.priority]}`}>{req.priority}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${TYPE_CLS}`}>{req.requestType}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${PRIORITY_CLS[req.priority]}`}>{req.priority}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="text-[10px] text-text font-medium">{req.linkedControlId} — {req.linkedControlName}</div>
-                      <div className="text-[9px] text-gray-400">{req.linkedAttributes}</div>
+                      <div className="text-[0.625rem] text-text font-medium">{req.linkedControlId} — {req.linkedControlName}</div>
+                      <div className="text-[0.5625rem] text-gray-400">{req.linkedAttributes}</div>
                     </td>
                     <td className="px-3 py-2.5 text-text">{req.requestedFrom}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`text-[10px] font-mono ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{req.dueDate}</span>
+                      <span className={`text-[0.625rem] font-mono ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{req.dueDate}</span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold ${STATUS_CLS[req.status]}`}>{req.status}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${STATUS_CLS[req.status]}`}>{req.status}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-[10px] text-gray-500">
+                    <td className="px-3 py-2.5 text-center text-[0.625rem] text-gray-500">
                       {req.progressText || (req.filesReceived.length > 0 ? `${req.filesReceived.length} file${req.filesReceived.length !== 1 ? 's' : ''}` : '—')}
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
@@ -205,7 +205,7 @@ function RequestActions({ req, onUpdateStatus }: { req: PBCRequest; onUpdateStat
   if (req.status === 'Draft') {
     return (
       <button onClick={() => onUpdateStatus(req.id, 'Sent')}
-        className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
+        className="flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
         <Send size={9} />Mark Sent
       </button>
     );
@@ -213,7 +213,7 @@ function RequestActions({ req, onUpdateStatus }: { req: PBCRequest; onUpdateStat
   if (req.status === 'Sent' || req.status === 'Pending') {
     return (
       <button onClick={() => onUpdateStatus(req.id, 'Received')}
-        className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition-colors">
+        className="flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition-colors">
         <CheckCircle2 size={9} />Received
       </button>
     );
@@ -221,20 +221,20 @@ function RequestActions({ req, onUpdateStatus }: { req: PBCRequest; onUpdateStat
   if (req.status === 'Partially Received') {
     return (
       <button onClick={() => onUpdateStatus(req.id, 'Received')}
-        className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition-colors">
+        className="flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition-colors">
         <CheckCircle2 size={9} />Complete
       </button>
     );
   }
   if (req.status === 'Overdue') {
     return (
-      <button className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
+      <button className="flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
         <Clock size={9} />Remind
       </button>
     );
   }
   if (req.status === 'Received') {
-    return <span className="text-[9px] text-emerald-600 font-medium">Complete</span>;
+    return <span className="text-[0.5625rem] text-emerald-600 font-medium">Complete</span>;
   }
   return null;
 }
@@ -252,24 +252,24 @@ function RequestDetail({ req }: { req: PBCRequest }) {
   return (
     <div className="bg-surface-2/15 border-b border-border-light px-6 py-4 space-y-3">
       <div>
-        <h6 className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</h6>
-        <p className="text-[11px] text-text leading-relaxed">{req.description}</p>
+        <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</h6>
+        <p className="text-[0.6875rem] text-text leading-relaxed">{req.description}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 text-[10px]">
-        <div><span className="text-gray-400 block text-[9px]">Linked Control</span><span className="text-text font-medium">{req.linkedControlId} — {req.linkedControlName}</span></div>
-        <div><span className="text-gray-400 block text-[9px]">Linked Attributes</span><span className="text-text font-medium">{req.linkedAttributes}</span></div>
-        <div><span className="text-gray-400 block text-[9px]">Requested From</span><span className="text-text font-medium">{req.requestedFrom}</span></div>
+      <div className="grid grid-cols-3 gap-4 text-[0.625rem]">
+        <div><span className="text-gray-400 block text-[0.5625rem]">Linked Control</span><span className="text-text font-medium">{req.linkedControlId} — {req.linkedControlName}</span></div>
+        <div><span className="text-gray-400 block text-[0.5625rem]">Linked Attributes</span><span className="text-text font-medium">{req.linkedAttributes}</span></div>
+        <div><span className="text-gray-400 block text-[0.5625rem]">Requested From</span><span className="text-text font-medium">{req.requestedFrom}</span></div>
       </div>
 
       {/* Timeline */}
       <div>
-        <h6 className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Progress</h6>
+        <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Progress</h6>
         <div className="flex items-center gap-1">
           {stages.map((s, i) => (
             <React.Fragment key={s.label}>
               {i > 0 && <div className={`flex-1 h-px ${s.done ? 'bg-emerald-400' : 'bg-gray-200'}`} />}
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-semibold ${s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.5rem] font-semibold ${s.done ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
                 {s.done ? <CheckCircle2 size={8} /> : <Clock size={8} />}
                 {s.label}
               </div>
@@ -280,7 +280,7 @@ function RequestDetail({ req }: { req: PBCRequest }) {
 
       {/* Overdue warning */}
       {req.status === 'Overdue' && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[10px] text-red-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[0.625rem] text-red-700">
           <AlertTriangle size={12} className="shrink-0 mt-0.5" />
           <span>This request is overdue. Evidence collection may block testing.</span>
         </div>
@@ -289,10 +289,10 @@ function RequestDetail({ req }: { req: PBCRequest }) {
       {/* Files received */}
       {req.filesReceived.length > 0 && (
         <div>
-          <h6 className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Files Received</h6>
+          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Files Received</h6>
           <div className="flex flex-wrap gap-1.5">
             {req.filesReceived.map(f => (
-              <span key={f} className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[9px] text-emerald-700">
+              <span key={f} className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[0.5625rem] text-emerald-700">
                 <FileText size={9} />{f}
               </span>
             ))}
@@ -303,10 +303,10 @@ function RequestDetail({ req }: { req: PBCRequest }) {
       {/* Comments */}
       {req.comments.length > 0 && (
         <div>
-          <h6 className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Comments</h6>
+          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Comments</h6>
           <div className="space-y-1">
             {req.comments.map((c, i) => (
-              <div key={i} className="text-[10px] text-gray-500 pl-2 border-l-2 border-gray-200">{c}</div>
+              <div key={i} className="text-[0.625rem] text-gray-500 pl-2 border-l-2 border-gray-200">{c}</div>
             ))}
           </div>
         </div>
@@ -317,9 +317,9 @@ function RequestDetail({ req }: { req: PBCRequest }) {
 
 // ─── Create Request Form ──────────────────────────────────────────────────
 
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 
 function CreateRequestForm({ onSave, onCancel }: { onSave: (r: PBCRequest) => void; onCancel: () => void }) {
   const [title, setTitle] = useState('');
@@ -362,7 +362,7 @@ function CreateRequestForm({ onSave, onCancel }: { onSave: (r: PBCRequest) => vo
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center justify-between mb-1">
-        <h4 className="text-[13px] font-bold text-text">Create PBC Request</h4>
+        <h4 className="text-[0.8125rem] font-bold text-text">Create PBC Request</h4>
         <button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
 
@@ -408,9 +408,9 @@ function CreateRequestForm({ onSave, onCancel }: { onSave: (r: PBCRequest) => vo
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-1">
-        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
+        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
         <button onClick={handleSave} disabled={!title.trim()}
-          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           Create Request
         </button>
       </div>

@@ -205,12 +205,12 @@ export default function NotificationDrawer({
       >
         {/* Header */}
         <header className="shrink-0 px-6 h-14 flex items-center justify-between gap-4 border-b border-canvas-border">
-          <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Notifications</h2>
+          <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Notifications</h2>
           <div className="flex items-center gap-1">
             <button
               onClick={onMarkAllRead}
               disabled={counts.primary.unread === 0}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12.5px] font-medium text-ink-600 hover:text-brand-700 hover:bg-[#F4F2F7] disabled:text-ink-300 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:bg-[#F4F2F7] disabled:text-ink-300 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
               title="Mark all as read"
             >
               <CheckCheck size={14} />
@@ -238,13 +238,13 @@ export default function NotificationDrawer({
                 <button
                   key={tab.id}
                   onClick={() => { setPrimaryFilter(tab.id); setCategoryFilter('all'); }}
-                  className={`relative inline-flex items-center gap-1.5 px-3 h-11 text-[13px] font-medium transition-colors cursor-pointer whitespace-nowrap
+                  className={`relative inline-flex items-center gap-1.5 px-3 h-11 text-[0.8125rem] font-medium transition-colors cursor-pointer whitespace-nowrap
                     ${active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'}
                   `}
                 >
                   <Icon size={14} />
                   {tab.label}
-                  <span className={`tabular-nums text-[11px] font-semibold ${
+                  <span className={`tabular-nums text-[0.6875rem] font-semibold ${
                     active ? 'text-brand-600' : 'text-ink-400'
                   }`}>
                     {count}
@@ -264,7 +264,7 @@ export default function NotificationDrawer({
           <div className="relative" ref={filterDropdownRef}>
             <button
               onClick={() => setCategoryOpen(o => !o)}
-              className={`relative inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer shrink-0
+              className={`relative inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer shrink-0
                 ${categoryOpen
                   ? 'bg-brand-50 text-brand-700 border-brand-200'
                   : categoryFilter !== 'all'
@@ -277,7 +277,7 @@ export default function NotificationDrawer({
               <ListFilter size={13.5} />
               Filters
               {categoryFilter !== 'all' && (
-                <span className="text-[10px] font-semibold tabular-nums min-w-[16px] h-[16px] px-[4px] rounded-full bg-brand-600 text-white flex items-center justify-center leading-none">
+                <span className="text-[0.625rem] font-semibold tabular-nums min-w-[16px] h-[16px] px-[4px] rounded-full bg-brand-600 text-white flex items-center justify-center leading-none">
                   1
                 </span>
               )}
@@ -300,7 +300,7 @@ export default function NotificationDrawer({
                   aria-label="Filter by category"
                 >
                   <div className="px-2 pt-2 pb-1">
-                    <span className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 px-1">Category</span>
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-500 px-1">Category</span>
                   </div>
                   <div className="py-1">
                     {CATEGORY_FILTERS.map(tab => {
@@ -314,7 +314,7 @@ export default function NotificationDrawer({
                           disabled={disabled}
                           role="menuitemradio"
                           aria-checked={active}
-                          className={`w-full flex items-center justify-between gap-2 pl-2 pr-3 h-8 text-[12.5px] font-medium text-left transition-colors cursor-pointer
+                          className={`w-full flex items-center justify-between gap-2 pl-2 pr-3 h-8 text-[0.75rem] font-medium text-left transition-colors cursor-pointer
                             ${active
                               ? 'bg-brand-50 text-brand-700'
                               : disabled
@@ -328,7 +328,7 @@ export default function NotificationDrawer({
                               : <span className="w-[13px] shrink-0" />}
                             <span className="truncate">{tab.label}</span>
                           </span>
-                          <span className={`tabular-nums text-[11px] font-semibold shrink-0 ${
+                          <span className={`tabular-nums text-[0.6875rem] font-semibold shrink-0 ${
                             active ? 'text-brand-600' : disabled ? 'text-ink-300' : 'text-ink-400'
                           }`}>
                             {count}
@@ -351,8 +351,8 @@ export default function NotificationDrawer({
             grouped.map(group => (
               <section key={group.label}>
                 <div className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm px-6 pt-4 pb-2 flex items-center justify-between">
-                  <span className="text-[11.5px] font-semibold tracking-tight text-ink-700">{group.label}</span>
-                  <span className="text-[11px] text-ink-400 tabular-nums">
+                  <span className="text-[0.75rem] font-semibold tracking-tight text-ink-700">{group.label}</span>
+                  <span className="text-[0.6875rem] text-ink-400 tabular-nums">
                     {group.items.length} {group.items.length === 1 ? 'event' : 'events'}
                   </span>
                 </div>
@@ -384,7 +384,7 @@ export default function NotificationDrawer({
           )}
         </div>
 
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[11.5px] text-ink-500 tabular-nums">
+        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[0.75rem] text-ink-500 tabular-nums">
           {counts.primary.unread > 0
             ? `${counts.primary.unread} unread · ${counts.primary.all} total`
             : `${counts.primary.all} total`}
@@ -407,8 +407,8 @@ function EmptyState({ primary, category }: { primary: PrimaryFilter; category: C
   return (
     <div className="text-center py-20 px-6">
       <BellOff size={28} className="mx-auto text-ink-400 mb-3" />
-      <p className="text-[14px] text-ink-700 font-medium">No {primaryLabel}{categoryLabel}.</p>
-      <p className="text-[12px] text-ink-500 mt-1">{subtitle}</p>
+      <p className="text-[0.875rem] text-ink-700 font-medium">No {primaryLabel}{categoryLabel}.</p>
+      <p className="text-[0.75rem] text-ink-500 mt-1">{subtitle}</p>
     </div>
   );
 }

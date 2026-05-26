@@ -56,7 +56,7 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
                 {file.icon === 'database'
                   ? <Database size={14} className="text-[#6a12cd]" />
                   : <FileText size={14} className="text-[#6a12cd]" />}
-                <span className="text-[12px] font-semibold text-[#26064a]">{file.name}</span>
+                <span className="text-[0.75rem] font-semibold text-[#26064a]">{file.name}</span>
               </div>
               <ChevronDown
                 size={14}
@@ -76,8 +76,8 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
                         className="w-full flex items-center justify-between px-4 py-2 hover:bg-[#faf5ff] transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-[#374151]">{sheet.name}</span>
-                          <span className="text-[10px] text-[#9ca3af]">({sheet.columns.length})</span>
+                          <span className="text-[0.6875rem] font-medium text-[#374151]">{sheet.name}</span>
+                          <span className="text-[0.625rem] text-[#9ca3af]">({sheet.columns.length})</span>
                         </div>
                         <ChevronDown
                           size={12}
@@ -102,7 +102,7 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
                               className={`flex items-center gap-2.5 px-6 py-1.5 hover:bg-[#f0ecff] transition-colors ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
                             >
                               <GripVertical size={11} className="text-[#d1d5db] shrink-0" />
-                              <span className="text-[11px] text-[#4b5563]">{col}</span>
+                              <span className="text-[0.6875rem] text-[#4b5563]">{col}</span>
                             </div>
                           ))}
                         </div>

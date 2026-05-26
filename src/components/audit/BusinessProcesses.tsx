@@ -109,7 +109,7 @@ interface LocalSOP {
 }
 
 const FAILURE_REASONS = [
-  'Unsupported file format — only PDF, DOCX, and XLSX are supported.',
+  'Unsupported file format — only PDF, XLSX, and CSV are supported.',
   'File is unreadable — the document may be corrupted or password-protected.',
   'Processing timeout — the document is too large or complex. Try splitting into smaller sections.',
   'No process content detected — the document does not appear to contain standard operating procedures.',
@@ -182,8 +182,8 @@ function ProcessingStepperPanel({ sop }: { sop: LocalSOP }) {
       transition={{ duration: 0.2 }} className="overflow-hidden">
       <div className="px-4 py-4 bg-surface-2/30 border-t border-border/30">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-semibold text-text-muted">Processing: {sop.name}</span>
-          <span className="text-[11px] font-bold text-text tabular-nums">{progressPct}%</span>
+          <span className="text-[0.6875rem] font-semibold text-text-muted">Processing: {sop.name}</span>
+          <span className="text-[0.6875rem] font-bold text-text tabular-nums">{progressPct}%</span>
         </div>
         <div className="space-y-0">
           {PROCESSING_STEPS.map((step, idx) => {
@@ -202,8 +202,8 @@ function ProcessingStepperPanel({ sop }: { sop: LocalSOP }) {
                   {!isLast && <div className={`w-0.5 h-5 ${styles.line}`} />}
                 </div>
                 <div className={`pt-0.5 pb-3 ${styles.text}`}>
-                  <div className="text-[11px] leading-tight">{step.label}</div>
-                  {state === 'in-progress' && <div className="text-[10px] text-gray-400 mt-0.5">{step.description}</div>}
+                  <div className="text-[0.6875rem] leading-tight">{step.label}</div>
+                  {state === 'in-progress' && <div className="text-[0.625rem] text-gray-400 mt-0.5">{step.description}</div>}
                 </div>
               </div>
             );
@@ -334,30 +334,30 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
     addToast({ message: `Control reference "${newCtrl.name}" added`, type: 'success' });
   };
 
-  const fieldCls = 'w-full px-2 py-1.5 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10';
+  const fieldCls = 'w-full px-2 py-1.5 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10';
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
           <ArrowLeft size={14} />Back to SOP List
         </button>
         <div className="bg-white rounded-xl border border-border-light p-5">
           <div className="flex items-start justify-between mb-3">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-[16px] font-bold text-text">{sop.name}</h2>
-                <span className="text-[11px] font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{sop.version}</span>
-                <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+                <h2 className="text-[1rem] font-bold text-text">{sop.name}</h2>
+                <span className="text-[0.6875rem] font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{sop.version}</span>
+                <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
               </div>
-              <div className="flex items-center gap-4 mt-1.5 text-[11px] text-gray-500">
+              <div className="flex items-center gap-4 mt-1.5 text-[0.6875rem] text-gray-500">
                 <span>Uploaded by {sop.uploadedBy} · {sop.uploadedAt}</span>
-                <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
               </div>
             </div>
             <button onClick={() => setShowConfirmModal(true)} disabled={activeRisks.length === 0 || (isPartial && !partialConfirmed)}
-              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
+              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
               <FileText size={13} />Create Draft RACM
             </button>
           </div>
@@ -368,11 +368,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               <div className="flex items-start gap-2.5">
                 <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <div className="text-[12px] font-semibold text-amber-800">Incomplete extraction — review required</div>
-                  <p className="text-[11px] text-amber-700/80 mt-0.5">Some information could not be extracted confidently. Review and complete missing items before creating RACM.</p>
+                  <div className="text-[0.75rem] font-semibold text-amber-800">Incomplete extraction — review required</div>
+                  <p className="text-[0.6875rem] text-amber-700/80 mt-0.5">Some information could not be extracted confidently. Review and complete missing items before creating RACM.</p>
                   <ul className="mt-2 space-y-0.5">
                     {partialWarnings.map((w, i) => (
-                      <li key={i} className="text-[11px] text-amber-700/70 flex items-center gap-1.5">
+                      <li key={i} className="text-[0.6875rem] text-amber-700/70 flex items-center gap-1.5">
                         <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />{w}
                       </li>
                     ))}
@@ -380,7 +380,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   <label className="flex items-center gap-2 mt-3 cursor-pointer">
                     <input type="checkbox" checked={partialConfirmed} onChange={e => setPartialConfirmed(e.target.checked)}
                       className="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 accent-amber-600 cursor-pointer" />
-                    <span className="text-[11px] font-medium text-amber-800">I have reviewed the gaps and want to proceed</span>
+                    <span className="text-[0.6875rem] font-medium text-amber-800">I have reviewed the gaps and want to proceed</span>
                   </label>
                 </div>
               </div>
@@ -391,15 +391,15 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50">
               <div className="text-lg font-bold text-text">{activeRisks.length}</div>
-              <div className="text-[10px] text-text-muted">Accepted Risks</div>
+              <div className="text-[0.625rem] text-text-muted">Accepted Risks</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50">
               <div className="text-lg font-bold text-text">{controls.filter(c => c.accepted).length}</div>
-              <div className="text-[10px] text-text-muted">Control References</div>
+              <div className="text-[0.625rem] text-text-muted">Control References</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50">
               <div className="text-lg font-bold text-gray-400">{risks.length - activeRisks.length + controls.length - controls.filter(c => c.accepted).length}</div>
-              <div className="text-[10px] text-text-muted">Removed</div>
+              <div className="text-[0.625rem] text-text-muted">Removed</div>
             </div>
           </div>
 
@@ -413,17 +413,17 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold text-text">{sop.racmName || sop.racmId}</span>
-                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-gray-100 text-gray-600">Draft</span>
-                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-amber-50 text-amber-600">Mapping Incomplete</span>
+                      <span className="text-[0.75rem] font-semibold text-text">{sop.racmName || sop.racmId}</span>
+                      <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-600">Draft</span>
+                      <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-amber-50 text-amber-600">Mapping Incomplete</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
+                    <div className="text-[0.625rem] text-gray-500 mt-0.5">
                       {sop.risks} risks · {sop.controls} control references · Created from this SOP
                     </div>
                   </div>
                 </div>
                 <button onClick={onBack}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer transition-colors inline-flex items-center gap-1">
+                  className="px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer transition-colors inline-flex items-center gap-1">
                   View RACM<ChevronRight size={8} />
                 </button>
               </div>
@@ -435,36 +435,36 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
       {/* AI Summary — editable */}
       <div className="bg-white rounded-xl border border-border-light p-4">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+          <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles size={11} className="text-primary/60" />SOP Summary
           </h3>
-          <button onClick={() => setEditingSummary(!editingSummary)} className="text-[10px] font-medium text-primary hover:underline cursor-pointer">
+          <button onClick={() => setEditingSummary(!editingSummary)} className="text-[0.625rem] font-medium text-primary hover:underline cursor-pointer">
             {editingSummary ? 'Done' : 'Edit'}
           </button>
         </div>
         {editingSummary ? (
           <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3}
-            className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 resize-none" />
+            className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 resize-none" />
         ) : (
-          <p className="text-[12px] text-text-secondary leading-relaxed">{summary}</p>
+          <p className="text-[0.75rem] text-text-secondary leading-relaxed">{summary}</p>
         )}
       </div>
 
       {/* Extracted Risks Table */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[13px] font-semibold text-text">Extracted Risks ({risks.length})</h3>
-          <button onClick={() => setShowAddRisk(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
+          <h3 className="text-[0.8125rem] font-semibold text-text">Extracted Risks ({risks.length})</h3>
+          <button onClick={() => setShowAddRisk(true)} className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
             <Plus size={11} />Add Missing Risk
           </button>
         </div>
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
                   {['Risk Name', 'Description', 'Process', 'Source Section', 'Confidence', 'Action'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -475,24 +475,24 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                       {editingRiskId === risk.id ? (
                         <input value={risk.name} onChange={e => handleEditRisk(risk.id, 'name', e.target.value)} className={fieldCls} autoFocus />
                       ) : (
-                        <span className="text-[12px] font-medium text-text">{risk.name}</span>
+                        <span className="text-[0.75rem] font-medium text-text">{risk.name}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 max-w-[200px]">
                       {editingRiskId === risk.id ? (
                         <input value={risk.description} onChange={e => handleEditRisk(risk.id, 'description', e.target.value)} className={fieldCls} />
                       ) : (
-                        <span className="text-[11px] text-gray-500 line-clamp-2">{risk.description}</span>
+                        <span className="text-[0.6875rem] text-gray-500 line-clamp-2">{risk.description}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[10px] text-gray-400 font-mono">{risk.section}</span>
+                      <span className="text-[0.625rem] text-gray-400 font-mono">{risk.section}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${CONFIDENCE_STYLES[risk.confidence]}`}>{risk.confidence}</span>
+                      <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${CONFIDENCE_STYLES[risk.confidence]}`}>{risk.confidence}</span>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -513,9 +513,9 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   <tr className="border-b border-border/50 bg-primary/5">
                     <td className="px-3 py-2"><input value={newRiskName} onChange={e => setNewRiskName(e.target.value)} placeholder="Risk name" className={fieldCls} autoFocus /></td>
                     <td className="px-3 py-2"><input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} placeholder="Description" className={fieldCls} /></td>
-                    <td className="px-3 py-2"><span className="text-[10px] text-gray-400">{sop.businessProcess}</span></td>
+                    <td className="px-3 py-2"><span className="text-[0.625rem] text-gray-400">{sop.businessProcess}</span></td>
                     <td className="px-3 py-2"><input value={newRiskSection} onChange={e => setNewRiskSection(e.target.value)} placeholder="Section" className={fieldCls} /></td>
-                    <td className="px-3 py-2"><span className="text-[9px] text-gray-400">Manual</span></td>
+                    <td className="px-3 py-2"><span className="text-[0.5625rem] text-gray-400">Manual</span></td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <button onClick={handleAddRisk} disabled={!newRiskName.trim()} className="p-1 rounded bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
@@ -534,20 +534,20 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
       <div>
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-[13px] font-semibold text-text">Extracted Control References ({controls.length})</h3>
-            <p className="text-[10px] text-gray-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
+            <h3 className="text-[0.8125rem] font-semibold text-text">Extracted Control References ({controls.length})</h3>
+            <p className="text-[0.625rem] text-gray-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
           </div>
-          <button onClick={() => setShowAddCtrl(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
+          <button onClick={() => setShowAddCtrl(true)} className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
             <Plus size={11} />Add Missing Reference
           </button>
         </div>
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
                   {['Control Reference', 'Related Risk', 'Process', 'Source Section', 'Type', 'Confidence', 'Action'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -560,23 +560,23 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         {editingCtrlId === ctrl.id ? (
                           <input value={ctrl.name} onChange={e => handleEditControl(ctrl.id, 'name', e.target.value)} className={fieldCls} autoFocus />
                         ) : (
-                          <span className="text-[12px] font-medium text-text">{ctrl.name}</span>
+                          <span className="text-[0.75rem] font-medium text-text">{ctrl.name}</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[11px] text-gray-500">{linkedRisk?.name || '—'}</span>
+                        <span className="text-[0.6875rem] text-gray-500">{linkedRisk?.name || '—'}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[10px] text-gray-400 font-mono">{ctrl.section || '—'}</span>
+                        <span className="text-[0.625rem] text-gray-400 font-mono">{ctrl.section || '—'}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-gray-100 text-gray-500 inline-flex items-center">{ctrl.type}</span>
+                        <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-500 inline-flex items-center">{ctrl.type}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${CONFIDENCE_STYLES[ctrl.confidence]}`}>{ctrl.confidence}</span>
+                        <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${CONFIDENCE_STYLES[ctrl.confidence]}`}>{ctrl.confidence}</span>
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
@@ -603,7 +603,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         {activeRisks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-2"><span className="text-[10px] text-gray-400">{sop.businessProcess}</span></td>
+                    <td className="px-3 py-2"><span className="text-[0.625rem] text-gray-400">{sop.businessProcess}</span></td>
                     <td className="px-3 py-2"><input value={newCtrlSection} onChange={e => setNewCtrlSection(e.target.value)} placeholder="Section" className={fieldCls} /></td>
                     <td className="px-3 py-2">
                       <select value={newCtrlType} onChange={e => setNewCtrlType(e.target.value as any)} className={fieldCls + ' cursor-pointer appearance-none'}>
@@ -612,7 +612,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         <option value="Corrective">Corrective</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2"><span className="text-[9px] text-gray-400">Manual</span></td>
+                    <td className="px-3 py-2"><span className="text-[0.5625rem] text-gray-400">Manual</span></td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <button onClick={handleAddControl} disabled={!newCtrlName.trim()} className="p-1 rounded bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
@@ -639,8 +639,8 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                 {/* Header */}
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
                   <div>
-                    <h2 className="text-[16px] font-bold text-text">Create Draft RACM from SOP</h2>
-                    <p className="text-[12px] text-text-muted mt-0.5">Review the summary below before creating the draft RACM.</p>
+                    <h2 className="text-[1rem] font-bold text-text">Create Draft RACM from SOP</h2>
+                    <p className="text-[0.75rem] text-text-muted mt-0.5">Review the summary below before creating the draft RACM.</p>
                   </div>
                   <button onClick={() => setShowConfirmModal(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
@@ -650,33 +650,33 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   {/* Source SOP */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Source SOP</span>
-                      <span className="text-[13px] text-text font-medium mt-0.5 block">{sop.name}</span>
+                      <span className="text-[0.625rem] text-gray-400 uppercase block">Source SOP</span>
+                      <span className="text-[0.8125rem] text-text font-medium mt-0.5 block">{sop.name}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Business Process</span>
-                      <span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span>
+                      <span className="text-[0.625rem] text-gray-400 uppercase block">Business Process</span>
+                      <span className="text-[0.8125rem] text-text mt-0.5 block">{sop.businessProcess}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Risks to create</span>
-                      <span className="text-[13px] text-text font-semibold mt-0.5 block">{activeRisks.length}</span>
+                      <span className="text-[0.625rem] text-gray-400 uppercase block">Risks to create</span>
+                      <span className="text-[0.8125rem] text-text font-semibold mt-0.5 block">{activeRisks.length}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Control references</span>
-                      <span className="text-[13px] text-text font-semibold mt-0.5 block">{controls.filter(c => c.accepted).length}</span>
+                      <span className="text-[0.625rem] text-gray-400 uppercase block">Control references</span>
+                      <span className="text-[0.8125rem] text-text font-semibold mt-0.5 block">{controls.filter(c => c.accepted).length}</span>
                     </div>
                   </div>
 
                   {/* RACM Name */}
                   <div>
-                    <label className="text-[12px] font-semibold text-text-muted block mb-1.5">RACM Name</label>
+                    <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">RACM Name</label>
                     <input value={racmName} onChange={e => setRacmName(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
                   </div>
 
                   {/* What will happen */}
                   <div className="rounded-lg bg-surface-2/50 border border-border/50 px-4 py-3 space-y-1.5">
-                    <div className="text-[11px] font-semibold text-text-muted">What will happen:</div>
+                    <div className="text-[0.6875rem] font-semibold text-text-muted">What will happen:</div>
                     <ul className="space-y-1">
                       {[
                         'RACM created in Draft status (not Active)',
@@ -686,7 +686,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         'RACM readiness: Mapping Incomplete',
                         'SOP linked to the created RACM',
                       ].map((item, i) => (
-                        <li key={i} className="text-[11px] text-text-secondary flex items-start gap-1.5">
+                        <li key={i} className="text-[0.6875rem] text-text-secondary flex items-start gap-1.5">
                           <CheckCircle2 size={10} className="text-emerald-500 shrink-0 mt-0.5" />{item}
                         </li>
                       ))}
@@ -695,14 +695,14 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
 
                   {/* What will NOT happen */}
                   <div className="rounded-lg bg-gray-50 border border-border/30 px-4 py-3 space-y-1.5">
-                    <div className="text-[11px] font-semibold text-gray-500">What will NOT happen:</div>
+                    <div className="text-[0.6875rem] font-semibold text-gray-500">What will NOT happen:</div>
                     <ul className="space-y-1">
                       {[
                         'Controls will not be created in Control Library',
                         'Workflows will not be linked',
                         'RACM will not be validated or activated',
                       ].map((item, i) => (
-                        <li key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                        <li key={i} className="text-[0.6875rem] text-gray-400 flex items-start gap-1.5">
                           <X size={10} className="text-gray-300 shrink-0 mt-0.5" />{item}
                         </li>
                       ))}
@@ -713,9 +713,9 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
                   <button onClick={() => setShowConfirmModal(false)}
-                    className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+                    className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
                   <button onClick={() => { setShowConfirmModal(false); onAccept(racmName); }} disabled={!racmName.trim()}
-                    className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
                     <FileText size={13} />Create Draft RACM
                   </button>
                 </div>
@@ -762,8 +762,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
   const buildData = (): UploadSOPData => ({ name: name.trim(), version: 'v1.0', description: description.trim(), fileName });
 
-  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-  const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+  const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   return (
     <>
@@ -775,8 +775,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">Upload SOP</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Upload SOP</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -803,14 +803,14 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
               {fileName ? (
                 <div className="flex items-center justify-center gap-2">
                   <FileText size={16} className="text-emerald-600" />
-                  <span className="text-[12px] font-medium text-emerald-700">{fileName}</span>
+                  <span className="text-[0.75rem] font-medium text-emerald-700">{fileName}</span>
                   <button onClick={e => { e.stopPropagation(); setFileName(''); }} className="text-gray-400 hover:text-red-500"><X size={12} /></button>
                 </div>
               ) : (
                 <>
                   <Upload size={18} className={`mx-auto mb-1.5 ${dragOver ? 'text-primary' : 'text-gray-300'}`} />
-                  <div className="text-[12px] text-text-muted">Drag & drop or click to browse</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">PDF, DOCX, XLSX, CSV</div>
+                  <div className="text-[0.75rem] text-text-muted">Drag & drop or click to browse</div>
+                  <div className="text-[0.625rem] text-gray-400 mt-0.5">PDF, XLSX, CSV</div>
                 </>
               )}
             </div>
@@ -825,7 +825,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
           {/* Business Process (read-only) */}
           <div>
             <label className={labelCls}>Business Process</label>
-            <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50 cursor-not-allowed">{bpAbbr}</div>
+            <div className="px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-gray-50 cursor-not-allowed">{bpAbbr}</div>
           </div>
 
 
@@ -839,9 +839,9 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
         </div>
 
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <button onClick={() => { if (isValid) onUploadAndProcess(buildData()); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Upload & Process
           </button>
         </div>
@@ -862,49 +862,49 @@ function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose
         className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[17px] font-semibold text-ink-900">{sop.name}</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">SOP Preview</p>
+            <h2 className="font-display text-[1.0625rem] font-semibold text-ink-900">{sop.name}</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5">SOP Preview</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Metadata */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <div><span className="text-[10px] text-gray-400 uppercase block">Uploaded By</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedBy}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Upload Date</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedAt}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Business Process</span><span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Version</span><span className="text-[13px] text-text mt-0.5 font-mono block">{sop.version}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Status</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">File</span><span className="text-[13px] text-text mt-0.5 block">{sop.fileName}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">Uploaded By</span><span className="text-[0.8125rem] text-text mt-0.5 block">{sop.uploadedBy}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">Upload Date</span><span className="text-[0.8125rem] text-text mt-0.5 block">{sop.uploadedAt}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">Business Process</span><span className="text-[0.8125rem] text-text mt-0.5 block">{sop.businessProcess}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">Version</span><span className="text-[0.8125rem] text-text mt-0.5 font-mono block">{sop.version}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">Status</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span></div>
+            <div><span className="text-[0.625rem] text-gray-400 uppercase block">File</span><span className="text-[0.8125rem] text-text mt-0.5 block">{sop.fileName}</span></div>
           </div>
           {/* Description */}
           {sop.description && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-1">Description</span>
-              <p className="text-[13px] text-text-secondary leading-relaxed">{sop.description}</p>
+              <span className="text-[0.625rem] text-gray-400 uppercase block mb-1">Description</span>
+              <p className="text-[0.8125rem] text-text-secondary leading-relaxed">{sop.description}</p>
             </div>
           )}
           {/* Source file placeholder */}
           <div>
-            <span className="text-[10px] text-gray-400 uppercase block mb-2">Document Preview</span>
+            <span className="text-[0.625rem] text-gray-400 uppercase block mb-2">Document Preview</span>
             <div className="rounded-lg border border-border bg-gray-50 p-8 text-center">
               <FileText size={24} className="mx-auto text-gray-300 mb-2" />
-              <div className="text-[12px] text-gray-400">Document preview not available in prototype</div>
-              <div className="text-[10px] text-gray-300 mt-1">{sop.fileName}</div>
+              <div className="text-[0.75rem] text-gray-400">Document preview not available in prototype</div>
+              <div className="text-[0.625rem] text-gray-300 mt-1">{sop.fileName}</div>
             </div>
           </div>
           {/* Extraction summary */}
           {(sop.risks > 0 || sop.controls > 0) && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-2">Extraction Summary</span>
+              <span className="text-[0.625rem] text-gray-400 uppercase block mb-2">Extraction Summary</span>
               <div className="flex gap-4">
                 <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50 flex-1">
                   <div className="text-lg font-bold text-text">{sop.risks}</div>
-                  <div className="text-[10px] text-text-muted">Risks Extracted</div>
+                  <div className="text-[0.625rem] text-text-muted">Risks Extracted</div>
                 </div>
                 <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50 flex-1">
                   <div className="text-lg font-bold text-text">{sop.controls}</div>
-                  <div className="text-[10px] text-text-muted">Control References</div>
+                  <div className="text-[0.625rem] text-text-muted">Control References</div>
                 </div>
               </div>
             </div>
@@ -912,15 +912,15 @@ function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose
           {/* Linked RACM */}
           {sop.racmId && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-2">Linked RACM</span>
+              <span className="text-[0.625rem] text-gray-400 uppercase block mb-2">Linked RACM</span>
               <div className="rounded-lg border border-border p-3 flex items-center justify-between">
                 <div>
-                  <span className="text-[12px] font-medium text-text">{sop.racmName || sop.racmId}</span>
-                  <span className="text-[10px] text-gray-400 block mt-0.5">{sop.risks} risks · {sop.controls} control references</span>
+                  <span className="text-[0.75rem] font-medium text-text">{sop.racmName || sop.racmId}</span>
+                  <span className="text-[0.625rem] text-gray-400 block mt-0.5">{sop.risks} risks · {sop.controls} control references</span>
                 </div>
                 {onGoToRacm && (
                   <button onClick={() => { onClose(); onGoToRacm(); }}
-                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">
+                    className="px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">
                     View RACM
                   </button>
                 )}
@@ -929,7 +929,7 @@ function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose
           )}
         </div>
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
         </footer>
       </motion.aside>
     </>
@@ -965,8 +965,8 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   const [owner, setOwner] = useState('Current User');
 
   const isFormValid = name.trim().length > 0 && owner.trim().length > 0;
-  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-  const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+  const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   const handleFileUpload = (fileName: string) => {
     setUploadedFile(fileName);
@@ -1004,8 +1004,8 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">Create RACM</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">Define a new Risk &amp; Control Matrix for audit governance.</p>
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Create RACM</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new Risk &amp; Control Matrix for audit governance.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -1014,7 +1014,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
 
           {/* ─── Form Fields (always visible once source chosen or immediately) ─── */}
           <div className="space-y-3">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
+            <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
             <div>
               <label className={labelCls}>RACM Name <span className="text-red-400">*</span></label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P — Vendor Payment" className={fieldCls} autoFocus />
@@ -1037,17 +1037,17 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
             {/* Business Process — auto-filled, read-only */}
             <div>
               <label className={labelCls}>Business Process</label>
-              <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2">
+              <div className="px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2">
                 <Building2 size={13} className="text-gray-400 shrink-0" />
                 <span>{bpAbbr}</span>
-                <span className="ml-auto text-[10px] text-gray-400">Auto-filled</span>
+                <span className="ml-auto text-[0.625rem] text-gray-400">Auto-filled</span>
               </div>
             </div>
           </div>
 
           {/* ─── Source Type Selection ─── */}
           <div className="space-y-3">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Source Type</h3>
+            <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Source Type</h3>
             <div className="grid grid-cols-3 gap-2">
               {([
                 { id: 'blank' as const, label: 'Start Blank', desc: 'Add risks & controls manually', icon: Plus, disabled: false },
@@ -1064,8 +1064,8 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                         : 'border-border-light hover:border-primary/30 hover:bg-primary/5 cursor-pointer'
                   }`}>
                   <opt.icon size={16} className={`mb-1.5 ${source === opt.id ? 'text-primary' : 'text-gray-400'}`} />
-                  <div className={`text-[12px] font-semibold ${source === opt.id ? 'text-primary' : 'text-text'}`}>{opt.label}</div>
-                  <div className="text-[10px] text-text-muted mt-0.5 leading-snug">{opt.desc}</div>
+                  <div className={`text-[0.75rem] font-semibold ${source === opt.id ? 'text-primary' : 'text-text'}`}>{opt.label}</div>
+                  <div className="text-[0.625rem] text-text-muted mt-0.5 leading-snug">{opt.desc}</div>
                 </button>
               ))}
             </div>
@@ -1074,7 +1074,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
           {/* ─── Upload Section (only when source is upload) ─── */}
           {source === 'upload' && (
             <div className="space-y-3">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Upload File</h3>
+              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Upload File</h3>
               {!uploadedFile ? (
                 <div onClick={() => {
                     const input = document.createElement('input'); input.type = 'file'; input.accept = '.xlsx,.xls,.csv,.pdf';
@@ -1083,8 +1083,8 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                   }}
                   className="border-2 border-dashed border-border-light rounded-xl p-6 text-center cursor-pointer hover:border-primary/30 hover:bg-gray-50/50 transition-all">
                   <Upload size={22} className="mx-auto text-gray-300 mb-2" />
-                  <div className="text-[13px] font-semibold text-text">Drop file here or click to browse</div>
-                  <div className="text-[11px] text-text-muted mt-1">Supported: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf)</div>
+                  <div className="text-[0.8125rem] font-semibold text-text">Drop file here or click to browse</div>
+                  <div className="text-[0.6875rem] text-text-muted mt-1">Supported: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf)</div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-border-light bg-surface-2/30 p-4 space-y-3">
@@ -1094,8 +1094,8 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                       <FileText size={16} className="text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-text truncate">{uploadedFile}</p>
-                      <p className="text-[10px] text-text-muted mt-0.5">
+                      <p className="text-[0.8125rem] font-semibold text-text truncate">{uploadedFile}</p>
+                      <p className="text-[0.625rem] text-text-muted mt-0.5">
                         {uploadParsing ? 'Parsing file…' : uploadParsed && extractedStats ? `${extractedStats.rows} rows · ${extractedStats.risks} risks · ${extractedStats.controls} controls extracted` : 'Ready'}
                       </p>
                     </div>
@@ -1110,7 +1110,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                   {uploadParsed && extractedStats && (
                     <div className="flex items-center gap-2 p-2.5 bg-emerald-50/40 rounded-lg border border-emerald-100/60">
                       <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                      <span className="text-[11px] text-emerald-700">File parsed successfully. Review the imported structure in the next step to validate and finalize.</span>
+                      <span className="text-[0.6875rem] text-emerald-700">File parsed successfully. Review the imported structure in the next step to validate and finalize.</span>
                     </div>
                   )}
                 </div>
@@ -1123,7 +1123,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
         {/* Footer — shown once a source type is selected */}
         {source && (
           <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-            <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
             <button onClick={() => {
                 if (!isFormValid) return;
                 if (isUploadReview && onStartReview) {
@@ -1133,7 +1133,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                   onCreate(name.trim(), framework || 'Internal Policy');
                 }
               }} disabled={ctaDisabled}
-              className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+              className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
               {isUploadReview && <Eye size={14} />}
               {ctaLabel}
             </button>
@@ -1386,10 +1386,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       {sortedSops.length === 0 ? (
         <div className="bg-white rounded-xl border border-border-light p-12 text-center">
           <FileText size={32} className="mx-auto text-gray-200 mb-3" />
-          <div className="text-[14px] font-semibold text-text mb-1">No SOPs uploaded yet</div>
-          <p className="text-[12px] text-gray-400 max-w-sm mx-auto mb-4">Upload a Standard Operating Procedure to extract risks and control references.</p>
+          <div className="text-[0.875rem] font-semibold text-text mb-1">No SOPs uploaded yet</div>
+          <p className="text-[0.75rem] text-gray-400 max-w-sm mx-auto mb-4">Upload a Standard Operating Procedure to extract risks and control references.</p>
           <button onClick={() => setShowUploadDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
             <Upload size={14} />Upload SOP
           </button>
         </div>
@@ -1397,9 +1397,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         <>
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[12px] text-gray-500">{sortedSops.length} SOP{sortedSops.length !== 1 ? 's' : ''}</span>
+            <span className="text-[0.75rem] text-gray-500">{sortedSops.length} SOP{sortedSops.length !== 1 ? 's' : ''}</span>
             <button onClick={() => setShowUploadDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
               <Upload size={13} />Upload SOP
             </button>
           </div>
@@ -1407,11 +1407,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           {/* SOP Table */}
           <div className="bg-white rounded-xl border border-border-light overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[0.75rem]">
                 <thead>
                   <tr className="border-b border-border bg-gray-50/50">
                     {['SOP Name', 'Status', 'Draft', 'Actions'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1424,27 +1424,27 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
                         className={`border-b border-border/40 transition-colors ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-gray-50/50'}`}>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] font-medium text-text">{sop.name}</span>
-                          <span className="text-[10px] text-gray-400 block mt-0.5">{sop.uploadedBy} · {sop.uploadedAt}</span>
+                          <span className="text-[0.75rem] font-medium text-text">{sop.name}</span>
+                          <span className="text-[0.625rem] text-gray-400 block mt-0.5">{sop.uploadedBy} · {sop.uploadedAt}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
+                          <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
                             {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
                             {sop.status}
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[11px] text-gray-400">{sop.uploadedAt}</span>
+                          <span className="text-[0.6875rem] text-gray-400">{sop.uploadedAt}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
                             <button onClick={() => handleSOPActionClick(sop)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${action.cls}`}>
+                              className={`px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors ${action.cls}`}>
                               {action.label}
                             </button>
                             {(sop.status === 'Processed' || sop.status === 'Linked') && (
                               <button onClick={() => setPreviewingSopId(sop.id)}
-                                className="px-2 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors">
+                                className="px-2 py-1 rounded-lg text-[0.625rem] font-medium text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors">
                                 View SOP
                               </button>
                             )}
@@ -1463,12 +1463,12 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           <td colSpan={4} className="p-0">
                             <div className="px-4 py-3 bg-gray-50/50 border-t border-border/30">
                               <div className="flex items-center gap-3">
-                                <span className="text-[11px] text-red-500/80 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
+                                <span className="text-[0.6875rem] text-red-500/80 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                  <button onClick={() => handleStartProcessing(sop.id)} className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">Retry</button>
-                                  <button onClick={() => setShowUploadDrawer(true)} className="px-2.5 py-1 rounded-lg text-[10px] font-medium border border-border text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors">Re-upload</button>
+                                  <button onClick={() => handleStartProcessing(sop.id)} className="px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">Retry</button>
+                                  <button onClick={() => setShowUploadDrawer(true)} className="px-2.5 py-1 rounded-lg text-[0.625rem] font-medium border border-border text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors">Re-upload</button>
                                   <button onClick={() => { setLocalSops(prev => prev.map(s => s.id === sop.id ? { ...s, status: 'Archived' as SOPStatus } : s)); addToast({ message: `"${sop.name}" archived`, type: 'info' }); }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors">Archive</button>
+                                    className="px-2.5 py-1 rounded-lg text-[0.625rem] font-medium text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors">Archive</button>
                                 </div>
                               </div>
                             </div>
@@ -1542,20 +1542,20 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                   <div className="px-6 pt-5 pb-4 border-b border-canvas-border">
                     <div className="flex items-center gap-2 mb-1">
                       <AlertTriangle size={16} className="text-amber-500" />
-                      <h2 className="text-[16px] font-bold text-text">SOP already exists</h2>
+                      <h2 className="text-[1rem] font-bold text-text">SOP already exists</h2>
                     </div>
-                    <p className="text-[12px] text-text-muted">An SOP with this name already exists for this process.</p>
+                    <p className="text-[0.75rem] text-text-muted">An SOP with this name already exists for this process.</p>
                   </div>
 
                   <div className="px-6 py-5 space-y-4">
                     {/* Existing SOP info */}
                     <div className="rounded-lg border border-border bg-surface-2/30 px-4 py-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[12px] font-semibold text-text">{existing.name}</span>
-                        <span className="text-[10px] font-mono text-gray-500 bg-gray-50 px-1 py-0.5 rounded">{existing.version}</span>
-                        <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${SOP_STATUS_STYLES[existing.status]}`}>{existing.status}</span>
+                        <span className="text-[0.75rem] font-semibold text-text">{existing.name}</span>
+                        <span className="text-[0.625rem] font-mono text-gray-500 bg-gray-50 px-1 py-0.5 rounded">{existing.version}</span>
+                        <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${SOP_STATUS_STYLES[existing.status]}`}>{existing.status}</span>
                       </div>
-                      <div className="text-[11px] text-gray-500">
+                      <div className="text-[0.6875rem] text-gray-500">
                         {existing.uploadedBy} · {existing.uploadedAt}
                         {isLinked && <span className="ml-2 text-primary">Linked to {existing.racmId}</span>}
                       </div>
@@ -1565,26 +1565,26 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     <div className="space-y-2">
                       <button onClick={() => handleVersionConflictResolve('new-version')}
                         className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer">
-                        <div className="text-[12px] font-semibold text-text">Upload as new version</div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))} — keeps existing SOP and linked RACM intact.</div>
+                        <div className="text-[0.75rem] font-semibold text-text">Upload as new version</div>
+                        <div className="text-[0.6875rem] text-gray-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))} — keeps existing SOP and linked RACM intact.</div>
                       </button>
 
                       {canReplace ? (
                         <button onClick={() => handleVersionConflictResolve('replace')}
                           className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-300 hover:bg-amber-50/30 transition-all cursor-pointer">
-                          <div className="text-[12px] font-semibold text-text">Replace existing draft</div>
-                          <div className="text-[11px] text-gray-500 mt-0.5">Removes the {existing.status.toLowerCase()} SOP and uploads the new file in its place.</div>
+                          <div className="text-[0.75rem] font-semibold text-text">Replace existing draft</div>
+                          <div className="text-[0.6875rem] text-gray-500 mt-0.5">Removes the {existing.status.toLowerCase()} SOP and uploads the new file in its place.</div>
                         </button>
                       ) : (
                         <div className="px-4 py-3 rounded-lg border border-border/50 bg-gray-50/50 opacity-60">
-                          <div className="text-[12px] font-medium text-gray-400">Replace existing</div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">Cannot replace — SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
+                          <div className="text-[0.75rem] font-medium text-gray-400">Replace existing</div>
+                          <div className="text-[0.6875rem] text-gray-400 mt-0.5">Cannot replace — SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
                         </div>
                       )}
 
                       <button onClick={() => handleVersionConflictResolve('cancel')}
                         className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-gray-50 transition-all cursor-pointer">
-                        <div className="text-[12px] font-medium text-gray-500">Cancel</div>
+                        <div className="text-[0.75rem] font-medium text-gray-500">Cancel</div>
                       </button>
                     </div>
                   </div>
@@ -1643,15 +1643,15 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-gray-500">{controls.length} control{controls.length !== 1 ? 's' : ''}</span>
+        <span className="text-[0.75rem] text-gray-500">{controls.length} control{controls.length !== 1 ? 's' : ''}</span>
       </div>
 
       <div className="bg-white rounded-xl border border-border-light overflow-hidden">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-[0.75rem]">
           <thead>
             <tr className="border-b border-border bg-gray-50/50">
               {['Control', 'Classification', 'Nature', 'Workflows', 'Mapped Risks', 'RACMs', 'Design Status', ''].map(h => (
-                <th key={h || 'act'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                <th key={h || 'act'} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -1665,39 +1665,39 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
                     className="border-b border-border/40 hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-gray-400">{ctrl.id}</span>
-                        <span className="text-[12px] font-medium text-text">{ctrl.name}</span>
+                        <span className="font-mono text-[0.625rem] text-gray-400">{ctrl.id}</span>
+                        <span className="text-[0.75rem] font-medium text-text">{ctrl.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{ctrl.classification}</span>
+                      <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{ctrl.classification}</span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-gray-500">{ctrl.nature}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-gray-500">{ctrl.nature}</span></td>
                     <td className="px-3 py-3">
                       {ctrl.workflows.length === 0 ? (
-                        <span className="text-[11px] text-amber-600 font-medium">No workflow mapped</span>
+                        <span className="text-[0.6875rem] text-amber-600 font-medium">No workflow mapped</span>
                       ) : ctrl.workflows.length === 1 ? (
-                        <span className="text-[11px] text-emerald-700 font-medium">{ctrl.workflows[0].name}</span>
+                        <span className="text-[0.6875rem] text-emerald-700 font-medium">{ctrl.workflows[0].name}</span>
                       ) : ctrl.workflows.length <= 2 ? (
                         <div className="flex flex-wrap gap-1">
-                          {ctrl.workflows.map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[8px] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 15 ? w.name.slice(0, 14) + '…' : w.name}</span>))}
+                          {ctrl.workflows.map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[0.5rem] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 15 ? w.name.slice(0, 14) + '…' : w.name}</span>))}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          {ctrl.workflows.slice(0, 2).map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[8px] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 12 ? w.name.slice(0, 11) + '…' : w.name}</span>))}
-                          <span className="px-1.5 h-4 rounded text-[8px] font-medium bg-gray-100 text-gray-500">+{ctrl.workflows.length - 2}</span>
+                          {ctrl.workflows.slice(0, 2).map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[0.5rem] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 12 ? w.name.slice(0, 11) + '…' : w.name}</span>))}
+                          <span className="px-1.5 h-4 rounded text-[0.5rem] font-medium bg-gray-100 text-gray-500">+{ctrl.workflows.length - 2}</span>
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{ctrl.mappedRisks.length}</span></td>
-                    <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{ctrl.usedInRACMs}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{ctrl.mappedRisks.length}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{ctrl.usedInRACMs}</span></td>
                     <td className="px-3 py-3">
-                      {(() => { const ds = getDesignStatus(ctrl); return <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${ds === 'Complete' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'}`}>{ds}</span>; })()}
+                      {(() => { const ds = getDesignStatus(ctrl); return <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${ds === 'Complete' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'}`}>{ds}</span>; })()}
                     </td>
                     <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        {ctrl.workflows.length === 0 && <button onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded text-[9px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">Create Workflow</button>}
-                        <button onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
+                        {ctrl.workflows.length === 0 && <button onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">Create Workflow</button>}
+                        <button onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded text-[0.5625rem] font-bold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
                       </div>
                     </td>
                   </motion.tr>
@@ -1707,56 +1707,56 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
                       <td colSpan={8} className="p-0">
                         <div className="px-5 py-4 bg-surface-2/20 border-t border-border/30 space-y-3">
                           <div className="grid grid-cols-2 gap-4">
-                            <div><span className="text-[9px] text-gray-400 uppercase block">Description</span><p className="text-[11px] text-text mt-0.5">{ctrl.description}</p></div>
+                            <div><span className="text-[0.5625rem] text-gray-400 uppercase block">Description</span><p className="text-[0.6875rem] text-text mt-0.5">{ctrl.description}</p></div>
                             <div className="grid grid-cols-2 gap-2">
-                              <div><span className="text-[9px] text-gray-400 uppercase block">Automation</span><p className="text-[11px] text-text">{ctrl.automation}</p></div>
-                              <div><span className="text-[9px] text-gray-400 uppercase block">Frequency</span><p className="text-[11px] text-text">{ctrl.frequency}</p></div>
+                              <div><span className="text-[0.5625rem] text-gray-400 uppercase block">Automation</span><p className="text-[0.6875rem] text-text">{ctrl.automation}</p></div>
+                              <div><span className="text-[0.5625rem] text-gray-400 uppercase block">Frequency</span><p className="text-[0.6875rem] text-text">{ctrl.frequency}</p></div>
                             </div>
                           </div>
                           {ctrl.assertions.length > 0 && (
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Assertions</span>
-                              <div className="flex flex-wrap gap-1">{ctrl.assertions.map(a => (<span key={a} className="px-2 py-0.5 rounded text-[9px] font-medium bg-gray-50 text-gray-600 border border-gray-200/60">{a}</span>))}</div>
+                            <div><span className="text-[0.5625rem] text-gray-400 uppercase block mb-1">Assertions</span>
+                              <div className="flex flex-wrap gap-1">{ctrl.assertions.map(a => (<span key={a} className="px-2 py-0.5 rounded text-[0.5625rem] font-medium bg-gray-50 text-gray-600 border border-gray-200/60">{a}</span>))}</div>
                             </div>
                           )}
                           <div className="grid grid-cols-2 gap-3">
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Linked Risks</span>
-                              {ctrl.mappedRisks.length > 0 ? ctrl.mappedRisks.map(r => (<div key={r} className="text-[10px] font-mono text-gray-500">{r}</div>)) : <span className="text-[10px] text-gray-300">None</span>}
+                            <div><span className="text-[0.5625rem] text-gray-400 uppercase block mb-1">Linked Risks</span>
+                              {ctrl.mappedRisks.length > 0 ? ctrl.mappedRisks.map(r => (<div key={r} className="text-[0.625rem] font-mono text-gray-500">{r}</div>)) : <span className="text-[0.625rem] text-gray-300">None</span>}
                             </div>
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Used in RACMs</span>
-                              <span className="text-[10px] text-text">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
+                            <div><span className="text-[0.5625rem] text-gray-400 uppercase block mb-1">Used in RACMs</span>
+                              <span className="text-[0.625rem] text-text">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
                             </div>
                           </div>
 
                           {/* Workflow bindings detail */}
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[9px] text-gray-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
-                              <button onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[9px] font-semibold text-primary hover:underline cursor-pointer">+ Create Workflow</button>
+                              <span className="text-[0.5625rem] text-gray-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
+                              <button onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[0.5625rem] font-semibold text-primary hover:underline cursor-pointer">+ Create Workflow</button>
                             </div>
                             {ctrl.workflows.length === 0 ? (
-                              <div className="text-[10px] text-amber-600 py-2">No workflows mapped. Create a workflow to enable testing.</div>
+                              <div className="text-[0.625rem] text-amber-600 py-2">No workflows mapped. Create a workflow to enable testing.</div>
                             ) : (
                               <div className="bg-white rounded-lg border border-border/50 overflow-hidden">
-                                <table className="w-full text-[11px]">
+                                <table className="w-full text-[0.6875rem]">
                                   <thead><tr className="border-b border-border/30 bg-gray-50/30">
-                                    <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-gray-400 uppercase">Workflow</th>
-                                    <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-gray-400 uppercase">Type</th>
-                                    <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-gray-400 uppercase">Status</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Runs</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Last Run</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Actions</th>
+                                    <th className="px-3 py-1.5 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase">Workflow</th>
+                                    <th className="px-3 py-1.5 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Type</th>
+                                    <th className="px-3 py-1.5 text-center text-[0.5625rem] font-semibold text-gray-400 uppercase">Status</th>
+                                    <th className="px-3 py-1.5 text-right text-[0.5625rem] font-semibold text-gray-400 uppercase">Runs</th>
+                                    <th className="px-3 py-1.5 text-right text-[0.5625rem] font-semibold text-gray-400 uppercase">Last Run</th>
+                                    <th className="px-3 py-1.5 text-right text-[0.5625rem] font-semibold text-gray-400 uppercase">Actions</th>
                                   </tr></thead>
                                   <tbody>{ctrl.workflows.map((w, wi) => (
                                     <tr key={wi} className="border-b border-border/20">
                                       <td className="px-3 py-1.5 text-text font-medium">{w.name}</td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${w.type === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{w.type}</span></td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${w.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' : w.status === 'Ready' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>{w.status}</span></td>
+                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${w.type === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{w.type}</span></td>
+                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${w.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' : w.status === 'Ready' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>{w.status}</span></td>
                                       <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{w.runs}</td>
                                       <td className="px-3 py-1.5 text-right text-gray-400">{w.lastRun}</td>
                                       <td className="px-3 py-1.5 text-right">
                                         <div className="flex items-center gap-1 justify-end">
-                                          <button onClick={e => { e.stopPropagation(); addToast({ message: `Viewing "${w.name}"`, type: 'info' }); }} className="text-[9px] font-medium text-primary hover:underline cursor-pointer">View</button>
-                                          {w.type === 'Automated' && <button onClick={e => { e.stopPropagation(); addToast({ message: `Running "${w.name}"...`, type: 'info' }); }} className="text-[9px] font-medium text-primary hover:underline cursor-pointer">Run</button>}
+                                          <button onClick={e => { e.stopPropagation(); addToast({ message: `Viewing "${w.name}"`, type: 'info' }); }} className="text-[0.5625rem] font-medium text-primary hover:underline cursor-pointer">View</button>
+                                          {w.type === 'Automated' && <button onClick={e => { e.stopPropagation(); addToast({ message: `Running "${w.name}"...`, type: 'info' }); }} className="text-[0.5625rem] font-medium text-primary hover:underline cursor-pointer">Run</button>}
                                         </div>
                                       </td>
                                     </tr>
@@ -1850,8 +1850,8 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="text-[18px] font-semibold text-text">Workflows</h2>
-        <p className="text-[13px] text-text-muted mt-0.5">Reusable workflows available for this business process.</p>
+        <h2 className="text-[1.125rem] font-semibold text-text">Workflows</h2>
+        <p className="text-[0.8125rem] text-text-muted mt-0.5">Reusable workflows available for this business process.</p>
       </div>
 
       {/* Search + Filters + CTA */}
@@ -1859,7 +1859,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
         <div className="relative w-[320px]">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workflow..."
-            className="w-full pl-10 pr-4 h-10 rounded-md border border-border bg-white text-[13px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+            className="w-full pl-10 pr-4 h-10 rounded-md border border-border bg-white text-[0.8125rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
         </div>
         <div className="flex items-center gap-1.5">
           {([
@@ -1868,7 +1868,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
             { id: 'Unused' as const, label: 'Unused', count: unusedCount },
           ]).map(f => (
             <button key={f.id} onClick={() => setUsageFilter(f.id)}
-              className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold cursor-pointer transition-all ${usageFilter === f.id ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10'}`}>
+              className={`px-2.5 py-1.5 rounded-md text-[0.6875rem] font-semibold cursor-pointer transition-all ${usageFilter === f.id ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10'}`}>
               {f.label} ({f.count})
             </button>
           ))}
@@ -1876,24 +1876,24 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
         <div className="ml-auto flex items-center gap-3">
           {bulkMode ? (
             <>
-              <span className="text-[13px] text-text-secondary"><span className="font-semibold text-text">{selectedIds.size}</span> selected</span>
+              <span className="text-[0.8125rem] text-text-secondary"><span className="font-semibold text-text">{selectedIds.size}</span> selected</span>
               <button onClick={handleBulkRun} disabled={selectedIds.size === 0}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary text-white text-[13px] font-semibold hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary text-white text-[0.8125rem] font-semibold hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 <Play size={14} />Run Selected
               </button>
               <button onClick={() => { setBulkMode(false); setSelectedIds(new Set()); }}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer">
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer">
                 Cancel
               </button>
             </>
           ) : (
             <>
               <button onClick={() => setShowCreateDrawer(true)}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[13px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[0.8125rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
                 <Sparkles size={14} />Create Workflow
               </button>
               <button onClick={() => setBulkMode(true)}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[13px] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]">
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]">
                 <Play size={14} />Bulk Run
               </button>
             </>
@@ -1905,11 +1905,11 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-border-light p-14 text-center">
           <FileText size={32} className="mx-auto text-gray-200 mb-3" />
-          <p className="text-[14px] font-semibold text-text-muted mb-1">
+          <p className="text-[0.875rem] font-semibold text-text-muted mb-1">
             {workflows.length === 0 ? 'No workflows created for this process yet' : `No workflows match "${search || usageFilter}"`}
           </p>
           {workflows.length === 0 && (
-            <button onClick={() => setShowCreateDrawer(true)} className="mt-3 px-4 py-2 rounded-lg text-[12px] font-semibold bg-primary text-white hover:bg-primary/90 cursor-pointer inline-flex items-center gap-1"><Plus size={12} />Create Workflow</button>
+            <button onClick={() => setShowCreateDrawer(true)} className="mt-3 px-4 py-2 rounded-lg text-[0.75rem] font-semibold bg-primary text-white hover:bg-primary/90 cursor-pointer inline-flex items-center gap-1"><Plus size={12} />Create Workflow</button>
           )}
         </div>
       ) : (
@@ -1923,11 +1923,11 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                       onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" aria-label="Select all" />
                   </th>
                 )}
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[280px]">Workflow Name</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">Description</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[160px]">Type</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[150px]">Usage</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[120px]" aria-label="Actions"></th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[280px]">Workflow Name</th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">Description</th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[160px]">Type</th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[150px]">Usage</th>
+                <th className="px-4 py-3 text-right text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[120px]" aria-label="Actions"></th>
               </tr>
             </thead>
             <tbody>
@@ -1949,40 +1949,40 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                       <div className="flex items-start gap-2">
                         {onOpenWorkflowDetail ? (
                           <button onClick={(e) => { e.stopPropagation(); onOpenWorkflowDetail(wf.id); }}
-                            className="text-[13px] text-text font-medium leading-snug hover:text-primary hover:underline cursor-pointer transition-colors text-left bg-transparent border-none p-0">{wf.name}</button>
+                            className="text-[0.8125rem] text-text font-medium leading-snug hover:text-primary hover:underline cursor-pointer transition-colors text-left bg-transparent border-none p-0">{wf.name}</button>
                         ) : (
-                          <span className="text-[13px] text-text font-medium leading-snug">{wf.name}</span>
+                          <span className="text-[0.8125rem] text-text font-medium leading-snug">{wf.name}</span>
                         )}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 mt-0.5 ${
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-medium shrink-0 mt-0.5 ${
                           wf.status === 'Active' ? '' : wf.status === 'Ready' ? 'bg-blue-50 text-blue-700' : wf.status === 'Archived' ? 'bg-gray-50 text-gray-400' : 'bg-gray-100 text-gray-500'
                         }`} style={wf.status === 'Active' ? { backgroundColor: '#ECFEF3', color: '#047A48' } : undefined}>
                           {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#047A48' }} />}
                           {wf.status}
                         </span>
                       </div>
-                      <span className="text-[11px] font-mono text-ink-500 tracking-tight">{wf.id.toUpperCase()}</span>
+                      <span className="text-[0.6875rem] font-mono text-ink-500 tracking-tight">{wf.id.toUpperCase()}</span>
                     </div>
                   </td>
                   {/* Description */}
                   <td className="px-4 py-4 align-top">
-                    <span className="text-[13px] text-text-secondary line-clamp-2">{wf.description}</span>
+                    <span className="text-[0.8125rem] text-text-secondary line-clamp-2">{wf.description}</span>
                   </td>
                   {/* Type — tags */}
                   <td className="px-4 py-4 align-top">
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[11px] font-medium">{wf.nature}</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[11px] font-medium">{wf.type}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[0.6875rem] font-medium">{wf.nature}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[0.6875rem] font-medium">{wf.type}</span>
                     </div>
                   </td>
                   {/* Usage */}
                   <td className="px-4 py-4 align-top">
                     {wf.linkedControls.length > 0 ? (
                       <button onClick={() => setShowLinkedControls(showLinkedControls === wf.id ? null : wf.id)}
-                        className="text-[12px] font-medium text-primary hover:underline cursor-pointer">
+                        className="text-[0.75rem] font-medium text-primary hover:underline cursor-pointer">
                         Used in {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}
                       </button>
                     ) : (
-                      <span className="text-[12px] text-gray-400">Not used</span>
+                      <span className="text-[0.75rem] text-gray-400">Not used</span>
                     )}
                   </td>
                   {/* Actions */}
@@ -2010,7 +2010,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
             </tbody>
           </table>
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-border-light bg-white">
-            <span className="text-[11px] text-text-muted">{filtered.length} workflow{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="text-[0.6875rem] text-text-muted">{filtered.length} workflow{filtered.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
       )}
@@ -2029,16 +2029,16 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                 onClick={e => e.stopPropagation()}>
                 <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
                   <div>
-                    <h3 className="text-[14px] font-bold text-text">Linked Controls</h3>
-                    <p className="text-[11px] text-text-muted mt-0.5">{wf.name}</p>
+                    <h3 className="text-[0.875rem] font-bold text-text">Linked Controls</h3>
+                    <p className="text-[0.6875rem] text-text-muted mt-0.5">{wf.name}</p>
                   </div>
                   <button onClick={() => setShowLinkedControls(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={14} /></button>
                 </div>
                 <div className="px-5 py-3 space-y-2">
                   {wf.linkedControls.map(cId => (
                     <div key={cId} className="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2/40 border border-border-light">
-                      <span className="text-[11px] font-mono text-gray-500">{cId}</span>
-                      <span className="text-[12px] text-text">{CONTROLS.find(c => c.id === cId)?.name || `Control ${cId}`}</span>
+                      <span className="text-[0.6875rem] font-mono text-gray-500">{cId}</span>
+                      <span className="text-[0.75rem] text-text">{CONTROLS.find(c => c.id === cId)?.name || `Control ${cId}`}</span>
                     </div>
                   ))}
                 </div>
@@ -2053,31 +2053,31 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
         {showCreateDrawer && (() => {
           const D = () => {
             const [n, setN] = useState(''); const [t, setT] = useState<'Automated' | 'Manual'>('Automated'); const [nat, setNat] = useState<'Preventive' | 'Detective'>('Preventive'); const [d, setD] = useState('');
-            const fCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+            const fCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
             return (<>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={() => setShowCreateDrawer(false)} />
               <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
                 className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
-                  <div><h2 className="font-display text-[18px] font-semibold text-ink-900">Create Workflow</h2><p className="text-[12px] text-ink-500 mt-0.5">Define a new workflow for this business process.</p></div>
+                  <div><h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Create Workflow</h2><p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new workflow for this business process.</p></div>
                   <button onClick={() => setShowCreateDrawer(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Name <span className="text-red-400">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Business Process</label>
-                    <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2"><Building2 size={13} className="text-gray-400 shrink-0" />{bpAbbr}<span className="ml-auto text-[10px] text-gray-400">Auto-filled</span></div>
+                  <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Name <span className="text-red-400">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
+                  <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Business Process</label>
+                    <div className="px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2"><Building2 size={13} className="text-gray-400 shrink-0" />{bpAbbr}<span className="ml-auto text-[0.625rem] text-gray-400">Auto-filled</span></div>
                   </div>
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Automation Type</label>
-                    <div className="flex gap-2">{(['Automated', 'Manual'] as const).map(v => (<button key={v} onClick={() => setT(v)} className={`px-3 py-2 rounded-lg text-[12px] font-medium border cursor-pointer transition-all ${t === v ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted'}`}>{v}</button>))}</div>
+                  <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Automation Type</label>
+                    <div className="flex gap-2">{(['Automated', 'Manual'] as const).map(v => (<button key={v} onClick={() => setT(v)} className={`px-3 py-2 rounded-lg text-[0.75rem] font-medium border cursor-pointer transition-all ${t === v ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted'}`}>{v}</button>))}</div>
                   </div>
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Nature</label>
-                    <div className="flex gap-2">{(['Preventive', 'Detective'] as const).map(v => (<button key={v} onClick={() => setNat(v)} className={`px-3 py-2 rounded-lg text-[12px] font-medium border cursor-pointer transition-all ${nat === v ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted'}`}>{v}</button>))}</div>
+                  <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Nature</label>
+                    <div className="flex gap-2">{(['Preventive', 'Detective'] as const).map(v => (<button key={v} onClick={() => setNat(v)} className={`px-3 py-2 rounded-lg text-[0.75rem] font-medium border cursor-pointer transition-all ${nat === v ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted'}`}>{v}</button>))}</div>
                   </div>
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Description</label><textarea value={d} onChange={e => setD(e.target.value)} rows={3} placeholder="Describe what this workflow does..." className={fCls + ' resize-none'} /></div>
+                  <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Description</label><textarea value={d} onChange={e => setD(e.target.value)} rows={3} placeholder="Describe what this workflow does..." className={fCls + ' resize-none'} /></div>
                 </div>
                 <div className="px-6 py-4 border-t border-canvas-border flex justify-end gap-3 shrink-0">
-                  <button onClick={() => setShowCreateDrawer(false)} className="px-4 py-2.5 rounded-lg border border-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
-                  <button onClick={() => { if (n.trim()) handleCreate({ name: n.trim(), type: t, nature: nat, desc: d }); }} disabled={!n.trim()} className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
+                  <button onClick={() => setShowCreateDrawer(false)} className="px-4 py-2.5 rounded-lg border border-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
+                  <button onClick={() => { if (n.trim()) handleCreate({ name: n.trim(), type: t, nature: nat, desc: d }); }} disabled={!n.trim()} className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
                 </div>
               </motion.aside>
             </>);
@@ -2309,17 +2309,17 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
           <ArrowLeft size={14} />Back to RACM List
         </button>
         <div className="bg-white rounded-xl border border-border-light p-5">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-[16px] font-bold text-text">{racmName}</h2>
-                <span className="px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center bg-amber-50 text-amber-600">Draft Review</span>
+                <h2 className="text-[1rem] font-bold text-text">{racmName}</h2>
+                <span className="px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center bg-amber-50 text-amber-600">Draft Review</span>
               </div>
-              <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-500">
+              <div className="flex items-center gap-3 mt-1 text-[0.6875rem] text-gray-500">
                 <span>{bpAbbr}</span>
                 <span>Source: {fileName}</span>
                 <span>{reviewedCount}/{rows.length} reviewed</span>
@@ -2328,11 +2328,11 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => addToast({ message: 'Draft saved.', type: 'success' })}
-                className="px-3 py-2 rounded-lg border border-border text-[12px] font-medium text-text-secondary hover:bg-gray-50 cursor-pointer">Save Draft</button>
+                className="px-3 py-2 rounded-lg border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-gray-50 cursor-pointer">Save Draft</button>
               <button onClick={() => { setFreezeConfirmed(false); setShowFreezeModal(true); }}
                 disabled={reviewedCount < rows.length}
                 title={reviewedCount < rows.length ? `Review all rows before freezing (${reviewedCount}/${rows.length} reviewed)` : ''}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"><Lock size={12} />Freeze RACM</button>
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"><Lock size={12} />Freeze RACM</button>
             </div>
           </div>
         </div>
@@ -2342,14 +2342,14 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           {(['All', 'Needs Review', 'Reviewed', 'Flagged', 'Has Issues'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)} className={`px-2 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-all ${filter === f ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10'}`}>
+            <button key={f} onClick={() => setFilter(f)} className={`px-2 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-all ${filter === f ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10'}`}>
               {f}{f === 'Has Issues' && issueCount > 0 ? ` (${issueCount})` : ''}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleBulkMarkReviewed} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-border text-text-muted hover:bg-gray-50 cursor-pointer">Mark All Reviewed</button>
-          <button onClick={handleAddRow} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer flex items-center gap-1"><Plus size={9} />Add Row</button>
+          <button onClick={handleBulkMarkReviewed} className="px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold border border-border text-text-muted hover:bg-gray-50 cursor-pointer">Mark All Reviewed</button>
+          <button onClick={handleAddRow} className="px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer flex items-center gap-1"><Plus size={9} />Add Row</button>
         </div>
       </div>
 
@@ -2358,11 +2358,11 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
         {/* Grid */}
         <div className={`${selectedRow ? 'flex-1' : 'w-full'} bg-white rounded-xl border border-border-light overflow-hidden`}>
           <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 520 }}>
-            <table className="w-full text-[11px] border-collapse" style={{ minWidth: totalMinW }}>
+            <table className="w-full text-[0.6875rem] border-collapse" style={{ minWidth: totalMinW }}>
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-border bg-gray-50/80">
                   {GRID_COLUMNS.map(c => (
-                    <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap"
+                    <th key={c.key} className="px-1.5 py-2 text-left text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap"
                       style={{ minWidth: c.minW }}>
                       {c.label}
                       {c.required && <span className="text-red-400 ml-0.5">*</span>}
@@ -2388,7 +2388,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       // ── Read-only Row # ──
                       if (col.type === 'readonly') {
                         return (
-                          <td key={col.key} className="px-1.5 py-1 text-[10px] text-gray-400 font-mono" style={{ minWidth: col.minW }}>
+                          <td key={col.key} className="px-1.5 py-1 text-[0.625rem] text-gray-400 font-mono" style={{ minWidth: col.minW }}>
                             {val}
                           </td>
                         );
@@ -2398,7 +2398,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       if (col.type === 'status') {
                         return (
                           <td key={col.key} className="px-1.5 py-1" style={{ minWidth: col.minW }}>
-                            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${row.reviewStatus === 'Reviewed' ? 'bg-emerald-50 text-emerald-700' : row.reviewStatus === 'Flagged' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${row.reviewStatus === 'Reviewed' ? 'bg-emerald-50 text-emerald-700' : row.reviewStatus === 'Flagged' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
                               {row.reviewStatus}
                             </span>
                           </td>
@@ -2428,7 +2428,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                                   if (e.key === 'Escape') setEditingCell(null);
                                   if (e.key === 'Tab') { e.preventDefault(); commitEdit(row.id, col.key, editValue); moveToAdjacentCell(row.id, col.key, !e.shiftKey); }
                                 }}
-                                className="w-full px-1 py-0.5 border border-primary/40 rounded text-[11px] outline-none bg-white cursor-pointer" autoFocus>
+                                className="w-full px-1 py-0.5 border border-primary/40 rounded text-[0.6875rem] outline-none bg-white cursor-pointer" autoFocus>
                                 <option value="">—</option>
                                 {col.options!.map(o => <option key={o} value={o}>{o}</option>)}
                               </select>
@@ -2442,9 +2442,9 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                             style={{ minWidth: col.minW }}
                             onClick={e => { e.stopPropagation(); setSelectedRowId(row.id); startEdit(row.id, col.key, val === 'undefined' ? '' : val); }}>
                             {col.key === 'riskRating' && val && val !== 'undefined' ? (
-                              <span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${ratingColor(val)}`}>{val}</span>
+                              <span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${ratingColor(val)}`}>{val}</span>
                             ) : (
-                              <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}>
+                              <span className={`text-[0.6875rem] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}>
                                 {hasIssue && isEmpty ? (
                                   <span className="inline-flex items-center gap-0.5"><AlertTriangle size={9} className="shrink-0" />Required</span>
                                 ) : val && val !== 'undefined' ? val : '—'}
@@ -2467,7 +2467,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                                 if (e.key === 'Escape') setEditingCell(null);
                                 if (e.key === 'Tab') { e.preventDefault(); commitEdit(row.id, col.key, editValue); moveToAdjacentCell(row.id, col.key, !e.shiftKey); }
                               }}
-                              className="w-full px-1 py-0.5 border border-primary/40 rounded text-[11px] outline-none" autoFocus />
+                              className="w-full px-1 py-0.5 border border-primary/40 rounded text-[0.6875rem] outline-none" autoFocus />
                           </td>
                         );
                       }
@@ -2476,7 +2476,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                           className={`px-1.5 py-1 ${hasIssue ? 'relative' : ''}`}
                           style={{ minWidth: col.minW }}
                           onClick={e => { e.stopPropagation(); setSelectedRowId(row.id); startEdit(row.id, col.key, val === 'undefined' ? '' : val); }}>
-                          <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}
+                          <span className={`text-[0.6875rem] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}
                             title={hasIssue && isEmpty ? 'Required field' : val}>
                             {hasIssue && isEmpty ? (
                               <span className="inline-flex items-center gap-0.5"><AlertTriangle size={9} className="shrink-0" />Required</span>
@@ -2501,7 +2501,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
               </tbody>
             </table>
           </div>
-          <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[10px] text-text-muted">
+          <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[0.625rem] text-text-muted">
             {filtered.length} row{filtered.length !== 1 ? 's' : ''} · Click any cell to edit. Press Enter to save, Tab to move.
           </div>
         </div>
@@ -2510,36 +2510,36 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
         {selectedRow && (
           <div className="w-[280px] shrink-0 bg-white rounded-xl border border-border-light p-4 space-y-3.5 overflow-y-auto" style={{ maxHeight: 560 }}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-text-muted uppercase">Row {selectedRow.sourceRow}</span>
+              <span className="text-[0.6875rem] font-bold text-text-muted uppercase">Row {selectedRow.sourceRow}</span>
               <button onClick={() => setSelectedRowId(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={12} /></button>
             </div>
 
             {/* Process */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Process</span>
-              <p className="text-[12px] font-medium text-text">{selectedRow.process || '—'}</p>
-              {selectedRow.subProcess && <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.subProcess}</p>}
+              <span className="text-[0.5625rem] text-gray-400 uppercase block">Process</span>
+              <p className="text-[0.75rem] font-medium text-text">{selectedRow.process || '—'}</p>
+              {selectedRow.subProcess && <p className="text-[0.625rem] text-gray-500 mt-0.5">{selectedRow.subProcess}</p>}
             </div>
 
             {/* Risk */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Risk</span>
-              <p className="text-[12px] font-medium text-text">{selectedRow.riskName || '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.riskDesc || '—'}</p>
+              <span className="text-[0.5625rem] text-gray-400 uppercase block">Risk</span>
+              <p className="text-[0.75rem] font-medium text-text">{selectedRow.riskName || '—'}</p>
+              <p className="text-[0.625rem] text-gray-500 mt-0.5">{selectedRow.riskDesc || '—'}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-[9px] font-mono text-gray-400">{selectedRow.riskId || '—'}</span>
+                <span className="text-[0.5625rem] font-mono text-gray-400">{selectedRow.riskId || '—'}</span>
                 {selectedRow.riskRating && (
-                  <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${ratingColor(selectedRow.riskRating)}`}>{selectedRow.riskRating}</span>
+                  <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${ratingColor(selectedRow.riskRating)}`}>{selectedRow.riskRating}</span>
                 )}
               </div>
             </div>
 
             {/* Control */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Control</span>
-              <p className="text-[12px] font-medium text-text">{selectedRow.controlName || '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.controlDesc || '—'}</p>
-              <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px]">
+              <span className="text-[0.5625rem] text-gray-400 uppercase block">Control</span>
+              <p className="text-[0.75rem] font-medium text-text">{selectedRow.controlName || '—'}</p>
+              <p className="text-[0.625rem] text-gray-500 mt-0.5">{selectedRow.controlDesc || '—'}</p>
+              <div className="grid grid-cols-2 gap-1 mt-1.5 text-[0.625rem]">
                 <div><span className="text-gray-400">ID:</span> <span className="text-text font-mono">{selectedRow.controlId || '���'}</span></div>
                 <div><span className="text-gray-400">Owner:</span> <span className="text-text">{selectedRow.controlOwner || '—'}</span></div>
                 <div><span className="text-gray-400">Type:</span> <span className="text-text">{selectedRow.controlType || '—'}</span></div>
@@ -2550,22 +2550,22 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             {/* Assertion / Attribute */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Assertion / Attribute</span>
-              <p className="text-[11px] text-text">{selectedRow.assertion || '—'} / {selectedRow.attribute || '—'}</p>
+              <span className="text-[0.5625rem] text-gray-400 uppercase block">Assertion / Attribute</span>
+              <p className="text-[0.6875rem] text-text">{selectedRow.assertion || '—'} / {selectedRow.attribute || '—'}</p>
             </div>
 
             {/* Source */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Source</span>
-              <p className="text-[10px] text-gray-500">Row {selectedRow.sourceRow} · {selectedRow.framework || '—'}</p>
+              <span className="text-[0.5625rem] text-gray-400 uppercase block">Source</span>
+              <p className="text-[0.625rem] text-gray-500">Row {selectedRow.sourceRow} · {selectedRow.framework || '—'}</p>
             </div>
 
             {/* Validation Issues */}
             {selectedRow.validationIssues.length > 0 && (
               <div className="bg-amber-50/60 rounded-lg p-2.5 space-y-1">
-                <span className="text-[9px] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
+                <span className="text-[0.5625rem] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
                 {selectedRow.validationIssues.map((issue, i) => (
-                  <p key={i} className="text-[10px] text-amber-700 flex items-center gap-1.5">
+                  <p key={i} className="text-[0.625rem] text-amber-700 flex items-center gap-1.5">
                     <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />{issue}
                   </p>
                 ))}
@@ -2574,10 +2574,10 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             <div className="flex gap-1.5 pt-2">
               {selectedRow.reviewStatus !== 'Reviewed' && (
-                <button onClick={() => handleMarkReviewed(selectedRow.id)} className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer text-center">Mark Reviewed</button>
+                <button onClick={() => handleMarkReviewed(selectedRow.id)} className="flex-1 py-1.5 rounded-lg text-[0.625rem] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer text-center">Mark Reviewed</button>
               )}
               <button onClick={() => { setRows(prev => prev.map(r => r.id === selectedRow.id ? { ...r, reviewStatus: 'Flagged' as const } : r)); }}
-                className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer text-center">Flag</button>
+                className="flex-1 py-1.5 rounded-lg text-[0.625rem] font-semibold bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer text-center">Flag</button>
             </div>
           </div>
         )}
@@ -2601,19 +2601,19 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                     <ShieldCheck size={22} className="text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-[16px] font-bold text-text">Freeze RACM Structure</h3>
-                    <p className="text-[11px] text-text-muted mt-0.5">{racmName}</p>
+                    <h3 className="text-[1rem] font-bold text-text">Freeze RACM Structure</h3>
+                    <p className="text-[0.6875rem] text-text-muted mt-0.5">{racmName}</p>
                   </div>
                 </div>
 
                 {/* Message */}
-                <p className="text-[12px] text-text-secondary leading-relaxed mb-5">
+                <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-5">
                   You are about to finalize this imported RACM structure. After freezing, structural edits will be restricted and the RACM will move into system mapping mode.
                 </p>
 
                 {/* Stats Grid */}
                 <div className="bg-surface-2/60 rounded-xl p-4 mb-4">
-                  <span className="text-[9px] font-bold text-text-muted uppercase tracking-wide block mb-3">Import Summary</span>
+                  <span className="text-[0.5625rem] font-bold text-text-muted uppercase tracking-wide block mb-3">Import Summary</span>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { label: 'Total Rows', value: stats.totalRows, color: 'text-text' },
@@ -2624,8 +2624,8 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       { label: 'Validation Warnings', value: stats.validationWarnings, color: stats.validationWarnings > 0 ? 'text-amber-600' : 'text-emerald-600' },
                     ].map(s => (
                       <div key={s.label} className="bg-white rounded-lg px-3 py-2 border border-border-light">
-                        <span className={`text-[18px] font-bold ${s.color} block`}>{s.value}</span>
-                        <span className="text-[9px] text-gray-400 font-medium">{s.label}</span>
+                        <span className={`text-[1.125rem] font-bold ${s.color} block`}>{s.value}</span>
+                        <span className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</span>
                       </div>
                     ))}
                   </div>
@@ -2634,24 +2634,24 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 {/* Validation warnings detail */}
                 {stats.validationWarnings > 0 && (
                   <div className="bg-amber-50/60 rounded-lg p-3 mb-4 space-y-1">
-                    <span className="text-[9px] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
+                    <span className="text-[0.5625rem] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
                     {rows.filter(r => r.validationIssues.length > 0).slice(0, 3).map(r => (
-                      <div key={r.id} className="flex items-start gap-2 text-[10px]">
+                      <div key={r.id} className="flex items-start gap-2 text-[0.625rem]">
                         <span className="text-amber-700 font-semibold shrink-0">Row {r.sourceRow}:</span>
                         <span className="text-amber-600">{r.validationIssues.join(', ')}</span>
                       </div>
                     ))}
                     {stats.validationWarnings > 3 && (
-                      <p className="text-[10px] text-amber-500 font-medium">+{stats.validationWarnings - 3} more…</p>
+                      <p className="text-[0.625rem] text-amber-500 font-medium">+{stats.validationWarnings - 3} more…</p>
                     )}
-                    <p className="text-[10px] text-amber-600/70 mt-1">These rows will be imported as-is. You can fix them in the RACM mapping workspace after freeze.</p>
+                    <p className="text-[0.625rem] text-amber-600/70 mt-1">These rows will be imported as-is. You can fix them in the RACM mapping workspace after freeze.</p>
                   </div>
                 )}
 
                 {/* Needs review warning */}
                 {stats.needsReview > 0 && (
                   <div className="bg-blue-50/60 rounded-lg p-3 mb-4">
-                    <p className="text-[10px] text-blue-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze — unreviewed rows will be imported.</p>
+                    <p className="text-[0.625rem] text-blue-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze — unreviewed rows will be imported.</p>
                   </div>
                 )}
 
@@ -2659,16 +2659,16 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 <label className="flex items-start gap-2.5 p-3 rounded-lg bg-surface-2/40 border border-border-light mb-5 cursor-pointer select-none hover:bg-surface-2/70 transition-colors">
                   <input type="checkbox" checked={freezeConfirmed} onChange={e => setFreezeConfirmed(e.target.checked)}
                     className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 accent-primary cursor-pointer" />
-                  <span className="text-[12px] text-text leading-snug">I confirm this RACM structure has been reviewed and is correct.</span>
+                  <span className="text-[0.75rem] text-text leading-snug">I confirm this RACM structure has been reviewed and is correct.</span>
                 </label>
 
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button onClick={() => setShowFreezeModal(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-border text-[12px] font-semibold text-text-secondary hover:bg-gray-50 cursor-pointer">Cancel</button>
+                    className="flex-1 py-2.5 rounded-xl border border-border text-[0.75rem] font-semibold text-text-secondary hover:bg-gray-50 cursor-pointer">Cancel</button>
                   <button onClick={() => { setShowFreezeModal(false); onFreeze(rows); }}
                     disabled={!freezeConfirmed}
-                    className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                    className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                     <Lock size={13} />Freeze &amp; Create RACM
                   </button>
                 </div>
@@ -2732,26 +2732,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             </div>
             <div className="flex-1">
               <h1 className="text-xl font-bold text-text">{bp.name}</h1>
-              <p className="text-[12px] text-text-muted">Business Process · FY 2025--26</p>
+              <p className="text-[0.75rem] text-text-muted">Business Process · FY 2025--26</p>
             </div>
           </div>
 
           {/* Process Metadata — always visible */}
           <div className="flex items-center gap-6 mb-4 pb-4 border-b border-border-light">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold text-text-muted">Owner:</span>
-              <span className="text-[12px] font-medium text-text">Tushar Goel</span>
+              <span className="text-[0.75rem] font-bold text-text-muted">Owner:</span>
+              <span className="text-[0.75rem] font-medium text-text">Tushar Goel</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold text-text-muted">Status:</span>
-              <span className="inline-flex items-center gap-1.5 bg-success-bg text-compliant-700 px-2.5 py-0.5 rounded-full text-[12px] font-semibold">
+              <span className="text-[0.75rem] font-bold text-text-muted">Status:</span>
+              <span className="inline-flex items-center gap-1.5 bg-success-bg text-compliant-700 px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-success" />
                 Active
               </span>
             </div>
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-[12px] font-bold text-text-muted shrink-0">Description:</span>
-              <span className="text-[12px] text-text-secondary truncate">End-to-end {bp.name.toLowerCase()} process covering all related risks, controls, and compliance workflows.</span>
+              <span className="text-[0.75rem] font-bold text-text-muted shrink-0">Description:</span>
+              <span className="text-[0.75rem] text-text-secondary truncate">End-to-end {bp.name.toLowerCase()} process covering all related risks, controls, and compliance workflows.</span>
             </div>
           </div>
 
@@ -2764,7 +2764,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
                 tab === t.id
                   ? 'border-primary text-primary'
                   : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -2773,7 +2773,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               <span className="flex items-center gap-2">
                 {t.label}
                 {t.count != null && (
-                  <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${
+                  <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${
                     tab === t.id ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'
                   }`}>{t.count}</span>
                 )}
@@ -2853,9 +2853,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         {tab === 'racm' && !reviewingRacm && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] text-gray-500">{bpRacms.length + createdRacms.length} RACM{bpRacms.length + createdRacms.length !== 1 ? 's' : ''}</span>
+              <span className="text-[0.75rem] text-gray-500">{bpRacms.length + createdRacms.length} RACM{bpRacms.length + createdRacms.length !== 1 ? 's' : ''}</span>
               <button onClick={() => setShowCreateRacm(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
                 <Plus size={13} />Create RACM
               </button>
             </div>
@@ -2984,7 +2984,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
           <div className="flex items-center gap-3">
             <button
               onClick={onNewClick}
-              className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[12px] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
             >
               <Plus size={13} />
               {newButtonLabel}
@@ -3002,7 +3002,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${
                   isActive
                     ? 'border-primary text-primary'
                     : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -3010,7 +3010,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
               >
                 <Icon size={14} />
                 {t.label}
-                <span className={`tabular-nums text-[11px] ${isActive ? 'text-primary' : 'text-text-muted'}`}>
+                <span className={`tabular-nums text-[0.6875rem] ${isActive ? 'text-primary' : 'text-text-muted'}`}>
                   {count}
                 </span>
               </button>
@@ -3027,7 +3027,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
               placeholder={`Search ${activeTabLabel.toLowerCase()}…`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
+              className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
             />
           </div>
         </div>
@@ -3053,7 +3053,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                 />
               ))}
               {filteredEngagements.length === 0 && (
-                <div className="col-span-2 text-center py-16 text-[13px] text-text-muted">
+                <div className="col-span-2 text-center py-16 text-[0.8125rem] text-text-muted">
                   No engagements match "{search}".
                 </div>
               )}
@@ -3072,19 +3072,19 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                   <Sparkles size={18} className="text-white" />
                 </div>
                 <div className="flex-1">
-                  <div className="text-[13px] font-semibold text-text">AI Coverage Analysis</div>
-                  <div className="text-[12px] text-text-secondary mt-0.5">
+                  <div className="text-[0.8125rem] font-semibold text-text">AI Coverage Analysis</div>
+                  <div className="text-[0.75rem] text-text-secondary mt-0.5">
                     2 processes are below 60% control coverage. <span className="text-primary font-semibold cursor-pointer hover:underline">View recommendations</span>
                   </div>
                 </div>
                 <div className="flex gap-4 shrink-0">
                   <div className="text-center">
                     <div className="text-lg font-bold font-mono text-text">{BUSINESS_PROCESSES.length}</div>
-                    <div className="text-[12px] text-text-muted">Processes</div>
+                    <div className="text-[0.75rem] text-text-muted">Processes</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold font-mono text-primary">{Math.round(BUSINESS_PROCESSES.reduce((s, b) => s + b.coverage, 0) / BUSINESS_PROCESSES.length)}%</div>
-                    <div className="text-[12px] text-text-muted">Avg Coverage</div>
+                    <div className="text-[0.75rem] text-text-muted">Avg Coverage</div>
                   </div>
                 </div>
               </div>
@@ -3119,8 +3119,8 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                                 <span className="text-sm font-bold" style={{ color: bp.color }}>{bp.abbr}</span>
                               </div>
                               <div className="flex-1">
-                                <div className="text-[15px] font-semibold text-text group-hover:text-primary transition-colors">{bp.name}</div>
-                                <div className="text-[12px] text-text-muted">FY 2025–26</div>
+                                <div className="text-[0.9375rem] font-semibold text-text group-hover:text-primary transition-colors">{bp.name}</div>
+                                <div className="text-[0.75rem] text-text-muted">FY 2025–26</div>
                               </div>
                               <ChevronRight size={15} className="text-text-muted opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                             </div>
@@ -3136,7 +3136,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                               ].map(s => (
                                 <div key={s.l} className="text-center p-2 rounded-lg bg-surface-2/80 border border-border-light/50">
                                   <div className="text-lg font-bold text-text leading-none mb-0.5">{s.v}</div>
-                                  <div className="text-[12px] text-text-muted font-medium">{s.l}</div>
+                                  <div className="text-[0.75rem] text-text-muted font-medium">{s.l}</div>
                                 </div>
                               ))}
                             </div>
@@ -3153,7 +3153,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                                   style={{ background: `linear-gradient(90deg, ${bp.color}, ${bp.color}cc)` }}
                                 />
                               </div>
-                              <span className="text-[13px] font-bold font-mono" style={{ color: bp.color }}>{bp.coverage}%</span>
+                              <span className="text-[0.8125rem] font-bold font-mono" style={{ color: bp.color }}>{bp.coverage}%</span>
                             </div>
                           </CardItem>
                         </div>
@@ -3162,7 +3162,7 @@ export default function BusinessProcesses({ selectedBPId, onSelectBP, onOpenEnga
                   </motion.div>
                 ))}
                 {filteredBPs.length === 0 && (
-                  <div className="col-span-2 text-center py-16 text-[13px] text-text-muted">
+                  <div className="col-span-2 text-center py-16 text-[0.8125rem] text-text-muted">
                     No business processes match "{search}".
                   </div>
                 )}
@@ -3201,31 +3201,31 @@ function EngagementCard({ eng, index, onOpen }: { eng: typeof ENGAGEMENTS[0]; in
             <Briefcase size={18} className="text-primary" />
           </div>
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
-            <div className="text-[12px] text-text-muted mt-0.5 flex items-center gap-2">
+            <div className="text-[0.9375rem] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
+            <div className="text-[0.75rem] text-text-muted mt-0.5 flex items-center gap-2">
               <span className="font-mono">{eng.id.toUpperCase()}</span>
               <span className="text-text-muted/50">·</span>
               <span>{eng.type}</span>
             </div>
           </div>
         </div>
-        <span className={`inline-flex items-center px-2 h-6 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusTone.bg} ${statusTone.text}`}>
+        <span className={`inline-flex items-center px-2 h-6 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${statusTone.bg} ${statusTone.text}`}>
           {statusTone.label}
         </span>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-          <div className="text-[18px] font-semibold text-text tabular-nums leading-none mb-1">{eng.controls}</div>
-          <div className="text-[11px] text-text-muted">Controls</div>
+          <div className="text-[1.125rem] font-semibold text-text tabular-nums leading-none mb-1">{eng.controls}</div>
+          <div className="text-[0.6875rem] text-text-muted">Controls</div>
         </div>
         <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-          <div className="text-[18px] font-semibold text-text tabular-nums leading-none mb-1">{eng.tested}</div>
-          <div className="text-[11px] text-text-muted">Tested</div>
+          <div className="text-[1.125rem] font-semibold text-text tabular-nums leading-none mb-1">{eng.tested}</div>
+          <div className="text-[0.6875rem] text-text-muted">Tested</div>
         </div>
         <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-          <div className={`text-[18px] font-semibold tabular-nums leading-none mb-1 ${eng.deficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{eng.deficiencies}</div>
-          <div className="text-[11px] text-text-muted">Deficiencies</div>
+          <div className={`text-[1.125rem] font-semibold tabular-nums leading-none mb-1 ${eng.deficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{eng.deficiencies}</div>
+          <div className="text-[0.6875rem] text-text-muted">Deficiencies</div>
         </div>
       </div>
 
@@ -3238,17 +3238,17 @@ function EngagementCard({ eng, index, onOpen }: { eng: typeof ENGAGEMENTS[0]; in
             className="h-full rounded-full bg-primary"
           />
         </div>
-        <span className="text-[12px] font-semibold text-text-secondary tabular-nums">{progressPct}%</span>
+        <span className="text-[0.75rem] font-semibold text-text-secondary tabular-nums">{progressPct}%</span>
       </div>
 
-      <div className="flex items-center justify-between text-[12px] text-text-muted">
+      <div className="flex items-center justify-between text-[0.75rem] text-text-muted">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5"><Users size={11} />{eng.owner}</span>
           <span className="text-text-muted/50">·</span>
           <span className="flex items-center gap-1.5"><Calendar size={11} />{eng.start} – {eng.end}</span>
         </div>
         {eng.tested > 0 && (
-          <span className="font-mono text-[11px]">{effectivePct}% effective</span>
+          <span className="font-mono text-[0.6875rem]">{effectivePct}% effective</span>
         )}
       </div>
     </motion.button>

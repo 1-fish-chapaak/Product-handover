@@ -94,7 +94,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
         >
           {/* Header */}
           <div className="flex items-center justify-between px-7 py-5 border-b border-canvas-border">
-            <h2 className="text-[16px] font-bold text-ink-900 shrink-0">Add data</h2>
+            <h2 className="text-[1rem] font-bold text-ink-900 shrink-0">Add data</h2>
             <div className="flex-1 mx-5 relative">
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
@@ -102,12 +102,12 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                 value={querySearch}
                 onChange={e => setQuerySearch(e.target.value)}
                 placeholder={activeTab === 'upload' ? 'Drop files below to upload...' : 'Search...'}
-                className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                className="w-full pl-10 pr-4 py-2 text-[0.8125rem] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
               />
             </div>
             <button
               onClick={() => { handleClose(); onOpenChat?.(); }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
             >
               <Plus size={14} />
               New Chat
@@ -120,13 +120,13 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
               <button
                 key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setSelectedQuery(null); setSelectedSource(null); }}
-                className={`flex items-center gap-1.5 pb-3 pt-3 text-[13px] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
+                className={`flex items-center gap-1.5 pb-3 pt-3 text-[0.8125rem] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
                   activeTab === tab.id ? 'text-brand-700' : 'text-ink-400 hover:text-ink-600'
                 }`}
               >
                 <tab.icon size={14} />
                 {tab.label}
-                {tab.count > 0 && <span className="text-[11px] text-ink-400 font-normal">{tab.count}</span>}
+                {tab.count > 0 && <span className="text-[0.6875rem] text-ink-400 font-normal">{tab.count}</span>}
                 {activeTab === tab.id && (
                   <motion.div layoutId="add-data-modal-tab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-600 rounded-full" />
                 )}
@@ -139,7 +139,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
             {/* Connected sources — only when caller passed connectedSources (dashboard-management mode) */}
             {connectedSources && connectedSources.length > 0 && (
               <div className="mb-5 pb-5 border-b border-canvas-border">
-                <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">Connected sources ({connectedSources.length})</div>
+                <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Connected sources ({connectedSources.length})</div>
                 <div className="space-y-1.5">
                   {connectedSources.map(src => {
                     const meta = src.type !== 'query' ? TYPE_META[src.type as DataSource['type']] : undefined;
@@ -157,14 +157,14 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                           <Icon size={12} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-medium text-ink-900 truncate">{src.name}</div>
-                          {src.subtype && <div className="text-[11px] text-ink-400 truncate">{src.subtype}</div>}
+                          <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{src.name}</div>
+                          {src.subtype && <div className="text-[0.6875rem] text-ink-400 truncate">{src.subtype}</div>}
                         </div>
                         {onSetPrimary && (
                           <button
                             type="button"
                             onClick={() => onSetPrimary(src)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer shrink-0 ${
+                            className={`flex items-center gap-1.5 px-2.5 py-1 text-[0.6875rem] font-medium rounded-md transition-colors cursor-pointer shrink-0 ${
                               isPrimary ? 'text-brand-700 bg-brand-100' : 'text-ink-500 hover:text-brand-600 hover:bg-brand-50'
                             }`}
                             title={isPrimary ? 'Primary source' : 'Set as primary'}
@@ -195,7 +195,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                           if (filtered.length === 0) return null;
                           return (
                             <div key={group.group || 'ungrouped'}>
-                              {group.group && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
+                              {group.group && <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
                               <div className="space-y-2">
                                 {filtered.map(q => (
                                   <button
@@ -207,7 +207,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                                   >
                                     {activeTab === 'recent' && <MessageSquare size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
                                     {activeTab === 'saved' && <Star size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
-                                    <span className={`text-[13px] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
+                                    <span className={`text-[0.8125rem] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
                                   </button>
                                 ))}
                               </div>
@@ -218,10 +218,10 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                     ) : (
                       <div className="flex flex-col items-center justify-center py-16 text-center">
                         {activeTab === 'recent' ? <MessageSquare size={32} className="text-ink-200 mb-3" /> : <Star size={32} className="text-ink-200 mb-3" />}
-                        <p className="text-[14px] font-medium text-ink-500 mb-1">
+                        <p className="text-[0.875rem] font-medium text-ink-500 mb-1">
                           {activeTab === 'recent' ? 'No chats found' : 'No favourites found'}
                         </p>
-                        <p className="text-[12px] text-ink-400">
+                        <p className="text-[0.75rem] text-ink-400">
                           {querySearch ? 'Try a different search term.' : activeTab === 'recent' ? 'Start a new chat to see it here.' : 'Star a chat to add it to favourites.'}
                         </p>
                       </div>
@@ -256,13 +256,13 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                     {uploadedFile ? (
                       <div>
                         <CloudUpload size={28} className="text-green-600 mx-auto mb-3" />
-                        <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
-                        <p className="text-[13px] text-compliant font-medium mb-1">
+                        <h3 className="text-[0.9375rem] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
+                        <p className="text-[0.8125rem] text-compliant font-medium mb-1">
                           {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
                         </p>
                         <button
                           onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
-                          className="text-[12px] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
+                          className="text-[0.75rem] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
                         >
                           Remove file
                         </button>
@@ -270,16 +270,16 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                     ) : (
                       <>
                         <Upload size={28} className="text-ink-300 mb-3" />
-                        <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
-                        <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
+                        <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Drop files here</h3>
+                        <p className="text-[0.8125rem] text-ink-400 mb-4">or pick from your computer</p>
                         <button
                           onClick={e => { e.stopPropagation(); document.getElementById('add-data-modal-file-input')?.click(); }}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-lg transition-colors cursor-pointer"
+                          className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-lg transition-colors cursor-pointer"
                         >
                           <Upload size={14} />
                           Choose files
                         </button>
-                        <p className="text-[11px] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
+                        <p className="text-[0.6875rem] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
                       </>
                     )}
                   </div>
@@ -310,8 +310,8 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                                 <Icon size={14} />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-[13px] font-medium text-ink-900 truncate">{source.name}</div>
-                                <div className="text-[11px] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
+                                <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{source.name}</div>
+                                <div className="text-[0.6875rem] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
                               </div>
                               {isSelected && <Check size={16} className="text-brand-600 shrink-0" />}
                             </button>
@@ -321,8 +321,8 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                     ) : (
                       <div className="flex flex-col items-center justify-center py-16 text-center">
                         <Search size={32} className="text-ink-200 mb-3" />
-                        <p className="text-[14px] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
-                        <p className="text-[12px] text-ink-400">
+                        <p className="text-[0.875rem] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
+                        <p className="text-[0.75rem] text-ink-400">
                           {querySearch ? 'Try a different search term.' : `No ${tabLabel} available.`}
                         </p>
                       </div>
@@ -335,15 +335,15 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
-            <p className="text-[12px] text-ink-400 mr-auto">Pick sources or files to attach.</p>
-            <button onClick={handleClose} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+            <p className="text-[0.75rem] text-ink-400 mr-auto">Pick sources or files to attach.</p>
+            <button onClick={handleClose} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
               Cancel
             </button>
             {(activeTab === 'recent' || activeTab === 'saved') && (
               <button
                 onClick={() => { handleClose(); onOpenChat?.(); }}
                 disabled={!selectedQuery}
-                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                   selectedQuery ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                 }`}
               >
@@ -360,7 +360,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                   onAttach?.({ name: uploadedFile.name, type: 'file', subtype: isCsv ? 'CSV' : 'XLSX' });
                   handleClose();
                 }}
-                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                   uploadedFile ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                 }`}
               >
@@ -377,7 +377,7 @@ export function AddDataModal({ open, onClose, onOpenChat, onAttach, connectedSou
                   onAttach?.({ id: src.id, name: src.name, type: src.type, subtype: src.subtype });
                   handleClose();
                 }}
-                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                   selectedSource ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                 }`}
               >

@@ -87,7 +87,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
           <p className="text-sm text-text-secondary mt-1">Browse all engagements — compliance audits, internal audits, and automation projects.</p>
         </div>
         <button onClick={onPlanEngagement}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
           <Plus size={14} />Plan Engagement
         </button>
       </div>
@@ -97,7 +97,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagements, owner, framework, or code..."
-            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
+            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
         </div>
         <div className="flex items-center gap-1.5">
           {([
@@ -107,7 +107,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
             { key: 'Automation' as EngagementType, label: 'Automation', count: counts.automation },
           ]).map(f => (
             <button key={f.key} onClick={() => setTypeFilter(f.key)}
-              className={`px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${
+              className={`px-3 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${
                 typeFilter === f.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50'
               }`}>
               {f.label} ({f.count})
@@ -118,9 +118,9 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
 
       {/* Engagement Table */}
       <div className="rounded-xl border border-border-light bg-white overflow-hidden">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-[0.75rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider">
               <th className="px-4 py-2.5 text-left">Engagement</th>
               <th className="px-4 py-2.5 text-center w-[120px]">Type</th>
               <th className="px-4 py-2.5 text-left w-[140px]">Process</th>
@@ -150,33 +150,33 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
                           <Icon size={16} className={TYPE_COLORS[eng.type]} />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
-                          <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[300px]">{eng.description}</div>
+                          <div className="text-[0.8125rem] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
+                          <div className="text-[0.625rem] text-gray-400 mt-0.5 truncate max-w-[300px]">{eng.description}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold ${TYPE_BADGE[eng.type]}`}>{eng.typeLabel}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${TYPE_BADGE[eng.type]}`}>{eng.typeLabel}</span>
                     </td>
                     <td className="px-4 py-3 text-text-muted">{eng.process}</td>
                     <td className="px-4 py-3">
                       <div className="text-text font-medium">{eng.owner}</div>
-                      {eng.reviewer && <div className="text-[10px] text-gray-400">{eng.reviewer}</div>}
+                      {eng.reviewer && <div className="text-[0.625rem] text-gray-400">{eng.reviewer}</div>}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${eng.statusTone}`}>{eng.status}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${eng.statusTone}`}>{eng.status}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-3">
                         {eng.metrics.map(m => (
                           <div key={m.label} className="text-center">
-                            <div className={`text-[13px] font-bold tabular-nums ${m.color || 'text-text'}`}>{m.value}</div>
-                            <div className="text-[8px] text-gray-400">{m.label}</div>
+                            <div className={`text-[0.8125rem] font-bold tabular-nums ${m.color || 'text-text'}`}>{m.value}</div>
+                            <div className="text-[0.5rem] text-gray-400">{m.label}</div>
                           </div>
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-text-muted text-[11px]">
+                    <td className="px-4 py-3 text-text-muted text-[0.6875rem]">
                       <span className="flex items-center gap-1"><Calendar size={10} />{eng.period}</span>
                     </td>
                   </motion.tr>
@@ -186,7 +186,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-[13px] text-text-muted">No engagements match your search.</div>
+          <div className="text-center py-12 text-[0.8125rem] text-text-muted">No engagements match your search.</div>
         )}
       </div>
     </div>

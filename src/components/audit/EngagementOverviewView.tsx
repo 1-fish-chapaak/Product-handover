@@ -210,12 +210,12 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     return (
       <div className="h-full overflow-y-auto bg-white">
         <div className="p-8">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
             <ArrowLeft size={14} />Back to Engagements
           </button>
           <div className="glass-card rounded-xl p-12 text-center">
-            <p className="text-[14px] font-semibold text-text mb-1">Engagement not found</p>
-            <p className="text-[12px] text-text-muted">It may have been deleted or moved.</p>
+            <p className="text-[0.875rem] font-semibold text-text mb-1">Engagement not found</p>
+            <p className="text-[0.75rem] text-text-muted">It may have been deleted or moved.</p>
           </div>
         </div>
       </div>
@@ -292,7 +292,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back to Engagements
         </button>
 
@@ -300,23 +300,23 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
         <div className="flex items-start justify-between mb-6 gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-[13px] font-bold shrink-0" style={{ background: processColor }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-[0.8125rem] font-bold shrink-0" style={{ background: processColor }}>
                 {eng.process}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-xl font-bold text-text">{eng.name}</h1>
-                  <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_CLS[eng.status]}`}>{eng.status}</span>
-                  <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[10.5px] font-semibold border ${TYPE_CLS[eng.type]}`}>
+                  <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${STATUS_CLS[eng.status]}`}>{eng.status}</span>
+                  <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[0.75rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
                     {TYPE_LABEL[eng.type]}
                   </span>
                   {eng.type === 'Automation' && eng.subtype && (
-                    <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
+                    <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
                       {SUBTYPE_LABEL[eng.subtype]}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-[12px] text-text-muted mt-1 flex-wrap">
+                <div className="flex items-center gap-4 text-[0.75rem] text-text-muted mt-1 flex-wrap">
                   <span className="font-mono tracking-tight">{eng.code}</span>
                   <span className="flex items-center gap-1"><User size={11} />{eng.owner}</span>
                   <span className="flex items-center gap-1"><Calendar size={11} />{eng.periodStart} – {eng.periodEnd}</span>
@@ -324,7 +324,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 </div>
               </div>
             </div>
-            <p className="text-[13px] text-text-secondary mt-2 max-w-3xl">{eng.description}</p>
+            <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-3xl">{eng.description}</p>
           </div>
 
           {/* Health */}
@@ -333,7 +333,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
               <div className={`text-3xl font-bold tabular-nums ${notStarted ? 'text-text-muted' : health.text}`}>
                 {notStarted ? '—' : `${eng.health}%`}
               </div>
-              <div className="text-[10px] text-text-muted uppercase tracking-wide mt-0.5">
+              <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-0.5">
                 {eng.type === 'Automation' ? 'Pass Rate' : 'Effective'}
               </div>
               {!notStarted && (
@@ -357,8 +357,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 className="glass-card rounded-xl p-3 text-center"
               >
                 <kpi.icon size={14} className="mx-auto text-text-muted mb-1" />
-                <div className="text-[15px] font-bold text-text tabular-nums truncate">{kpi.value}</div>
-                <div className="text-[10px] text-text-muted leading-tight">{kpi.label}</div>
+                <div className="text-[0.9375rem] font-bold text-text tabular-nums truncate">{kpi.value}</div>
+                <div className="text-[0.625rem] text-text-muted leading-tight">{kpi.label}</div>
               </motion.div>
             ))}
           </div>
@@ -373,7 +373,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
@@ -552,52 +552,52 @@ function ExceptionManagementTab({
           className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">All Exceptions</span>
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">All Exceptions</span>
             <Workflow size={13} className="text-text-muted" />
           </div>
-          <div className="text-[22px] font-bold text-text tabular-nums leading-none">{allExceptions.length}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Across {allWorkflowsView.length} workflows</div>
+          <div className="text-[1.375rem] font-bold text-text tabular-nums leading-none">{allExceptions.length}</div>
+          <div className="text-[0.6875rem] text-text-muted mt-1.5">Across {allWorkflowsView.length} workflows</div>
         </button>
         <button
           onClick={() => onOpenWorkspace({ status: 'Open' })}
           className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Open</span>
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">Open</span>
             <AlertTriangle size={13} className="text-risk-700" />
           </div>
-          <div className="text-[22px] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Awaiting triage</div>
+          <div className="text-[1.375rem] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
+          <div className="text-[0.6875rem] text-text-muted mt-1.5">Awaiting triage</div>
         </button>
         <button
           onClick={() => onOpenWorkspace({ status: 'Triaging' })}
           className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">In Progress</span>
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">In Progress</span>
             <Clock size={13} className="text-mitigated-700" />
           </div>
-          <div className="text-[22px] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Owner assigned</div>
+          <div className="text-[1.375rem] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
+          <div className="text-[0.6875rem] text-text-muted mt-1.5">Owner assigned</div>
         </button>
         <button
           onClick={() => onOpenWorkspace({ status: 'Resolved' })}
           className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Resolved</span>
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">Resolved</span>
             <CheckCircle2 size={13} className="text-compliant-700" />
           </div>
-          <div className="text-[22px] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Closed this engagement</div>
+          <div className="text-[1.375rem] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
+          <div className="text-[0.6875rem] text-text-muted mt-1.5">Closed this engagement</div>
         </button>
       </div>
 
       {/* Compact toolbar — title, search, sort, workspace link. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-baseline gap-2 shrink-0">
-          <h4 className="text-[13px] font-semibold text-text">Exceptions by workflow</h4>
-          <span className="text-[11px] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
+          <h4 className="text-[0.8125rem] font-semibold text-text">Exceptions by workflow</h4>
+          <span className="text-[0.6875rem] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -607,12 +607,12 @@ function ExceptionManagementTab({
               value={wfSearch}
               onChange={e => setWfSearch(e.target.value)}
               placeholder="Search workflows..."
-              className="w-48 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-48 pl-8 pr-2.5 py-1.5 text-[0.75rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
           <button
             onClick={() => setSortByOpen(v => !v)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-semibold transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
               sortByOpen
                 ? 'bg-primary text-white border-primary'
                 : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
@@ -628,7 +628,7 @@ function ExceptionManagementTab({
       {/* Per-workflow breakdown — shows every workflow, including those with 0 exceptions */}
       <div className="space-y-2.5">
         {visibleWorkflows.length === 0 ? (
-          <div className="glass-card rounded-xl px-4 py-8 text-center text-[12px] text-text-muted">
+          <div className="glass-card rounded-xl px-4 py-8 text-center text-[0.75rem] text-text-muted">
             No workflows match “{wfSearch}”.
           </div>
         ) : visibleWorkflows.map(group => {
@@ -649,12 +649,12 @@ function ExceptionManagementTab({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-text">{group.workflowName}</span>
-                  <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{group.code}</span>
+                  <span className="text-[0.8125rem] font-semibold text-text">{group.workflowName}</span>
+                  <span className="px-1.5 h-4 rounded text-[0.75rem] font-bold bg-surface-2 text-text-secondary font-mono">{group.code}</span>
                   {hasNone ? (
-                    <span className="text-[11px] text-text-muted italic">No exceptions yet</span>
+                    <span className="text-[0.6875rem] text-text-muted italic">No exceptions yet</span>
                   ) : (
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-[0.6875rem] text-text-muted">
                       <span className="font-semibold text-text">{group.total}</span> total · <span className="font-semibold text-risk-700">{group.openCount}</span> open
                     </span>
                   )}
@@ -663,7 +663,7 @@ function ExceptionManagementTab({
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map(sev => (
                       group.severityCounts[sev] > 0 && (
-                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[sev]}`}>
+                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[sev]}`}>
                           {group.severityCounts[sev]} {sev}
                         </span>
                       )
@@ -675,11 +675,11 @@ function ExceptionManagementTab({
               {/* Right-aligned open % */}
               <div className="flex items-center gap-3 shrink-0">
                 {hasNone ? (
-                  <span className="text-[11px] text-text-muted tabular-nums w-[88px] text-right">—</span>
+                  <span className="text-[0.6875rem] text-text-muted tabular-nums w-[88px] text-right">—</span>
                 ) : (
                   <div className="w-[88px] text-right">
-                    <div className={`text-[15px] font-bold tabular-nums leading-none ${openTier}`}>{group.openPct}%</div>
-                    <div className="text-[9.5px] text-text-muted uppercase tracking-wide mt-0.5">open</div>
+                    <div className={`text-[0.9375rem] font-bold tabular-nums leading-none ${openTier}`}>{group.openPct}%</div>
+                    <div className="text-[0.75rem] text-text-muted uppercase tracking-wide mt-0.5">open</div>
                     <div className="mt-1 h-1 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${openBar} rounded-full transition-all`} style={{ width: `${group.openPct}%` }} />
                     </div>
@@ -701,13 +701,13 @@ function ExceptionRow({ ex, onClick, showWorkflow }: { ex: EngagementException; 
       onClick={onClick}
       className="w-full flex items-center gap-4 px-4 py-3 hover:bg-surface-2/30 transition-colors cursor-pointer text-left"
     >
-      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
+      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
         {ex.severity}
       </span>
-      <span className="font-mono text-[11.5px] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
+      <span className="font-mono text-[0.75rem] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] text-text truncate">{ex.title}</div>
-        <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+        <div className="text-[0.8125rem] text-text truncate">{ex.title}</div>
+        <div className="text-[0.6875rem] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
           <span>{ex.assignee}</span>
           <span className="text-border">·</span>
           <span>{ex.opened}</span>
@@ -725,7 +725,7 @@ function ExceptionRow({ ex, onClick, showWorkflow }: { ex: EngagementException; 
           )}
         </div>
       </div>
-      <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center shrink-0 ${STATUS_PILL_CLS[ex.status]}`}>
+      <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center shrink-0 ${STATUS_PILL_CLS[ex.status]}`}>
         {ex.status}
       </span>
       <ChevronRight size={14} className="text-text-muted shrink-0" />
@@ -821,12 +821,12 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       {/* Header — title + generate report */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-[13px] font-semibold text-text">Action Trail</h3>
-          <p className="text-[11px] text-text-muted mt-0.5">Every event on this engagement — runs, exceptions, evidence, and sign-offs.</p>
+          <h3 className="text-[0.8125rem] font-semibold text-text">Action Trail</h3>
+          <p className="text-[0.6875rem] text-text-muted mt-0.5">Every event on this engagement — runs, exceptions, evidence, and sign-offs.</p>
         </div>
         <button
           onClick={() => setReportOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary-xlight/40 text-primary hover:bg-primary/10 text-[12px] font-semibold transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary-xlight/40 text-primary hover:bg-primary/10 text-[0.75rem] font-semibold transition-colors cursor-pointer"
           title="Generate an AI-summarised report for a chosen period"
         >
           <Sparkles size={13} />Generate Report
@@ -843,10 +843,10 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
         ].map(kpi => (
           <div key={kpi.label} className="glass-card rounded-xl p-4">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{kpi.label}</span>
+              <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{kpi.label}</span>
               <kpi.icon size={13} className="text-text-muted" />
             </div>
-            <div className={`text-[22px] font-bold tabular-nums ${kpi.tone}`}>{kpi.value}</div>
+            <div className={`text-[1.375rem] font-bold tabular-nums ${kpi.tone}`}>{kpi.value}</div>
           </div>
         ))}
       </div>
@@ -855,10 +855,10 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[13px] font-semibold text-text">Daily new vs closed</h3>
-            <p className="text-[11px] text-text-muted mt-0.5">Last 30 days — exceptions opened (top) and closed (bottom).</p>
+            <h3 className="text-[0.8125rem] font-semibold text-text">Daily new vs closed</h3>
+            <p className="text-[0.6875rem] text-text-muted mt-0.5">Last 30 days — exceptions opened (top) and closed (bottom).</p>
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-text-muted">
+          <div className="flex items-center gap-3 text-[0.6875rem] text-text-muted">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-risk-500" />New</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-compliant" />Closed</span>
           </div>
@@ -886,12 +886,12 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
                     <div className="w-full bg-surface-3/60 rounded-sm" style={{ height: '2px' }} />
                   )}
                 </div>
-                {isToday && <div className="text-[9px] font-bold uppercase tracking-wider text-primary mt-1">Now</div>}
+                {isToday && <div className="text-[0.5625rem] font-bold uppercase tracking-wider text-primary mt-1">Now</div>}
               </div>
             );
           })}
         </div>
-        <div className="flex items-center justify-between text-[10px] text-text-muted mt-2 tabular-nums">
+        <div className="flex items-center justify-between text-[0.625rem] text-text-muted mt-2 tabular-nums">
           <span>{formatChartDay(29)}</span>
           <span>{formatChartDay(15)}</span>
           <span>{formatChartDay(0)}</span>
@@ -899,13 +899,13 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap text-[11px]">
+      <div className="flex items-center gap-4 flex-wrap text-[0.6875rem]">
         <div className="flex items-center gap-2">
           <span className="font-bold text-text-muted uppercase tracking-wide">Workflow</span>
           <select
             value={workflowFilter}
             onChange={e => setWorkflowFilter(e.target.value)}
-            className="px-2.5 py-1 rounded-lg border border-border bg-white text-[11px] text-text outline-none focus:border-primary/40 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg border border-border bg-white text-[0.6875rem] text-text outline-none focus:border-primary/40 cursor-pointer"
           >
             <option value="All">All workflows</option>
             {workflowOptions.map(([id, name]) => (
@@ -932,7 +932,7 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
             ))}
           </div>
         </div>
-        <div className="ml-auto text-[11px] text-text-muted tabular-nums">
+        <div className="ml-auto text-[0.6875rem] text-text-muted tabular-nums">
           {filtered.length} of {allEvents.length} events
         </div>
       </div>
@@ -941,14 +941,14 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       {grouped.length === 0 ? (
         <div className="border border-border-light rounded-xl p-12 text-center bg-white">
           <Activity size={28} className="text-text-muted mx-auto mb-3" />
-          <p className="text-[14px] font-semibold text-text mb-1">No activity for these filters</p>
-          <p className="text-[12px] text-text-muted">Try clearing the workflow or type filter.</p>
+          <p className="text-[0.875rem] font-semibold text-text mb-1">No activity for these filters</p>
+          <p className="text-[0.75rem] text-text-muted">Try clearing the workflow or type filter.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {grouped.map(group => (
             <div key={group.dayOffset}>
-              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-text-muted mb-2 sticky top-0 bg-white/80 backdrop-blur-sm py-1">
+              <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-2 sticky top-0 bg-white/80 backdrop-blur-sm py-1">
                 {formatDay(group.dayOffset)}
                 <span className="ml-2 text-text-muted/60 normal-case font-normal tracking-normal">{formatChartDay(group.dayOffset)}</span>
               </div>
@@ -968,9 +968,9 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
                         <Icon size={13} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] text-text leading-snug">{ev.title}</div>
-                        {ev.detail && <div className="text-[12px] text-text-muted mt-0.5">{ev.detail}</div>}
-                        <div className="flex items-center gap-2 text-[11px] text-text-muted mt-1 flex-wrap">
+                        <div className="text-[0.8125rem] text-text leading-snug">{ev.title}</div>
+                        {ev.detail && <div className="text-[0.75rem] text-text-muted mt-0.5">{ev.detail}</div>}
+                        <div className="flex items-center gap-2 text-[0.6875rem] text-text-muted mt-1 flex-wrap">
                           <span>{ev.actor}</span>
                           {ev.workflowName && (
                             <>
@@ -1235,13 +1235,13 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[13px] font-semibold text-text">{labels.donutHeader}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">Click a slice to drill into Exception Management.</p>
+              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.donutHeader}</h3>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a slice to drill into Exception Management.</p>
             </div>
-            <span className="text-[11px] text-text-muted">{totalOpenForDonut} open</span>
+            <span className="text-[0.6875rem] text-text-muted">{totalOpenForDonut} open</span>
           </div>
           {severityData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[12px] text-text-muted">No open exceptions</div>
+            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No open exceptions</div>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-[180px] h-[180px] shrink-0 relative">
@@ -1266,8 +1266,8 @@ export function HealthOverviewTab({
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <div className="text-[22px] font-bold text-text tabular-nums leading-none">{totalOpenForDonut}</div>
-                  <div className="text-[10px] text-text-muted uppercase tracking-wide mt-1">Open</div>
+                  <div className="text-[1.375rem] font-bold text-text tabular-nums leading-none">{totalOpenForDonut}</div>
+                  <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-1">Open</div>
                 </div>
               </div>
               <div className="flex-1 space-y-1.5">
@@ -1277,11 +1277,11 @@ export function HealthOverviewTab({
                     onClick={() => onDrillToExceptions()}
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
                   >
-                    <span className="flex items-center gap-2 text-[12px] text-text">
+                    <span className="flex items-center gap-2 text-[0.75rem] text-text">
                       <span className="w-2.5 h-2.5 rounded-sm" style={{ background: d.color }} />
                       {d.name}
                     </span>
-                    <span className="text-[12px] font-bold text-text tabular-nums">{d.value}</span>
+                    <span className="text-[0.75rem] font-bold text-text tabular-nums">{d.value}</span>
                   </button>
                 ))}
               </div>
@@ -1293,12 +1293,12 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[13px] font-semibold text-text">{labels.barHeader}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">Click a bar to filter the Exception Management tab.</p>
+              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.barHeader}</h3>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a bar to filter the Exception Management tab.</p>
             </div>
           </div>
           {workflowData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[12px] text-text-muted">No exception activity</div>
+            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity</div>
           ) : (
             <div className="h-[180px]">
               <ResponsiveContainer>
@@ -1338,10 +1338,10 @@ export function HealthOverviewTab({
       <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[13px] font-semibold text-text">{labels.heatmapHeader.replace('14', String(heatmapDays))}</h3>
-            <p className="text-[11px] text-text-muted mt-0.5">Rows are workflows; each cell is a day. Click a cell to drill into that workflow.</p>
+            <h3 className="text-[0.8125rem] font-semibold text-text">{labels.heatmapHeader.replace('14', String(heatmapDays))}</h3>
+            <p className="text-[0.6875rem] text-text-muted mt-0.5">Rows are workflows; each cell is a day. Click a cell to drill into that workflow.</p>
           </div>
-          <div className="flex items-center gap-2 text-[10.5px] text-text-muted">
+          <div className="flex items-center gap-2 text-[0.75rem] text-text-muted">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-surface-2/40 border border-border-light/30" />0
             </span>
@@ -1357,14 +1357,14 @@ export function HealthOverviewTab({
           </div>
         </div>
         {!heatmapHasData ? (
-          <div className="h-[120px] flex items-center justify-center text-[12px] text-text-muted">No exception activity in the last {heatmapDays} days</div>
+          <div className="h-[120px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity in the last {heatmapDays} days</div>
         ) : (
           <div className="space-y-1.5">
             {heatmapData.map(row => (
               <div key={row.workflowId} className="flex items-center gap-3">
                 <button
                   onClick={() => onDrillToExceptions()}
-                  className="w-[180px] text-left text-[11.5px] text-text font-medium truncate hover:text-primary transition-colors cursor-pointer shrink-0"
+                  className="w-[180px] text-left text-[0.75rem] text-text font-medium truncate hover:text-primary transition-colors cursor-pointer shrink-0"
                   title={row.name}
                 >
                   {row.name}
@@ -1377,16 +1377,16 @@ export function HealthOverviewTab({
                       title={`${formatChartDay(heatmapDays - 1 - idx)} — ${c} exception${c === 1 ? '' : 's'}`}
                       className={`h-6 rounded-sm border transition-transform hover:scale-110 cursor-pointer ${heatmapCellCls(c)}`}
                     >
-                      {c > 0 && <span className="text-[9px] font-bold text-text/70">{c}</span>}
+                      {c > 0 && <span className="text-[0.5625rem] font-bold text-text/70">{c}</span>}
                     </button>
                   ))}
                 </div>
-                <span className="text-[11px] font-bold text-text tabular-nums w-8 text-right shrink-0">{row.total}</span>
+                <span className="text-[0.6875rem] font-bold text-text tabular-nums w-8 text-right shrink-0">{row.total}</span>
               </div>
             ))}
             <div className="flex items-center gap-3 pt-1.5">
-              <div className="w-[180px] text-[10px] text-text-muted shrink-0" />
-              <div className="flex-1 grid gap-1 text-[9px] text-text-muted tabular-nums" style={{ gridTemplateColumns: `repeat(${heatmapDays}, minmax(0, 1fr))` }}>
+              <div className="w-[180px] text-[0.625rem] text-text-muted shrink-0" />
+              <div className="flex-1 grid gap-1 text-[0.5625rem] text-text-muted tabular-nums" style={{ gridTemplateColumns: `repeat(${heatmapDays}, minmax(0, 1fr))` }}>
                 {Array.from({ length: heatmapDays }).map((_, idx) => {
                   const offset = heatmapDays - 1 - idx;
                   // Label every 2nd day to avoid crowding.
@@ -1409,8 +1409,8 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[13px] font-semibold text-text">{labels.effectivenessHeader}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">True positives / total fires per workflow. Click a workflow to see its past runs.</p>
+              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.effectivenessHeader}</h3>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">True positives / total fires per workflow. Click a workflow to see its past runs.</p>
             </div>
           </div>
           <div className="space-y-1">
@@ -1425,14 +1425,14 @@ export function HealthOverviewTab({
                   className={`w-full space-y-1 text-left px-2 py-1.5 -mx-2 rounded-lg transition-colors ${onOpenWorkflow ? 'hover:bg-surface-2/50 cursor-pointer' : 'cursor-default'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] text-text truncate">{wf.name}</span>
-                    <span className={`text-[12px] font-bold tabular-nums shrink-0 ${tier.tone}`}>{eff}% · {tier.label}</span>
+                    <span className="text-[0.75rem] text-text truncate">{wf.name}</span>
+                    <span className={`text-[0.75rem] font-bold tabular-nums shrink-0 ${tier.tone}`}>{eff}% · {tier.label}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${tier.bar} transition-all`} style={{ width: `${eff}%` }} />
                     </div>
-                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0 w-12 text-right">{wf.truePositives}/{wf.totalFires}</span>
+                    <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0 w-12 text-right">{wf.truePositives}/{wf.totalFires}</span>
                   </div>
                 </button>
               );
@@ -1444,8 +1444,8 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[13px] font-semibold text-text">{labels.funnelHeader}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">
+              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.funnelHeader}</h3>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">
                 {isAutomation
                   ? 'Where exceptions sit in the resolution pipeline. Bottlenecks become visible.'
                   : isCompliance
@@ -1460,7 +1460,7 @@ export function HealthOverviewTab({
               <div className="space-y-2">
                 {funnelSteps.map((s, i) => (
                   <div key={s.label} className="flex items-center gap-3">
-                    <span className="text-[11px] text-text-muted w-24 shrink-0 truncate">{s.label}</span>
+                    <span className="text-[0.6875rem] text-text-muted w-24 shrink-0 truncate">{s.label}</span>
                     <div className="flex-1 h-7 bg-surface-2/40 rounded-md overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
@@ -1468,10 +1468,10 @@ export function HealthOverviewTab({
                         transition={{ delay: 0.05 + i * 0.06, duration: 0.4 }}
                         className={`h-full ${s.bar} flex items-center px-2`}
                       >
-                        {s.count > 0 && <span className="text-[11px] font-bold text-white tabular-nums">{s.count}</span>}
+                        {s.count > 0 && <span className="text-[0.6875rem] font-bold text-white tabular-nums">{s.count}</span>}
                       </motion.div>
                     </div>
-                    <span className="text-[11px] text-text-muted tabular-nums w-12 text-right shrink-0">
+                    <span className="text-[0.6875rem] text-text-muted tabular-nums w-12 text-right shrink-0">
                       {max === 0 ? '—' : `${Math.round((s.count / max) * 100)}%`}
                     </span>
                   </div>
@@ -1503,10 +1503,10 @@ export function HealthOverviewTab({
                 <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-mitigated-50/40 border border-mitigated-100/60">
                   <Sparkles size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
                   <div className="flex-1">
-                    <div className="text-[12.5px] text-text font-medium">
+                    <div className="text-[0.75rem] text-text font-medium">
                       Pattern detected — exceptions clustering on vendor <span className="font-mono font-bold">{vendorPattern.vendor}</span> ({vendorPattern.count} cases this engagement).
                     </div>
-                    <div className="text-[11px] text-text-muted mt-0.5">Open the Vendor 360 view to see this vendor's full risk profile across engagements.</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5">Open the Vendor 360 view to see this vendor's full risk profile across engagements.</div>
                   </div>
                 </div>
               )}
@@ -1514,10 +1514,10 @@ export function HealthOverviewTab({
                 <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-risk-50/40 border border-risk-100/60">
                   <AlertTriangle size={14} className="text-risk-700 mt-0.5 shrink-0" />
                   <div className="flex-1">
-                    <div className="text-[12.5px] text-text font-medium">
+                    <div className="text-[0.75rem] text-text font-medium">
                       Possible silent failure — <span className="font-semibold">{silentMonitor.name}</span> hasn't fired exceptions in {silentMonitor.lastRun} despite a frequency schedule.
                     </div>
-                    <div className="text-[11px] text-text-muted mt-0.5">Check the data feed / connector status.</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5">Check the data feed / connector status.</div>
                   </div>
                 </div>
               )}
@@ -1530,8 +1530,8 @@ export function HealthOverviewTab({
       {!hideWorkflowConfig && <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[13px] font-semibold text-text">{labels.workflowConfigHeader}</h3>
-            <p className="text-[11px] text-text-muted mt-0.5">{labels.workflowConfigSub}</p>
+            <h3 className="text-[0.8125rem] font-semibold text-text">{labels.workflowConfigHeader}</h3>
+            <p className="text-[0.6875rem] text-text-muted mt-0.5">{labels.workflowConfigSub}</p>
           </div>
         </div>
         <div className="space-y-4">
@@ -1539,8 +1539,8 @@ export function HealthOverviewTab({
             <div key={group.subProcess}>
               <div className="flex items-center gap-2 mb-2">
                 <Layers size={12} className="text-text-muted" />
-                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{group.subProcess}</span>
-                <span className="text-[11px] text-text-muted">· {group.items.length}</span>
+                <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">{group.subProcess}</span>
+                <span className="text-[0.6875rem] text-text-muted">· {group.items.length}</span>
               </div>
               <div className="space-y-2 ml-5">
                 {group.items.map(wf => {
@@ -1550,18 +1550,18 @@ export function HealthOverviewTab({
                       <div className="p-2 rounded-lg bg-brand-50 shrink-0"><Workflow size={14} className="text-brand-600" /></div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13px] font-semibold text-text">{wf.name}</span>
-                          <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{wf.code}</span>
+                          <span className="text-[0.8125rem] font-semibold text-text">{wf.name}</span>
+                          <span className="px-1.5 h-4 rounded text-[0.75rem] font-bold bg-surface-2 text-text-secondary font-mono">{wf.code}</span>
                           {wf.inputs.map(src => (
-                            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
+                            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-4 rounded text-[0.75rem] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
                               {src === 'SQL' && <span className="w-1 h-1 rounded-full bg-evidence-600" aria-hidden="true" />}
                               {src}
                             </span>
                           ))}
                         </div>
-                        <div className="text-[11px] text-text-muted mt-1 flex items-center gap-1.5 flex-wrap">
+                        <div className="text-[0.6875rem] text-text-muted mt-1 flex items-center gap-1.5 flex-wrap">
                           {wf.cadence.kind === 'Ad-hoc' ? (
-                            <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700 border border-mitigated-100/60">Ad-hoc</span>
+                            <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-semibold italic bg-mitigated-50/60 text-mitigated-700 border border-mitigated-100/60">Ad-hoc</span>
                           ) : (
                             <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
                           )}
@@ -1575,7 +1575,7 @@ export function HealthOverviewTab({
                       </div>
                       <button
                         onClick={() => onConfigureWorkflow(wf.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.6875rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0"
                       >
                         <Settings size={11} />
                         Configure
@@ -1592,8 +1592,8 @@ export function HealthOverviewTab({
       {/* ─── Engagement at a glance + recent activity (kept) ─── */}
       <div className="grid grid-cols-2 gap-4">
         <div className="glass-card rounded-xl p-5">
-          <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Engagement at a glance</h3>
-          <dl className="space-y-2.5 text-[12.5px]">
+          <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Engagement at a glance</h3>
+          <dl className="space-y-2.5 text-[0.75rem]">
             <div className="flex items-center justify-between"><dt className="text-text-muted">Type</dt><dd className="text-text font-medium">Automation{eng.subtype ? ` · ${eng.subtype}` : ''}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Process</dt><dd className="text-text font-medium">{eng.process}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Framework</dt><dd className="text-text font-medium">{eng.framework}</dd></div>
@@ -1602,13 +1602,13 @@ export function HealthOverviewTab({
           </dl>
         </div>
         <div className="glass-card rounded-xl p-5">
-          <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Recent activity</h3>
-          <ul className="space-y-3 text-[12.5px]">
+          <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Recent activity</h3>
+          <ul className="space-y-3 text-[0.75rem]">
             <li className="flex items-start gap-2.5">
               <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-compliant shrink-0" />
               <div>
                 <div className="text-text">Workflow run completed — {eng.lastActivity}</div>
-                <div className="text-[11px] text-text-muted">{eng.owner}</div>
+                <div className="text-[0.6875rem] text-text-muted">{eng.owner}</div>
               </div>
             </li>
             <li className="flex items-start gap-2.5">
@@ -1619,14 +1619,14 @@ export function HealthOverviewTab({
                     ? `${openCount + inProgressCount} open / in-progress exception(s)`
                     : 'No open exceptions'}
                 </div>
-                <div className="text-[11px] text-text-muted">Updated {eng.lastActivity}</div>
+                <div className="text-[0.6875rem] text-text-muted">Updated {eng.lastActivity}</div>
               </div>
             </li>
             <li className="flex items-start gap-2.5">
               <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-mitigated-500 shrink-0" />
               <div>
                 <div className="text-text">Next run: {eng.nextScheduled}</div>
-                <div className="text-[11px] text-text-muted">On schedule</div>
+                <div className="text-[0.6875rem] text-text-muted">On schedule</div>
               </div>
             </li>
           </ul>
@@ -1656,11 +1656,11 @@ function KpiCard({
       className={`text-left glass-card rounded-xl p-4 transition-all ${isClickable ? 'cursor-pointer hover:border-primary/30 hover:shadow-sm' : 'cursor-default'}`}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
+        <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
         <Icon size={13} className="text-text-muted" />
       </div>
-      <div className={`text-[22px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
-      {sub && <div className="text-[11px] text-text-muted mt-1.5">{sub}</div>}
+      <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
+      {sub && <div className="text-[0.6875rem] text-text-muted mt-1.5">{sub}</div>}
       {progress !== undefined && (
         <div className="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-500 ${progressCls ?? 'bg-primary'}`} style={{ width: `${progress}%` }} />
@@ -1718,9 +1718,9 @@ function WorkflowConfigDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Settings size={16} className="text-brand-600 shrink-0" />
-              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
             </div>
-            <p className="text-[12px] text-ink-500">
+            <p className="text-[0.75rem] text-ink-500">
               <span className="font-mono">{wf.code}</span>
               <span className="mx-1.5 text-ink-300">·</span>
               {wf.type}
@@ -1738,13 +1738,13 @@ function WorkflowConfigDrawer({
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Schedule */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Schedule</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Schedule</label>
             <div className="grid grid-cols-2 gap-2">
               {SCHEDULE_OPTIONS.map(s => (
                 <button
                   key={s}
                   onClick={() => setSchedule(s)}
-                  className={`px-3 py-2 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${
+                  className={`px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${
                     schedule === s
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1758,7 +1758,7 @@ function WorkflowConfigDrawer({
 
           {/* Detection threshold */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Detection threshold</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Detection threshold</label>
             <div className="flex items-center gap-3">
               <input
                 type="range" min="0.5" max="1" step="0.01"
@@ -1766,20 +1766,20 @@ function WorkflowConfigDrawer({
                 onChange={(e) => setThreshold(e.target.value)}
                 className="flex-1 accent-brand-500"
               />
-              <span className="w-12 text-right text-[14px] font-bold text-ink-900 tabular-nums">{(parseFloat(threshold) * 100).toFixed(0)}%</span>
+              <span className="w-12 text-right text-[0.875rem] font-bold text-ink-900 tabular-nums">{(parseFloat(threshold) * 100).toFixed(0)}%</span>
             </div>
-            <p className="text-[11px] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
           </div>
 
           {/* Retry */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Retry policy</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Retry policy</label>
             <div className="flex gap-2">
               {RETRY_OPTIONS.map(r => (
                 <button
                   key={r}
                   onClick={() => setRetry(r)}
-                  className={`flex-1 px-3 py-2 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${
+                  className={`flex-1 px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${
                     retry === r
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1793,11 +1793,11 @@ function WorkflowConfigDrawer({
 
           {/* Owner */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Owner</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Owner</label>
             <select
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
             >
               {OWNER_LIST.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -1805,13 +1805,13 @@ function WorkflowConfigDrawer({
 
           {/* Min severity to alert */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Minimum severity to alert</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Minimum severity to alert</label>
             <div className="grid grid-cols-4 gap-2">
               {SEVERITY_MIN_OPTIONS.map(s => (
                 <button
                   key={s}
                   onClick={() => setMinSeverity(s)}
-                  className={`px-2 py-2 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                  className={`px-2 py-2 rounded-lg border text-[0.6875rem] font-bold uppercase tracking-wide transition-all cursor-pointer ${
                     minSeverity === s
                       ? `${SEV_BADGE_CLS[s]} ring-2 ring-brand-500/20`
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1825,11 +1825,11 @@ function WorkflowConfigDrawer({
 
           {/* Exception routing */}
           <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Exception routing</label>
+            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Exception routing</label>
             <select
               value={exceptionRouting}
               onChange={(e) => setExceptionRouting(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
             >
               <option value="Round-robin">Round-robin to team</option>
               <option value="Owner">Always to owner</option>
@@ -1841,7 +1841,7 @@ function WorkflowConfigDrawer({
           {/* Data source preview */}
           <div className="rounded-lg border border-border-light bg-canvas/60 p-3 flex items-start gap-2.5">
             <Database size={13} className="text-text-muted mt-0.5 shrink-0" />
-            <div className="text-[11px] text-text-muted leading-relaxed">
+            <div className="text-[0.6875rem] text-text-muted leading-relaxed">
               <span className="font-semibold text-text">Inputs:</span> {wf.inputs.join(' · ')}
               {wf.inputs.includes('SQL') && (
                 <div className="mt-1">SQL queries reuse the engagement's connected data source. Edit the source in Knowledge Hub.</div>
@@ -1853,13 +1853,13 @@ function WorkflowConfigDrawer({
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
+            className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={onSaved}
-            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
           >
             Save configuration
           </button>
@@ -1971,32 +1971,32 @@ function WorkflowsBySubProcess({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="text-[13px] font-semibold text-text">
+        <h3 className="text-[0.8125rem] font-semibold text-text">
           Workflows <span className="text-text-muted font-normal">({allWorkflows.length})</span>
           {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
         </h3>
         <div className="flex items-center gap-2">
           {bulkMode && (
             <>
-              <span className="text-[12px] text-text-secondary">
+              <span className="text-[0.75rem] text-text-secondary">
                 <span className="font-semibold text-text">{selectedIds.size}</span> selected
               </span>
               <button
                 onClick={allSelected ? () => setSelectedIds(new Set()) : selectAll}
-                className="text-[11.5px] font-semibold text-text-secondary hover:text-primary px-2 py-1 cursor-pointer"
+                className="text-[0.75rem] font-semibold text-text-secondary hover:text-primary px-2 py-1 cursor-pointer"
               >
                 {allSelected ? 'Clear' : 'Select all'}
               </button>
               <button
                 onClick={() => setBulkModalOpen(true)}
                 disabled={selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 <Play size={12} />Execute {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
               </button>
               <button
                 onClick={exitBulkMode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -2006,7 +2006,7 @@ function WorkflowsBySubProcess({
             <>
               <button
                 onClick={() => setGrouped(g => !g)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                   grouped
                     ? 'bg-primary text-white border-primary'
                     : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
@@ -2017,13 +2017,13 @@ function WorkflowsBySubProcess({
               </button>
               <button
                 onClick={enterBulkMode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 <Play size={12} />Execute Workflows
               </button>
               <button
                 onClick={() => setLinkModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
               >
                 <Plus size={12} />Link Workflow
               </button>
@@ -2045,8 +2045,8 @@ function WorkflowsBySubProcess({
                   <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] font-semibold text-text">{group.subProcess}</span>
-                      <span className="text-[11px] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text">{group.subProcess}</span>
+                      <span className="text-[0.6875rem] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
                     </div>
                   </div>
                   <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isCollapsed ? '' : 'rotate-90'}`} />
@@ -2156,15 +2156,15 @@ function WorkflowRow({
       <div className="flex-1 min-w-0">
         {/* Title line */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
-          <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+          <span className="text-[0.875rem] font-semibold text-text leading-snug">{wf.name}</span>
+          <span className="px-1.5 h-[18px] rounded text-[0.625rem] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
         </div>
         {/* Meta line — generous spacing, input badges grouped here */}
-        <div className="text-[11.5px] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
+        <div className="text-[0.75rem] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
           <span className="font-medium text-text-secondary">{wf.type}</span>
           <span className="text-border-light">·</span>
           {wf.cadence.kind === 'Ad-hoc' ? (
-            <span className="inline-flex items-center px-1.5 h-[18px] rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700">Ad-hoc</span>
+            <span className="inline-flex items-center px-1.5 h-[18px] rounded text-[0.625rem] font-semibold italic bg-mitigated-50/60 text-mitigated-700">Ad-hoc</span>
           ) : (
             <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
           )}
@@ -2175,14 +2175,14 @@ function WorkflowRow({
           <span className="text-text-muted/80">({wf.truePositives}/{wf.totalFires} · 90d)</span>
           {/* Input source badges */}
           {wf.inputs.map(src => (
-            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
+            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[0.75rem] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
               {src === 'SQL' && <span className="w-1 h-1 rounded-full bg-evidence-600" aria-hidden="true" />}
               {src}
             </span>
           ))}
         </div>
       </div>
-      <span className={`px-2.5 h-6 rounded-full text-[10.5px] font-semibold inline-flex items-center shrink-0 ${
+      <span className={`px-2.5 h-6 rounded-full text-[0.75rem] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'
         : wf.status === 'Running' ? 'bg-evidence-50 text-evidence-700'
         : 'bg-risk-50 text-risk-700'
@@ -2190,7 +2190,7 @@ function WorkflowRow({
       {!bulkMode && (
         <button
           onClick={(e) => { e.stopPropagation(); onConfigure(); }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.6875rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
           title="Configure workflow"
         >
           <Settings size={11} />

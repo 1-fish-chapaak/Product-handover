@@ -40,7 +40,7 @@ const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-medium rounded-full whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -102,12 +102,12 @@ function idChipRow(ids: string[], max = 4) {
   return (
     <div className="flex items-center gap-1.5">
       {visible.map(id => (
-        <span key={id} className="inline-flex items-center h-5 px-1.5 text-[10.5px] font-mono bg-[#F4F2F7] text-ink-500 rounded">
+        <span key={id} className="inline-flex items-center h-5 px-1.5 text-[0.75rem] font-mono bg-[#F4F2F7] text-ink-500 rounded">
           {id}
         </span>
       ))}
       {rest > 0 && (
-        <span className="text-[10.5px] font-medium text-ink-500 tabular-nums">+{rest}</span>
+        <span className="text-[0.75rem] font-medium text-ink-500 tabular-nums">+{rest}</span>
       )}
     </div>
   );
@@ -116,10 +116,10 @@ function idChipRow(ids: string[], max = 4) {
 function AvatarChip({ name, initials }: { name: string; initials: string }) {
   return (
     <div className="inline-flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[10px] font-semibold tracking-wider">
+      <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[0.625rem] font-semibold tracking-wider">
         {initials}
       </span>
-      <span className="text-[12.5px] text-ink-800">{name}</span>
+      <span className="text-[0.75rem] text-ink-800">{name}</span>
     </div>
   );
 }
@@ -148,13 +148,13 @@ function ActionGroupRow({
         <span className="w-5 h-5 flex items-center justify-center text-ink-500">
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
-        <span className="inline-flex items-center h-6 px-2.5 text-[12px] font-mono font-semibold bg-brand-50 text-brand-700 rounded-full">
+        <span className="inline-flex items-center h-6 px-2.5 text-[0.75rem] font-mono font-semibold bg-brand-50 text-brand-700 rounded-full">
           {group.actionId}
         </span>
         {group.title && (
-          <span className="text-[12.5px] text-ink-700 truncate">{group.title}</span>
+          <span className="text-[0.75rem] text-ink-700 truncate">{group.title}</span>
         )}
-        <span className="text-[12px] text-ink-500 tabular-nums whitespace-nowrap">
+        <span className="text-[0.75rem] text-ink-500 tabular-nums whitespace-nowrap">
           {group.exceptions.length} exception{group.exceptions.length === 1 ? '' : 's'}
         </span>
         <div className="flex items-center gap-1.5">{statusPills(group.exceptions)}</div>
@@ -171,16 +171,16 @@ function ActionGroupRow({
             className="overflow-hidden"
           >
             <div className="px-2 pb-3">
-              <table className="w-full text-[12.5px]">
+              <table className="w-full text-[0.75rem]">
                 <thead>
                   <tr className="text-left text-ink-500 uppercase tracking-wider">
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Exception ID</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Risk Category</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Classification</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Status</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Assigned To</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px]">Last Action</th>
-                    <th className="px-3 py-2 font-medium text-[10.5px] text-right">Updated</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Exception ID</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Risk Category</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Classification</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Status</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Assigned To</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem]">Last Action</th>
+                    <th className="px-3 py-2 font-medium text-[0.75rem] text-right">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -193,7 +193,7 @@ function ActionGroupRow({
                         className="border-t border-canvas-border hover:bg-brand-50/40 cursor-pointer transition-colors"
                       >
                         <td className="px-3 py-2.5 align-middle">
-                          <span className="text-brand-700 font-medium font-mono text-[12.5px]">{ex.id}</span>
+                          <span className="text-brand-700 font-medium font-mono text-[0.75rem]">{ex.id}</span>
                         </td>
                         <td className="px-3 py-2.5 align-middle text-ink-800">{ex.riskCategory}</td>
                         <td className="px-3 py-2.5 align-middle">
@@ -205,10 +205,10 @@ function ActionGroupRow({
                         <td className="px-3 py-2.5 align-middle">
                           <AvatarChip name={ex.assignedTo?.name ?? '—'} initials={ex.assignedTo?.initials ?? '—'} />
                         </td>
-                        <td className="px-3 py-2.5 align-middle text-ink-600 text-[12px]">
+                        <td className="px-3 py-2.5 align-middle text-ink-600 text-[0.75rem]">
                           {last ? truncate(last.message, 42) : '—'}
                         </td>
-                        <td className="px-3 py-2.5 align-middle text-right text-ink-500 text-[11.5px] tabular-nums whitespace-nowrap">
+                        <td className="px-3 py-2.5 align-middle text-right text-ink-500 text-[0.75rem] tabular-nums whitespace-nowrap">
                           {last?.date ?? ex.lastUpdated}
                         </td>
                       </tr>
@@ -258,12 +258,12 @@ export default function ExceptionStatusTracker({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-[14px] font-semibold text-ink-900">Action Plan Status Tracker</h3>
-                <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium bg-[#F4F2F7] text-ink-600 rounded-full tabular-nums">
+                <h3 className="text-[0.875rem] font-semibold text-ink-900">Action Plan Status Tracker</h3>
+                <span className="inline-flex items-center h-5 px-2 text-[0.6875rem] font-medium bg-[#F4F2F7] text-ink-600 rounded-full tabular-nums">
                   {totalCases}
                 </span>
               </div>
-              <p className="text-[12px] text-ink-500 mt-0.5">Exceptions grouped by Action ID — Click a group to Expand</p>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Exceptions grouped by Action ID — Click a group to Expand</p>
             </div>
           </div>
           <ChevronDown size={16} className={`text-ink-500 transition-transform ${sectionOpen ? '' : '-rotate-90'}`} />
@@ -286,8 +286,8 @@ export default function ExceptionStatusTracker({
                     className="w-full flex items-center gap-3 px-5 py-2.5 bg-[#FAFAFB] cursor-pointer text-left hover:bg-[#F4F2F7]"
                   >
                     <ChevronDown size={14} className={`text-ink-500 transition-transform ${bulkOpen ? '' : '-rotate-90'}`} />
-                    <span className="text-[11.5px] font-semibold uppercase tracking-wider text-ink-700">Bulk</span>
-                    <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-700">Bulk</span>
+                    <span className="inline-flex items-center h-5 px-2 text-[0.6875rem] font-medium bg-brand-50 text-brand-700 rounded-full tabular-nums">
                       {buckets.bulk.length} {buckets.bulk.length === 1 ? 'group' : 'groups'}
                     </span>
                   </button>
@@ -302,7 +302,7 @@ export default function ExceptionStatusTracker({
                       >
                         <div className="divide-y divide-canvas-border">
                           {buckets.bulk.length === 0 ? (
-                            <div className="px-5 py-4 text-[12.5px] text-ink-500">No bulk action plans yet.</div>
+                            <div className="px-5 py-4 text-[0.75rem] text-ink-500">No bulk action plans yet.</div>
                           ) : (
                             buckets.bulk.map(group => (
                               <ActionGroupRow
@@ -327,8 +327,8 @@ export default function ExceptionStatusTracker({
                     className="w-full flex items-center gap-3 px-5 py-2.5 bg-[#FAFAFB] cursor-pointer text-left hover:bg-[#F4F2F7]"
                   >
                     <ChevronDown size={14} className={`text-ink-500 transition-transform ${individualOpen ? '' : '-rotate-90'}`} />
-                    <span className="text-[11.5px] font-semibold uppercase tracking-wider text-ink-700">Individual</span>
-                    <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-700">Individual</span>
+                    <span className="inline-flex items-center h-5 px-2 text-[0.6875rem] font-medium bg-brand-50 text-brand-700 rounded-full tabular-nums">
                       {buckets.individual.length} {buckets.individual.length === 1 ? 'group' : 'groups'}
                     </span>
                   </button>
@@ -343,7 +343,7 @@ export default function ExceptionStatusTracker({
                       >
                         <div className="divide-y divide-canvas-border">
                           {buckets.individual.length === 0 ? (
-                            <div className="px-5 py-4 text-[12.5px] text-ink-500">No individual action plans yet.</div>
+                            <div className="px-5 py-4 text-[0.75rem] text-ink-500">No individual action plans yet.</div>
                           ) : (
                             buckets.individual.map(group => (
                               <ActionGroupRow
@@ -396,8 +396,8 @@ function ExceptionPreviewDrawer({ exception, onClose }: { exception: GrcExceptio
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight font-mono">{exception.id}</h2>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">{exception.title}</p>
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight font-mono">{exception.id}</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5 leading-snug">{exception.title}</p>
           </div>
           <button
             onClick={onClose}
@@ -416,17 +416,17 @@ function ExceptionPreviewDrawer({ exception, onClose }: { exception: GrcExceptio
               </div>
               <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
             </div>
-            <h3 className="text-[14px] font-semibold text-ink-900 leading-snug mb-3">{exception.title}</h3>
+            <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-snug mb-3">{exception.title}</h3>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Pill className={STATUS_STYLE[exception.status]}>{STATUS_LABEL[exception.status]}</Pill>
                 <Pill className={CLASSIFICATION_STYLE[exception.classification]}>{exception.classification}</Pill>
               </div>
-              <span className="text-[12.5px] text-ink-700">{exception.assignedTo?.name ?? '—'}</span>
+              <span className="text-[0.75rem] text-ink-700">{exception.assignedTo?.name ?? '—'}</span>
             </div>
           </div>
         </div>
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[11.5px] text-ink-500">
+        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[0.75rem] text-ink-500">
           1 exception shown
         </footer>
       </motion.aside>

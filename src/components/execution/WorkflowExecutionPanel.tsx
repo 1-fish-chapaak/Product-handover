@@ -102,7 +102,7 @@ function AttrResultBadge({ result }: { result: string }) {
   };
   const s = map[result] || map.pending;
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2.5 py-1 rounded-full text-[11px] font-bold uppercase`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} border px-2.5 py-1 rounded-full text-[0.6875rem] font-bold uppercase`}>
       {s.icon}
       {result}
     </span>
@@ -136,8 +136,8 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
             <Workflow size={18} className="text-indigo-600" />
           </div>
           <div>
-            <h2 className="text-[14px] font-bold text-text">Workflow Execution</h2>
-            <p className="text-[11px] text-text-muted">
+            <h2 className="text-[0.875rem] font-bold text-text">Workflow Execution</h2>
+            <p className="text-[0.6875rem] text-text-muted">
               <span className="font-mono">{wf.workflowId}</span> &middot; {wf.version} &middot;
               <span className="font-semibold text-indigo-600"> {wf.type}</span>
             </p>
@@ -145,13 +145,13 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
         </div>
         <div className="flex items-center gap-2">
           {onViewWorkingPaper && (
-            <button onClick={onViewWorkingPaper} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
+            <button onClick={onViewWorkingPaper} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
               <FileText size={12} />
               Working Paper
             </button>
           )}
           {onViewTrace && (
-            <button onClick={onViewTrace} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
+            <button onClick={onViewTrace} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
               <Shield size={12} />
               Trace
             </button>
@@ -168,31 +168,31 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
         <div className="px-6 py-4 border-b border-border-light">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Workflow</span>
-              <p className="text-[13px] font-bold text-indigo-700">{wf.name}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Workflow</span>
+              <p className="text-[0.8125rem] font-bold text-indigo-700">{wf.name}</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Status</span>
+              <span className="text-[0.625rem] text-text-muted uppercase">Status</span>
               <div className="mt-0.5">
                 <AttrResultBadge result={wf.status === 'complete' ? 'pass' : wf.status === 'in-progress' ? 'pending' : 'na'} />
               </div>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Control</span>
-              <p className="text-[12px] text-text-secondary">
+              <span className="text-[0.625rem] text-text-muted uppercase">Control</span>
+              <p className="text-[0.75rem] text-text-secondary">
                 <span className="font-mono text-primary">{wf.controlId}</span> &middot; {wf.controlName}
               </p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Execution Date</span>
-              <p className="text-[12px] text-text-secondary">{wf.executionDate}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Execution Date</span>
+              <p className="text-[0.75rem] text-text-secondary">{wf.executionDate}</p>
             </div>
           </div>
         </div>
 
         {/* Input Sources */}
         <div className="px-6 py-4 border-b border-border-light">
-          <h3 className="text-[12px] font-bold text-text-muted uppercase mb-3 flex items-center gap-1.5">
+          <h3 className="text-[0.75rem] font-bold text-text-muted uppercase mb-3 flex items-center gap-1.5">
             <Database size={12} />
             Input Sources
           </h3>
@@ -201,11 +201,11 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
               <div key={src.name} className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-2/40 hover:bg-surface-2/70 transition-colors">
                 <div className="flex items-center gap-2">
                   <Upload size={11} className="text-text-muted" />
-                  <span className="text-[12px] font-medium text-text">{src.name}</span>
+                  <span className="text-[0.75rem] font-medium text-text">{src.name}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-text-muted bg-gray-100 px-1.5 py-0.5 rounded">{src.type}</span>
-                  <span className="text-[11px] text-text-muted tabular-nums">{src.rows} rows</span>
+                  <span className="text-[0.6875rem] text-text-muted bg-gray-100 px-1.5 py-0.5 rounded">{src.type}</span>
+                  <span className="text-[0.6875rem] text-text-muted tabular-nums">{src.rows} rows</span>
                 </div>
               </div>
             ))}
@@ -214,7 +214,7 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
 
         {/* Attributes (Test Steps) */}
         <div className="px-6 py-4 border-b border-border-light">
-          <h3 className="text-[12px] font-bold text-text-muted uppercase mb-3 flex items-center gap-1.5">
+          <h3 className="text-[0.75rem] font-bold text-text-muted uppercase mb-3 flex items-center gap-1.5">
             <Target size={12} />
             Attributes ({wf.attributes.length} test steps)
           </h3>
@@ -230,12 +230,12 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
                     <div className="flex items-center gap-3">
                       {isExpanded ? <ChevronDown size={12} className="text-text-muted" /> : <ChevronRight size={12} className="text-text-muted" />}
                       <div className="text-left">
-                        <span className="text-[10px] text-text-muted font-mono">Step {i + 1}</span>
-                        <p className="text-[12px] font-semibold text-text">{attr.name}</p>
+                        <span className="text-[0.625rem] text-text-muted font-mono">Step {i + 1}</span>
+                        <p className="text-[0.75rem] font-semibold text-text">{attr.name}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-text-muted tabular-nums">{attr.passRate}</span>
+                      <span className="text-[0.6875rem] text-text-muted tabular-nums">{attr.passRate}</span>
                       <AttrResultBadge result={attr.result} />
                     </div>
                   </button>
@@ -243,22 +243,22 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-border-light/60 space-y-3 pt-3">
                       <div>
-                        <span className="text-[10px] text-text-muted uppercase font-bold">What it checks</span>
-                        <p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{attr.description}</p>
+                        <span className="text-[0.625rem] text-text-muted uppercase font-bold">What it checks</span>
+                        <p className="text-[0.75rem] text-text-secondary leading-relaxed mt-0.5">{attr.description}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-text-muted uppercase font-bold">Logic</span>
-                        <p className="text-[11px] font-mono text-indigo-700 bg-indigo-50/50 p-2 rounded-lg mt-0.5 leading-relaxed">{attr.logic}</p>
+                        <span className="text-[0.625rem] text-text-muted uppercase font-bold">Logic</span>
+                        <p className="text-[0.6875rem] font-mono text-indigo-700 bg-indigo-50/50 p-2 rounded-lg mt-0.5 leading-relaxed">{attr.logic}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-text-muted uppercase font-bold">Required Evidence</span>
-                        <p className="text-[12px] text-text-secondary mt-0.5">{attr.requiredEvidence}</p>
+                        <span className="text-[0.625rem] text-text-muted uppercase font-bold">Required Evidence</span>
+                        <p className="text-[0.75rem] text-text-secondary mt-0.5">{attr.requiredEvidence}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-text-muted uppercase font-bold">Data Dependency</span>
+                        <span className="text-[0.625rem] text-text-muted uppercase font-bold">Data Dependency</span>
                         <div className="flex flex-wrap gap-1.5 mt-1">
                           {attr.dataDependency.split(', ').map(dep => (
-                            <span key={dep} className="text-[11px] font-mono text-primary bg-primary/5 px-2 py-0.5 rounded-md border border-primary/10">
+                            <span key={dep} className="text-[0.6875rem] font-mono text-primary bg-primary/5 px-2 py-0.5 rounded-md border border-primary/10">
                               {dep}
                             </span>
                           ))}
@@ -276,7 +276,7 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
         <div className="px-6 py-4">
           <button
             onClick={() => setShowLineage(!showLineage)}
-            className="flex items-center gap-2 text-[12px] font-bold text-text-muted uppercase mb-3 cursor-pointer hover:text-text transition-colors"
+            className="flex items-center gap-2 text-[0.75rem] font-bold text-text-muted uppercase mb-3 cursor-pointer hover:text-text transition-colors"
           >
             {showLineage ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             <BarChart3 size={12} />
@@ -305,8 +305,8 @@ export default function WorkflowExecutionPanel({ onClose, onViewWorkingPaper, on
                       <step.icon size={14} className={step.color} />
                     </div>
                     <div className="flex-1">
-                      <p className="text-[12px] font-semibold text-text">{step.label}</p>
-                      <p className="text-[11px] text-text-muted">{step.detail}</p>
+                      <p className="text-[0.75rem] font-semibold text-text">{step.label}</p>
+                      <p className="text-[0.6875rem] text-text-muted">{step.detail}</p>
                     </div>
                     <Eye size={12} className="text-text-muted cursor-pointer hover:text-primary transition-colors" />
                   </div>

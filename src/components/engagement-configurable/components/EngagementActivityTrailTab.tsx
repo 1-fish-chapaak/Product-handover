@@ -179,33 +179,33 @@ export default function EngagementActivityTrailTab({ engagement, complianceState
       {/* Filter bar */}
       <div className="flex items-center gap-4 pb-4 border-b border-border-light">
         <div>
-          <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
+          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
           <div className="flex items-center gap-1.5">
             {TYPE_FILTERS.map(f => (
               <button key={f.label} onClick={() => setTypeFilter(f.label)}
-                className={`h-8 px-3 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${typeFilter === f.label ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                className={`h-8 px-3 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${typeFilter === f.label ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                 {f.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="ml-auto text-[11px] text-gray-400 self-end pb-1">{filtered.length} event{filtered.length !== 1 ? 's' : ''}</div>
+        <div className="ml-auto text-[0.6875rem] text-gray-400 self-end pb-1">{filtered.length} event{filtered.length !== 1 ? 's' : ''}</div>
       </div>
 
       {/* Timeline */}
       {groups.length === 0 ? (
         <div className="py-16 text-center">
           <Clock size={32} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-[14px] font-semibold text-text mb-1">No Activity Yet</p>
-          <p className="text-[12px] text-text-muted">Events will appear here as you work on this engagement.</p>
+          <p className="text-[0.875rem] font-semibold text-text mb-1">No Activity Yet</p>
+          <p className="text-[0.75rem] text-text-muted">Events will appear here as you work on this engagement.</p>
         </div>
       ) : (
         <div className="pt-2">
           {groups.map(group => (
             <div key={group.label}>
               <div className="flex items-center gap-3 py-3 sticky top-0 bg-surface z-10">
-                <span className="text-[11px] font-bold text-gray-400 tracking-wider">{group.label}</span>
-                <span className="text-[10px] text-gray-300">({group.entries.length})</span>
+                <span className="text-[0.6875rem] font-bold text-gray-400 tracking-wider">{group.label}</span>
+                <span className="text-[0.625rem] text-gray-300">({group.entries.length})</span>
                 <div className="flex-1 border-b border-border-light/50" />
               </div>
               <div className="space-y-1 pb-2">
@@ -216,12 +216,12 @@ export default function EngagementActivityTrailTab({ engagement, complianceState
                     <div key={entry.id} className={`flex items-start gap-3 px-4 py-2.5 rounded-lg border-l-[3px] ${borderCls} hover:bg-white transition-colors`}>
                       <div className={`w-7 h-7 rounded-full ${icon.bg} ${icon.color} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-text leading-snug">{entry.title}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{entry.subtitle}</div>
+                        <div className="text-[0.75rem] font-semibold text-text leading-snug">{entry.title}</div>
+                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.subtitle}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[10px] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{entry.actor}</div>
+                        <div className="text-[0.625rem] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
+                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.actor}</div>
                       </div>
                     </div>
                   );

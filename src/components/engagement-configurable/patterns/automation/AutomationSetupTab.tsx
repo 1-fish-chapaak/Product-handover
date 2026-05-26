@@ -14,9 +14,9 @@ import {
   type AutomationSetupState, type SetupMode, type DraftWorkflowStep, type QASetup, type ProjectCreatedWorkflow,
 } from './automationSetupData';
 
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -44,24 +44,24 @@ export default function AutomationSetupTab({ engagement, inputData, setupState, 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[15px] font-bold text-text mb-0.5">Automation Setup</h3>
-          <p className="text-[12px] text-text-muted">Choose whether this project will use saved workflows, newly built workflows, or ad-hoc Q&A analysis.</p>
+          <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Automation Setup</h3>
+          <p className="text-[0.75rem] text-text-muted">Choose whether this project will use saved workflows, newly built workflows, or ad-hoc Q&A analysis.</p>
         </div>
-        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${SETUP_STATUS_CLS[status]}`}>{status.replace(/_/g, ' ')}</span>
+        <span className={`px-2.5 py-1 rounded-full text-[0.625rem] font-bold shrink-0 ${SETUP_STATUS_CLS[status]}`}>{status.replace(/_/g, ' ')}</span>
       </div>
 
       {/* Context */}
       <div className="rounded-lg border border-border-light p-3">
-        <div className="grid grid-cols-4 gap-3 text-[11px]">
-          <div><span className="text-gray-400 block text-[10px]">Automation Approach</span><span className="text-text font-medium">{SETUP_MODE_LABELS[setupState.setupMode]}</span></div>
-          <div><span className="text-gray-400 block text-[10px]">Input Sources</span><span className={`font-medium ${hasInput ? 'text-emerald-600' : 'text-amber-600'}`}>{hasInput ? `${inputData.selectedSourceIds.length} selected` : 'None'}</span></div>
-          <div><span className="text-gray-400 block text-[10px]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
-          <div><span className="text-gray-400 block text-[10px]">Outputs</span><span className="text-text font-medium">{cfg.outputTypes.map(o => o.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())).join(', ')}</span></div>
+        <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
+          <div><span className="text-gray-400 block text-[0.625rem]">Automation Approach</span><span className="text-text font-medium">{SETUP_MODE_LABELS[setupState.setupMode]}</span></div>
+          <div><span className="text-gray-400 block text-[0.625rem]">Input Sources</span><span className={`font-medium ${hasInput ? 'text-emerald-600' : 'text-amber-600'}`}>{hasInput ? `${inputData.selectedSourceIds.length} selected` : 'None'}</span></div>
+          <div><span className="text-gray-400 block text-[0.625rem]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
+          <div><span className="text-gray-400 block text-[0.625rem]">Outputs</span><span className="text-text font-medium">{cfg.outputTypes.map(o => o.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())).join(', ')}</span></div>
         </div>
       </div>
 
       {!hasInput && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
           <AlertCircle size={11} className="shrink-0 mt-0.5" /><span>Select input data or choose to proceed without data for now.</span>
         </div>
       )}
@@ -81,10 +81,10 @@ export default function AutomationSetupTab({ engagement, inputData, setupState, 
               className={`text-left rounded-xl border-2 p-3 transition-all cursor-pointer ${isSelected ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Icon size={14} className={isSelected ? 'text-primary' : 'text-gray-400'} />
-                <span className={`text-[12px] font-semibold ${isSelected ? 'text-primary' : 'text-text'}`}>{m.title}</span>
+                <span className={`text-[0.75rem] font-semibold ${isSelected ? 'text-primary' : 'text-text'}`}>{m.title}</span>
                 {isSelected && <CheckCircle2 size={12} className="text-primary ml-auto" />}
               </div>
-              <p className="text-[10px] text-gray-500">{m.desc}</p>
+              <p className="text-[0.625rem] text-gray-500">{m.desc}</p>
             </button>
           );
         })}
@@ -103,14 +103,14 @@ export default function AutomationSetupTab({ engagement, inputData, setupState, 
       {setupState.setupMode === 'UPLOAD_DATA_FIRST_DECIDE_LATER' && (
         <div className="rounded-lg border border-border-light p-4 text-center space-y-2">
           <Clock size={24} className="text-gray-300 mx-auto" />
-          <h4 className="text-[13px] font-semibold text-text">Decide Later</h4>
-          <p className="text-[11px] text-gray-500">Automation setup is not configured yet. You can review input data first, then choose a workflow or Q&A approach later.</p>
+          <h4 className="text-[0.8125rem] font-semibold text-text">Decide Later</h4>
+          <p className="text-[0.6875rem] text-gray-500">Automation setup is not configured yet. You can review input data first, then choose a workflow or Q&A approach later.</p>
         </div>
       )}
 
       {/* Setup notes */}
       <div className="rounded-lg border border-border-light p-4 space-y-2">
-        <h4 className="text-[11px] font-bold text-text">Setup Notes</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text">Setup Notes</h4>
         <textarea value={setupState.setupNotes} onChange={e => onUpdateSetup({ ...setupState, setupNotes: e.target.value })}
           rows={2} placeholder="Assumptions, workflow design notes, unresolved questions..." className={inputCls + ' resize-none'} />
       </div>
@@ -118,9 +118,9 @@ export default function AutomationSetupTab({ engagement, inputData, setupState, 
       {/* History */}
       {setupState.history.length > 0 && (
         <div className="rounded-lg border border-border-light p-4">
-          <h4 className="text-[11px] font-bold text-text mb-1">History</h4>
+          <h4 className="text-[0.6875rem] font-bold text-text mb-1">History</h4>
           <div className="space-y-1">{setupState.history.slice(-5).map(h => (
-            <div key={h.id} className="text-[9px] text-gray-500"><span className="font-semibold text-text">{h.action.replace(/_/g, ' ')}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action.replace(/_/g, ' ')}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}
@@ -128,22 +128,22 @@ export default function AutomationSetupTab({ engagement, inputData, setupState, 
       {/* Readiness */}
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <h4 className="text-[11px] font-bold text-text">Automation Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${SETUP_STATUS_CLS[status]}`}>{status.replace(/_/g, ' ')}</span>
+          <h4 className="text-[0.6875rem] font-bold text-text">Automation Readiness</h4>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${SETUP_STATUS_CLS[status]}`}>{status.replace(/_/g, ' ')}</span>
         </div>
         <div className="space-y-1">{checks.map(c => (
-          <div key={c.label} className="flex items-center gap-2 text-[10px]">
+          <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
             {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
             <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
           </div>
         ))}</div>
         {isRecurring && setupState.setupMode === 'QA_ADHOC_ANALYSIS' && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
             <AlertCircle size={11} className="shrink-0 mt-0.5" /><span>Recurring automation requires at least one saved or built workflow. Q&A setup is valid for ad-hoc runs only.</span>
           </div>
         )}
         <button onClick={() => onNavigateTab?.('runs')} disabled={status !== 'READY_FOR_RUN'}
-          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           Continue to Runs <ChevronRight size={11} />
         </button>
       </div>
@@ -190,13 +190,13 @@ function ExistingWorkflowPanel({ inputType, setupState, onUpdateSetup, engagemen
   return (
     <div className="rounded-lg border border-border-light p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold text-text">Select Existing Workflows <span className="font-normal text-gray-400 ml-1">(Selected: {ids.length})</span></h4>
+        <h4 className="text-[0.6875rem] font-bold text-text">Select Existing Workflows <span className="font-normal text-gray-400 ml-1">(Selected: {ids.length})</span></h4>
         <div className="flex items-center gap-2">
-          <button onClick={selectRecommended} className="text-[9px] font-semibold text-primary hover:underline cursor-pointer">Select Recommended</button>
-          {ids.length > 0 && <button onClick={() => onUpdateSetup({ ...setupState, selectedWorkflowIds: [], selectedWorkflowNames: [], selectedWorkflowId: '', selectedWorkflowName: '' })} className="text-[9px] font-semibold text-gray-500 hover:underline cursor-pointer">Clear</button>}
+          <button onClick={selectRecommended} className="text-[0.5625rem] font-semibold text-primary hover:underline cursor-pointer">Select Recommended</button>
+          {ids.length > 0 && <button onClick={() => onUpdateSetup({ ...setupState, selectedWorkflowIds: [], selectedWorkflowNames: [], selectedWorkflowId: '', selectedWorkflowName: '' })} className="text-[0.5625rem] font-semibold text-gray-500 hover:underline cursor-pointer">Clear</button>}
         </div>
       </div>
-      <p className="text-[10px] text-gray-500">Choose one or more workflows to run against the selected input data.</p>
+      <p className="text-[0.625rem] text-gray-500">Choose one or more workflows to run against the selected input data.</p>
       <div className="space-y-2">
         {allWorkflows.map(wf => {
           const isSelected = ids.includes(wf.id);
@@ -206,22 +206,22 @@ function ExistingWorkflowPanel({ inputType, setupState, onUpdateSetup, engagemen
               className={`w-full text-left rounded-lg border-2 p-3 transition-all cursor-pointer ${isSelected ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
               <div className="flex items-center gap-2 mb-0.5">
                 <input type="checkbox" checked={isSelected} readOnly className="w-3.5 h-3.5 rounded border-border accent-[#6a12cd] cursor-pointer shrink-0" />
-                <span className="text-[12px] font-semibold text-text">{wf.name}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${wf.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status}</span>
-                {wf.isCreated && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-purple-50 text-purple-700">Created in this Project</span>}
-                {!wf.isCreated && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${compatible ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{compatible ? 'Compatible' : 'Needs Review'}</span>}
+                <span className="text-[0.75rem] font-semibold text-text">{wf.name}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wf.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status}</span>
+                {wf.isCreated && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-purple-50 text-purple-700">Created in this Project</span>}
+                {!wf.isCreated && <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${compatible ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{compatible ? 'Compatible' : 'Needs Review'}</span>}
               </div>
-              <p className="text-[10px] text-gray-500 mb-1">{wf.description}</p>
+              <p className="text-[0.625rem] text-gray-500 mb-1">{wf.description}</p>
               <div className="flex flex-wrap gap-1">
-                {wf.steps.map((s, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[8px]">{i + 1}. {s}</span>)}
-                {wf.isCreated && wf.linkedSources && wf.linkedSources.map((ds, i) => <span key={`ds-${i}`} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[8px]">{ds}</span>)}
+                {wf.steps.map((s, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[0.5rem]">{i + 1}. {s}</span>)}
+                {wf.isCreated && wf.linkedSources && wf.linkedSources.map((ds, i) => <span key={`ds-${i}`} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[0.5rem]">{ds}</span>)}
               </div>
             </button>
           );
         })}
       </div>
       {ids.length > 1 && (
-        <p className="text-[9px] text-gray-400 italic">Selected workflows can be run individually or together as a bulk run from the Runs tab.</p>
+        <p className="text-[0.5625rem] text-gray-400 italic">Selected workflows can be run individually or together as a bulk run from the Runs tab.</p>
       )}
     </div>
   );
@@ -309,10 +309,10 @@ function CreateWorkflowPanel({ setupState, onUpdateSetup, engagement, inputData,
       <div className="rounded-lg border border-border-light p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-[12px] font-bold text-text">Build New Workflow</h4>
-            <p className="text-[10px] text-gray-500">Use the workflow builder to create one or more workflows for this project. Saved workflows will appear in the existing workflow list and can be selected for runs.</p>
+            <h4 className="text-[0.75rem] font-bold text-text">Build New Workflow</h4>
+            <p className="text-[0.625rem] text-gray-500">Use the workflow builder to create one or more workflows for this project. Saved workflows will appear in the existing workflow list and can be selected for runs.</p>
           </div>
-          <button onClick={() => openBuilder()} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shrink-0">
+          <button onClick={() => openBuilder()} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shrink-0">
             <Plus size={13} />Build Workflow
           </button>
         </div>
@@ -320,7 +320,7 @@ function CreateWorkflowPanel({ setupState, onUpdateSetup, engagement, inputData,
 
       {/* Success message */}
       {successMsg && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[0.6875rem] text-emerald-700">
           <CheckCircle2 size={12} /><span>{successMsg}</span>
         </div>
       )}
@@ -339,11 +339,11 @@ function CreateWorkflowPanel({ setupState, onUpdateSetup, engagement, inputData,
 
       {/* Created workflows */}
       <div className="rounded-lg border border-border-light p-4 space-y-3">
-        <h4 className="text-[11px] font-bold text-text">Created Workflows <span className="font-normal text-gray-400 ml-1">({createdWorkflows.length})</span></h4>
+        <h4 className="text-[0.6875rem] font-bold text-text">Created Workflows <span className="font-normal text-gray-400 ml-1">({createdWorkflows.length})</span></h4>
         {createdWorkflows.length === 0 ? (
           <div className="text-center py-4 space-y-1">
             <Workflow size={20} className="text-gray-300 mx-auto" />
-            <p className="text-[11px] text-gray-400">No workflows created yet. Build a workflow to use it in this automation project.</p>
+            <p className="text-[0.6875rem] text-gray-400">No workflows created yet. Build a workflow to use it in this automation project.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -353,25 +353,25 @@ function CreateWorkflowPanel({ setupState, onUpdateSetup, engagement, inputData,
                 <div key={wf.id} className={`rounded-lg border-2 p-3 transition-all ${isSelected ? 'border-primary bg-primary/5' : 'border-border-light'}`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold text-text">{wf.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${wf.status === 'SAVED' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status === 'SAVED' ? 'Saved' : 'Draft'}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-purple-50 text-purple-700">Created in this Project</span>
+                      <span className="text-[0.75rem] font-semibold text-text">{wf.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wf.status === 'SAVED' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status === 'SAVED' ? 'Saved' : 'Draft'}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-purple-50 text-purple-700">Created in this Project</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => toggleSelectCreated(wf)}
-                        className={`px-2 py-1 rounded text-[9px] font-semibold cursor-pointer transition-colors ${isSelected ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-primary bg-primary/10 hover:bg-primary/20'}`}>
+                        className={`px-2 py-1 rounded text-[0.5625rem] font-semibold cursor-pointer transition-colors ${isSelected ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-primary bg-primary/10 hover:bg-primary/20'}`}>
                         {isSelected ? 'Unselect' : 'Select for Run'}
                       </button>
-                      <button onClick={() => openBuilder(wf.id)} className="px-2 py-1 rounded text-[9px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"><Settings size={9} /></button>
-                      <button onClick={() => removeWorkflow(wf.id)} className="px-2 py-1 rounded text-[9px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 cursor-pointer transition-colors"><Trash2 size={9} /></button>
+                      <button onClick={() => openBuilder(wf.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"><Settings size={9} /></button>
+                      <button onClick={() => removeWorkflow(wf.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-red-500 bg-red-50 hover:bg-red-100 cursor-pointer transition-colors"><Trash2 size={9} /></button>
                     </div>
                   </div>
-                  {wf.objective && <p className="text-[10px] text-gray-500 mb-1">{wf.objective}</p>}
+                  {wf.objective && <p className="text-[0.625rem] text-gray-500 mb-1">{wf.objective}</p>}
                   <div className="flex flex-wrap gap-1">
-                    {wf.steps.map((s, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[8px]">{i + 1}. {s.name || s.stepType}</span>)}
-                    {wf.linkedDataSourceNames.map((ds, i) => <span key={`ds-${i}`} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[8px]">{ds}</span>)}
+                    {wf.steps.map((s, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[0.5rem]">{i + 1}. {s.name || s.stepType}</span>)}
+                    {wf.linkedDataSourceNames.map((ds, i) => <span key={`ds-${i}`} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[0.5rem]">{ds}</span>)}
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-[9px] text-gray-400">
+                  <div className="flex items-center gap-3 mt-1 text-[0.5625rem] text-gray-400">
                     <span>{wf.steps.length} step{wf.steps.length !== 1 ? 's' : ''}</span>
                     <span>{wf.linkedDataSourceIds.length} data source{wf.linkedDataSourceIds.length !== 1 ? 's' : ''}</span>
                     <span>Created {wf.createdAt}</span>
@@ -490,8 +490,8 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
     <div className="rounded-xl border-2 border-primary/30 bg-white p-5 space-y-4 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-[14px] font-bold text-text">{existingWorkflow ? 'Edit Workflow' : 'Workflow Builder'}</h4>
-          <p className="text-[10px] text-gray-500">In production, this will open the full Workflow Builder / Q&A workflow creation experience.</p>
+          <h4 className="text-[0.875rem] font-bold text-text">{existingWorkflow ? 'Edit Workflow' : 'Workflow Builder'}</h4>
+          <p className="text-[0.625rem] text-gray-500">In production, this will open the full Workflow Builder / Q&A workflow creation experience.</p>
         </div>
         <button onClick={onCancel} className="p-1.5 rounded text-gray-400 hover:text-text cursor-pointer"><X size={16} /></button>
       </div>
@@ -508,11 +508,11 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className={labelCls}>Data Sources <span className="text-red-400">*</span> <span className="font-normal text-gray-400">({linkedSourceIds.length} linked)</span></label>
-          <button onClick={() => setShowAddSource(true)} className="px-2 py-1 rounded text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={9} /> Add New Source</button>
+          <button onClick={() => setShowAddSource(true)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors"><Plus size={9} /> Add New Source</button>
         </div>
-        <p className="text-[9px] text-gray-400 mb-1">Select data from the project input pool or add a new data source for this workflow.</p>
+        <p className="text-[0.5625rem] text-gray-400 mb-1">Select data from the project input pool or add a new data source for this workflow.</p>
         {allSources.length === 0 ? (
-          <div className="text-[10px] text-gray-400 italic py-2">No project data sources available. Add a new data source below.</div>
+          <div className="text-[0.625rem] text-gray-400 italic py-2">No project data sources available. Add a new data source below.</div>
         ) : (
           <div className="grid grid-cols-2 gap-1.5">
             {allSources.map(ds => {
@@ -522,10 +522,10 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
                 <label key={ds.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${linked ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
                   <input type="checkbox" checked={linked} onChange={() => toggleSource(ds.id)} className="w-3.5 h-3.5 rounded border-border accent-[#6a12cd] cursor-pointer shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-medium text-text truncate">{ds.name}</div>
-                    <div className="text-[9px] text-gray-400">{SOURCE_TYPE_LABELS[ds.sourceType]} · {ds.recordCount || ds.pageCount || ds.imageCount || 0} items</div>
+                    <div className="text-[0.6875rem] font-medium text-text truncate">{ds.name}</div>
+                    <div className="text-[0.5625rem] text-gray-400">{SOURCE_TYPE_LABELS[ds.sourceType]} · {ds.recordCount || ds.pageCount || ds.imageCount || 0} items</div>
                   </div>
-                  {isNew && <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-amber-50 text-amber-700 shrink-0">New</span>}
+                  {isNew && <span className="px-1 py-0.5 rounded text-[0.4375rem] font-bold bg-amber-50 text-amber-700 shrink-0">New</span>}
                 </label>
               );
             })}
@@ -536,14 +536,14 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
         {showAddSource && (
           <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <h5 className="text-[11px] font-bold text-text">Add New Data Source</h5>
+              <h5 className="text-[0.6875rem] font-bold text-text">Add New Data Source</h5>
               <button onClick={() => setShowAddSource(false)} className="p-0.5 rounded text-gray-400 hover:text-text cursor-pointer"><X size={12} /></button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div><label className={labelCls}>Source Name</label><input value={newSourceName} onChange={e => setNewSourceName(e.target.value)} placeholder="e.g. Invoice Register" className={inputCls} /></div>
               <div><label className={labelCls}>Source Type</label><select value={newSourceType} onChange={e => setNewSourceType(e.target.value as DataSourceType)} className={selectCls}>{BUILDER_SOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
             </div>
-            <button onClick={addNewSource} disabled={!newSourceName.trim()} className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[10px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add Source</button>
+            <button onClick={addNewSource} disabled={!newSourceName.trim()} className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.625rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add Source</button>
           </div>
         )}
       </div>
@@ -553,18 +553,18 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
         <div className="flex items-center justify-between mb-1">
           <label className={labelCls}>Workflow Steps ({steps.length})</label>
           <div className="flex items-center gap-1">
-            <button onClick={addSuggestedSteps} className="px-2 py-1 rounded text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Add Suggested Steps</button>
-            <button onClick={addCustomStep} className="px-2 py-1 rounded text-[9px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">+ Custom Step</button>
+            <button onClick={addSuggestedSteps} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Add Suggested Steps</button>
+            <button onClick={addCustomStep} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">+ Custom Step</button>
           </div>
         </div>
         {steps.length === 0 ? (
-          <div className="text-[10px] text-gray-400 italic py-2">No steps defined yet. Add suggested steps or create custom ones. Steps are optional if a builder prompt is provided.</div>
+          <div className="text-[0.625rem] text-gray-400 italic py-2">No steps defined yet. Add suggested steps or create custom ones. Steps are optional if a builder prompt is provided.</div>
         ) : (
           <div className="space-y-1.5">{steps.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-light text-[10px]">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[8px] font-bold inline-flex items-center justify-center shrink-0">{i + 1}</span>
-              <input value={s.name} onChange={e => updateStep(i, { name: e.target.value })} placeholder="Step name..." className="flex-1 px-2 py-1 border border-border-light rounded text-[10px] text-text bg-white outline-none focus:border-primary/40" />
-              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[8px] shrink-0">{STEP_TYPE_LABELS[s.stepType]}</span>
+            <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-light text-[0.625rem]">
+              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[0.5rem] font-bold inline-flex items-center justify-center shrink-0">{i + 1}</span>
+              <input value={s.name} onChange={e => updateStep(i, { name: e.target.value })} placeholder="Step name..." className="flex-1 px-2 py-1 border border-border-light rounded text-[0.625rem] text-text bg-white outline-none focus:border-primary/40" />
+              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[0.5rem] shrink-0">{STEP_TYPE_LABELS[s.stepType]}</span>
               <button onClick={() => removeStep(i)} className="p-0.5 rounded text-gray-400 hover:text-red-500 cursor-pointer"><X size={10} /></button>
             </div>
           ))}</div>
@@ -573,18 +573,18 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
 
       {/* Validation */}
       {validationMsg && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[10px] text-red-600">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[0.625rem] text-red-600">
           <AlertCircle size={11} /><span>{validationMsg}</span>
         </div>
       )}
 
       {/* Actions */}
       <div className="flex items-center gap-3 pt-1 border-t border-border-light">
-        <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+        <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
           <CheckCircle2 size={12} />Save Workflow
         </button>
-        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
-        <span className="text-[9px] text-gray-400 ml-auto">Saved workflows appear under Use Existing Workflow and can be selected for runs.</span>
+        <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
+        <span className="text-[0.5625rem] text-gray-400 ml-auto">Saved workflows appear under Use Existing Workflow and can be selected for runs.</span>
       </div>
     </div>
   );
@@ -618,51 +618,51 @@ function QASetupPanel({ setupState, onUpdateSetup, engagement, inputSourceIds, i
 
   return (
     <div className="rounded-lg border border-border-light p-4 space-y-3">
-      <h4 className="text-[11px] font-bold text-text">Ask Questions / Ad-hoc Analysis</h4>
-      <p className="text-[9px] text-gray-400">Use this when you want to explore data or documents without creating a repeatable workflow yet.</p>
+      <h4 className="text-[0.6875rem] font-bold text-text">Ask Questions / Ad-hoc Analysis</h4>
+      <p className="text-[0.5625rem] text-gray-400">Use this when you want to explore data or documents without creating a repeatable workflow yet.</p>
 
       <div><label className={labelCls}>Analysis Objective</label><textarea value={qa.objective} onChange={e => updateObjective(e.target.value)} rows={2} placeholder="What should this analysis accomplish?" className={inputCls + ' resize-none'} /></div>
 
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className={labelCls}>Questions / Instructions ({qa.questions.length})</label>
-          <button onClick={addSuggested} className="px-2 py-1 rounded text-[9px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Use Suggested</button>
+          <button onClick={addSuggested} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Use Suggested</button>
         </div>
         {qa.questions.length > 0 && (
           <div className="space-y-1 mb-2">{qa.questions.map((q, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-light text-[10px]">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[8px] font-bold inline-flex items-center justify-center shrink-0">{i + 1}</span>
+            <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-light text-[0.625rem]">
+              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[0.5rem] font-bold inline-flex items-center justify-center shrink-0">{i + 1}</span>
               <span className="text-text flex-1">{q}</span>
             </div>
           ))}</div>
         )}
         <div className="flex items-center gap-2">
-          <input value={newQ} onChange={e => setNewQ(e.target.value)} placeholder="Add custom question..." className="flex-1 px-3 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addQuestion(); }} />
-          <button onClick={addQuestion} disabled={!newQ.trim()} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold hover:bg-primary/20 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
+          <input value={newQ} onChange={e => setNewQ(e.target.value)} placeholder="Add custom question..." className="flex-1 px-3 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addQuestion(); }} />
+          <button onClick={addQuestion} disabled={!newQ.trim()} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.625rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
         </div>
       </div>
 
       <div>
         <label className={labelCls}>Expected Outputs</label>
         <div className="flex flex-wrap gap-2">{EXPECTED_OUTPUTS.map(o => (
-          <label key={o} className="flex items-center gap-1.5 text-[10px] text-text cursor-pointer">
+          <label key={o} className="flex items-center gap-1.5 text-[0.625rem] text-text cursor-pointer">
             <input type="checkbox" checked={qa.expectedOutputs.includes(o)} onChange={() => toggleOutput(o)} className="w-3 h-3 rounded border-border accent-[#6a12cd] cursor-pointer" />{o}
           </label>
         ))}</div>
       </div>
 
       {isRecurring && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
           <AlertCircle size={11} className="shrink-0 mt-0.5" /><span>Recurring automation requires a saved workflow. Convert this Q&A setup into a workflow before scheduling.</span>
         </div>
       )}
 
       <div className="flex items-center gap-2">
         <button onClick={markReady} disabled={!qa.objective.trim() || qa.questions.length === 0}
-          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
           <CheckCircle2 size={11} />Mark Q&A Setup Ready
         </button>
-        {qa.status === 'READY' && <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1"><CheckCircle2 size={10} />Ready</span>}
+        {qa.status === 'READY' && <span className="text-[0.625rem] text-emerald-600 font-medium flex items-center gap-1"><CheckCircle2 size={10} />Ready</span>}
       </div>
     </div>
   );

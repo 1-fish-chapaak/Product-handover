@@ -145,7 +145,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
               />
               {search && (
                 <button
@@ -159,7 +159,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
           )}
           {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
           {paginated && (
-            <div className="text-[12px] text-text-muted shrink-0">
+            <div className="text-[0.75rem] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
             </div>
           )}
@@ -168,7 +168,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
+        <table className={`w-full ${isModern ? 'text-[0.8125rem]' : 'text-[0.75rem]'}`}>
           <thead>
             <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
               {expandable && <th className="w-8" />}
@@ -177,7 +177,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   key={col.key}
                   className={[
                     isModern
-                      ? `py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      ? `py-3 text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
@@ -203,9 +203,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
                     <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
                       <Search size={18} className="text-text-muted/50" />
                     </div>
-                    <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
+                    <div className="text-[0.8125rem] font-medium text-text-secondary">{emptyMessage}</div>
                     {search && (
-                      <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
+                      <button onClick={() => setSearch('')} className="text-[0.75rem] text-primary font-medium hover:underline cursor-pointer mt-1">
                         Clear search
                       </button>
                     )}
@@ -284,7 +284,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Pagination */}
       {paginated && totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-          <div className="text-[12px] text-text-muted">
+          <div className="text-[0.75rem] text-text-muted">
             Showing {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sorted.length)} of {sorted.length}
           </div>
           <div className="flex items-center gap-1">
@@ -299,7 +299,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
               <button
                 key={i}
                 onClick={() => setPage(i)}
-                className={`w-7 h-7 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`w-7 h-7 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                   i === safePage
                     ? 'bg-primary text-white'
                     : 'text-text-secondary hover:bg-gray-100'

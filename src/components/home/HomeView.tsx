@@ -154,7 +154,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
             <Sparkles size={16} className="text-brand-700" />
           </div>
           <div>
-            <div className="font-display text-[20px] font-[420] text-ink-900 leading-tight">
+            <div className="font-display text-[1.25rem] font-[420] text-ink-900 leading-tight">
               Set up your workspace <span className="font-mono font-normal text-xs text-ink-500 ml-1">· {completed}/{total} done</span>
             </div>
             <p className="text-meta text-ink-500 mt-0.5">Get your workspace set up in a few quick steps.</p>
@@ -316,7 +316,7 @@ function WorkQueueSection({ setView, rangeDays }: { setView: Props['setView']; r
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <ClipboardCheck size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">
             <span className="tabular-nums"><CountUp value={items.length} /></span> items waiting on you
           </h3>
           {overdueCount > 0 && (
@@ -462,7 +462,7 @@ function StatusPill({ kind, label }: { kind: StatusKind; label?: string }) {
   // actually means "this needs you" rather than "every tile shouts at once".
   if (!t.loud) return null;
   return (
-    <span className={`inline-flex items-center text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${t.bg} ${t.text} ${t.border}`}>
+    <span className={`inline-flex items-center text-[0.75rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${t.bg} ${t.text} ${t.border}`}>
       {label ?? t.label}
     </span>
   );
@@ -604,7 +604,7 @@ function HealthTilesPicker({
                         {isVisible && <Check size={10} strokeWidth={3} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`text-[12.5px] font-medium ${isVisible ? 'text-ink-900' : 'text-ink-700'}`}>{tile.label}</div>
+                        <div className={`text-[0.75rem] font-medium ${isVisible ? 'text-ink-900' : 'text-ink-700'}`}>{tile.label}</div>
                         <div className="text-xs text-ink-500 mt-0.5 leading-snug">{tile.description}</div>
                       </div>
                     </button>
@@ -737,7 +737,7 @@ function HealthDashboardSection({
       <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <BarChart3 size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">{
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">{
             dateRangeId === 'all'    ? 'FY26' :
             dateRangeId === 'qtd'    ? 'Quarterly' :
             dateRangeId === 'ytd'    ? 'Year-to-date' :
@@ -916,19 +916,19 @@ function HealthDashboardSection({
                 <div className="flex items-center gap-2.5">
                   <span className="w-3 h-3 rounded-sm bg-brand-700 shrink-0" aria-hidden />
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Executed</div>
+                    <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-500">Executed</div>
                     <div className="text-base font-semibold tabular-nums text-ink-900 leading-tight"><CountUp value={executed} /> of <CountUp value={planned} /></div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <span className="w-3 h-3 rounded-sm bg-brand-100 border border-brand-200 shrink-0" aria-hidden />
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Remaining</div>
+                    <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-500">Remaining</div>
                     <div className="text-base font-semibold tabular-nums text-ink-900 leading-tight"><CountUp value={remaining} /></div>
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Target</div>
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-500">Target</div>
                   <div className="text-base font-semibold tabular-nums text-ink-900 leading-tight">75%</div>
                 </div>
                 <motion.span
@@ -960,7 +960,7 @@ function HealthDashboardSection({
               <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">Risk overview</span>
             </div>
             <div className="flex items-baseline gap-3">
-              <div className="text-[40px] font-semibold leading-none tabular-nums text-ink-900"><CountUp value={riskTotal} /></div>
+              <div className="text-[2.5rem] font-semibold leading-none tabular-nums text-ink-900"><CountUp value={riskTotal} /></div>
               <span className="text-meta text-ink-500">open risks</span>
             </div>
           </div>
@@ -1011,7 +1011,7 @@ function HealthDashboardSection({
               <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">Controls</span>
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[40px] font-semibold leading-none tabular-nums text-ink-900"><CountUp value={ctlEffective} /></span>
+              <span className="text-[2.5rem] font-semibold leading-none tabular-nums text-ink-900"><CountUp value={ctlEffective} /></span>
               <span className="text-base font-medium text-ink-400 tabular-nums">/ <CountUp value={ctlTotal} /></span>
             </div>
             <div className="text-meta text-ink-500 mt-1">effective in library</div>
@@ -1097,7 +1097,7 @@ function HealthDashboardSection({
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[16px] font-semibold leading-none tabular-nums text-ink-900">
+                    <span className="text-[1rem] font-semibold leading-none tabular-nums text-ink-900">
                       <CountUp value={complianceScore} />%
                     </span>
                   </div>
@@ -1116,7 +1116,7 @@ function HealthDashboardSection({
                   ~80→90→72 trajectory actually reads (not all bars look equal).
                   Current quarter is brand-600, prior quarters are brand-200. */}
               <div>
-                <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-1">
+                <div className="flex items-center justify-between text-[0.625rem] font-mono uppercase tracking-wider text-ink-400 mb-1">
                   <span>8-quarter trend</span>
                   <span className="tabular-nums text-ink-500">{trend[0]} → {complianceScore}%</span>
                 </div>
@@ -1203,7 +1203,7 @@ function HealthDashboardSection({
                   key={f.name}
                   className="flex flex-col items-center justify-between text-center rounded-xl border border-canvas-border/50 bg-canvas/40 px-2 py-3 transition-colors hover:border-canvas-border hover:bg-canvas"
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-500">{f.name}</span>
+                  <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-500">{f.name}</span>
 
                   <div className="relative w-14 h-14 my-2">
                     <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
@@ -1221,13 +1221,13 @@ function HealthDashboardSection({
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-[14px] font-semibold tabular-nums text-ink-900 leading-none">
+                      <span className="text-[0.875rem] font-semibold tabular-nums text-ink-900 leading-none">
                         <CountUp value={f.pct} />%
                       </span>
                     </div>
                   </div>
 
-                  <span className={`text-[9.5px] font-bold uppercase tracking-wider ${statusTone}`}>
+                  <span className={`text-[0.75rem] font-bold uppercase tracking-wider ${statusTone}`}>
                     {statusLabel}
                   </span>
                 </div>
@@ -1267,14 +1267,14 @@ function HealthDashboardSection({
                 {/* Calendar tear: month band, big day, weekday footer.
                     Two-zone styling reads like a desk-calendar page. */}
                 <div className="shrink-0 w-16 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden text-center shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-evidence-700 bg-evidence-50 py-0.5">Apr</div>
-                  <div className="text-[26px] font-semibold leading-none tabular-nums text-ink-900 mt-1.5">23</div>
-                  <div className="text-[9.5px] font-medium uppercase tracking-wider text-ink-400 mt-1 mb-1.5">Thu</div>
+                  <div className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-evidence-700 bg-evidence-50 py-0.5">Apr</div>
+                  <div className="text-[1.625rem] font-semibold leading-none tabular-nums text-ink-900 mt-1.5">23</div>
+                  <div className="text-[0.75rem] font-medium uppercase tracking-wider text-ink-400 mt-1 mb-1.5">Thu</div>
                 </div>
                 {/* Countdown — number + days label stacked, supporting text below */}
                 <div className="min-w-0 flex flex-col justify-center">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-[36px] font-semibold leading-none tabular-nums text-ink-900">
+                    <span className="text-[2.25rem] font-semibold leading-none tabular-nums text-ink-900">
                       <CountUp value={nextAuditDays} />
                     </span>
                     <span className="text-meta text-ink-500">days</span>
@@ -1311,7 +1311,7 @@ function HealthDashboardSection({
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-ink-400 mt-2">
+                <div className="flex items-center justify-between text-[0.625rem] font-mono uppercase tracking-wider text-ink-400 mt-2">
                   <span>Day {elapsed} of 14</span>
                   <span className="text-brand-700 font-semibold">audit day →</span>
                 </div>
@@ -1344,7 +1344,7 @@ function HealthDashboardSection({
                 {/* Hero column */}
                 <div className="min-w-[120px] flex flex-col justify-center">
                   <div className="flex items-baseline gap-1.5">
-                    <div className="text-[44px] font-semibold leading-none tabular-nums text-ink-900">
+                    <div className="text-[2.75rem] font-semibold leading-none tabular-nums text-ink-900">
                       <CountUp value={wfSuccessRate} />%
                     </div>
                   </div>
@@ -1360,7 +1360,7 @@ function HealthDashboardSection({
 
                 {/* Runs-by-type chart column */}
                 <div className="border-l border-canvas-border/70 pl-5 flex flex-col">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">Runs by type</div>
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-500 mb-2">Runs by type</div>
                   <div className="space-y-1.5 flex-1 flex flex-col justify-center">
                     {wfTypeBreakdown.map((t, i) => (
                       <div key={t.type} className="flex items-center gap-2 text-xs">
@@ -1514,7 +1514,7 @@ function PlatformActivitySection({
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Bell size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Platform activity</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Platform activity</h3>
           {unreadCount > 0 && (
             <span className="inline-flex items-center text-xs font-semibold tabular-nums text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded-full shrink-0">
               {unreadCount}
@@ -1541,7 +1541,7 @@ function PlatformActivitySection({
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`relative shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer ${
+              className={`relative shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[0.75rem] font-medium border transition-colors cursor-pointer ${
                 active
                   ? 'border-transparent text-brand-700'
                   : 'bg-canvas-elevated text-ink-600 border-canvas-border hover:border-brand-200 hover:text-brand-700'
@@ -1678,7 +1678,7 @@ function RecentSharedSection({ setView, rangeDays }: { setView: Props['setView']
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Share2 size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Shared with you</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Shared with you</h3>
         </div>
         <button
           onClick={() => setView('dashboards')}
@@ -1702,17 +1702,17 @@ function RecentSharedSection({ setView, rangeDays }: { setView: Props['setView']
               className="text-left rounded-lg border border-canvas-border/70 bg-canvas p-3 hover:border-brand-200 hover:bg-brand-50/30 transition-all cursor-pointer flex flex-col gap-2 min-h-[120px]"
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-700 shrink min-w-0">
+                <div className="inline-flex items-center gap-1 text-[0.625rem] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-700 shrink min-w-0">
                   <Icon size={10} className="shrink-0" />
                   <span className="truncate">{item.kind}</span>
                 </div>
                 <span className="text-xs text-ink-400 tabular-nums whitespace-nowrap shrink-0">{item.timeAgo}</span>
               </div>
               <div>
-                <div className="font-display text-[15px] leading-snug text-ink-900 line-clamp-1">{item.name}</div>
+                <div className="font-display text-[0.9375rem] leading-snug text-ink-900 line-clamp-1">{item.name}</div>
                 <div className="text-xs text-ink-500 line-clamp-2 mt-1">{item.description}</div>
               </div>
-              <div className="text-[11.5px] text-ink-400 mt-auto">Shared by {item.sharedBy}</div>
+              <div className="text-[0.75rem] text-ink-400 mt-auto">Shared by {item.sharedBy}</div>
             </button>
           );
         })}
@@ -1767,7 +1767,7 @@ function RecentAskIraSection({
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <MessageSquare size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Pick up where you left off</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Pick up where you left off</h3>
         </div>
         <button
           onClick={() => setView('recents')}
@@ -1814,7 +1814,7 @@ function ActiveEngagementsSection({ setView, rangeDays, openAuditExecution }: { 
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Briefcase size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={items.length} /></span> active engagements</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={items.length} /></span> active engagements</h3>
         </div>
         <button onClick={() => setView('audit-execution')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
       </div>
@@ -1884,7 +1884,7 @@ function OpenExceptionsSection({ setView, rangeDays }: { setView: Props['setView
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <AlertOctagon size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={totalOpen} /></span> open exceptions</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={totalOpen} /></span> open exceptions</h3>
         </div>
         <button onClick={() => setView('manage-exceptions')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
       </div>
@@ -2019,7 +2019,7 @@ function TopWorkflowsSection({ setView, rangeDays, setSelectedWorkflow }: { setV
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Activity size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Workflow activity</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Workflow activity</h3>
           <span className="hidden sm:inline-flex items-center text-xs font-mono tabular-nums text-ink-500 ml-1">
             <span className="text-ink-700 font-bold mr-0.5">{totalRuns}</span> runs
             {failedCount > 0 && (
@@ -2050,7 +2050,7 @@ function TopWorkflowsSection({ setView, rangeDays, setSelectedWorkflow }: { setV
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`relative shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer ${
+              className={`relative shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[0.75rem] font-medium border transition-colors cursor-pointer ${
                 active ? 'border-transparent text-brand-700' : 'bg-canvas-elevated text-ink-600 border-canvas-border hover:border-brand-200 hover:text-brand-700'
               }`}
             >
@@ -2124,7 +2124,7 @@ function TopWorkflowsSection({ setView, rangeDays, setSelectedWorkflow }: { setV
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-meta font-medium text-ink-900 truncate">{run.name}</span>
-                      <span className={`shrink-0 inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${typeMeta.bg} ${typeMeta.text}`}>{run.type}</span>
+                      <span className={`shrink-0 inline-flex items-center text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${typeMeta.bg} ${typeMeta.text}`}>{run.type}</span>
                     </div>
                     <div className="text-xs text-ink-500 mt-0.5 tabular-nums flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-ink-700">{run.duration}</span>
@@ -2179,7 +2179,7 @@ function ConnectedSourcesSection({ setView, rangeDays }: { setView: Props['setVi
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Database size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={connected} /></span> of <CountUp value={DATA_SOURCES.length} /> connected</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate"><span className="tabular-nums"><CountUp value={connected} /></span> of <CountUp value={DATA_SOURCES.length} /> connected</h3>
           <span className="hidden sm:inline-flex items-center text-xs font-mono tabular-nums text-ink-500 ml-1">
             <span className="mx-1 text-ink-300">·</span>
             <span className="text-ink-700 font-bold mr-0.5">{syncsInRange}</span>
@@ -2199,9 +2199,9 @@ function ConnectedSourcesSection({ setView, rangeDays }: { setView: Props['setVi
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-meta font-medium text-ink-900 truncate">{s.name}</span>
-                  <span className={`shrink-0 inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${SOURCE_TYPE_TONE[s.type] ?? 'bg-canvas-border/40 text-ink-700'}`}>{s.type}</span>
+                  <span className={`shrink-0 inline-flex items-center text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${SOURCE_TYPE_TONE[s.type] ?? 'bg-canvas-border/40 text-ink-700'}`}>{s.type}</span>
                 </div>
-                <div className="text-[11.5px] text-ink-500 mt-0.5">
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${ok ? 'bg-compliant' : 'bg-risk'}`} />
                   {ok ? `Synced ${s.lastSync}` : 'Disconnected'} · <span className="tabular-nums">{s.records}</span> records
                 </div>
@@ -2224,7 +2224,7 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Layers size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Business processes</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Business processes</h3>
         </div>
         <button onClick={() => setView('business-processes')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
       </div>
@@ -2238,14 +2238,14 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
           >
             <div className="flex items-center justify-between mb-2">
               <span
-                className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                className="inline-flex items-center text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
                 style={{ backgroundColor: `${bp.color}1A`, color: bp.color }}
               >
                 {bp.abbr}
               </span>
               <span className="text-xs tabular-nums font-semibold" style={{ color: bp.color }}>{bp.coverage}%</span>
             </div>
-            <div className="text-[12.5px] font-medium text-ink-900 truncate">{bp.name}</div>
+            <div className="text-[0.75rem] font-medium text-ink-900 truncate">{bp.name}</div>
             <div className="mt-1.5 h-1 rounded-full bg-canvas-border/40 overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
@@ -2289,7 +2289,7 @@ function RecentReportsSection({
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <FileText size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">
             <span className="tabular-nums"><CountUp value={items.length} /></span> recent reports
           </h3>
         </div>
@@ -2317,7 +2317,7 @@ function RecentReportsSection({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-meta text-ink-900 truncate">{r.name}</span>
-                  <span className={`shrink-0 inline-flex items-center text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${REPORT_STATUS_TONE[r.status] ?? 'bg-canvas-border/40 text-ink-700'}`}>{r.status}</span>
+                  <span className={`shrink-0 inline-flex items-center text-[0.75rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${REPORT_STATUS_TONE[r.status] ?? 'bg-canvas-border/40 text-ink-700'}`}>{r.status}</span>
                 </div>
                 <div className="text-xs text-ink-500 mt-0.5 tabular-nums">
                   {r.generatedBy} · {r.generatedAt} · {r.pages}p
@@ -2351,7 +2351,7 @@ function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; r
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">AI Concierge</h3>
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">AI Concierge</h3>
           <span className="hidden sm:inline-flex items-center text-xs font-mono tabular-nums text-ink-500 ml-1">
             <span className="mx-1 text-ink-300">·</span>
             <span className="text-ink-700 font-bold mr-0.5">{usedInRange}</span>
@@ -2374,7 +2374,7 @@ function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; r
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-meta font-medium text-ink-900 truncate">{tool.label}</div>
-                <div className="text-[11.5px] text-ink-500 mt-0.5 line-clamp-1">{tool.description}</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5 line-clamp-1">{tool.description}</div>
               </div>
               <ArrowRight size={13} className="text-ink-400 group-hover:text-brand-700 shrink-0" />
             </button>
@@ -2513,7 +2513,7 @@ function AuditCalendarSection({ setView, rangeDays, openAuditExecution }: { setV
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Calendar size={14} className="text-ink-500 shrink-0" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">
             <span className="tabular-nums"><CountUp value={events.length} /></span> upcoming
           </h3>
         </div>
@@ -2548,17 +2548,17 @@ function AuditCalendarSection({ setView, rangeDays, openAuditExecution }: { setV
                   className="w-full flex items-start gap-3 px-5 py-3 border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer text-left group"
                 >
                   <div className="shrink-0 w-12 flex flex-col items-center pt-0.5">
-                    <span className={`text-[10px] font-mono uppercase tracking-wider ${isUrgent ? 'text-risk-700 font-bold' : 'text-ink-500'}`}>
+                    <span className={`text-[0.625rem] font-mono uppercase tracking-wider ${isUrgent ? 'text-risk-700 font-bold' : 'text-ink-500'}`}>
                       {ev.date.toLocaleDateString('en-US', { month: 'short' })}
                     </span>
-                    <span className={`text-[18px] font-semibold leading-none tabular-nums ${isUrgent ? 'text-risk-700' : 'text-ink-900'}`}>
+                    <span className={`text-[1.125rem] font-semibold leading-none tabular-nums ${isUrgent ? 'text-risk-700' : 'text-ink-900'}`}>
                       {ev.date.getDate()}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-meta font-medium text-ink-900 truncate">{ev.title}</span>
-                      <span className={`shrink-0 inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${tone}`}>{ev.kind}</span>
+                      <span className={`shrink-0 inline-flex items-center text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${tone}`}>{ev.kind}</span>
                     </div>
                     <div className="text-xs text-ink-500 mt-0.5 tabular-nums">
                       {ev.context} · <span className={isUrgent ? 'text-risk-700 font-semibold' : ''}>{days <= 0 ? 'today' : `in ${days} ${days === 1 ? 'day' : 'days'}`}</span>
@@ -2599,7 +2599,7 @@ function PinnedSection({
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Star size={14} className="text-mitigated-700 shrink-0" fill="currentColor" />
-          <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">
             Pinned <span className="text-ink-500 font-normal tabular-nums">· {total}</span>
           </h3>
         </div>
@@ -2897,7 +2897,7 @@ function AddWidgetModal({
         ref={modalRef}
       >
         <header className="shrink-0 px-6 py-5 border-b border-white/40 bg-white/20">
-          <h2 className="font-display text-[20px] font-[420] text-ink-900 leading-tight">Edit widgets</h2>
+          <h2 className="font-display text-[1.25rem] font-[420] text-ink-900 leading-tight">Edit widgets</h2>
           <p className="text-meta text-ink-500 mt-0.5">
             Add or remove widgets from your homepage. Drag the handle on a widget to reorder it.
           </p>
@@ -3012,12 +3012,12 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
       <div className="absolute inset-0">
         <div className="h-full overflow-hidden flex flex-col">
           <div className="px-3 py-1.5 border-b border-canvas-border bg-paper-50/40">
-            <div className="text-[8px] font-semibold uppercase tracking-wider text-ink-500">Today</div>
+            <div className="text-[0.5rem] font-semibold uppercase tracking-wider text-ink-500">Today</div>
           </div>
           {rows.map((r, i) => (
             <div key={i} className="relative px-3 py-2 border-b border-canvas-border last:border-0 bg-brand-50/30 flex-1">
               <span className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full ${r.stripe}`} />
-              <div className="text-[9px] font-medium text-ink-900 truncate">{r.title}</div>
+              <div className="text-[0.5625rem] font-medium text-ink-900 truncate">{r.title}</div>
               <div className="h-1 w-3/4 rounded-full bg-ink-200/60 mt-1" />
             </div>
           ))}
@@ -3036,15 +3036,15 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
       <div className="absolute inset-0">
         <div className="h-full overflow-hidden flex flex-col">
           <div className="px-3 py-1.5 border-b border-canvas-border bg-paper-50/40 grid grid-cols-[35%_45%_20%] gap-2">
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Type</div>
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Item</div>
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Risk</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Type</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Item</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Risk</div>
           </div>
           {rows.map((r, i) => (
             <div key={i} className="px-3 py-2 border-b border-canvas-border last:border-0 grid grid-cols-[35%_45%_20%] gap-2 items-center flex-1">
-              <div className="text-[8px] text-ink-700">{r.type}</div>
+              <div className="text-[0.5rem] text-ink-700">{r.type}</div>
               <div className="h-1 rounded-full bg-ink-200/60" />
-              <span className={`inline-flex items-center justify-center text-[7px] font-bold text-white px-1 py-0.5 rounded ${r.risk}`}>{r.riskLabel}</span>
+              <span className={`inline-flex items-center justify-center text-[0.4375rem] font-bold text-white px-1 py-0.5 rounded ${r.risk}`}>{r.riskLabel}</span>
             </div>
           ))}
         </div>
@@ -3057,27 +3057,27 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
       <div className="absolute inset-0 grid grid-cols-3 grid-rows-2 gap-1.5">
         <div className="col-span-1 row-span-2 rounded-md bg-canvas-elevated border border-canvas-border p-2 flex flex-col justify-between">
           <div>
-            <div className="text-[7px] font-semibold text-brand-600 uppercase tracking-wider">FY26</div>
-            <div className="text-[16px] font-bold text-ink-900 leading-none mt-0.5 tabular-nums">76%</div>
+            <div className="text-[0.4375rem] font-semibold text-brand-600 uppercase tracking-wider">FY26</div>
+            <div className="text-[1rem] font-bold text-ink-900 leading-none mt-0.5 tabular-nums">76%</div>
           </div>
           <svg viewBox="0 0 60 20" preserveAspectRatio="none" className="w-full h-4">
             <polyline points="0,16 12,13 24,9 36,7 48,5 60,3" fill="none" stroke="var(--color-brand-500)" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </div>
         <div className="rounded-md bg-mitigated-50 border border-mitigated-50 p-1.5 flex flex-col justify-between">
-          <div className="text-[7px] font-semibold text-mitigated-700">Risk</div>
+          <div className="text-[0.4375rem] font-semibold text-mitigated-700">Risk</div>
           <div className="text-xs font-bold text-ink-900 tabular-nums">28</div>
         </div>
         <div className="rounded-md bg-brand-50 border border-brand-100 p-1.5 flex flex-col justify-between">
-          <div className="text-[7px] font-semibold text-brand-700">Controls</div>
+          <div className="text-[0.4375rem] font-semibold text-brand-700">Controls</div>
           <div className="text-xs font-bold text-brand-700 tabular-nums">87</div>
         </div>
         <div className="rounded-md bg-risk-50 border border-risk-50 p-1.5 flex flex-col justify-between">
-          <div className="text-[7px] font-semibold text-risk-700">Defs</div>
+          <div className="text-[0.4375rem] font-semibold text-risk-700">Defs</div>
           <div className="text-xs font-bold text-ink-900 tabular-nums">12</div>
         </div>
         <div className="rounded-md bg-compliant-50 border border-compliant-50 p-1.5 flex flex-col justify-between">
-          <div className="text-[7px] font-semibold text-compliant-700">Runs</div>
+          <div className="text-[0.4375rem] font-semibold text-compliant-700">Runs</div>
           <div className="text-xs font-bold text-compliant-700 tabular-nums">142</div>
         </div>
       </div>
@@ -3096,14 +3096,14 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
           const CIcon = c.icon;
           return (
             <div key={i} className="rounded-md bg-canvas-elevated border border-canvas-border p-2 flex flex-col gap-1.5">
-              <div className="inline-flex items-center gap-0.5 text-[7px] font-bold uppercase tracking-wider text-brand-700 bg-brand-50 self-start px-1 py-0.5 rounded">
+              <div className="inline-flex items-center gap-0.5 text-[0.4375rem] font-bold uppercase tracking-wider text-brand-700 bg-brand-50 self-start px-1 py-0.5 rounded">
                 <CIcon size={6} />
                 {c.kind}
               </div>
-              <div className="text-[8px] font-semibold text-ink-900 leading-tight truncate">{c.name}</div>
+              <div className="text-[0.5rem] font-semibold text-ink-900 leading-tight truncate">{c.name}</div>
               <div className="h-0.5 rounded-full bg-ink-200/60 w-full" />
               <div className="h-0.5 rounded-full bg-ink-200/60 w-2/3" />
-              <div className="text-[6.5px] text-ink-400 mt-auto">Shared by</div>
+              <div className="text-[0.75rem] text-ink-400 mt-auto">Shared by</div>
             </div>
           );
         })}
@@ -3125,7 +3125,7 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
               <div className="w-3.5 h-3.5 rounded bg-brand-50 flex items-center justify-center shrink-0">
                 <MessageSquare size={7} className="text-brand-700" />
               </div>
-              <div className="text-[8.5px] text-ink-900 truncate flex-1">{q}</div>
+              <div className="text-[0.75rem] text-ink-900 truncate flex-1">{q}</div>
               <ArrowRight size={8} className="text-ink-400 shrink-0" />
             </div>
           ))}
@@ -3143,20 +3143,20 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
       <div className="absolute inset-0">
         <div className="h-full overflow-hidden flex flex-col">
           <div className="px-3 py-1.5 border-b border-canvas-border bg-paper-50/40 grid grid-cols-[55%_30%_15%] gap-2">
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Engagement</div>
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Progress</div>
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">%</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Engagement</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Progress</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">%</div>
           </div>
           {rows.map((r, i) => (
             <div key={i} className="px-3 py-2 border-b border-canvas-border last:border-0 grid grid-cols-[55%_30%_15%] gap-2 items-center flex-1">
               <div>
-                <div className="text-[8.5px] font-medium text-ink-900 truncate">{r.name}</div>
-                <div className="text-[7px] text-ink-500 mt-0.5">{r.type}</div>
+                <div className="text-[0.75rem] font-medium text-ink-900 truncate">{r.name}</div>
+                <div className="text-[0.4375rem] text-ink-500 mt-0.5">{r.type}</div>
               </div>
               <div className="h-1 rounded-full bg-canvas-border overflow-hidden">
                 <div className="h-full bg-brand-500" style={{ width: `${r.pct}%` }} />
               </div>
-              <div className="text-[8px] font-semibold text-ink-700 tabular-nums">{r.pct}%</div>
+              <div className="text-[0.5rem] font-semibold text-ink-700 tabular-nums">{r.pct}%</div>
             </div>
           ))}
         </div>
@@ -3174,13 +3174,13 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
       <div className="absolute inset-0">
         <div className="h-full overflow-hidden flex flex-col">
           <div className="px-3 py-1.5 border-b border-canvas-border bg-paper-50/40 grid grid-cols-[28%_72%] gap-2">
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Sev</div>
-            <div className="text-[7.5px] font-semibold text-ink-500 uppercase tracking-wider">Title</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Sev</div>
+            <div className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wider">Title</div>
           </div>
           {rows.map((r, i) => (
             <div key={i} className="px-3 py-2 border-b border-canvas-border last:border-0 grid grid-cols-[28%_72%] gap-2 items-center flex-1">
-              <span className={`inline-flex items-center text-[7px] font-bold px-1 py-0.5 rounded self-start ${r.tone}`}>{r.sev}</span>
-              <div className="text-[8px] text-ink-900 truncate">{r.title}</div>
+              <span className={`inline-flex items-center text-[0.4375rem] font-bold px-1 py-0.5 rounded self-start ${r.tone}`}>{r.sev}</span>
+              <div className="text-[0.5rem] text-ink-900 truncate">{r.title}</div>
             </div>
           ))}
         </div>
@@ -3202,11 +3202,11 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
               <div className="w-3.5 h-3.5 rounded bg-compliant-50 flex items-center justify-center shrink-0">
                 <WorkflowIcon size={7} className="text-compliant-700" />
               </div>
-              <div className="text-[8px] text-ink-900 truncate flex-1">{r.name}</div>
+              <div className="text-[0.5rem] text-ink-900 truncate flex-1">{r.name}</div>
               <div className="w-10 h-1 rounded-full bg-canvas-border overflow-hidden shrink-0">
                 <div className="h-full bg-compliant" style={{ width: r.w }} />
               </div>
-              <div className="text-[7.5px] font-semibold text-ink-700 tabular-nums shrink-0 w-4 text-right">{r.runs}</div>
+              <div className="text-[0.75rem] font-semibold text-ink-700 tabular-nums shrink-0 w-4 text-right">{r.runs}</div>
             </div>
           ))}
         </div>
@@ -3230,10 +3230,10 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
-                <div className="text-[7.5px] font-medium text-ink-900 truncate">{c.name}</div>
-                <span className={`text-[6px] font-bold uppercase px-1 rounded ${c.tone}`}>{c.type}</span>
+                <div className="text-[0.75rem] font-medium text-ink-900 truncate">{c.name}</div>
+                <span className={`text-[0.375rem] font-bold uppercase px-1 rounded ${c.tone}`}>{c.type}</span>
               </div>
-              <div className="text-[6px] text-ink-500 mt-0.5 flex items-center">
+              <div className="text-[0.375rem] text-ink-500 mt-0.5 flex items-center">
                 <span className={`inline-block w-1 h-1 rounded-full mr-1 ${c.ok ? 'bg-compliant' : 'bg-risk'}`} />
                 {c.ok ? 'Synced' : 'Off'}
               </div>
@@ -3256,13 +3256,13 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
         {tiles.map(t => (
           <div key={t.abbr} className="rounded-md bg-canvas-elevated border border-canvas-border p-2 flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <span className="text-[7.5px] font-bold uppercase px-1 rounded" style={{ backgroundColor: `${t.color}1A`, color: t.color }}>{t.abbr}</span>
-              <span className="text-[7.5px] tabular-nums font-semibold" style={{ color: t.color }}>{t.pct}%</span>
+              <span className="text-[0.75rem] font-bold uppercase px-1 rounded" style={{ backgroundColor: `${t.color}1A`, color: t.color }}>{t.abbr}</span>
+              <span className="text-[0.75rem] tabular-nums font-semibold" style={{ color: t.color }}>{t.pct}%</span>
             </div>
             <div className="h-0.5 rounded-full bg-canvas-border/40 overflow-hidden">
               <div className="h-full rounded-full" style={{ width: `${t.pct}%`, backgroundColor: t.color }} />
             </div>
-            <div className="text-[6px] text-ink-500 mt-auto">risks · controls</div>
+            <div className="text-[0.375rem] text-ink-500 mt-auto">risks · controls</div>
           </div>
         ))}
       </div>
@@ -3283,8 +3283,8 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
               <div className="w-3.5 h-3.5 rounded bg-brand-50 flex items-center justify-center shrink-0">
                 <FileText size={7} className="text-brand-700" />
               </div>
-              <div className="text-[8px] text-ink-900 truncate flex-1">{r.name}</div>
-              <span className={`text-[6.5px] font-bold uppercase px-1 rounded ${r.status === 'final' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{r.status}</span>
+              <div className="text-[0.5rem] text-ink-900 truncate flex-1">{r.name}</div>
+              <span className={`text-[0.75rem] font-bold uppercase px-1 rounded ${r.status === 'final' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{r.status}</span>
             </div>
           ))}
         </div>
@@ -3308,7 +3308,7 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
                 <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${t.tone}`}>
                   <TIcon size={8} />
                 </div>
-                <div className="text-[8px] font-medium text-ink-900 truncate flex-1">{t.label}</div>
+                <div className="text-[0.5rem] font-medium text-ink-900 truncate flex-1">{t.label}</div>
                 <ArrowRight size={7} className="text-ink-400" />
               </div>
             );
@@ -3330,11 +3330,11 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
           {events.map((e, i) => (
             <div key={i} className="px-3 py-2 flex items-center gap-2 flex-1">
               <div className="w-7 flex flex-col items-center shrink-0">
-                <div className="text-[6.5px] font-mono uppercase tracking-wider text-ink-500">{e.mo}</div>
+                <div className="text-[0.75rem] font-mono uppercase tracking-wider text-ink-500">{e.mo}</div>
                 <div className="text-xs font-bold tabular-nums text-ink-900 leading-none">{e.day}</div>
               </div>
-              <div className="text-[8px] text-ink-900 truncate flex-1">{e.label}</div>
-              <span className={`text-[6.5px] font-bold uppercase px-1 rounded ${e.tone}`}>{i === 1 ? 'def' : 'eng'}</span>
+              <div className="text-[0.5rem] text-ink-900 truncate flex-1">{e.label}</div>
+              <span className={`text-[0.75rem] font-bold uppercase px-1 rounded ${e.tone}`}>{i === 1 ? 'def' : 'eng'}</span>
             </div>
           ))}
         </div>
@@ -3354,8 +3354,8 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
           {items.map((it, i) => (
             <div key={i} className="px-3 py-2 flex items-center gap-2 flex-1">
               <Star size={9} className="text-mitigated-700 shrink-0" fill="currentColor" />
-              <div className="text-[8.5px] text-ink-900 truncate flex-1">{it.name}</div>
-              <span className={`text-[6.5px] font-bold uppercase px-1 rounded ${it.tone}`}>{it.type}</span>
+              <div className="text-[0.75rem] text-ink-900 truncate flex-1">{it.name}</div>
+              <span className={`text-[0.75rem] font-bold uppercase px-1 rounded ${it.tone}`}>{it.type}</span>
             </div>
           ))}
         </div>
@@ -3805,7 +3805,7 @@ function PersonaDropdown({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className={`text-meta font-semibold ${active ? 'text-brand-800' : 'text-ink-900'}`}>{p.label}</div>
-                      <div className="text-[11.5px] text-ink-500 mt-0.5 leading-snug">{p.description}</div>
+                      <div className="text-[0.75rem] text-ink-500 mt-0.5 leading-snug">{p.description}</div>
                     </div>
                     {active && <Check size={14} className="text-brand-700 shrink-0 mt-1" />}
                   </button>
@@ -4069,7 +4069,7 @@ function CompactLayout({
     return (
       <div className="rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated/50 p-10 text-center">
         <p className="text-sm text-ink-700 font-medium">Compact layout unavailable</p>
-        <p className="text-[12.5px] text-ink-500 mt-1">
+        <p className="text-[0.75rem] text-ink-500 mt-1">
           react-grid-layout couldn&rsquo;t initialize (likely a v1/v2 API mismatch).
         </p>
       </div>
@@ -4080,7 +4080,7 @@ function CompactLayout({
     <div className={editMode ? 'home-edit-mode' : ''}>
       {editMode && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/40 px-4 py-2.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-brand-800">
+          <div className="flex items-center gap-2 text-[0.75rem] text-brand-800">
             <GripVertical size={14} className="text-brand-600" />
             <span>Drag any tile to reposition. Drag the bottom-right corner to resize.</span>
           </div>
@@ -4352,7 +4352,7 @@ export default function HomeView({
                 let charIndex = 0;
                 return (
                   <h1
-                    className="text-[40px] leading-[1.1] mb-2 flex flex-wrap"
+                    className="text-[2.5rem] leading-[1.1] mb-2 flex flex-wrap"
                     style={{ columnGap: '0.28em' }}
                   >
                     {segments.map((seg, si) => (
@@ -4496,7 +4496,7 @@ export default function HomeView({
             {!editMode && visibleWidgets.length > 0 && (
               <button
                 onClick={() => setEditMode(true)}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-200 hover:text-brand-700 text-[12.5px] font-medium text-ink-700 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-200 hover:text-brand-700 text-[0.75rem] font-medium text-ink-700 transition-colors cursor-pointer"
               >
                 <GripVertical size={13} />
                 Customize layout
@@ -4508,7 +4508,7 @@ export default function HomeView({
         {visibleWidgets.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated/50 p-10 text-center">
             <p className="text-sm text-ink-700 font-medium">No widgets enabled</p>
-            <p className="text-[12.5px] text-ink-500 mt-1">Use the &ldquo;Add widget&rdquo; button below to bring widgets back.</p>
+            <p className="text-[0.75rem] text-ink-500 mt-1">Use the &ldquo;Add widget&rdquo; button below to bring widgets back.</p>
           </div>
         ) : isTransitioning ? (
           <div className="grid grid-cols-12 gap-5">
@@ -4540,13 +4540,13 @@ export default function HomeView({
             whileTap={{ scale: editorOpen ? 1 : 0.97 }}
             animate={{ opacity: editorOpen ? 0 : 1 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className={`relative z-30 inline-flex items-center justify-center gap-2.5 h-12 px-7 rounded-full text-[13.5px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 bg-canvas-elevated border border-dashed border-brand-200 text-brand-600 hover:bg-brand-50 hover:border-brand-300 shadow-[0_2px_8px_rgb(15_8_30_/_0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+            className={`relative z-30 inline-flex items-center justify-center gap-2.5 h-12 px-7 rounded-full text-[0.75rem] font-semibold transition-[background-color,border-color,color,box-shadow] duration-200 bg-canvas-elevated border border-dashed border-brand-200 text-brand-600 hover:bg-brand-50 hover:border-brand-300 shadow-[0_2px_8px_rgb(15_8_30_/_0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
               editorOpen ? 'pointer-events-none' : 'cursor-pointer'
             }`}
           >
             <Plus size={15} strokeWidth={2.5} />
             <span>Add widget</span>
-            <span className="text-[11.5px] font-medium tabular-nums text-ink-400">
+            <span className="text-[0.75rem] font-medium tabular-nums text-ink-400">
               {widgets.filter(w => w.visible).length}/{widgets.length}
             </span>
           </motion.button>

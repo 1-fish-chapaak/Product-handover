@@ -145,11 +145,11 @@ export default function WorkingPaperTab({ engagement }: Props) {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-display text-[22px] font-bold text-text leading-tight flex items-center gap-2">
+          <h2 className="font-display text-[1.375rem] font-bold text-text leading-tight flex items-center gap-2">
             <BookText size={22} className="text-primary" />
             {title}
           </h2>
-          <p className="text-[12px] text-text-secondary mt-1">
+          <p className="text-[0.75rem] text-text-secondary mt-1">
             {isIA
               ? 'Final internal audit report — engagement summary, per-control working papers, sign-off chain.'
               : 'SOX testing deliverable — engagement summary, per-control working papers, sign-off chain.'}
@@ -158,7 +158,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowExportModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
           >
             <Download size={13} />
             Export as PDF
@@ -167,7 +167,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
             <button
               onClick={() => addToast({ message: allTested ? 'Engagement submitted for review' : 'Cannot submit — some controls not tested', type: allTested ? 'success' : 'error' })}
               disabled={!allTested}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold transition-colors ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[0.75rem] font-semibold transition-colors ${
                 allTested
                   ? 'bg-primary hover:bg-primary-hover text-white cursor-pointer'
                   : 'bg-surface-2 text-text-muted cursor-not-allowed'
@@ -181,7 +181,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
           {reviewSubmitted && engagement.status !== 'Closed' && (
             <button
               onClick={() => addToast({ message: 'Engagement signed off', type: 'success' })}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant hover:bg-compliant-700 text-white text-[12px] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant hover:bg-compliant-700 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
             >
               <ShieldCheck size={13} />
               Sign off
@@ -194,48 +194,48 @@ export default function WorkingPaperTab({ engagement }: Props) {
       <div className="glass-card rounded-2xl p-6">
         <div className="flex items-start justify-between gap-6 mb-5">
           <div className="flex-1">
-            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-text-muted mb-1">
+            <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-1">
               {titleShort} · {engagement.code}
             </div>
-            <h3 className="font-display text-[20px] font-bold text-text leading-snug">{engagement.name}</h3>
-            <p className="text-[12.5px] text-text-secondary mt-1.5">{engagement.description}</p>
+            <h3 className="font-display text-[1.25rem] font-bold text-text leading-snug">{engagement.name}</h3>
+            <p className="text-[0.75rem] text-text-secondary mt-1.5">{engagement.description}</p>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-text-muted mb-1">Overall conclusion</div>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[13px] font-bold border ${CONCLUSION_CLS[overallConclusion]}`}>
+            <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-1">Overall conclusion</div>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[0.8125rem] font-bold border ${CONCLUSION_CLS[overallConclusion]}`}>
               {(() => { const Ic = CONCLUSION_ICON[overallConclusion]; return <Ic size={14} />; })()}
               {overallConclusion}
             </span>
           </div>
         </div>
-        <dl className="grid grid-cols-4 gap-3 text-[12px]">
+        <dl className="grid grid-cols-4 gap-3 text-[0.75rem]">
           <SumTile label="Scope" value={`${racmRows.length} controls`} />
           <SumTile label="Framework" value={engagement.framework} />
           <SumTile label="Period" value={`${engagement.periodStart} – ${engagement.periodEnd}`} />
           <SumTile label="Materiality" value="₹50K" />
         </dl>
         {/* Conclusion breakdown */}
-        <div className="mt-5 grid grid-cols-4 gap-3 text-[11.5px]">
+        <div className="mt-5 grid grid-cols-4 gap-3 text-[0.75rem]">
           <BreakdownTile label="Effective"        value={totals.effective}    tone="text-compliant-700" />
           <BreakdownTile label="Deficient"        value={totals.deficient}    tone="text-risk-700" />
           <BreakdownTile label="Inconclusive"     value={totals.inconclusive} tone="text-mitigated-700" />
           <BreakdownTile label="Not yet tested"   value={totals.notTested}    tone="text-text-muted" />
         </div>
-        <div className="mt-3 text-[11.5px] text-text-secondary">
+        <div className="mt-3 text-[0.75rem] text-text-secondary">
           {totals.totalSamples} samples tested · {totals.totalExceptions} exceptions captured · linked to case management
         </div>
       </div>
 
       {/* Per-control working papers */}
       <div className="space-y-2.5">
-        <h3 className="text-[12.5px] font-semibold text-text">
+        <h3 className="text-[0.75rem] font-semibold text-text">
           Per-control {titleShort.toLowerCase()}s <span className="text-text-muted font-normal">({papers.length})</span>
         </h3>
         {papers.length === 0 ? (
           <div className="border border-border-light rounded-xl p-12 text-center bg-white">
             <FileText size={28} className="text-text-muted mx-auto mb-3" />
-            <p className="text-[14px] font-semibold text-text mb-1">No controls in scope</p>
-            <p className="text-[12px] text-text-muted">Upload a RACM or add controls in the Controls tab.</p>
+            <p className="text-[0.875rem] font-semibold text-text mb-1">No controls in scope</p>
+            <p className="text-[0.75rem] text-text-muted">Upload a RACM or add controls in the Controls tab.</p>
           </div>
         ) : (
           papers.map(paper => {
@@ -250,11 +250,11 @@ export default function WorkingPaperTab({ engagement }: Props) {
                   <div className="p-2 rounded-lg bg-brand-50 shrink-0"><FileText size={14} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[11.5px] text-text-secondary">{paper.row.controlId}</span>
-                      <span className="text-[13px] font-semibold text-text">{paper.row.controlDescription}</span>
-                      {paper.row.isKey && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-mitigated-50 text-mitigated-700 text-[9px] font-bold">K</span>}
+                      <span className="font-mono text-[0.75rem] text-text-secondary">{paper.row.controlId}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text">{paper.row.controlDescription}</span>
+                      {paper.row.isKey && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.5625rem] font-bold">K</span>}
                     </div>
-                    <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
                       <span>{paper.row.subProcess}</span>
                       <span className="text-border">·</span>
                       <span>{paper.samplesTested} / {paper.samplesSelected} samples tested</span>
@@ -264,11 +264,11 @@ export default function WorkingPaperTab({ engagement }: Props) {
                       </span>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-md text-[10px] font-bold border ${CONCLUSION_CLS[paper.conclusion]} shrink-0`}>
+                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-md text-[0.625rem] font-bold border ${CONCLUSION_CLS[paper.conclusion]} shrink-0`}>
                     <Ic size={10} />
                     {paper.conclusion}
                   </span>
-                  <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center shrink-0 ${STATUS_CLS[paper.status]}`}>{paper.status}</span>
+                  <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center shrink-0 ${STATUS_CLS[paper.status]}`}>{paper.status}</span>
                   <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
                 </button>
                 <AnimatePresence initial={false}>
@@ -282,13 +282,13 @@ export default function WorkingPaperTab({ engagement }: Props) {
                     >
                       <div className="px-4 py-4 space-y-4 bg-surface-2/20">
                         <Field label="Risk addressed">
-                          <div className="text-[12.5px] text-text"><span className="font-mono text-text-muted">{paper.row.riskId}</span> · {paper.row.riskDescription}</div>
+                          <div className="text-[0.75rem] text-text"><span className="font-mono text-text-muted">{paper.row.riskId}</span> · {paper.row.riskDescription}</div>
                         </Field>
                         <Field label="Scope">
-                          <div className="text-[12.5px] text-text">{paper.scope}</div>
+                          <div className="text-[0.75rem] text-text">{paper.scope}</div>
                         </Field>
                         <Field label="Test procedure">
-                          <pre className="whitespace-pre-wrap font-sans text-[12.5px] text-text-secondary leading-relaxed">{paper.testProcedure}</pre>
+                          <pre className="whitespace-pre-wrap font-sans text-[0.75rem] text-text-secondary leading-relaxed">{paper.testProcedure}</pre>
                         </Field>
                         <div className="grid grid-cols-3 gap-3">
                           <DataTile label="Samples selected" value={paper.samplesSelected} />
@@ -296,15 +296,15 @@ export default function WorkingPaperTab({ engagement }: Props) {
                           <DataTile label="Exceptions"        value={paper.exceptionsFound} tone={paper.exceptionsFound > 0 ? 'text-risk-700' : 'text-compliant-700'} />
                         </div>
                         <Field label="Results">
-                          <div className="text-[12.5px] text-text-secondary">{paper.results}</div>
+                          <div className="text-[0.75rem] text-text-secondary">{paper.results}</div>
                         </Field>
                         <Field label="Conclusion">
                           <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11.5px] font-bold border ${CONCLUSION_CLS[paper.conclusion]}`}>
+                            <span className={`inline-flex items-center gap-1 px-2 h-6 rounded-md text-[0.75rem] font-bold border ${CONCLUSION_CLS[paper.conclusion]}`}>
                               <Ic size={11} />
                               {paper.conclusion}
                             </span>
-                            <span className="text-[11.5px] text-text-muted">— recorded by {signOffChain[0].who.name}</span>
+                            <span className="text-[0.75rem] text-text-muted">— recorded by {signOffChain[0].who.name}</span>
                           </div>
                         </Field>
                       </div>
@@ -319,7 +319,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
 
       {/* Sign-off chain */}
       <div className="glass-card rounded-2xl p-6">
-        <h3 className="text-[12.5px] font-bold text-ink-500 uppercase tracking-wider mb-4">Sign-off chain</h3>
+        <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Sign-off chain</h3>
         <div className="grid grid-cols-3 gap-4">
           {signOffChain.map((step, i) => (
             <div key={step.role} className="relative">
@@ -332,14 +332,14 @@ export default function WorkingPaperTab({ engagement }: Props) {
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                     step.done ? 'bg-compliant text-white' : 'bg-surface-2 text-text-muted'
                   }`}>
-                    {step.done ? <CheckCircle2 size={14} /> : <span className="text-[12px] font-bold">{i + 1}</span>}
+                    {step.done ? <CheckCircle2 size={14} /> : <span className="text-[0.75rem] font-bold">{i + 1}</span>}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{step.role}</div>
-                    <div className="text-[12.5px] font-semibold text-text truncate">{step.who.name}</div>
+                    <div className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{step.role}</div>
+                    <div className="text-[0.75rem] font-semibold text-text truncate">{step.who.name}</div>
                   </div>
                 </div>
-                <div className="text-[11px] text-text-muted">
+                <div className="text-[0.6875rem] text-text-muted">
                   {step.done ? (
                     <span className="flex items-center gap-1"><CheckCircle2 size={10} className="text-compliant-700" />Signed {step.date}</span>
                   ) : (
@@ -355,7 +355,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
             </div>
           ))}
         </div>
-        <div className="mt-4 text-[11.5px] text-text-muted">
+        <div className="mt-4 text-[0.75rem] text-text-muted">
           Current user · <span className="font-medium text-text-secondary">{CURRENT_USER.name}</span>
         </div>
       </div>
@@ -378,30 +378,30 @@ export default function WorkingPaperTab({ engagement }: Props) {
             >
               <header className="shrink-0 px-6 py-4 border-b border-canvas-border flex items-center justify-between">
                 <div>
-                  <h2 className="text-[15px] font-bold text-text">Export {title} · Preview</h2>
-                  <p className="text-[11.5px] text-text-muted mt-0.5">Formatted output sent to your downloads folder.</p>
+                  <h2 className="text-[0.9375rem] font-bold text-text">Export {title} · Preview</h2>
+                  <p className="text-[0.75rem] text-text-muted mt-0.5">Formatted output sent to your downloads folder.</p>
                 </div>
                 <button onClick={() => setShowExportModal(false)} className="w-8 h-8 rounded-full text-ink-500 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer">
                   <X size={16} />
                 </button>
               </header>
               <div className="flex-1 overflow-y-auto px-6 py-5 bg-white">
-                <div className="font-display text-[20px] font-bold text-text mb-1">{title} · {engagement.name}</div>
-                <div className="text-[11px] text-text-muted mb-5">{engagement.code} · {engagement.framework} · {engagement.periodStart} – {engagement.periodEnd}</div>
-                <h4 className="text-[12.5px] font-bold text-text mt-4 mb-2 uppercase tracking-wide">1. Engagement summary</h4>
-                <p className="text-[12.5px] text-text-secondary mb-4">{engagement.description}</p>
-                <h4 className="text-[12.5px] font-bold text-text mb-2 uppercase tracking-wide">2. Overall conclusion</h4>
-                <p className="text-[12.5px] text-text-secondary mb-4">
+                <div className="font-display text-[1.25rem] font-bold text-text mb-1">{title} · {engagement.name}</div>
+                <div className="text-[0.6875rem] text-text-muted mb-5">{engagement.code} · {engagement.framework} · {engagement.periodStart} – {engagement.periodEnd}</div>
+                <h4 className="text-[0.75rem] font-bold text-text mt-4 mb-2 uppercase tracking-wide">1. Engagement summary</h4>
+                <p className="text-[0.75rem] text-text-secondary mb-4">{engagement.description}</p>
+                <h4 className="text-[0.75rem] font-bold text-text mb-2 uppercase tracking-wide">2. Overall conclusion</h4>
+                <p className="text-[0.75rem] text-text-secondary mb-4">
                   <span className="font-semibold text-text">{overallConclusion}.</span> {totals.effective} of {papers.length} controls operating effectively. {totals.deficient} deficient. {totals.inconclusive} inconclusive. {totals.notTested} not yet tested.
                 </p>
-                <h4 className="text-[12.5px] font-bold text-text mb-2 uppercase tracking-wide">3. Per-control conclusions</h4>
-                <table className="w-full text-[11.5px] border border-border-light mb-4">
+                <h4 className="text-[0.75rem] font-bold text-text mb-2 uppercase tracking-wide">3. Per-control conclusions</h4>
+                <table className="w-full text-[0.75rem] border border-border-light mb-4">
                   <thead className="bg-surface-2/40">
                     <tr>
-                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[10.5px] uppercase tracking-wide text-text-muted">Control</th>
-                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[10.5px] uppercase tracking-wide text-text-muted">Tested</th>
-                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[10.5px] uppercase tracking-wide text-text-muted">Excs</th>
-                      <th className="px-2 py-1.5 text-left text-[10.5px] uppercase tracking-wide text-text-muted">Conclusion</th>
+                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[0.75rem] uppercase tracking-wide text-text-muted">Control</th>
+                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[0.75rem] uppercase tracking-wide text-text-muted">Tested</th>
+                      <th className="px-2 py-1.5 text-left border-r border-border-light/60 text-[0.75rem] uppercase tracking-wide text-text-muted">Excs</th>
+                      <th className="px-2 py-1.5 text-left text-[0.75rem] uppercase tracking-wide text-text-muted">Conclusion</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -415,21 +415,21 @@ export default function WorkingPaperTab({ engagement }: Props) {
                     ))}
                   </tbody>
                 </table>
-                <h4 className="text-[12.5px] font-bold text-text mb-2 uppercase tracking-wide">4. Sign-off</h4>
+                <h4 className="text-[0.75rem] font-bold text-text mb-2 uppercase tracking-wide">4. Sign-off</h4>
                 {signOffChain.map(step => (
-                  <div key={step.role} className="text-[12px] text-text-secondary">
+                  <div key={step.role} className="text-[0.75rem] text-text-secondary">
                     <span className="font-semibold">{step.role}:</span> {step.who.name} {step.done ? `(signed ${step.date})` : '(pending)'}
                   </div>
                 ))}
               </div>
               <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
-                <button onClick={() => setShowExportModal(false)} className="px-4 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+                <button onClick={() => setShowExportModal(false)} className="px-4 py-2 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
                 <button
                   onClick={() => {
                     setShowExportModal(false);
                     addToast({ message: `Generating ${engagement.code}-${titleShort}.pdf …`, type: 'success' });
                   }}
-                  className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <Download size={13} />
                   Download PDF
@@ -446,8 +446,8 @@ export default function WorkingPaperTab({ engagement }: Props) {
 function SumTile({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
-      <div className="text-[13px] font-bold text-text mt-1">{value}</div>
+      <div className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
+      <div className="text-[0.8125rem] font-bold text-text mt-1">{value}</div>
     </div>
   );
 }
@@ -455,8 +455,8 @@ function SumTile({ label, value }: { label: string; value: string }) {
 function BreakdownTile({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className="rounded-lg border border-border-light bg-white p-3">
-      <div className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
-      <div className={`text-[18px] font-bold tabular-nums leading-none mt-1 ${tone}`}>{value}</div>
+      <div className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
+      <div className={`text-[1.125rem] font-bold tabular-nums leading-none mt-1 ${tone}`}>{value}</div>
     </div>
   );
 }
@@ -464,8 +464,8 @@ function BreakdownTile({ label, value, tone }: { label: string; value: number; t
 function DataTile({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
     <div className="rounded-lg border border-border-light bg-white px-3 py-2">
-      <div className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
-      <div className={`text-[16px] font-bold tabular-nums leading-none mt-0.5 ${tone ?? 'text-text'}`}>{value}</div>
+      <div className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</div>
+      <div className={`text-[1rem] font-bold tabular-nums leading-none mt-0.5 ${tone ?? 'text-text'}`}>{value}</div>
     </div>
   );
 }
@@ -475,7 +475,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <div className="flex items-center gap-1.5 mb-1">
         <User size={10} className="text-text-muted" />
-        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
+        <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
       </div>
       {children}
     </div>

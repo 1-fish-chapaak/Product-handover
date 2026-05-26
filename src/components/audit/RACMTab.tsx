@@ -149,16 +149,16 @@ export default function RACMTab(props: Props): JSX.Element {
         <div className="p-3 rounded-2xl bg-brand-50 mb-4">
           <FileText size={28} className="text-brand-600" />
         </div>
-        <h3 className="text-[15px] font-semibold text-text mb-1.5">
+        <h3 className="text-[0.9375rem] font-semibold text-text mb-1.5">
           No RACM rows for this process yet
         </h3>
-        <p className="text-[12.5px] text-text-muted max-w-md mb-5 leading-relaxed">
+        <p className="text-[0.75rem] text-text-muted max-w-md mb-5 leading-relaxed">
           The RACM library for {engagement.process} is empty. Import an existing
           matrix as XLSX to seed risks, controls, and attributes for this engagement.
         </p>
         <button
           onClick={onUploadClick}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
           <Upload size={14} /> Upload RACM
         </button>
@@ -184,10 +184,10 @@ export default function RACMTab(props: Props): JSX.Element {
             <FileText size={16} className="text-brand-600" />
           </div>
           <div className="min-w-0">
-            <div className="text-[14.5px] font-semibold text-text leading-tight">
+            <div className="text-[0.75rem] font-semibold text-text leading-tight">
               Risk and Control Matrix
             </div>
-            <div className="text-[11px] text-text-muted mt-0.5 tabular-nums">
+            <div className="text-[0.6875rem] text-text-muted mt-0.5 tabular-nums">
               {engagement.process} · {engagement.framework}
             </div>
           </div>
@@ -195,14 +195,14 @@ export default function RACMTab(props: Props): JSX.Element {
 
         {/* Middle — version dropdown */}
         <div className="flex items-center gap-2">
-          <span className="text-[10.5px] font-bold text-text-muted uppercase tracking-wide">
+          <span className="text-[0.75rem] font-bold text-text-muted uppercase tracking-wide">
             Version
           </span>
           <div className="relative">
             <select
               value={versionId}
               onChange={(e) => onChangeVersion(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-1.5 text-[12px] font-medium border border-border-light rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer"
+              className="appearance-none pl-3 pr-8 py-1.5 text-[0.75rem] font-medium border border-border-light rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer"
             >
               {RACM_VERSIONS.map(v => (
                 <option key={v.id} value={v.id}>{v.label}</option>
@@ -220,7 +220,7 @@ export default function RACMTab(props: Props): JSX.Element {
           {onOpenFullEditor && (
             <button
               onClick={onOpenFullEditor}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               title="Open the full-page editor — best for editing 100+ controls"
             >
               <ArrowUpRight size={12} /> Open in editor
@@ -228,14 +228,14 @@ export default function RACMTab(props: Props): JSX.Element {
           )}
           <button
             onClick={onDownload}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
             title="Export this RACM as an XLSX file"
           >
             <Download size={12} /> Download RACM
           </button>
           <button
             onClick={onUploadClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
             title="Import a RACM from an XLSX file"
           >
             <Upload size={12} /> Upload RACM
@@ -250,7 +250,7 @@ export default function RACMTab(props: Props): JSX.Element {
           <button
             onClick={onToggleKeyOnly}
             aria-pressed={keyOnly}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
               keyOnly
                 ? 'bg-brand-50 border-brand-100/70 text-brand-600 hover:bg-brand-50/80'
                 : 'bg-white border-border-light text-text-secondary hover:bg-primary-xlight/40 hover:border-primary/30 hover:text-primary'
@@ -259,7 +259,7 @@ export default function RACMTab(props: Props): JSX.Element {
           >
             <Filter size={12} /> Key controls only
             {keyOnly && (
-              <span className="ml-1 px-1.5 h-4 rounded-full text-[9.5px] font-bold bg-brand-600 text-white inline-flex items-center tabular-nums">
+              <span className="ml-1 px-1.5 h-4 rounded-full text-[0.75rem] font-bold bg-brand-600 text-white inline-flex items-center tabular-nums">
                 {stats.keyControls}
               </span>
             )}
@@ -305,10 +305,10 @@ export default function RACMTab(props: Props): JSX.Element {
       {filteredRows.length === 0 ? (
         <div className="glass-card rounded-xl p-10 text-center">
           <Filter size={22} className="text-text-muted mx-auto mb-2" />
-          <p className="text-[13px] font-semibold text-text mb-1">
+          <p className="text-[0.8125rem] font-semibold text-text mb-1">
             No key controls in this RACM
           </p>
-          <p className="text-[12px] text-text-muted">
+          <p className="text-[0.75rem] text-text-muted">
             Turn off the “Key controls only” filter to see all rows.
           </p>
         </div>
@@ -332,10 +332,10 @@ export default function RACMTab(props: Props): JSX.Element {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13.5px] font-semibold text-text">
+                      <span className="text-[0.75rem] font-semibold text-text">
                         {group.subProcess}
                       </span>
-                      <span className="text-[11px] text-text-muted">
+                      <span className="text-[0.6875rem] text-text-muted">
                         {groupRisks} risk{groupRisks === 1 ? '' : 's'}
                         <span className="text-border mx-1.5">·</span>
                         {groupControls} control{groupControls === 1 ? '' : 's'}
@@ -404,14 +404,14 @@ function StatTile({
     <div className="rounded-xl border border-border-light bg-white px-3 py-2.5">
       <div className="flex items-center gap-1.5 mb-1">
         {icon}
-        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
+        <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">
           {label}
         </span>
       </div>
-      <div className="text-[22px] font-bold text-text leading-none tabular-nums">
+      <div className="text-[1.375rem] font-bold text-text leading-none tabular-nums">
         {value}
       </div>
-      <div className="text-[10.5px] text-text-muted mt-1">{sub}</div>
+      <div className="text-[0.75rem] text-text-muted mt-1">{sub}</div>
     </div>
   );
 }
@@ -430,10 +430,10 @@ function RACMTable({
   onOpenDetail: (row: RACMRow) => void;
 }) {
   return (
-    <div className="text-[12px]">
+    <div className="text-[0.75rem]">
       {/* Column header */}
       <div
-        className="grid items-center gap-3 px-4 py-2 bg-surface-2/40 border-b border-border-light text-[10px] uppercase tracking-wider font-semibold text-text-muted/80"
+        className="grid items-center gap-3 px-4 py-2 bg-surface-2/40 border-b border-border-light text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted/80"
         style={{ gridTemplateColumns: '22% 28% 10% 9% 9% 10% 5% 76px' }}
       >
         <div>Risk</div>
@@ -460,11 +460,11 @@ function RACMTable({
                 <div className="min-w-0">
                   <button
                     onClick={onIdClick}
-                    className="text-[10.5px] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
+                    className="text-[0.75rem] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
                   >
                     {row.riskId}
                   </button>
-                  <p className="text-[12px] text-text mt-1 leading-snug line-clamp-3">
+                  <p className="text-[0.75rem] text-text mt-1 leading-snug line-clamp-3">
                     {row.riskDescription}
                   </p>
                 </div>
@@ -473,37 +473,37 @@ function RACMTable({
                 <div className="min-w-0">
                   <button
                     onClick={onIdClick}
-                    className="text-[10.5px] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
+                    className="text-[0.75rem] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
                   >
                     {row.controlId}
                   </button>
-                  <p className="text-[12px] text-text mt-1 leading-snug line-clamp-3">
+                  <p className="text-[0.75rem] text-text mt-1 leading-snug line-clamp-3">
                     {row.controlDescription}
                   </p>
                 </div>
 
                 {/* Assertion */}
                 <div className="min-w-0">
-                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                     {row.assertion}
                   </span>
                 </div>
 
                 {/* Frequency */}
-                <div className="text-[11.5px] text-text-secondary">
+                <div className="text-[0.75rem] text-text-secondary">
                   {row.frequency}
                 </div>
 
                 {/* Type */}
                 <div>
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${TYPE_CLS[row.controlType]}`}>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-semibold border ${TYPE_CLS[row.controlType]}`}>
                     {row.controlType}
                   </span>
                 </div>
 
                 {/* Automation */}
                 <div>
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${AUTOMATION_CLS[row.automation]}`}>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-semibold border ${AUTOMATION_CLS[row.automation]}`}>
                     {row.automation}
                   </span>
                 </div>
@@ -513,12 +513,12 @@ function RACMTable({
                   {row.isKey ? (
                     <span
                       title="Key control"
-                      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-bold border border-mitigated-100/70"
+                      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.625rem] font-bold border border-mitigated-100/70"
                     >
                       K
                     </span>
                   ) : (
-                    <span className="text-text-muted text-[11px]">—</span>
+                    <span className="text-text-muted text-[0.6875rem]">—</span>
                   )}
                 </div>
 
@@ -572,7 +572,7 @@ function AttributesList({ attributes }: { attributes: ControlAttribute[] }) {
   return (
     <div className="px-4 pb-4 pt-1 bg-surface-2/30">
       <div className="border-l-2 border-brand-100 pl-4 ml-7 space-y-2.5">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <div className="flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-text-muted">
           <ListTree size={11} className="text-brand-600" />
           Attributes & test procedures
           <span className="ml-0.5 text-text-muted/80 normal-case tracking-normal font-medium">
@@ -585,14 +585,14 @@ function AttributesList({ attributes }: { attributes: ControlAttribute[] }) {
               key={attr.id}
               className="grid grid-cols-[88px_1fr] gap-3 items-start"
             >
-              <span className="text-[10.5px] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 tabular-nums leading-tight inline-flex items-center justify-center text-center">
+              <span className="text-[0.75rem] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 tabular-nums leading-tight inline-flex items-center justify-center text-center">
                 {attr.id}
               </span>
               <div className="min-w-0">
-                <p className="text-[12px] text-text leading-snug">
+                <p className="text-[0.75rem] text-text leading-snug">
                   {attr.description}
                 </p>
-                <p className="text-[11px] italic text-text-muted mt-1 leading-snug">
+                <p className="text-[0.6875rem] italic text-text-muted mt-1 leading-snug">
                   {attr.testProcedure}
                 </p>
               </div>
@@ -645,12 +645,12 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="p-1.5 rounded-lg bg-brand-50"><Library size={14} className="text-brand-600" /></div>
-              <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted">RACM row · {row.subProcess}</span>
+              <span className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">RACM row · {row.subProcess}</span>
               {row.isKey && (
-                <span className="inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100/70">KEY</span>
+                <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100/70">KEY</span>
               )}
             </div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900 leading-snug">
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 leading-snug">
               <span className="font-mono text-brand-600">{row.riskId}</span>
               <span className="text-text-muted mx-2">→</span>
               <span className="font-mono text-brand-600">{row.controlId}</span>
@@ -668,23 +668,23 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
             <div className="rounded-xl border border-risk-100/60 bg-risk-50/30 p-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <AlertTriangle size={12} className="text-risk-700" />
-                <span className="text-[10.5px] uppercase tracking-wider font-bold text-risk-700">Risk</span>
+                <span className="text-[0.75rem] uppercase tracking-wider font-bold text-risk-700">Risk</span>
               </div>
-              <div className="font-mono text-[11px] text-text-secondary mb-1.5">{row.riskId}</div>
-              <p className="text-[12.5px] text-text leading-relaxed">{row.riskDescription}</p>
+              <div className="font-mono text-[0.6875rem] text-text-secondary mb-1.5">{row.riskId}</div>
+              <p className="text-[0.75rem] text-text leading-relaxed">{row.riskDescription}</p>
             </div>
             <div className="rounded-xl border border-compliant-100/60 bg-compliant-50/30 p-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <Shield size={12} className="text-compliant-700" />
-                <span className="text-[10.5px] uppercase tracking-wider font-bold text-compliant-700">Control</span>
+                <span className="text-[0.75rem] uppercase tracking-wider font-bold text-compliant-700">Control</span>
               </div>
-              <div className="font-mono text-[11px] text-text-secondary mb-1.5">{row.controlId}</div>
-              <p className="text-[12.5px] text-text leading-relaxed">{row.controlDescription}</p>
+              <div className="font-mono text-[0.6875rem] text-text-secondary mb-1.5">{row.controlId}</div>
+              <p className="text-[0.75rem] text-text leading-relaxed">{row.controlDescription}</p>
             </div>
           </div>
 
           {/* Metadata chips */}
-          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+          <div className="flex items-center gap-2 flex-wrap text-[0.6875rem]">
             <Pill label="Assertion" value={row.assertion} />
             <Pill label="Frequency" value={row.frequency} />
             <Pill label="Type" value={row.controlType} />
@@ -694,26 +694,26 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Attributes */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Attributes · sub-controls</h3>
-              <span className="text-[11px] text-text-muted">{row.attributes.length} · {totalEvidence} evidence types required</span>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Attributes · sub-controls</h3>
+              <span className="text-[0.6875rem] text-text-muted">{row.attributes.length} · {totalEvidence} evidence types required</span>
             </div>
             <div className="space-y-2.5">
               {row.attributes.map(a => (
                 <div key={a.id} className="rounded-lg border border-border-light p-3 bg-white">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="px-1.5 h-4 rounded text-[10px] font-bold bg-brand-50 text-brand-700 font-mono">{a.id}</span>
-                    <span className="text-[12.5px] font-semibold text-text">{a.description}</span>
+                    <span className="px-1.5 h-4 rounded text-[0.625rem] font-bold bg-brand-50 text-brand-700 font-mono">{a.id}</span>
+                    <span className="text-[0.75rem] font-semibold text-text">{a.description}</span>
                   </div>
-                  <p className="text-[11.5px] italic text-text-muted mb-2">{a.testProcedure}</p>
+                  <p className="text-[0.75rem] italic text-text-muted mb-2">{a.testProcedure}</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Required evidence:</span>
+                    <span className="text-[0.625rem] font-bold uppercase tracking-wider text-text-muted">Required evidence:</span>
                     {a.requiredEvidence.map(ev => (
-                      <span key={ev} className="inline-flex items-center gap-1 px-1.5 h-4 rounded text-[10px] font-medium bg-surface-2 text-text-secondary border border-border-light">
+                      <span key={ev} className="inline-flex items-center gap-1 px-1.5 h-4 rounded text-[0.625rem] font-medium bg-surface-2 text-text-secondary border border-border-light">
                         <FileText size={9} />{ev}
                       </span>
                     ))}
                   </div>
-                  <div className="text-[10.5px] text-text-muted mt-1.5">
+                  <div className="text-[0.75rem] text-text-muted mt-1.5">
                     Population: <span className="font-medium tabular-nums">{a.populationSize.toLocaleString()}</span> · Default sample: <span className="font-medium tabular-nums">{a.defaultSampleSize}</span>
                   </div>
                 </div>
@@ -724,10 +724,10 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Linked workflows */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Linked workflows</h3>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Linked workflows</h3>
               <button
                 onClick={() => addToast({ message: 'Manage workflow links in the Controls tab', type: 'info' })}
-                className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
+                className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
               >
                 Manage in Controls <ArrowUpRight size={10} />
               </button>
@@ -737,14 +737,14 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
                 <div key={wf.code} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light">
                   <Workflow size={13} className="text-brand-600 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-text truncate">{wf.name}</div>
-                    <div className="text-[10.5px] text-text-muted font-mono">{wf.code}</div>
+                    <div className="text-[0.75rem] font-medium text-text truncate">{wf.name}</div>
+                    <div className="text-[0.75rem] text-text-muted font-mono">{wf.code}</div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${wf.confidence >= 85 ? 'bg-compliant' : wf.confidence >= 65 ? 'bg-mitigated-500' : 'bg-text-muted'}`} style={{ width: `${wf.confidence}%` }} />
                     </div>
-                    <span className="text-[10.5px] font-bold text-text tabular-nums w-8 text-right">{wf.confidence}%</span>
+                    <span className="text-[0.75rem] font-bold text-text tabular-nums w-8 text-right">{wf.confidence}%</span>
                   </div>
                 </div>
               ))}
@@ -754,22 +754,22 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Test history */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Test history</h3>
-              <span className="text-[11px] text-text-muted">last 3 periods</span>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Test history</h3>
+              <span className="text-[0.6875rem] text-text-muted">last 3 periods</span>
             </div>
             <div className="space-y-1.5">
               {testHistory.map(h => (
                 <div key={h.period} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light">
                   <Calendar size={12} className="text-text-muted shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-text">{h.period}</div>
-                    <div className="text-[10.5px] text-text-muted flex items-center gap-1.5">
+                    <div className="text-[0.75rem] font-medium text-text">{h.period}</div>
+                    <div className="text-[0.75rem] text-text-muted flex items-center gap-1.5">
                       <User size={9} />{h.tester}
                       <span className="text-border">·</span>
                       <span>{h.date}</span>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded text-[10px] font-bold ${
+                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded text-[0.625rem] font-bold ${
                     h.conclusion === 'Effective' ? 'bg-compliant-50 text-compliant-700'
                     : h.conclusion === 'Deficient' ? 'bg-risk-50 text-risk-700'
                     : 'bg-mitigated-50 text-mitigated-700'
@@ -785,12 +785,12 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
             Close
           </button>
           <button
             onClick={() => addToast({ message: 'Opening test workspace in Controls tab…', type: 'info' })}
-            className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
           >
             <Eye size={12} />
             Open in Controls
@@ -804,8 +804,8 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
 function Pill({ label, value }: { label: string; value: string }) {
   return (
     <div className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md bg-surface-2 text-text-secondary border border-border-light">
-      <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{label}</span>
-      <span className="text-[11px] font-semibold text-text">{value}</span>
+      <span className="text-[0.625rem] uppercase tracking-wider font-bold text-text-muted">{label}</span>
+      <span className="text-[0.6875rem] font-semibold text-text">{value}</span>
     </div>
   );
 }

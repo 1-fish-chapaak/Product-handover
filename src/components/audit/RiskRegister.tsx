@@ -117,8 +117,8 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
     createdAt: risk?.createdAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
   });
 
-  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-  const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+  const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   return (
     <>
@@ -131,8 +131,8 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -141,7 +141,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* Basic Details */}
           <div className="space-y-3">
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h3>
+            <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Basic Details</h3>
             <div>
               <label className={labelCls}>Risk Name <span className="text-red-400">*</span></label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Unauthorized vendor payments" className={fieldCls} autoFocus />
@@ -174,7 +174,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 
           {/* Ownership */}
           <div className="space-y-3 pt-2">
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Ownership</h3>
+            <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Ownership</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Risk Owner</label>
@@ -189,11 +189,11 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 
           {/* Priority */}
           <div className="space-y-3 pt-2">
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Priority</h3>
+            <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Priority</h3>
             <div className="flex gap-2">
               {PRIORITIES.map(p => (
                 <button key={p} onClick={() => setPriority(p)}
-                  className={`px-3 py-2 rounded-lg text-[12px] font-medium border transition-all cursor-pointer ${
+                  className={`px-3 py-2 rounded-lg text-[0.75rem] font-medium border transition-all cursor-pointer ${
                     priority === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted hover:border-primary/30'
                   }`}>{p}</button>
               ))}
@@ -203,9 +203,9 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <button onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Save
           </button>
         </div>
@@ -266,10 +266,10 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-[18px] font-semibold text-ink-900">{risk.name}</h2>
-              <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">{risk.name}</h2>
+              <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
             </div>
-            <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -277,18 +277,18 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Description */}
           <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Description</h3>
-            <p className="text-[13px] text-text leading-relaxed">{risk.description}</p>
+            <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Description</h3>
+            <p className="text-[0.8125rem] text-text leading-relaxed">{risk.description}</p>
           </div>
 
           {/* Fields */}
           <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Details</h3>
+            <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Details</h3>
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               {fields.map(f => (
                 <div key={f.label}>
-                  <span className="text-[10px] text-gray-400 uppercase block">{f.label}</span>
-                  <span className={`text-[13px] mt-0.5 block ${f.label === 'Priority' ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
+                  <span className="text-[0.625rem] text-gray-400 uppercase block">{f.label}</span>
+                  <span className={`text-[0.8125rem] mt-0.5 block ${f.label === 'Priority' ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
                 </div>
               ))}
             </div>
@@ -297,7 +297,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
         </footer>
 
         {/* Edit drawer (nested) */}
@@ -405,10 +405,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-text">Risk Register</h1>
-            <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
+            <p className="text-[0.8125rem] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
           </div>
           <button onClick={() => setShowCreateDrawer(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
             <Plus size={14} />New Risk
           </button>
         </div>
@@ -417,7 +417,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         {unmappedCount > 0 && (
           <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-4 py-3 flex items-center gap-3">
             <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-            <span className="text-[12px] text-amber-800 flex-1">
+            <span className="text-[0.75rem] text-amber-800 flex-1">
               <span className="font-semibold">{unmappedCount} risk{unmappedCount !== 1 ? 's' : ''}</span> {unmappedCount !== 1 ? 'are' : 'is'} not yet mapped to controls.
             </span>
           </div>
@@ -428,11 +428,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           <div className="flex items-center gap-1.5 flex-wrap">
             {filters.map(f => (
               <button key={f.key} onClick={() => setActiveFilter(f.key)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                   activeFilter === f.key ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                 }`}>
                 {f.label}
-                {f.count > 0 && <span className={`ml-1 text-[10px] tabular-nums ${activeFilter === f.key ? 'text-white/80' : 'text-text-muted/60'}`}>{f.count}</span>}
+                {f.count > 0 && <span className={`ml-1 text-[0.625rem] tabular-nums ${activeFilter === f.key ? 'text-white/80' : 'text-text-muted/60'}`}>{f.count}</span>}
               </button>
             ))}
           </div>
@@ -440,46 +440,46 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search risks..."
-              className="pl-9 pr-3 py-2 rounded-lg border border-border bg-white text-[12px] w-[220px] placeholder:text-ink-400 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+              className="pl-9 pr-3 py-2 rounded-lg border border-border bg-white text-[0.75rem] w-[220px] placeholder:text-ink-400 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
           </div>
         </div>
 
         {/* Risk Table */}
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
                   {['Risk ID', 'Risk Name', 'Sub-process', 'Category', 'Priority', ''].map(h => (
-                    <th key={h || 'action'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    <th key={h || 'action'} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredRisks.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-10 text-center text-[12px] text-text-muted">No risks match your search or filters</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No risks match your search or filters</td></tr>
                 ) : filteredRisks.map((risk, i) => (
                   <motion.tr key={risk.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
                     onClick={() => setDetailRisk(risk)}
                     className="border-b border-border/50 hover:bg-gray-50/60 transition-colors cursor-pointer">
                     <td className="px-3 py-2.5">
-                      <span className="font-mono text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{risk.id}</span>
+                      <span className="font-mono text-[0.625rem] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{risk.id}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[12px] font-medium text-text">{risk.name}</span>
+                      <span className="text-[0.75rem] font-medium text-text">{risk.name}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[11px] text-gray-500">{risk.subProcess || '—'}</span>
+                      <span className="text-[0.6875rem] text-gray-500">{risk.subProcess || '—'}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[11px] text-gray-500">{risk.category}</span>
+                      <span className="text-[0.6875rem] text-gray-500">{risk.category}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={`text-[11px] ${PRIORITY_STYLES[risk.priority]}`}>{risk.priority}</span>
+                      <span className={`text-[0.6875rem] ${PRIORITY_STYLES[risk.priority]}`}>{risk.priority}</span>
                     </td>
                     <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setDetailRisk(risk)}
-                        className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
+                        className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
                         View<ChevronRight size={8} />
                       </button>
                     </td>
@@ -489,7 +489,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </table>
           </div>
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-            <span className="text-[11px] text-text-muted">{filteredRisks.length} of {baseRisks.length} risks</span>
+            <span className="text-[0.6875rem] text-text-muted">{filteredRisks.length} of {baseRisks.length} risks</span>
           </div>
         </div>
       </div>

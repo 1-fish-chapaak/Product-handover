@@ -94,14 +94,14 @@ export default function StepReviewRun({
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-canvas-border/60">
           <div className="flex items-baseline gap-2 min-w-0">
-            <span className="text-[13.5px] font-semibold text-ink-800">
+            <span className="text-[0.75rem] font-semibold text-ink-800">
               Workflow plan
             </span>
-            <span className="text-[11.5px] text-ink-400 truncate">
+            <span className="text-[0.75rem] text-ink-400 truncate">
               {stepCount} step{stepCount === 1 ? '' : 's'} · ~{estimateSeconds}s
             </span>
           </div>
-          <span className="text-[11px] text-ink-400 shrink-0">
+          <span className="text-[0.6875rem] text-ink-400 shrink-0">
             View full plan in the Plan tab
           </span>
         </div>
@@ -114,14 +114,14 @@ export default function StepReviewRun({
                 key={step.id}
                 className="flex items-center gap-2.5 px-4 py-2 border-t border-canvas-border first:border-t-0"
               >
-                <span className="w-5 h-5 rounded-full bg-ink-900 text-white flex items-center justify-center text-[10.5px] font-bold shrink-0 tabular-nums">
+                <span className="w-5 h-5 rounded-full bg-ink-900 text-white flex items-center justify-center text-[0.75rem] font-bold shrink-0 tabular-nums">
                   {idx + 1}
                 </span>
-                <span className="text-[13px] font-medium text-ink-800 truncate flex-1 min-w-0">
+                <span className="text-[0.8125rem] font-medium text-ink-800 truncate flex-1 min-w-0">
                   {step.name}
                 </span>
                 <span
-                  className={`text-[9.5px] font-bold tracking-wider rounded px-1.5 py-0.5 shrink-0 ${badge.bg} ${badge.text}`}
+                  className={`text-[0.75rem] font-bold tracking-wider rounded px-1.5 py-0.5 shrink-0 ${badge.bg} ${badge.text}`}
                 >
                   {badge.label}
                 </span>
@@ -135,12 +135,12 @@ export default function StepReviewRun({
             <span className="w-4 h-4 rounded-full bg-compliant text-white flex items-center justify-center shrink-0">
               <Check size={10} strokeWidth={3} />
             </span>
-            <span className="text-[12px] text-ink-500 shrink-0">Output</span>
-            <span className="text-[12.5px] font-semibold text-ink-800 truncate">
+            <span className="text-[0.75rem] text-ink-500 shrink-0">Output</span>
+            <span className="text-[0.75rem] font-semibold text-ink-800 truncate">
               {workflow.output.title}
             </span>
           </div>
-          <span className="text-[11.5px] text-ink-500 whitespace-nowrap shrink-0">
+          <span className="text-[0.75rem] text-ink-500 whitespace-nowrap shrink-0">
             ~{expectedRows} rows
           </span>
         </div>
@@ -152,7 +152,7 @@ export default function StepReviewRun({
             type="button"
             onClick={onValidate}
             disabled={validateDisabled}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <Play size={13} />
             Validate workflow
@@ -163,7 +163,7 @@ export default function StepReviewRun({
         <button
           type="button"
           onClick={() => onViewWorkspace?.()}
-          className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 px-3 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 px-3 py-1.5 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
         >
           <Shapes size={13} />
           View Workspace
@@ -175,8 +175,8 @@ export default function StepReviewRun({
         <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-5 flex items-center gap-3">
           <Loader2 size={18} className="animate-spin text-brand-600 shrink-0" />
           <div>
-            <div className="text-[13px] font-semibold text-ink-800">Running workflow…</div>
-            <div className="text-[12px] text-ink-500">
+            <div className="text-[0.8125rem] font-semibold text-ink-800">Running workflow…</div>
+            <div className="text-[0.75rem] text-ink-500">
               Ingesting, validating, and generating your output.
             </div>
           </div>
@@ -194,14 +194,14 @@ export default function StepReviewRun({
             className="rounded-xl border border-canvas-border bg-canvas-elevated p-4"
           >
             <div className="flex items-baseline justify-between gap-4 mb-1">
-              <h4 className="text-[14px] font-semibold text-ink-800">
+              <h4 className="text-[0.875rem] font-semibold text-ink-800">
                 {result.title}
               </h4>
-              <span className="text-[12px] text-ink-400 font-bold">
+              <span className="text-[0.75rem] text-ink-400 font-bold">
                 {result.outputType}
               </span>
             </div>
-            <p className="text-[12px] text-ink-500 leading-relaxed mb-3">
+            <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-3">
               {result.description}
             </p>
 
@@ -211,10 +211,10 @@ export default function StepReviewRun({
                   key={s.label}
                   className="rounded-lg border border-canvas-border bg-canvas p-3"
                 >
-                  <div className="text-[9.5px] text-ink-400 font-bold">
+                  <div className="text-[0.75rem] text-ink-400 font-bold">
                     {s.label}
                   </div>
-                  <div className={`mt-0.5 text-[17px] font-bold ${STAT_TONE[s.tone]}`}>
+                  <div className={`mt-0.5 text-[1.0625rem] font-bold ${STAT_TONE[s.tone]}`}>
                     {s.value}
                   </div>
                 </div>
@@ -222,7 +222,7 @@ export default function StepReviewRun({
             </div>
 
             <div className="rounded-lg border border-canvas-border overflow-hidden">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[0.75rem]">
                 <thead className="bg-canvas text-ink-500">
                   <tr>
                     <th className="w-7"></th>

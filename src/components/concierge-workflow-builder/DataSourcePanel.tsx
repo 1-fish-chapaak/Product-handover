@@ -555,7 +555,7 @@ export default function DataSourcePanel({
                 onClick={() => setTab(t.id)}
                 aria-pressed={active}
                 className={[
-                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer',
+                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer',
                   active
                     ? 'bg-brand-600 text-white border-brand-600 hover:bg-brand-500'
                     : 'bg-white text-ink-700 border-paper-200 hover:bg-paper-50 hover:text-ink-800',
@@ -565,7 +565,7 @@ export default function DataSourcePanel({
                 {t.badge && (
                   <span
                     className={[
-                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-bold tabular-nums',
+                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[0.75rem] font-bold tabular-nums',
                       active
                         ? 'bg-white/20 text-white'
                         : 'bg-canvas-elevated text-ink-500 border border-canvas-border',
@@ -589,10 +589,10 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <FolderClosed size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
                 Folders
               </span>
-              <span className="text-[11px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {INPUT_FILE_FOLDERS.length} folder{INPUT_FILE_FOLDERS.length === 1 ? '' : 's'}
               </span>
             </div>
@@ -611,16 +611,16 @@ export default function DataSourcePanel({
                         {expanded ? <FolderOpen size={14} /> : <FolderClosed size={14} />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-ink-800 leading-tight truncate">
+                        <div className="text-[0.8125rem] font-semibold text-ink-800 leading-tight truncate">
                           {folder.name}
                         </div>
-                        <div className="text-[11.5px] text-ink-400 leading-tight truncate mt-0.5">
+                        <div className="text-[0.75rem] text-ink-400 leading-tight truncate mt-0.5">
                           {folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass('pdf'),
                         ].join(' ')}
                       >
@@ -641,7 +641,7 @@ export default function DataSourcePanel({
                                 <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(f.type)}`}>
                                   <Icon size={10} />
                                 </div>
-                                <span className="text-[11px] font-medium text-ink-800 truncate flex-1">
+                                <span className="text-[0.6875rem] font-medium text-ink-800 truncate flex-1">
                                   {f.name}
                                 </span>
                               </li>
@@ -649,7 +649,7 @@ export default function DataSourcePanel({
                           })}
                         </ul>
                       ) : (
-                        <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[11px] text-ink-400">
+                        <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[0.6875rem] text-ink-400">
                           Empty folder
                         </div>
                       )
@@ -660,7 +660,7 @@ export default function DataSourcePanel({
                       onClick={() => toggleInputFolderExpansion(folder.id)}
                       aria-expanded={expanded}
                       aria-label={expanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
-                      className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[11px] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
+                      className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
                     >
                       {expanded ? (
                         <>
@@ -684,10 +684,10 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <Database size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
                 Files
               </span>
-              <span className="text-[11px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'}
               </span>
             </div>
@@ -708,16 +708,16 @@ export default function DataSourcePanel({
                         <Database size={14} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-ink-800 leading-tight truncate">
+                        <div className="text-[0.8125rem] font-semibold text-ink-800 leading-tight truncate">
                           {input.name}
                         </div>
-                        <div className="text-[11.5px] text-ink-400 leading-tight truncate mt-0.5">
+                        <div className="text-[0.75rem] text-ink-400 leading-tight truncate mt-0.5">
                           {input.description || 'Data source'}
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass(input.type),
                         ].join(' ')}
                       >
@@ -734,10 +734,10 @@ export default function DataSourcePanel({
                               key={col}
                               className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
                             >
-                              <div className="text-[11px] font-mono font-semibold text-ink-800 truncate">
+                              <div className="text-[0.6875rem] font-mono font-semibold text-ink-800 truncate">
                                 {col}
                               </div>
-                              <div className="text-[10.5px] text-ink-500 leading-snug mt-0.5">
+                              <div className="text-[0.75rem] text-ink-500 leading-snug mt-0.5">
                                 {describeColumn(col)}
                               </div>
                             </li>
@@ -748,7 +748,7 @@ export default function DataSourcePanel({
                           {cols.map((col) => (
                             <span
                               key={col}
-                              className="inline-flex items-center rounded-md bg-canvas border border-canvas-border px-1.5 py-0.5 text-[10.5px] text-ink-600 font-mono"
+                              className="inline-flex items-center rounded-md bg-canvas border border-canvas-border px-1.5 py-0.5 text-[0.75rem] text-ink-600 font-mono"
                             >
                               {col}
                             </span>
@@ -764,7 +764,7 @@ export default function DataSourcePanel({
                         onClick={() => toggleInputCardExpansion(input.id)}
                         aria-expanded={expanded}
                         aria-label={expanded ? `Collapse ${input.name}` : `Expand ${input.name}`}
-                        className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[11px] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
+                        className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
                       >
                         {expanded ? (
                           <>
@@ -793,15 +793,15 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <ArrowRight size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
                 Output Configuration
               </span>
-              <span className="text-[11px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {visibleColumnCount} column{visibleColumnCount === 1 ? '' : 's'}
               </span>
             </div>
 
-            <p className="text-[11.5px] text-ink-500 px-1 -mt-1">
+            <p className="text-[0.75rem] text-ink-500 px-1 -mt-1">
               Each output column shows the input it's mapped to or the rule that derives it.
             </p>
 
@@ -818,19 +818,19 @@ export default function DataSourcePanel({
                       <span className="text-ink-300 shrink-0 cursor-grab" aria-hidden>
                         <GripVertical size={13} />
                       </span>
-                      <span className="text-[13px] font-semibold text-ink-800 truncate">
+                      <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                         {col.name}
                       </span>
                       <span
                         className={[
-                          'text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 border shrink-0',
+                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 border shrink-0',
                           typeBadgeClasses(col.type),
                         ].join(' ')}
                       >
                         {col.type}
                       </span>
                       {col.required && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold rounded-md px-1.5 py-0.5 bg-brand-50 text-brand-700 border border-brand-200/70 shrink-0">
+                        <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold rounded-md px-1.5 py-0.5 bg-brand-50 text-brand-700 border border-brand-200/70 shrink-0">
                           <Lock size={9} />
                           Required
                         </span>
@@ -863,7 +863,7 @@ export default function DataSourcePanel({
                         {resolved.map((s, i) => (
                           <span
                             key={`${s.inputName}-${s.column}-${i}`}
-                            className="inline-flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 bg-canvas border border-canvas-border text-ink-600"
+                            className="inline-flex items-center gap-1 text-[0.6875rem] rounded-md px-1.5 py-0.5 bg-canvas border border-canvas-border text-ink-600"
                           >
                             <span className="font-semibold text-ink-700">
                               {s.inputName}
@@ -873,7 +873,7 @@ export default function DataSourcePanel({
                           </span>
                         ))}
                         {col.formula && (
-                          <span className="text-[11px] text-ink-500 italic leading-snug">
+                          <span className="text-[0.6875rem] text-ink-500 italic leading-snug">
                             {resolved.length > 0 ? '· ' : ''}
                             {col.formula}
                           </span>
@@ -891,8 +891,8 @@ export default function DataSourcePanel({
                 <span className="w-7 h-7 rounded-lg bg-white text-brand-600 flex items-center justify-center shrink-0 border border-brand-200/70">
                   <Sparkles size={13} />
                 </span>
-                <span className="text-[13px] font-semibold text-ink-800">AI Suggestions</span>
-                <span className="text-[10px] font-bold tracking-wider rounded-md px-1.5 py-0.5 bg-brand-100 text-brand-700 shrink-0">
+                <span className="text-[0.8125rem] font-semibold text-ink-800">AI Suggestions</span>
+                <span className="text-[0.625rem] font-bold tracking-wider rounded-md px-1.5 py-0.5 bg-brand-100 text-brand-700 shrink-0">
                   SMART
                 </span>
               </div>
@@ -925,7 +925,7 @@ export default function DataSourcePanel({
                         </span>
                         <span
                           className={[
-                            'text-[12.5px] leading-snug',
+                            'text-[0.75rem] leading-snug',
                             accepted ? 'font-semibold text-brand-700' : 'text-ink-700',
                           ].join(' ')}
                         >
@@ -945,7 +945,7 @@ export default function DataSourcePanel({
             {running && !result ? (
               <div className="flex flex-col items-center justify-center text-center py-12 px-4">
                 <Loader2 size={20} className="animate-spin text-brand-600 mb-2" />
-                <div className="text-[12.5px] font-semibold text-ink-800">
+                <div className="text-[0.75rem] font-semibold text-ink-800">
                   Running {workflow.name}…
                 </div>
               </div>
@@ -954,10 +954,10 @@ export default function DataSourcePanel({
                 <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
                   <FileOutput size={18} />
                 </div>
-                <div className="text-[13px] font-semibold text-ink-800 mb-1">
+                <div className="text-[0.8125rem] font-semibold text-ink-800 mb-1">
                   No output yet
                 </div>
-                <div className="text-[12px] text-ink-500 max-w-[220px] leading-snug">
+                <div className="text-[0.75rem] text-ink-500 max-w-[220px] leading-snug">
                   Run the workflow to see KPIs and the audit report here.
                 </div>
               </div>
@@ -969,19 +969,19 @@ export default function DataSourcePanel({
                     <Zap size={16} className="text-brand-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-semibold text-ink-900 leading-tight truncate">
+                    <div className="text-[0.875rem] font-semibold text-ink-900 leading-tight truncate">
                       {workflow.name}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
+                      <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
                         <CheckCircle2 size={10} />
                         RUN SUCCESSFUL
                       </span>
-                      <span className="text-[10.5px] text-ink-400">
+                      <span className="text-[0.75rem] text-ink-400">
                         RUN ID: RWF-4407-B
                       </span>
                     </div>
-                    <div className="text-[10.5px] text-ink-400 mt-0.5">
+                    <div className="text-[0.75rem] text-ink-400 mt-0.5">
                       {(28_345_840).toLocaleString()} records
                     </div>
                   </div>
@@ -1026,21 +1026,21 @@ export default function DataSourcePanel({
 
                 {/* Audit Report */}
                 <div className="mt-1">
-                  <h2 className="text-[13px] font-semibold text-ink-900 mb-2 px-1">
+                  <h2 className="text-[0.8125rem] font-semibold text-ink-900 mb-2 px-1">
                     Audit Report
                   </h2>
 
                   <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
                     <div className="flex items-baseline justify-between gap-2 px-3 pt-2.5 pb-1.5">
-                      <div className="text-[12.5px] font-semibold text-ink-800 truncate">
+                      <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
                         {result.title}
                       </div>
-                      <span className="text-[10px] text-ink-400 font-bold uppercase tracking-wider shrink-0">
+                      <span className="text-[0.625rem] text-ink-400 font-bold uppercase tracking-wider shrink-0">
                         {result.outputType}
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-[11.5px]">
+                      <table className="w-full text-[0.75rem]">
                         <thead className="bg-canvas text-ink-500 border-y border-canvas-border">
                           <tr>
                             <th className="w-6"></th>
@@ -1118,7 +1118,7 @@ export default function DataSourcePanel({
                 onClick={() => setCodeOpen(false)}
                 aria-pressed={!codeOpen}
                 className={[
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[12.5px] font-semibold transition-colors cursor-pointer',
+                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[0.75rem] font-semibold transition-colors cursor-pointer',
                   !codeOpen
                     ? 'border border-canvas-border bg-white text-ink-800 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
                     : 'border border-transparent text-ink-500 hover:text-ink-800 hover:bg-canvas-elevated',
@@ -1132,7 +1132,7 @@ export default function DataSourcePanel({
                 onClick={() => setCodeOpen(true)}
                 aria-pressed={codeOpen}
                 className={[
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-mono font-semibold rounded-md transition-colors cursor-pointer',
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 text-[0.75rem] font-mono font-semibold rounded-md transition-colors cursor-pointer',
                   codeOpen
                     ? 'text-brand-700 bg-brand-50 border border-brand-200/70'
                     : 'text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated border border-transparent',
@@ -1152,10 +1152,10 @@ export default function DataSourcePanel({
                 className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-canvas/40 transition-colors cursor-pointer"
               >
                 <FileText size={12} className="text-ink-500 shrink-0" />
-                <span className="text-[10.5px] font-bold tracking-[0.14em] text-ink-700 uppercase">
+                <span className="text-[0.75rem] font-bold tracking-[0.14em] text-ink-700 uppercase">
                   References
                 </span>
-                <span className="text-[11.5px] text-ink-500 truncate">
+                <span className="text-[0.75rem] text-ink-500 truncate">
                   · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
                 </span>
                 <span className="ml-auto text-ink-400 shrink-0">
@@ -1174,10 +1174,10 @@ export default function DataSourcePanel({
                           >
                             <Icon size={10} />
                           </div>
-                          <span className="text-[12.5px] font-semibold text-ink-800 truncate">
+                          <span className="text-[0.75rem] font-semibold text-ink-800 truncate">
                             {input.name}
                           </span>
-                          <span className="text-[11px] text-ink-400 truncate">
+                          <span className="text-[0.6875rem] text-ink-400 truncate">
                             {inputMeta(input)}
                           </span>
                         </div>
@@ -1186,7 +1186,7 @@ export default function DataSourcePanel({
                             {input.columns!.map((col) => (
                               <span
                                 key={col}
-                                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[10.5px] text-brand-700 font-mono"
+                                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[0.75rem] text-brand-700 font-mono"
                               >
                                 {col}
                               </span>
@@ -1205,24 +1205,24 @@ export default function DataSourcePanel({
               <section className="flex flex-col gap-2">
                 <div className="flex items-start justify-between gap-2 px-1">
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-ink-900 leading-tight">
+                    <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
                       Generated code
                     </div>
-                    <div className="text-[11px] text-ink-500 mt-0.5">
+                    <div className="text-[0.6875rem] text-ink-500 mt-0.5">
                       Python · pandas · ira utils
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[11.5px] font-semibold text-ink-700 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
                     >
                       <Copy size={11} />
                       Copy
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[11.5px] font-semibold text-ink-700 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
                     >
                       <ExternalLink size={11} />
                       Open
@@ -1232,15 +1232,15 @@ export default function DataSourcePanel({
 
                 <div className="rounded-xl border border-canvas-border overflow-hidden bg-[#0f1115]">
                   <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/5">
-                    <span className="text-[11px] font-mono text-white/70">
+                    <span className="text-[0.6875rem] font-mono text-white/70">
                       workflow.py
                     </span>
-                    <span className="inline-flex items-center gap-1.5 text-[10.5px] font-mono text-emerald-400/90">
+                    <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-mono text-emerald-400/90">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                       synced
                     </span>
                   </div>
-                  <pre className="text-[11.5px] leading-[1.55] font-mono text-white/90 px-3 py-3 overflow-x-auto">
+                  <pre className="text-[0.75rem] leading-[1.55] font-mono text-white/90 px-3 py-3 overflow-x-auto">
                     <code>
                       {SAMPLE_CODE_LINES.map((line, i) => (
                         <div key={i} className="flex">
@@ -1260,10 +1260,10 @@ export default function DataSourcePanel({
               /* Steps list */
               <section>
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[13px] font-semibold text-ink-800">Steps</span>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">Steps</span>
                   <button
                     type="button"
-                    className="text-[12.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+                    className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
                   >
                     Reorder
                   </button>
@@ -1280,21 +1280,21 @@ export default function DataSourcePanel({
                         className="rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-3 hover:border-brand-200 transition-colors"
                       >
                         <div className="flex items-start gap-3">
-                          <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[11.5px] font-bold shrink-0 mt-0.5 tabular-nums">
+                          <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[0.75rem] font-bold shrink-0 mt-0.5 tabular-nums">
                             {idx + 1}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-[13.5px] font-semibold text-ink-800">
+                              <h3 className="text-[0.75rem] font-semibold text-ink-800">
                                 {step.name}
                               </h3>
                               <span
-                                className={`text-[10px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
+                                className={`text-[0.625rem] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
                               >
                                 {badge.label}
                               </span>
                             </div>
-                            <p className="text-[12px] text-ink-500 leading-relaxed mt-0.5">
+                            <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5">
                               {step.description}
                             </p>
                             {relevant.length > 0 && (
@@ -1302,7 +1302,7 @@ export default function DataSourcePanel({
                                 {relevant.map((input) => (
                                   <span
                                     key={input.id}
-                                    className="inline-flex items-center gap-1.5 rounded-md bg-canvas border border-canvas-border px-2 py-0.5 text-[11px] text-ink-700"
+                                    className="inline-flex items-center gap-1.5 rounded-md bg-canvas border border-canvas-border px-2 py-0.5 text-[0.6875rem] text-ink-700"
                                   >
                                     <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0" />
                                     {input.name}
@@ -1394,14 +1394,14 @@ function OutputKPICard({
         : 'text-ink-500 bg-canvas';
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-2.5">
-      <div className="text-[9.5px] font-bold text-ink-400 tracking-wider">{label}</div>
+      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider">{label}</div>
       <div className="flex items-baseline gap-1.5 mt-0.5">
-        <div className={`text-[18px] font-bold ${valueColor} leading-none tabular-nums`}>
+        <div className={`text-[1.125rem] font-bold ${valueColor} leading-none tabular-nums`}>
           {value}
         </div>
         {delta && (
           <span
-            className={`text-[9.5px] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
+            className={`text-[0.75rem] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
           >
             {delta}
           </span>
@@ -1424,7 +1424,7 @@ function FlagDistributionCard() {
   let offsetAccum = 0;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[10.5px] font-bold text-ink-400 tracking-wider mb-2">
+      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider mb-2">
         FLAG DISTRIBUTION
       </div>
       <div className="flex items-center gap-3">
@@ -1458,7 +1458,7 @@ function FlagDistributionCard() {
         </svg>
         <ul className="flex flex-col gap-1.5 min-w-0 flex-1">
           {FLAG_DISTRIBUTION.map((seg) => (
-            <li key={seg.label} className="flex items-center gap-2 text-[12px]">
+            <li key={seg.label} className="flex items-center gap-2 text-[0.75rem]">
               <span
                 className="w-3 h-3 rounded-sm shrink-0"
                 style={{ background: seg.color }}
@@ -1487,7 +1487,7 @@ function MonthlyInvoiceVolumeCard() {
   const chartHeight = 56;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[12.5px] font-semibold text-ink-900 mb-3">
+      <div className="text-[0.75rem] font-semibold text-ink-900 mb-3">
         Monthly Invoice Volume
       </div>
       <div className="grid grid-cols-6 gap-2 items-end" style={{ height: chartHeight + 32 }}>
@@ -1495,7 +1495,7 @@ function MonthlyInvoiceVolumeCard() {
           const h = Math.max(4, (m.value / max) * chartHeight);
           return (
             <div key={m.month} className="flex flex-col items-center gap-1 min-w-0">
-              <div className="text-[10.5px] font-semibold text-ink-500 tabular-nums">
+              <div className="text-[0.75rem] font-semibold text-ink-500 tabular-nums">
                 {m.label}
               </div>
               <div
@@ -1503,7 +1503,7 @@ function MonthlyInvoiceVolumeCard() {
                 style={{ height: `${h}px` }}
                 aria-label={`${m.month}: ${m.label}`}
               />
-              <div className="text-[10.5px] text-ink-400">{m.month}</div>
+              <div className="text-[0.75rem] text-ink-400">{m.month}</div>
             </div>
           );
         })}

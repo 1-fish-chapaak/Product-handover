@@ -205,13 +205,13 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-[15px] font-bold text-text truncate">{racmName ?? 'Procurement SOP — Budget to Payment RACM'}</h1>
-              {racmId && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-600 font-mono">{racmId}</span>}
-              {processLabel && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary">{processLabel}</span>}
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700">DRAFT</span>
-              <span className="text-[10px] text-text-muted font-mono">v0.1</span>
+              <h1 className="text-[0.9375rem] font-bold text-text truncate">{racmName ?? 'Procurement SOP — Budget to Payment RACM'}</h1>
+              {racmId && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-gray-100 text-gray-600 font-mono">{racmId}</span>}
+              {processLabel && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-primary/10 text-primary">{processLabel}</span>}
+              <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-amber-50 text-amber-700">DRAFT</span>
+              <span className="text-[0.625rem] text-text-muted font-mono">v0.1</span>
             </div>
-            <div className="flex items-center gap-3 text-[11px] text-text-muted mt-0.5">
+            <div className="flex items-center gap-3 text-[0.6875rem] text-text-muted mt-0.5">
               <span><strong className="text-text">{stats.controls}</strong> controls</span>
               <span><strong className="text-text">{stats.risks}</strong> risks</span>
               <span><strong className="text-text">{stats.subProcesses}</strong> sub-processes</span>
@@ -224,15 +224,15 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => fileInputRef.current?.click()}
-            className="px-2.5 py-1.5 rounded-lg border border-border text-[11px] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
+            className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
             <Upload size={11} />Import
           </button>
           <button onClick={() => setShowImportToast(true)}
-            className="px-2.5 py-1.5 rounded-lg border border-border text-[11px] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
+            className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
             <Download size={11} />Export
           </button>
           <button onClick={addRow}
-            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
             <Plus size={11} />Add Risk-Control
           </button>
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className="hidden"
@@ -247,21 +247,21 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search across all 25 columns…"
-              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[11px] bg-white outline-none focus:border-primary/40 transition-all" />
+              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.6875rem] bg-white outline-none focus:border-primary/40 transition-all" />
           </div>
           <button onClick={() => setShowOnlyKey(v => !v)}
-            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showOnlyKey ? 'bg-primary text-white' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+            className={`px-2.5 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showOnlyKey ? 'bg-primary text-white' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
             <KeyRound size={10} />Key only
           </button>
           {/* Risk rating quick filter */}
           <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-lg border border-border bg-white">
-            <span className="text-[9px] text-gray-400 font-semibold uppercase px-1.5">Risk</span>
+            <span className="text-[0.5625rem] text-gray-400 font-semibold uppercase px-1.5">Risk</span>
             {(['High', 'Medium', 'Low'] as const).map(rt => {
               const active = riskRatingFilter.has(rt);
               return (
                 <button key={rt} onClick={() => toggleRiskRating(rt)}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${active ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'text-gray-500 hover:bg-gray-50'}`}>
-                  {rt} <span className="text-[8px] tabular-nums opacity-60">{stats.ratings[rt] ?? 0}</span>
+                  className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors ${active ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'text-gray-500 hover:bg-gray-50'}`}>
+                  {rt} <span className="text-[0.5rem] tabular-nums opacity-60">{stats.ratings[rt] ?? 0}</span>
                 </button>
               );
             })}
@@ -270,7 +270,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-white">
             <Layers size={10} className="text-gray-400" />
             <select value={groupBy} onChange={e => setGroupBy(e.target.value as GroupByMode)}
-              className="text-[10px] bg-transparent outline-none cursor-pointer text-text-secondary">
+              className="text-[0.625rem] bg-transparent outline-none cursor-pointer text-text-secondary">
               <option value="none">No grouping</option>
               <option value="subProcess">Group by Sub-Process</option>
               <option value="processArea">Group by Process Area</option>
@@ -280,7 +280,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           {/* Columns */}
           <div className="relative">
             <button onClick={() => setShowColumnPanel(v => !v)}
-              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+              className={`px-2.5 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
               <Columns3 size={10} />
               Columns ({visibleColumns.length}/{PROCUREMENT_RACM_COLUMNS.length})
             </button>
@@ -298,22 +298,22 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
         <div className="flex items-center gap-2 shrink-0">
           {selectedRowIds.size > 0 && (
             <>
-              <span className="text-[10px] text-text-muted">{selectedRowIds.size} selected</span>
+              <span className="text-[0.625rem] text-text-muted">{selectedRowIds.size} selected</span>
               <button onClick={deleteSelected}
-                className="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer transition-colors flex items-center gap-1">
+                className="px-2 py-1.5 rounded-lg text-[0.625rem] font-semibold bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer transition-colors flex items-center gap-1">
                 <Trash2 size={10} />Delete
               </button>
               <span className="text-gray-200">|</span>
             </>
           )}
-          <span className="text-[10px] text-text-muted">
+          <span className="text-[0.625rem] text-text-muted">
             Showing <strong className="text-text">{stats.filtered}</strong> of {stats.total}
           </span>
         </div>
       </div>
 
       {/* Stats strip */}
-      <div className="bg-surface-2/40 border-b border-border-light px-6 py-2 flex items-center gap-6 text-[10px] shrink-0 overflow-x-auto">
+      <div className="bg-surface-2/40 border-b border-border-light px-6 py-2 flex items-center gap-6 text-[0.625rem] shrink-0 overflow-x-auto">
         <StatPill label="Total Controls" value={stats.total} />
         <StatPill label="Total Risks" value={stats.risks} />
         <StatPill label="Sub-Processes" value={stats.subProcesses} />
@@ -357,7 +357,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
         {showImportToast && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
             onAnimationComplete={() => setTimeout(() => setShowImportToast(false), 2200)}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-text text-white text-[11px] shadow-lg z-50 flex items-center gap-2">
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-text text-white text-[0.6875rem] shadow-lg z-50 flex items-center gap-2">
             <AlertTriangle size={11} className="text-amber-300" />
             Import / export wired in production — this prototype uses the in-memory dataset.
           </motion.div>
@@ -371,8 +371,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
 function StatPill({ label, value, accent }: { label: string; value: number; accent?: string }) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
-      <span className={`text-[12px] font-bold tabular-nums ${accent ?? 'text-text'}`}>{value}</span>
-      <span className="text-[10px] text-text-muted">{label}</span>
+      <span className={`text-[0.75rem] font-bold tabular-nums ${accent ?? 'text-text'}`}>{value}</span>
+      <span className="text-[0.625rem] text-text-muted">{label}</span>
     </div>
   );
 }
@@ -400,15 +400,15 @@ function ColumnVisibilityPanel({
   return (
     <div ref={ref} className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
       <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
-        <h6 className="text-[10px] font-bold text-text uppercase tracking-wider">Column groups</h6>
-        <p className="text-[9px] text-text-muted mt-0.5">Toggle entire groups in/out of view.</p>
+        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Column groups</h6>
+        <p className="text-[0.5625rem] text-text-muted mt-0.5">Toggle entire groups in/out of view.</p>
       </div>
       <div className="p-2 space-y-0.5">
         {COLUMN_GROUP_ORDER.map(g => {
           const on = visibleGroups.has(g);
           return (
             <button key={g} onClick={() => onToggleGroup(g)}
-              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
+              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[0.6875rem] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
               <span className="font-medium">{COLUMN_GROUP_LABELS[g]}</span>
               <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${on ? 'bg-primary border-primary' : 'border-border'}`}>
                 {on && <Check size={9} className="text-white" />}
@@ -418,8 +418,8 @@ function ColumnVisibilityPanel({
         })}
       </div>
       <div className="px-3 py-2 border-t border-border-light bg-surface-2/40">
-        <h6 className="text-[10px] font-bold text-text uppercase tracking-wider">Pinned columns</h6>
-        <p className="text-[9px] text-text-muted mt-0.5">Pin to keep visible while scrolling horizontally.</p>
+        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Pinned columns</h6>
+        <p className="text-[0.5625rem] text-text-muted mt-0.5">Pin to keep visible while scrolling horizontally.</p>
       </div>
       <div className="p-2 space-y-0.5">
         {PINNABLE_KEYS.map(k => {
@@ -427,7 +427,7 @@ function ColumnVisibilityPanel({
           const on = pinnedKeys.has(k);
           return (
             <button key={k} onClick={() => onTogglePin(k)}
-              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
+              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[0.6875rem] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
               <span className="font-medium">{col.label}</span>
               <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${on ? 'bg-primary border-primary' : 'border-border'}`}>
                 {on && <Check size={9} className="text-white" />}
@@ -465,7 +465,7 @@ function RacmGrid({
       <div className="sticky top-0 z-20 flex bg-surface-2/95 border-b border-border backdrop-blur">
         {/* checkbox column */}
         <div className="sticky left-0 bg-surface-2/95 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
-          <span className="text-[9px] text-gray-400 font-bold">#</span>
+          <span className="text-[0.5625rem] text-gray-400 font-bold">#</span>
         </div>
         {visibleColumns.map(c => {
           const pinned = pinnedKeys.has(c.key);
@@ -474,7 +474,7 @@ function RacmGrid({
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`h-9 px-3 flex items-center text-[9px] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              className={`h-9 px-3 flex items-center text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               {c.label}
             </div>
           );
@@ -491,8 +491,8 @@ function RacmGrid({
                 className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/15 hover:bg-primary/10 transition-colors cursor-pointer"
                 style={{ minWidth: totalWidth }}>
                 {collapsed ? <ChevronRight size={12} className="text-primary" /> : <ChevronDown size={12} className="text-primary" />}
-                <span className="text-[11px] font-bold text-primary truncate">{group.label}</span>
-                <span className="text-[10px] text-primary/70 tabular-nums">({group.count})</span>
+                <span className="text-[0.6875rem] font-bold text-primary truncate">{group.label}</span>
+                <span className="text-[0.625rem] text-primary/70 tabular-nums">({group.count})</span>
               </button>
             )}
             {!collapsed && group.rows.map((r, idx) => {
@@ -557,7 +557,7 @@ function RacmGridRow({
         return (
           <div key={c.key}
             style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-            className={`h-10 px-3 py-1.5 text-[11px] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
+            className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
             {isAttrEditing ? (
               <>
                 <CellContent row={row} col={c} onEdit={() => {}} onOpenDetail={onOpenDetail} />
@@ -574,7 +574,7 @@ function RacmGridRow({
                   if (e.key === 'Enter') { onUpdateCell(rowKey, c.key, (e.target as HTMLInputElement).value); setEditingKey(null); }
                   if (e.key === 'Escape') setEditingKey(null);
                 }}
-                className="w-full h-full px-3 text-[11px] border-2 border-primary rounded outline-none bg-white" />
+                className="w-full h-full px-3 text-[0.6875rem] border-2 border-primary rounded outline-none bg-white" />
             ) : (
               <CellContent
                 row={row}
@@ -621,7 +621,7 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[440px] bg-white rounded-2xl border border-border-light shadow-xl overflow-hidden"
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
-          <h3 className="text-[14px] font-bold text-text">Edit Attributes</h3>
+          <h3 className="text-[0.875rem] font-bold text-text">Edit Attributes</h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors"><X size={15} /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
@@ -629,7 +629,7 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
           {attrs.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {attrs.map((a, idx) => (
-                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.6875rem] font-medium bg-purple-50 text-purple-700 border border-purple-100">
                   {a}
                   <button onClick={() => removeAttr(idx)} className="text-purple-400 hover:text-red-500 cursor-pointer transition-colors"><X size={10} /></button>
                 </span>
@@ -637,7 +637,7 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
             </div>
           )}
           {attrs.length === 0 && (
-            <p className="text-[11px] text-gray-400 italic">No attributes yet. Type below and press Enter to add.</p>
+            <p className="text-[0.6875rem] text-gray-400 italic">No attributes yet. Type below and press Enter to add.</p>
           )}
 
           {/* Input */}
@@ -648,18 +648,18 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttr(); } }}
               placeholder="Type attribute and press Enter..."
-              className="flex-1 px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
             <button onClick={addAttr} disabled={!input.trim()}
-              className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[11px] font-semibold cursor-pointer hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              className="px-3 py-2 rounded-lg bg-primary/10 text-primary text-[0.6875rem] font-semibold cursor-pointer hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
               Add
             </button>
           </div>
-          <p className="text-[10px] text-gray-400">Press Enter after each attribute to add it. Click the x on a chip to remove.</p>
+          <p className="text-[0.625rem] text-gray-400">Press Enter after each attribute to add it. Click the x on a chip to remove.</p>
         </div>
         <div className="px-5 py-3 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors shadow-sm">Save</button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-[0.6875rem] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
+          <button onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors shadow-sm">Save</button>
         </div>
       </motion.div>
     </>
@@ -681,7 +681,7 @@ function CellContent({
   if (isId) {
     return (
       <button onClick={onOpenDetail}
-        className="font-mono text-[11px] text-primary hover:underline cursor-pointer">
+        className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer">
         {val || '—'}
       </button>
     );
@@ -698,7 +698,7 @@ function CellContent({
             : 'bg-gray-100 text-gray-600 border-gray-200';
     return (
       <button onDoubleClick={onEdit}
-        className={`px-2 h-5 rounded-full text-[9px] font-bold inline-flex items-center border ${cls} cursor-pointer`}>
+        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} cursor-pointer`}>
         {val || '—'}
       </button>
     );
@@ -706,12 +706,12 @@ function CellContent({
 
   // Attributes — render comma-separated values as individual chips, click to edit via modal
   if (col.key === 'attributes') {
-    if (!val) return <button onClick={onEdit} className="text-[10px] text-primary hover:underline cursor-pointer">+ Add attributes</button>;
+    if (!val) return <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer">+ Add attributes</button>;
     const items = val.split(',').map(s => s.trim()).filter(Boolean);
     return (
       <button onClick={onEdit} className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1 cursor-pointer hover:bg-white/60 rounded transition-colors w-full text-left">
         {items.map((attr, idx) => (
-          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
+          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
           </span>
         ))}
@@ -722,7 +722,7 @@ function CellContent({
   // Plain text — single line truncated, double click to edit
   return (
     <button onDoubleClick={onEdit} onClick={onEdit}
-      className="w-full h-full text-left text-[11px] text-text truncate cursor-text hover:bg-white/60 -mx-3 px-3 rounded transition-colors">
+      className="w-full h-full text-left text-[0.6875rem] text-text truncate cursor-text hover:bg-white/60 -mx-3 px-3 rounded transition-colors">
       {val || <span className="text-gray-300">—</span>}
     </button>
   );
@@ -746,13 +746,13 @@ function DetailPanel({
       <div className="px-5 py-3 border-b border-border-light flex items-start justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-mono text-gray-400">{row.riskId} · {row.controlId}</span>
-            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
-            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
-            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
+            <span className="text-[0.625rem] font-mono text-gray-400">{row.riskId} · {row.controlId}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
           </div>
-          <h2 className="text-[13px] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
-          <p className="text-[10px] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
+          <h2 className="text-[0.8125rem] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
+          <p className="text-[0.625rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 -mr-1"><X size={14} /></button>
       </div>
@@ -773,11 +773,11 @@ function DetailPanel({
       </div>
 
       <div className="px-5 py-3 border-t border-border-light flex items-center justify-between bg-surface-2/30">
-        <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
+        <div className="flex items-center gap-1.5 text-[0.625rem] text-text-muted">
           <Save size={10} />Changes auto-save
         </div>
         <button onClick={onClose}
-          className="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-semibold cursor-pointer hover:bg-primary/90 transition-colors">
+          className="px-3 py-1.5 rounded-lg bg-primary text-white text-[0.6875rem] font-semibold cursor-pointer hover:bg-primary/90 transition-colors">
           Done
         </button>
       </div>
@@ -791,7 +791,7 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
     <div className="rounded-lg border border-border-light">
       <button onClick={() => setOpen(v => !v)}
         className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface-2/30 cursor-pointer transition-colors">
-        <span className="text-[10px] font-bold text-text uppercase tracking-wider">{label}</span>
+        <span className="text-[0.625rem] font-bold text-text uppercase tracking-wider">{label}</span>
         {open ? <ChevronDown size={11} className="text-gray-400" /> : <ChevronRight size={11} className="text-gray-400" />}
       </button>
       {open && <div className="px-3 pb-3 pt-1 space-y-2.5">{children}</div>}
@@ -802,14 +802,14 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
 function DetailField({ label, value, onChange, multiLine }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean }) {
   return (
     <div>
-      <label className="text-[9px] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
+      <label className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
       {multiLine ? (
         <textarea defaultValue={value} onBlur={e => onChange(e.target.value)}
           rows={Math.min(6, Math.max(2, Math.ceil((value || '').length / 50)))}
-          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40 transition-all resize-none" />
+          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all resize-none" />
       ) : (
         <input defaultValue={value} onBlur={e => onChange(e.target.value)}
-          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40 transition-all" />
+          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all" />
       )}
     </div>
   );

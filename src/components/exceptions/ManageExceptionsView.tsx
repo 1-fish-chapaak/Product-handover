@@ -87,8 +87,8 @@ function StatCard({
       aria-pressed={interactive ? !!active : undefined}
     >
       <div>
-        <div className="text-[12px] text-ink-500 mb-2">{label}</div>
-        <div className={`text-[28px] leading-none font-semibold tabular-nums ${toneStyles.valueColor}`}>{value}</div>
+        <div className="text-[0.75rem] text-ink-500 mb-2">{label}</div>
+        <div className={`text-[1.75rem] leading-none font-semibold tabular-nums ${toneStyles.valueColor}`}>{value}</div>
       </div>
       <div className={`w-8 h-8 ${toneStyles.iconBg} ${toneStyles.iconColor} rounded-full flex items-center justify-center shrink-0`}>
         <Icon size={16} strokeWidth={1.75} />
@@ -130,8 +130,8 @@ function InlineStatTile({
         <Icon size={16} strokeWidth={1.75} />
       </div>
       <div>
-        <div className={`text-[22px] leading-none font-semibold tabular-nums ${toneStyles.valueColor} mb-1`}>{value}</div>
-        <div className="text-[11px] text-ink-500 tracking-wide">{label}</div>
+        <div className={`text-[1.375rem] leading-none font-semibold tabular-nums ${toneStyles.valueColor} mb-1`}>{value}</div>
+        <div className="text-[0.6875rem] text-ink-500 tracking-wide">{label}</div>
       </div>
     </button>
   );
@@ -142,7 +142,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
     <div className="flex items-center gap-1 p-1 bg-canvas-elevated border border-canvas-border rounded-full">
       <button
         onClick={() => setRole('risk-owner')}
-        className={`flex items-center gap-1.5 px-3 h-7 text-[12px] font-medium rounded-full transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-3 h-7 text-[0.75rem] font-medium rounded-full transition-colors cursor-pointer ${
           role === 'risk-owner' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-700'
         }`}
       >
@@ -151,7 +151,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
       </button>
       <button
         onClick={() => setRole('auditor')}
-        className={`flex items-center gap-1.5 px-3 h-7 text-[12px] font-medium rounded-full transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-3 h-7 text-[0.75rem] font-medium rounded-full transition-colors cursor-pointer ${
           role === 'auditor' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-700'
         }`}
       >
@@ -272,7 +272,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <header className="shrink-0 h-[60px] px-6 flex items-center gap-4 bg-canvas-elevated border-b border-canvas-border">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 transition-colors cursor-pointer pr-2 border-r border-canvas-border mr-1"
+            className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 hover:text-brand-700 transition-colors cursor-pointer pr-2 border-r border-canvas-border mr-1"
             aria-label="Back to reports"
           >
             <ArrowLeft size={14} />
@@ -287,11 +287,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <div className={`max-w-[1600px] mx-auto px-8 ${embedded ? 'pt-4 pb-0' : 'pt-8 pb-0'}`}>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              {!embedded && <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
+              {!embedded && <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
               {embedded ? (
-                <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
+                <h2 className="text-[1rem] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
               ) : (
-                <p className="text-[14px] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
+                <p className="text-[0.875rem] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -320,7 +320,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <button
                     key={t.id}
                     onClick={() => setActiveNav(t.id)}
-                    className={`relative flex items-center gap-2 px-4 h-11 text-[13px] font-medium transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-2 px-4 h-11 text-[0.8125rem] font-medium transition-colors cursor-pointer ${
                       isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
                     }`}
                   >
@@ -341,14 +341,14 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             {activeNav === 'action-hub' && (
               <div className="flex items-center gap-4 shrink-0 pb-2">
                 <div className="flex items-baseline gap-1.5 leading-none">
-                  <span className="text-[11px] uppercase tracking-[0.12em] text-ink-500 font-medium">Report health</span>
-                  <span className="text-[13px] text-ink-900 font-medium">{ACTION_HUB_SUMMARY.reportHealthLabel}</span>
-                  <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
+                  <span className="text-[0.6875rem] uppercase tracking-[0.12em] text-ink-500 font-medium">Report health</span>
+                  <span className="text-[0.8125rem] text-ink-900 font-medium">{ACTION_HUB_SUMMARY.reportHealthLabel}</span>
+                  <span className="text-[0.75rem] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
                 </div>
                 <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
                 <button
                   onClick={() => setAtrModalOpen(true)}
-                  className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
+                  className="h-9 px-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
                 >
                   <FileText size={14} />
                   Generate ATR
@@ -381,7 +381,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 </div>
                 {/* Divider + source query ATR */}
                 <div className="px-6 py-5 border-t border-canvas-border">
-                  <div className="flex items-center gap-2 mb-3 text-[11px]">
+                  <div className="flex items-center gap-2 mb-3 text-[0.6875rem]">
                     <span className="font-bold text-brand-700 uppercase tracking-wider">Query · {sourceQuery.id}</span>
                   </div>
                   <button
@@ -395,11 +395,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                     >
                       <ChevronDown size={14} />
                     </motion.span>
-                    <p className="text-[14px] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
+                    <p className="text-[0.875rem] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
                       {sourceQuery.title}
                     </p>
                   </button>
-                  <p className="text-[13px] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
+                  <p className="text-[0.8125rem] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
                 </div>
                 <AnimatePresence initial={false}>
                   {atrExpanded && (
@@ -417,7 +417,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                             { title: 'Observations', items: sourceQuery.observations },
                           ].map(section => (
                             <div key={section.title}>
-                              <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
+                              <h4 className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
                               <ul className="space-y-2.5">
                                 {section.items.map((item, i) => (
                                   <motion.li
@@ -425,7 +425,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                                     initial={{ opacity: 0, x: -4 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: 0.08 + i * 0.05, duration: 0.3 }}
-                                    className="flex gap-2.5 text-[13px] text-ink-700 leading-relaxed"
+                                    className="flex gap-2.5 text-[0.8125rem] text-ink-700 leading-relaxed"
                                   >
                                     <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
                                     {item}
@@ -491,11 +491,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                     <button
                       onClick={() => setBulkClassifyOpen(true)}
                       title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
                     >
                       <Tag size={13} />
                       Bulk Classify
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[0.75rem] font-semibold bg-white/20 rounded-full tabular-nums">
                         {selected.size}
                       </span>
                     </button>
@@ -510,11 +510,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                         }
                       }}
                       title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 cursor-pointer transition-colors"
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] font-medium rounded-[8px] border text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 cursor-pointer transition-colors"
                     >
                       <UserPlus size={13} />
                       Bulk Assign
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-100 rounded-full tabular-nums">
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[0.75rem] font-semibold bg-brand-100 rounded-full tabular-nums">
                         {selected.size}
                       </span>
                     </button>
@@ -524,7 +524,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       disabled={selected.size === 0}
                       onClick={() => onBulkAssign(Array.from(selected))}
                       title={selected.size === 0 ? 'Select exceptions first' : `Mark ${selected.size} as case${selected.size === 1 ? '' : 's'} & assign`}
-                      className={`flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border transition-colors ${
+                      className={`flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] font-medium rounded-[8px] border transition-colors ${
                         selected.size === 0
                           ? 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
                           : 'text-white bg-purple-600 border-purple-600 hover:bg-purple-500 cursor-pointer'
@@ -533,7 +533,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       <UserPlus size={13} />
                       Mark as Case & Assign
                       {selected.size > 0 && (
-                        <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                        <span className="inline-flex items-center h-5 min-w-5 px-1 text-[0.75rem] font-semibold bg-white/20 rounded-full tabular-nums">
                           {selected.size}
                         </span>
                       )}
@@ -544,7 +544,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               headerExtras={
                 <button
                   onClick={() => setSampleModalOpen(true)}
-                  className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
+                  className="flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
                 >
                   <FlaskConical size={13} />
                   Sample Data

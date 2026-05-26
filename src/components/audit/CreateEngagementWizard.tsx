@@ -9,9 +9,9 @@ import type { Engagement, EngType, AutomationSubtype, ProcessCode } from '../../
 import { OWNER_NAMES, SUB_PROCESSES } from '../../data/grc-domain';
 
 // ─── Styles ────────────────────────────────────────────────────────────────
-const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
+const labelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
 const segActiveCls = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const segIdleCls = 'border-canvas-border bg-white text-ink-600 hover:bg-canvas';
 
@@ -200,9 +200,9 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
-                <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
+                <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
               </div>
-              <p className="text-[12px] text-ink-500">Step {step} of 5</p>
+              <p className="text-[0.75rem] text-ink-500">Step {step} of 5</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
@@ -216,7 +216,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
               />
             ))}
           </div>
-          <div className="flex justify-between mt-1.5 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">
+          <div className="flex justify-between mt-1.5 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
             {(['Type', 'Basics', 'Details', 'Team', 'Review'] as const).map((lbl, i) => (
               <span key={lbl} className={step === i + 1 ? 'text-brand-700' : ''}>{lbl}</span>
             ))}
@@ -234,8 +234,8 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
               {/* ═══ STEP 1: TYPE ═══ */}
               {step === 1 && (
                 <div>
-                  <h3 className="text-[14px] font-semibold text-ink-900 mb-1">Pick an engagement type</h3>
-                  <p className="text-[12px] text-ink-500 mb-4">Determines the workflow, configuration screens, and exit criteria.</p>
+                  <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1">Pick an engagement type</h3>
+                  <p className="text-[0.75rem] text-ink-500 mb-4">Determines the workflow, configuration screens, and exit criteria.</p>
                   <div className="space-y-3">
                     {TYPE_TILES.map(t => {
                       const selected = type === t.type;
@@ -248,10 +248,10 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${t.iconWrap}`}>{t.icon}</div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <div className="text-[14px] font-semibold">{t.type}</div>
+                              <div className="text-[0.875rem] font-semibold">{t.type}</div>
                               {selected && <Check size={16} className="shrink-0" />}
                             </div>
-                            <p className="text-[12px] opacity-80 mt-0.5">{t.tagline}</p>
+                            <p className="text-[0.75rem] opacity-80 mt-0.5">{t.tagline}</p>
                           </div>
                         </button>
                       );
@@ -278,7 +278,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                       <div className="flex gap-1.5">
                         {PRIORITIES.map(p => (
                           <button key={p} onClick={() => setPriority(p)}
-                            className={`flex-1 px-2 py-2 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${priority === p ? `${PRIORITY_CLS[p]} ring-2` : segIdleCls}`}>
+                            className={`flex-1 px-2 py-2 rounded-lg border text-[0.6875rem] font-bold uppercase tracking-wide transition-all cursor-pointer ${priority === p ? `${PRIORITY_CLS[p]} ring-2` : segIdleCls}`}>
                             {p[0]}
                           </button>
                         ))}
@@ -294,7 +294,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                     <div className="grid grid-cols-6 gap-1.5">
                       {PROCESS_OPTIONS.map(p => (
                         <button key={p} onClick={() => setProcess(p)}
-                          className={`px-2 py-2 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${process === p ? segActiveCls : segIdleCls}`}>{p}</button>
+                          className={`px-2 py-2 rounded-lg border text-[0.6875rem] font-bold transition-all cursor-pointer ${process === p ? segActiveCls : segIdleCls}`}>{p}</button>
                       ))}
                     </div>
                   </div>
@@ -356,13 +356,13 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                   )}
                   <Field label="Materiality threshold">
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-ink-500 pointer-events-none">{'₹'}</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-500 pointer-events-none">{'₹'}</span>
                       <input type="number" min={0} value={materiality} onChange={e => setMateriality(parseInt(e.target.value) || 0)} className={inputCls + ' pl-7'} />
                     </div>
                   </Field>
                   <div className="rounded-lg border border-border-light bg-canvas/60 p-3">
                     <div className={labelCls + ' mb-1.5'}>Sign-off chain</div>
-                    <div className="flex items-center gap-2 text-[12px] text-ink-700">
+                    <div className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                       <span className="font-semibold">{owner}</span>
                       <ChevronRight size={12} className="text-ink-400" />
                       <span className="font-semibold">{reviewer}</span>
@@ -388,13 +388,13 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                       {subProcessOptions.map(sp => (
                         <Chip key={sp} label={sp} selected={subProcessSel.includes(sp)} onToggle={() => setSubProcessSel(toggle(subProcessSel, sp))} />
                       ))}
-                      {subProcessOptions.length === 0 && <span className="text-[11px] text-ink-400">No sub-processes for selected process</span>}
+                      {subProcessOptions.length === 0 && <span className="text-[0.6875rem] text-ink-400">No sub-processes for selected process</span>}
                     </div>
                   </Field>
                   <Field label="Linked RACMs">
                     <div className="space-y-1.5">
                       {RACM_VERSIONS.map(v => (
-                        <label key={v} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-canvas-border bg-white text-[12px] text-ink-700 cursor-pointer hover:bg-canvas">
+                        <label key={v} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.75rem] text-ink-700 cursor-pointer hover:bg-canvas">
                           <input type="checkbox" checked={linkedRacms.includes(v)} onChange={() => setLinkedRacms(toggle(linkedRacms, v))} className="accent-brand-500" />
                           {v}
                         </label>
@@ -445,12 +445,12 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                           <div key={tpl.id} className="flex items-start gap-3 p-3 rounded-lg border border-canvas-border bg-white">
                             <div className="w-8 h-8 rounded-lg bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><Zap size={14} /></div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-semibold text-ink-900">{tpl.name}</div>
-                              <p className="text-[11px] text-ink-500 mt-0.5">{tpl.description}</p>
+                              <div className="text-[0.8125rem] font-semibold text-ink-900">{tpl.name}</div>
+                              <p className="text-[0.6875rem] text-ink-500 mt-0.5">{tpl.description}</p>
                             </div>
                             <button
                               onClick={() => setSelectedTemplates(toggle(selectedTemplates, tpl.id))}
-                              className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${added ? 'bg-compliant-50 text-compliant-700 border border-compliant-100' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}>
+                              className={`shrink-0 px-3 py-1.5 rounded-lg text-[0.6875rem] font-semibold transition-colors cursor-pointer ${added ? 'bg-compliant-50 text-compliant-700 border border-compliant-100' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}>
                               {added ? 'Added' : 'Add'}
                             </button>
                           </div>
@@ -476,9 +476,9 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                   <Field label="Detection threshold">
                     <div className="flex items-center gap-3">
                       <input type="range" min={0.5} max={1} step={0.01} value={threshold} onChange={e => setThreshold(parseFloat(e.target.value))} className="flex-1 accent-brand-500" />
-                      <span className="w-12 text-right text-[14px] font-bold text-ink-900 tabular-nums">{(threshold * 100).toFixed(0)}%</span>
+                      <span className="w-12 text-right text-[0.875rem] font-bold text-ink-900 tabular-nums">{(threshold * 100).toFixed(0)}%</span>
                     </div>
-                    <p className="text-[11px] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
+                    <p className="text-[0.6875rem] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
                   </Field>
                   <Field label="Alert recipients">
                     <div className="flex flex-wrap gap-1.5">
@@ -497,11 +497,11 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                   <SectionTitle title="Team & permissions" subtitle="Co-owners, auditors, risk owners, reviewers, viewers" />
                   <Field label="Owner (primary)">
                     <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas/60">
-                      <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-800">
+                      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-800">
                         <Users size={14} className="text-brand-600" />
                         {owner}
                       </div>
-                      <button onClick={() => setStep(2)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline cursor-pointer">
+                      <button onClick={() => setStep(2)} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
                         <Edit3 size={11} /> Edit
                       </button>
                     </div>
@@ -578,23 +578,23 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <div className="flex items-center gap-2">
             {step > 1 && (
-              <button onClick={prevStep} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
+              <button onClick={prevStep} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
                 <ChevronLeft size={14} /> Back
               </button>
             )}
             {step < 5 && (
               <button onClick={nextStep} disabled={!canAdvanceFrom[step]}
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 Next <ChevronRight size={14} />
               </button>
             )}
             {step === 5 && (
               <>
-                <button onClick={() => submit('Draft')} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-semibold text-ink-700 hover:bg-canvas transition-colors cursor-pointer">Create as Draft</button>
-                <button onClick={() => submit('Active')} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer">Create &amp; Activate</button>
+                <button onClick={() => submit('Draft')} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-700 hover:bg-canvas transition-colors cursor-pointer">Create as Draft</button>
+                <button onClick={() => submit('Active')} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">Create &amp; Activate</button>
               </>
             )}
           </div>
@@ -606,14 +606,14 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
 
 // ─── Sub-components ────────────────────────────────────────────────────────
 function Hint({ text }: { text: string }) {
-  return <div className="mt-1 flex items-center gap-1 text-[10.5px] text-risk-700"><AlertCircle size={11} /> {text}</div>;
+  return <div className="mt-1 flex items-center gap-1 text-[0.75rem] text-risk-700"><AlertCircle size={11} /> {text}</div>;
 }
 
 function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-1">
-      <h3 className="text-[14px] font-semibold text-ink-900">{title}</h3>
-      {subtitle && <p className="text-[12px] text-ink-500">{subtitle}</p>}
+      <h3 className="text-[0.875rem] font-semibold text-ink-900">{title}</h3>
+      {subtitle && <p className="text-[0.75rem] text-ink-500">{subtitle}</p>}
     </div>
   );
 }
@@ -624,7 +624,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function RadioCard({ label, selected, onChange, centered }: { label: string; selected: boolean; onChange: () => void; centered?: boolean }) {
   return (
-    <label className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-all ${selected ? segActiveCls : segIdleCls} ${centered ? 'justify-center' : ''}`}>
+    <label className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-[0.75rem] font-medium cursor-pointer transition-all ${selected ? segActiveCls : segIdleCls} ${centered ? 'justify-center' : ''}`}>
       <input type="radio" checked={selected} onChange={onChange} className="accent-brand-500" />
       {label}
     </label>
@@ -634,7 +634,7 @@ function RadioCard({ label, selected, onChange, centered }: { label: string; sel
 function Chip({ label, selected, onToggle }: { label: string; selected: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle}
-      className={`px-2.5 py-1.5 rounded-full text-[11.5px] font-medium border transition-all cursor-pointer ${selected ? segActiveCls : segIdleCls}`}>
+      className={`px-2.5 py-1.5 rounded-full text-[0.75rem] font-medium border transition-all cursor-pointer ${selected ? segActiveCls : segIdleCls}`}>
       {label}
     </button>
   );
@@ -644,7 +644,7 @@ function ChipPicker({ label, helper, options, selected, onChange }: { label: str
   return (
     <div>
       <label className={labelCls}>{label}</label>
-      {helper && <p className="text-[11px] text-ink-500 -mt-1 mb-1.5">{helper}</p>}
+      {helper && <p className="text-[0.6875rem] text-ink-500 -mt-1 mb-1.5">{helper}</p>}
       <div className="flex flex-wrap gap-1.5">
         {options.map(o => <Chip key={o} label={o} selected={selected.includes(o)} onToggle={() => onChange(toggle(selected, o))} />)}
       </div>
@@ -656,7 +656,7 @@ function ReviewSection({ title, open, onToggle, children }: { title: string; ope
   return (
     <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
       <button onClick={onToggle} className="w-full px-3 py-2.5 flex items-center justify-between text-left cursor-pointer hover:bg-canvas/60">
-        <span className="text-[12.5px] font-semibold text-ink-800">{title}</span>
+        <span className="text-[0.75rem] font-semibold text-ink-800">{title}</span>
         {open ? <ChevronUp size={14} className="text-ink-500" /> : <ChevronDown size={14} className="text-ink-500" />}
       </button>
       {open && <div className="px-3 pb-3 pt-1 space-y-1.5 border-t border-canvas-border/60">{children}</div>}
@@ -666,7 +666,7 @@ function ReviewSection({ title, open, onToggle, children }: { title: string; ope
 
 function ReviewRow({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-[12px]">
+    <div className="flex items-start justify-between gap-3 text-[0.75rem]">
       <span className="text-ink-500 shrink-0">{k}</span>
       <span className="text-ink-800 text-right min-w-0 break-words">{v}</span>
     </div>

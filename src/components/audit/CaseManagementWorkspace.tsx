@@ -136,7 +136,7 @@ function activeFilterChips(f: Filters): { key: keyof Filters; label: string }[] 
 }
 
 const INPUT_CLS =
-  'w-full px-3 py-2 border border-canvas-border rounded-lg text-[12.5px] text-ink-900 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:text-ink-400';
+  'w-full px-3 py-2 border border-canvas-border rounded-lg text-[0.75rem] text-ink-900 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:text-ink-400';
 
 // ─── Reusable small controls ─────────────────────────────────────────────────
 
@@ -149,10 +149,10 @@ function SelectChip<T extends string>({
   return (
     <label className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated hover:border-brand-300 transition-colors cursor-pointer">
       {Icon && <Icon size={11} className="text-ink-500" />}
-      <span className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">{label}</span>
+      <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">{label}</span>
       <div className="relative">
         <select value={value} onChange={(e) => onChange(e.target.value as T)}
-          className="appearance-none bg-transparent text-[12px] font-medium text-ink-800 pr-4 outline-none cursor-pointer">
+          className="appearance-none bg-transparent text-[0.75rem] font-medium text-ink-800 pr-4 outline-none cursor-pointer">
           {options.map((o) => <option key={o} value={o}>{getLabel ? getLabel(o) : o}</option>)}
         </select>
         <ChevronDown size={11} className="absolute right-0 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
@@ -212,8 +212,8 @@ function CountPill({ label, value, tone }: { label: string; value: number; tone:
     : 'bg-compliant-50 text-compliant-700';
   return (
     <div className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg ${cls}`}>
-      <span className="text-[20px] font-bold tabular-nums leading-none">{value}</span>
-      <span className="text-[10.5px] font-semibold uppercase tracking-wider">{label}</span>
+      <span className="text-[1.25rem] font-bold tabular-nums leading-none">{value}</span>
+      <span className="text-[0.75rem] font-semibold uppercase tracking-wider">{label}</span>
     </div>
   );
 }
@@ -222,7 +222,7 @@ function AssigneeChip({ name, primary }: { name: string; primary?: boolean }) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('');
   return (
     <span title={`${name}${primary ? ' (Primary)' : ''}`}
-      className={`relative inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold tracking-wider ring-2 ring-canvas-elevated ${
+      className={`relative inline-flex items-center justify-center w-6 h-6 rounded-full text-[0.625rem] font-semibold tracking-wider ring-2 ring-canvas-elevated ${
         primary ? 'bg-brand-600 text-white z-20' : 'bg-brand-100 text-brand-700 z-10'
       }`}>{initials}</span>
   );
@@ -232,10 +232,10 @@ function EmptyState({ title, sub, actionLabel, onAction }: { title: string; sub:
   return (
     <div className="glass-card rounded-2xl p-14 text-center">
       <AlertTriangle size={28} className="text-ink-400 mx-auto mb-3" />
-      <p className="text-[14px] font-semibold text-ink-900 mb-1">{title}</p>
-      <p className="text-[12px] text-ink-500">{sub}</p>
+      <p className="text-[0.875rem] font-semibold text-ink-900 mb-1">{title}</p>
+      <p className="text-[0.75rem] text-ink-500">{sub}</p>
       <button onClick={onAction}
-        className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+        className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors">
         {actionLabel}
       </button>
     </div>
@@ -250,7 +250,7 @@ function BulkBtn({
 }) {
   return (
     <button ref={refEl} onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
+      className={`inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer ${
         active ? 'bg-brand-600 text-white' : 'border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas'
       }`}>
       <Icon size={13} /> {label}
@@ -265,24 +265,24 @@ function BulkAssign({ onApply, count }: { onApply: (names: string[], primary: st
   const toggle = (n: string) => setPicked((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Assign owners · first selected is Primary</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Assign owners · first selected is Primary</div>
       <div className="max-h-56 overflow-y-auto rounded-lg border border-canvas-border bg-white p-1">
         {OWNER_NAMES.map((n) => {
           const sel = picked.includes(n); const primary = picked[0] === n;
           return (
             <button key={n} onClick={() => toggle(n)}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left text-[12px] cursor-pointer ${sel ? 'bg-brand-50' : 'hover:bg-canvas'}`}>
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left text-[0.75rem] cursor-pointer ${sel ? 'bg-brand-50' : 'hover:bg-canvas'}`}>
               <span className={`w-4 h-4 rounded border ${sel ? 'bg-brand-600 border-brand-600' : 'border-canvas-border'} flex items-center justify-center`}>
                 {sel && <Check size={10} className="text-white" />}
               </span>
               <span className="text-ink-900 flex-1">{n}</span>
-              {primary && <span className="px-1.5 h-4 rounded text-[9.5px] font-bold uppercase bg-brand-600 text-white inline-flex items-center">Primary</span>}
+              {primary && <span className="px-1.5 h-4 rounded text-[0.75rem] font-bold uppercase bg-brand-600 text-white inline-flex items-center">Primary</span>}
             </button>
           );
         })}
       </div>
       <button disabled={picked.length === 0} onClick={() => onApply(picked, picked[0])}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply to {count} exception{count === 1 ? '' : 's'}
       </button>
     </div>
@@ -293,19 +293,19 @@ function BulkDue({ onApply, count }: { onApply: (label: string) => void; count: 
   const [custom, setCustom] = useState('');
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Set due date for {count} exception{count === 1 ? '' : 's'}</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Set due date for {count} exception{count === 1 ? '' : 's'}</div>
       <div className="grid grid-cols-3 gap-2">
         {[['+3d', '+3 days'], ['+7d', '+7 days'], ['+14d', '+14 days']].map(([k, label]) => (
           <button key={k} onClick={() => onApply(label)}
-            className="px-2 py-1.5 rounded-lg border border-canvas-border bg-white hover:border-brand-300 text-[12px] font-medium text-ink-700 cursor-pointer">{k}</button>
+            className="px-2 py-1.5 rounded-lg border border-canvas-border bg-white hover:border-brand-300 text-[0.75rem] font-medium text-ink-700 cursor-pointer">{k}</button>
         ))}
       </div>
       <div>
-        <label className="text-[11px] font-semibold text-ink-600 block mb-1">Custom date</label>
+        <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Custom date</label>
         <input type="date" value={custom} onChange={(e) => setCustom(e.target.value)} className={INPUT_CLS} />
       </div>
       <button disabled={!custom} onClick={() => onApply(custom)}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply custom date
       </button>
     </div>
@@ -319,13 +319,13 @@ function BulkClassify({ onApply, count }: { onApply: (cls: Classification, ratio
   const templates = cls ? RATIONALES.filter((r) => r.classification === cls) : RATIONALES;
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Classify {count} exception{count === 1 ? '' : 's'}</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Classify {count} exception{count === 1 ? '' : 's'}</div>
       <div className="grid grid-cols-2 gap-1.5">
         {CLASSIFICATIONS.map((c) => {
           const active = cls === c;
           return (
             <button key={c} onClick={() => setCls(c)} role="radio" aria-checked={active}
-              className={`px-2.5 py-2 rounded-lg border text-left text-[11.5px] font-semibold cursor-pointer transition-all ${
+              className={`px-2.5 py-2 rounded-lg border text-left text-[0.75rem] font-semibold cursor-pointer transition-all ${
                 active ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
                   : 'border-canvas-border bg-white text-ink-800 hover:border-brand-300'
               }`}>{c}</button>
@@ -334,10 +334,10 @@ function BulkClassify({ onApply, count }: { onApply: (cls: Classification, ratio
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-[11px] font-semibold text-ink-600">Rationale (optional)</label>
+          <label className="text-[0.6875rem] font-semibold text-ink-600">Rationale (optional)</label>
           <div className="relative">
             <button onClick={() => setTmplOpen((o) => !o)}
-              className="text-[10.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer inline-flex items-center gap-1">
+              className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer inline-flex items-center gap-1">
               <Tag size={10} /> Use template
             </button>
             <AnimatePresence>
@@ -346,7 +346,7 @@ function BulkClassify({ onApply, count }: { onApply: (cls: Classification, ratio
                   className="absolute top-full right-0 mt-1 z-50 w-56 rounded-lg border border-canvas-border bg-canvas-elevated shadow-lg p-1">
                   {templates.map((t) => (
                     <button key={t.id} onClick={() => { setBody(t.body); setCls(t.classification); setTmplOpen(false); }}
-                      className="w-full text-left px-2 py-1.5 rounded-md text-[11.5px] text-ink-700 hover:bg-canvas cursor-pointer">
+                      className="w-full text-left px-2 py-1.5 rounded-md text-[0.75rem] text-ink-700 hover:bg-canvas cursor-pointer">
                       {t.label}
                     </button>
                   ))}
@@ -359,7 +359,7 @@ function BulkClassify({ onApply, count }: { onApply: (cls: Classification, ratio
           className={INPUT_CLS + ' resize-none'} />
       </div>
       <button disabled={!cls} onClick={() => cls && onApply(cls, body)}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply classification
       </button>
     </div>
@@ -370,19 +370,19 @@ function BulkSnooze({ onApply, count }: { onApply: (label: string) => void; coun
   const [date, setDate] = useState('');
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Snooze {count} exception{count === 1 ? '' : 's'}</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Snooze {count} exception{count === 1 ? '' : 's'}</div>
       <div className="grid grid-cols-3 gap-2">
         {['1d', '3d', '1w'].map((p) => (
           <button key={p} onClick={() => onApply(p)}
-            className="px-2 py-1.5 rounded-lg border border-canvas-border bg-white hover:border-brand-300 text-[12px] font-medium text-ink-700 cursor-pointer">{p}</button>
+            className="px-2 py-1.5 rounded-lg border border-canvas-border bg-white hover:border-brand-300 text-[0.75rem] font-medium text-ink-700 cursor-pointer">{p}</button>
         ))}
       </div>
       <div>
-        <label className="text-[11px] font-semibold text-ink-600 block mb-1">Until date</label>
+        <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Until date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={INPUT_CLS} />
       </div>
       <button disabled={!date} onClick={() => onApply(`until ${date}`)}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Snooze until date
       </button>
     </div>
@@ -394,14 +394,14 @@ function BulkClose({ onApply, count }: { onApply: (cls: Classification | null, n
   const [note, setNote] = useState('');
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Close {count} exception{count === 1 ? '' : 's'}</div>
-      <div className="text-[11px] text-ink-500">A classification is required before closing.</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Close {count} exception{count === 1 ? '' : 's'}</div>
+      <div className="text-[0.6875rem] text-ink-500">A classification is required before closing.</div>
       <div className="grid grid-cols-2 gap-1.5">
         {CLASSIFICATIONS.map((c) => {
           const active = cls === c;
           return (
             <button key={c} onClick={() => setCls(c)} role="radio" aria-checked={active}
-              className={`px-2.5 py-2 rounded-lg border text-left text-[11.5px] font-semibold cursor-pointer transition-all ${
+              className={`px-2.5 py-2 rounded-lg border text-left text-[0.75rem] font-semibold cursor-pointer transition-all ${
                 active ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
                   : 'border-canvas-border bg-white text-ink-800 hover:border-brand-300'
               }`}>{c}</button>
@@ -409,12 +409,12 @@ function BulkClose({ onApply, count }: { onApply: (cls: Classification | null, n
         })}
       </div>
       <div>
-        <label className="text-[11px] font-semibold text-ink-600 block mb-1">Resolution note</label>
+        <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Resolution note</label>
         <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was done to resolve this?"
           className={INPUT_CLS + ' resize-none'} />
       </div>
       <button disabled={!cls} onClick={() => onApply(cls, note)}
-        className="w-full px-3 py-2 rounded-lg bg-compliant text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-compliant text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-[0.75rem] font-semibold cursor-pointer">
         Close cases
       </button>
     </div>
@@ -425,11 +425,11 @@ function BulkReassign({ onApply, count }: { onApply: (name: string) => void; cou
   const [pick, setPick] = useState<string>('');
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Reassign {count} exception{count === 1 ? '' : 's'} to</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Reassign {count} exception{count === 1 ? '' : 's'} to</div>
       <div className="max-h-56 overflow-y-auto rounded-lg border border-canvas-border bg-white p-1">
         {OWNER_NAMES.map((n) => (
           <button key={n} onClick={() => setPick(n)}
-            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left text-[12px] cursor-pointer ${
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left text-[0.75rem] cursor-pointer ${
               pick === n ? 'bg-brand-50 text-brand-700' : 'hover:bg-canvas text-ink-900'
             }`}>
             <span className={`w-3.5 h-3.5 rounded-full border ${pick === n ? 'bg-brand-600 border-brand-600' : 'border-canvas-border'}`} />
@@ -438,7 +438,7 @@ function BulkReassign({ onApply, count }: { onApply: (name: string) => void; cou
         ))}
       </div>
       <button disabled={!pick} onClick={() => onApply(pick)}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Reassign
       </button>
     </div>
@@ -449,11 +449,11 @@ function BulkComment({ onApply, count }: { onApply: (body: string) => void; coun
   const [body, setBody] = useState('');
   return (
     <div className="space-y-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Comment on {count} exception{count === 1 ? '' : 's'}</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Comment on {count} exception{count === 1 ? '' : 's'}</div>
       <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment will be tagged [bulk]…"
         className={INPUT_CLS + ' resize-none'} />
       <button disabled={!body.trim()} onClick={() => onApply(body)}
-        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold cursor-pointer">
+        className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Post comment
       </button>
     </div>
@@ -478,41 +478,41 @@ function ExceptionRow({
         selected ? 'bg-brand-50/60' : 'hover:bg-canvas/60'
       }`}>
       <TriStateCheckbox checked={selected} indeterminate={false} onChange={onToggle} ariaLabel={`Select ${ex.ref}`} />
-      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide border shrink-0 ${SEV_BADGE[ex.severity]}`}>
+      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide border shrink-0 ${SEV_BADGE[ex.severity]}`}>
         <span className={`w-1.5 h-1.5 rounded-full mr-1 ${SEV_DOT[ex.severity]}`} aria-hidden="true" />
         {ex.severity}
       </span>
-      <span className="font-mono text-[11.5px] text-ink-500 tabular-nums shrink-0 w-20">{ex.ref}</span>
+      <span className="font-mono text-[0.75rem] text-ink-500 tabular-nums shrink-0 w-20">{ex.ref}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] text-ink-900 truncate font-medium">
+        <div className="text-[0.8125rem] text-ink-900 truncate font-medium">
           {ex.title}
           {ex.amount && (
-            <span className="ml-2 inline-flex items-center px-1.5 h-4 rounded text-[10.5px] font-semibold bg-[#F4F2F7] text-ink-700 font-mono align-middle">
+            <span className="ml-2 inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-semibold bg-[#F4F2F7] text-ink-700 font-mono align-middle">
               {ex.amount}
             </span>
           )}
         </div>
-        <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-2 flex-wrap">
+        <div className="text-[0.6875rem] text-ink-500 mt-0.5 flex items-center gap-2 flex-wrap">
           <Clock size={10} className="text-ink-400" /> Opened {ex.opened}
         </div>
       </div>
       <div className="hidden md:flex items-center -space-x-1.5 shrink-0">
         {head.map((name, i) => <AssigneeChip key={`${name}-${i}`} name={name} primary={i === 0} />)}
         {overflow > 0 && (
-          <span className="relative z-10 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full bg-canvas-border text-ink-700 text-[10.5px] font-semibold tabular-nums ring-2 ring-canvas-elevated">
+          <span className="relative z-10 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full bg-canvas-border text-ink-700 text-[0.75rem] font-semibold tabular-nums ring-2 ring-canvas-elevated">
             +{overflow}
           </span>
         )}
       </div>
-      <span className={`shrink-0 inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10.5px] font-semibold tabular-nums ${SLA_PILL[sla.tone]}`}
+      <span className={`shrink-0 inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.75rem] font-semibold tabular-nums ${SLA_PILL[sla.tone]}`}
         title={`SLA · ${Math.round(sla.pct)}% elapsed`}>
         <CalendarClock size={10} /> {sla.label}
       </span>
-      <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10.5px] font-semibold ${STATUS_PILL[ex.status]}`}>
+      <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[0.75rem] font-semibold ${STATUS_PILL[ex.status]}`}>
         {ex.status}
       </span>
       {ex.classification && (
-        <span className={`shrink-0 hidden lg:inline-flex items-center px-2 h-5 rounded-full text-[10.5px] font-medium ${CLASSIFICATION_PILL[ex.classification]}`}
+        <span className={`shrink-0 hidden lg:inline-flex items-center px-2 h-5 rounded-full text-[0.75rem] font-medium ${CLASSIFICATION_PILL[ex.classification]}`}
           title={`Classification · ${ex.classification}`}>
           {ex.classification}
         </span>
@@ -676,14 +676,14 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
         <div className={embedded ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
           {!embedded && (
             <button onClick={onBack}
-              className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
+              className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
               <ArrowLeft size={14} /> Back
             </button>
           )}
           <div className="glass-card rounded-xl p-12 text-center">
             <AlertTriangle size={28} className="text-ink-400 mx-auto mb-3" />
-            <p className="text-[14px] font-semibold text-ink-900 mb-1">Engagement not found</p>
-            <p className="text-[12px] text-ink-500">It may have been deleted or moved.</p>
+            <p className="text-[0.875rem] font-semibold text-ink-900 mb-1">Engagement not found</p>
+            <p className="text-[0.75rem] text-ink-500">It may have been deleted or moved.</p>
           </div>
         </div>
       </div>
@@ -697,22 +697,22 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
           <>
             {/* Back link */}
             <button onClick={onBack}
-              className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
+              className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
               <ArrowLeft size={14} /> Back to {eng.code} {eng.name}
             </button>
 
             {/* Header */}
             <header className="glass-card rounded-2xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <h1 className="font-display text-[22px] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
-                <p className="text-[12.5px] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
+                <h1 className="font-display text-[1.375rem] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
+                <p className="text-[0.75rem] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
               </div>
               <div className="flex items-center gap-3">
                 <CountPill label="Open" value={totals.open} tone="risk" />
                 <CountPill label="Triaging" value={totals.triaging} tone="mitigated" />
                 <CountPill label="Resolved" value={totals.resolved} tone="compliant" />
                 <button onClick={() => addToast({ message: 'Refreshed exception list', type: 'info' })}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[0.75rem] font-semibold cursor-pointer transition-colors">
                   <RefreshCw size={13} /> Refresh
                 </button>
               </div>
@@ -729,7 +729,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
               <CountPill label="Resolved" value={totals.resolved} tone="compliant" />
             </div>
             <button onClick={() => addToast({ message: 'Refreshed exception list', type: 'info' })}
-              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[0.75rem] font-semibold cursor-pointer transition-colors">
               <RefreshCw size={13} /> Refresh
             </button>
           </header>
@@ -739,7 +739,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
         <section aria-label="Filters" className="glass-card rounded-2xl px-4 py-3.5 mb-3 flex items-center gap-2 flex-wrap">
           <div className="inline-flex items-center gap-1.5 mr-1 text-ink-500">
             <ListFilter size={12} />
-            <span className="text-[11px] font-semibold uppercase tracking-wide">Filters</span>
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide">Filters</span>
           </div>
           <SelectChip label="Workflow" value={filters.workflow}
             options={workflowOptions.map(([id]) => id) as string[]}
@@ -763,7 +763,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
             onChange={(v) => setFilters((f) => ({ ...f, classification: v }))} icon={Tag} />
           {activeChips.length > 0 && (
             <button onClick={() => setFilters(EMPTY_FILTERS)}
-              className="ml-auto text-[11.5px] text-ink-500 hover:text-brand-700 font-medium cursor-pointer">Clear all</button>
+              className="ml-auto text-[0.75rem] text-ink-500 hover:text-brand-700 font-medium cursor-pointer">Clear all</button>
           )}
         </section>
 
@@ -771,7 +771,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
         {activeChips.length > 0 && (
           <div className="mb-3 flex items-center gap-1.5 flex-wrap">
             {activeChips.map((c) => (
-              <span key={c.key} className="inline-flex items-center gap-1.5 px-2 h-6 rounded-full bg-brand-50 text-brand-700 text-[11.5px] font-medium">
+              <span key={c.key} className="inline-flex items-center gap-1.5 px-2 h-6 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium">
                 {c.label}
                 <button onClick={() => setFilters((f) => ({ ...f, [c.key]: EMPTY_FILTERS[c.key] }))}
                   className="rounded-full hover:bg-brand-100 cursor-pointer" aria-label={`Clear ${c.label}`}>
@@ -788,7 +788,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
             const isActive = filtersEqual(v.filters, filters);
             return (
               <button key={v.id} onClick={() => applyView(v)}
-                className={`inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-[11.5px] font-semibold transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                   isActive ? 'bg-brand-600 text-white' : 'bg-canvas-elevated border border-canvas-border text-ink-700 hover:border-brand-300'
                 }`}>
                 <Star size={11} className={isActive ? 'fill-white' : 'fill-mitigated'} />
@@ -798,22 +798,22 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
           })}
           <div className="ml-auto relative">
             <button onClick={() => setShowSaveDialog((s) => !s)}
-              className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-[11.5px] font-semibold text-ink-700 hover:text-brand-700 cursor-pointer">
+              className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-[0.75rem] font-semibold text-ink-700 hover:text-brand-700 cursor-pointer">
               <Plus size={11} /> Save current view
             </button>
             <AnimatePresence>
               {showSaveDialog && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}
                   className="absolute top-full right-0 mt-2 z-40 w-72 rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-3.5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-500 mb-2">Save current filters as</div>
+                  <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500 mb-2">Save current filters as</div>
                   <input autoFocus type="text" value={saveName} onChange={(e) => setSaveName(e.target.value)}
                     placeholder="e.g. Critical · Awaiting class" className={INPUT_CLS}
                     onKeyDown={(e) => { if (e.key === 'Enter') saveCurrent(); }} />
                   <div className="flex items-center justify-end gap-2 mt-3">
                     <button onClick={() => { setShowSaveDialog(false); setSaveName(''); }}
-                      className="px-3 py-1.5 rounded-lg text-[11.5px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Cancel</button>
+                      className="px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Cancel</button>
                     <button onClick={saveCurrent} disabled={!saveName.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11.5px] font-semibold cursor-pointer">Save</button>
+                      className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">Save</button>
                   </div>
                 </motion.div>
               )}
@@ -826,14 +826,14 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
           <div className="flex items-center gap-3 px-4 py-2 mb-2 rounded-xl bg-canvas-elevated border border-canvas-border">
             <TriStateCheckbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && someVisibleSelected}
               onChange={toggleAllVisible} ariaLabel="Select all visible exceptions" />
-            <span className="text-[12px] text-ink-700 font-medium">
+            <span className="text-[0.75rem] text-ink-700 font-medium">
               {selectedIds.size > 0
                 ? <>{selectedIds.size} selected of {filtered.length}</>
                 : <>Showing <span className="tabular-nums">{filtered.length}</span> of {allExceptions.length}</>}
             </span>
             {selectedIds.size > 0 && (
               <button onClick={clearSelection}
-                className="ml-auto text-[11.5px] text-ink-500 hover:text-brand-700 font-medium cursor-pointer">Clear selection</button>
+                className="ml-auto text-[0.75rem] text-ink-500 hover:text-brand-700 font-medium cursor-pointer">Clear selection</button>
             )}
           </div>
         )}
@@ -844,7 +844,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
             <motion.div initial={{ opacity: 0, y: -8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -8, height: 0 }} transition={{ duration: 0.16 }}
               className="sticky top-0 z-30 mb-3 overflow-visible">
               <div className="glass-card rounded-2xl px-4 py-2.5 flex items-center gap-2 flex-wrap shadow-lg">
-                <span className="text-[12.5px] font-semibold text-ink-900 mr-2">{selectedIds.size} selected</span>
+                <span className="text-[0.75rem] font-semibold text-ink-900 mr-2">{selectedIds.size} selected</span>
                 <div className="h-5 w-px bg-canvas-border mr-1" />
                 <BulkBtn refEl={assignRef} icon={Users} label="Assign" active={openBulk === 'assign'} onClick={() => setOpenBulk(openBulk === 'assign' ? null : 'assign')} />
                 <BulkBtn refEl={dueRef} icon={CalendarClock} label="Due date" active={openBulk === 'due'} onClick={() => setOpenBulk(openBulk === 'due' ? null : 'due')} />
@@ -854,7 +854,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
                 <BulkBtn refEl={reassignRef} icon={UserCog} label="Reassign" active={openBulk === 'reassign'} onClick={() => setOpenBulk(openBulk === 'reassign' ? null : 'reassign')} />
                 <BulkBtn refEl={commentRef} icon={MessageSquare} label="Comment" active={openBulk === 'comment'} onClick={() => setOpenBulk(openBulk === 'comment' ? null : 'comment')} />
                 <button onClick={applyExport}
-                  className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
+                  className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[0.75rem] font-semibold cursor-pointer transition-colors">
                   <Download size={13} /> Export
                 </button>
                 <div className="relative">
@@ -918,20 +918,20 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
                       <div className="p-2 rounded-lg bg-brand-50 shrink-0"><WorkflowIcon size={14} className="text-brand-600" /></div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13.5px] font-semibold text-ink-900">{g.workflowName}</span>
-                          <span className="text-[11px] text-ink-500">
+                          <span className="text-[0.75rem] font-semibold text-ink-900">{g.workflowName}</span>
+                          <span className="text-[0.6875rem] text-ink-500">
                             {g.exceptions.length} total · <span className="tabular-nums">{g.exceptions.filter((e) => e.status !== 'Resolved').length} open</span>
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           {SEVERITIES.map((sev) => g.severityCounts[sev] > 0 && (
-                            <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide border ${SEV_BADGE[sev]}`}>
+                            <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide border ${SEV_BADGE[sev]}`}>
                               {g.severityCounts[sev]} {sev}
                             </span>
                           ))}
                         </div>
                       </div>
-                      <div className="text-[11px] text-ink-500 shrink-0 hidden md:flex items-center gap-1">
+                      <div className="text-[0.6875rem] text-ink-500 shrink-0 hidden md:flex items-center gap-1">
                         <Clock size={10} /> Last fired {lastFired}
                       </div>
                     </button>
@@ -947,7 +947,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
                             className="absolute top-full right-0 mt-1 z-30 w-40 rounded-lg border border-canvas-border bg-canvas-elevated shadow-lg p-1">
                             {(['severity', 'opened', 'title'] as const).map((k) => (
                               <button key={k} onClick={() => setGroupSort((prev) => ({ ...prev, [g.workflowId]: { key: k, sortOpen: false } }))}
-                                className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11.5px] font-medium cursor-pointer ${
+                                className={`w-full text-left px-2.5 py-1.5 rounded-md text-[0.75rem] font-medium cursor-pointer ${
                                   sortPref.key === k ? 'bg-brand-50 text-brand-700' : 'text-ink-700 hover:bg-canvas'
                                 }`}>
                                 Sort by {k === 'severity' ? 'Severity' : k === 'opened' ? 'Opened' : 'Title'}
@@ -958,7 +958,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
                       </AnimatePresence>
                     </div>
                     <button onClick={() => addToast({ message: `Open workflow run for ${g.workflowName} — coming soon`, type: 'info' })}
-                      className="text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer hidden md:inline">
+                      className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer hidden md:inline">
                       View workflow →
                     </button>
                     <button onClick={() => toggleGroupCollapse(g.workflowId)}
@@ -999,7 +999,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
       {/* Audit pack export FAB */}
       {!embedded && (
         <button onClick={() => addToast({ message: 'Generating audit pack…', type: 'info' })}
-          className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 px-4 h-11 rounded-full bg-ink-900 hover:bg-ink-800 text-white text-[12.5px] font-semibold shadow-xl cursor-pointer transition-colors"
+          className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 px-4 h-11 rounded-full bg-ink-900 hover:bg-ink-800 text-white text-[0.75rem] font-semibold shadow-xl cursor-pointer transition-colors"
           aria-label="Generate audit pack">
           <FileSpreadsheet size={14} /> Audit pack export
         </button>
