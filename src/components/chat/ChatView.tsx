@@ -4806,11 +4806,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
 
-              {/* Starter prompts — mode-aware. Click fills the composer
-                  (no auto-send) so the user can edit before sending.
-                  Removes the blank-page anxiety on first visit. */}
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {(buildWorkflowMode
+              {/* Starter prompts — mode-aware AND user-aware:
+                  • If the user has prior chats, surface the 4 most-recent
+                    titles as 'pick up where you left off' chips.
+                  • If the user is fresh (no history yet), fall back to
+                    mode-specific sample prompts so the empty state is
+                    never blank.
+                  Click fills the composer (no auto-send) so the user
+                  can edit before sending. */}
+              {(() => {
+                const fallbackPrompts = buildWorkflowMode
                   ? [
                       'Duplicate invoice detection',
                       'Three-way match (PO / GRN / Invoice)',
@@ -4822,22 +4827,36 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       'Top 5 vendors by spend YTD',
                       'GL postings outside business hours',
                       'Approvals above ₹1L without backup',
-                    ]
-                ).map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => {
-                      setInput(prompt);
-                      textareaRef.current?.focus();
-                      requestAnimationFrame(() => handleTextareaInput());
-                    }}
-                    className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
+                    ];
+                const recentPrompts = CHAT_HISTORY.length > 0
+                  ? CHAT_HISTORY.slice(0, 4).map(c => c.title)
+                  : null;
+                const prompts = recentPrompts ?? fallbackPrompts;
+                const caption = recentPrompts ? 'Pick up where you left off' : 'Try one of these to get started';
+                return (
+                  <div className="mt-5 flex flex-col items-center gap-2">
+                    <span className="text-[11.5px] font-medium uppercase tracking-[0.10em] text-ink-400">
+                      {caption}
+                    </span>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {prompts.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => {
+                            setInput(prompt);
+                            textareaRef.current?.focus();
+                            requestAnimationFrame(() => handleTextareaInput());
+                          }}
+                          className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
             </motion.div>
           </div>
