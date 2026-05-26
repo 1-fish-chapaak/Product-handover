@@ -104,11 +104,26 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const dragCounter = useRef(0);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
-  useFocusTrap(dialogRef, open, onClose);
+  // Dirty when the user has typed a name/description or attached a file.
+  // ESC key and backdrop click both route through handleBackdropClose so an
+  // accidental dismiss gives the user a chance to keep their work.
+  const isDirty =
+    obsForm.name.trim().length > 0 ||
+    obsForm.description.trim().length > 0 ||
+    obsForm.attachments.length > 0;
+
+  const handleBackdropClose = () => {
+    if (isSaving) return;
+    if (isDirty) setShowDiscardConfirm(true);
+    else onClose();
+  };
+
+  useFocusTrap(dialogRef, open, handleBackdropClose);
 
   // Sync form when (re)opening — populate from `editing`, or reset to blank.
   useEffect(() => {
@@ -267,7 +282,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
         className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
-        onClick={onClose}
+        onClick={handleBackdropClose}
       >
         <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
         <motion.div
@@ -303,7 +318,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
             </motion.div>
           )}
           <button
-            onClick={onClose}
+            onClick={handleBackdropClose}
             aria-label="Close"
             className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
@@ -473,6 +488,47 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                   : 'Save observation'}
             </button>
           </div>
+          {showDiscardConfirm && createPortal(
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-6"
+              onClick={() => setShowDiscardConfirm(false)}
+            >
+              <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="discard-obs-title"
+                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[400px] p-6"
+              >
+                <h3 id="discard-obs-title" className="text-[16px] font-bold text-text tracking-tight mb-2">Discard changes?</h3>
+                <p className="text-[13px] text-text-secondary leading-relaxed mb-6">Your observation has unsaved changes. Discard them?</p>
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    onClick={() => setShowDiscardConfirm(false)}
+                    className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                  >
+                    Keep editing
+                  </button>
+                  <button
+                    onClick={() => { setShowDiscardConfirm(false); onClose(); }}
+                    className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer"
+                  >
+                    Discard
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body,
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>,
