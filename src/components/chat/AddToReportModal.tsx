@@ -259,7 +259,7 @@ export function AddToReportModal({
                   mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
-                Existing Report
+                Existing report
               </button>
               <button
                 type="button"
@@ -271,7 +271,7 @@ export function AddToReportModal({
                 }`}
               >
                 <Plus size={12} className="inline mr-1 -mt-0.5" />
-                New Draft
+                New report
               </button>
             </div>
 
