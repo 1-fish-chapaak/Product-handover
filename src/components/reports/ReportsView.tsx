@@ -263,7 +263,7 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
         onClick={() => scroll('left')}
         disabled={!canScrollLeft}
         aria-label="Scroll left"
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronLeft size={16} />
       </button>
@@ -286,7 +286,7 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
         onClick={() => scroll('right')}
         disabled={!canScrollRight}
         aria-label="Scroll right"
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronRight size={16} />
       </button>
@@ -4395,11 +4395,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
+  // Regenerate summary mock — overrides the summary section's content with an
+  // alternative blurb after a short simulated delay so the action feels real.
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
+    setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
 
@@ -5093,12 +5100,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             </div>
                             {hasQueries && (
                               <button
-                                onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
+                                onClick={() => {
+                                  if (isRegeneratingSummary) return;
+                                  setIsRegeneratingSummary(true);
+                                  setTimeout(() => {
+                                    setSummaryOverride(ALT_SUMMARY);
+                                    setIsRegeneratingSummary(false);
+                                    addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                  }, 1200);
+                                }}
+                                disabled={isRegeneratingSummary}
+                                aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
-                                Regenerate
+                                {isRegeneratingSummary ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                )}
+                                {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )}
                           </div>
@@ -5121,7 +5142,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                               </motion.div>
                             ))}
                           </div>
-                          <p className="text-[13px] text-text-secondary leading-relaxed">{section.content}</p>
+                          <p className="text-[13px] text-text-secondary leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5369,7 +5390,6 @@ export default function ReportsView({
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [tagFilter, setTagFilter] = useState<string>('All');
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
@@ -5538,40 +5558,29 @@ export default function ReportsView({
     return q ? byTag.filter(r => r.name.toLowerCase().includes(q)) : byTag;
   })();
 
-  const TAG_FILTER_OPTIONS = ['All', 'Internal Audit', 'Bulk Audit'];
-
   const TagFilterDropdown = () => (
-    <div className="relative">
-      <button
-        onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
-        style={{ borderRadius: '8px' }}
-      >
-        {tagFilter === 'All' ? 'All Tags' : tagFilter}
-        <ChevronDown size={10} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
-      </button>
-      {showTagDropdown && (
-        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1" style={{ borderRadius: '8px' }}>
-          {TAG_FILTER_OPTIONS.map(t => (
-            <button
-              key={t}
-              onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
-              className={`w-full text-left px-3 py-2 text-[12px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
-            >
-              {tagFilter === t && <span className="text-primary">✓</span>}
-              {tagFilter !== t && <span className="w-3" />}
-              {t === 'All' ? 'All Tags' : t}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <select
+      value={tagFilter}
+      onChange={e => setTagFilter(e.target.value)}
+      aria-label="Filter by tag"
+      className="h-7 px-2.5 pr-7 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary/40"
+      style={{
+        borderRadius: '8px',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 8px center',
+      }}
+    >
+      <option value="All">All Tags</option>
+      <option value="Internal Audit">Internal Audit</option>
+      <option value="Bulk Audit">Bulk Audit</option>
+    </select>
   );
 
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
