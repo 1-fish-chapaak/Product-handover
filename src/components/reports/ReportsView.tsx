@@ -5724,6 +5724,7 @@ export default function ReportsView({
             searchKeys={['name', 'generatedBy']}
             paginated
             pageSize={20}
+            hideResultCount
             emptyContent={generatedReports.length === 0 ? (
               <EmptyState
                 icon={FileText}
@@ -5958,6 +5959,7 @@ export default function ReportsView({
             searchKeys={['name', 'sharedBy', 'sharedWith']}
             paginated
             pageSize={20}
+            hideResultCount
             emptyContent={SHARED_REPORTS.length === 0 ? (
               <EmptyState
                 icon={Share2}

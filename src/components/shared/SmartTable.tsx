@@ -38,6 +38,7 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
+  hideResultCount?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -72,6 +73,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   headerExtra,
   animateRows = true,
   variant = 'default',
+  hideResultCount = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -164,7 +166,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
             </div>
           )}
           {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
-          {paginated && (
+          {paginated && !hideResultCount && (
             <div className="text-[12px] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
             </div>
