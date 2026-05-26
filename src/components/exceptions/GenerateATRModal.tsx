@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Lightbulb,
   AlertCircle,
+  ChevronDown,
 } from 'lucide-react';
 import { ACTION_HUB_SUMMARY, GRC_EXCEPTIONS, GRC_CASE_DETAILS } from '../../data/mockData';
 
@@ -182,13 +183,24 @@ export default function GenerateATRModal({
 
   const status = STATUS_PILL[query.status];
 
-  const handleDownload = () => {
+  const [showFormatDropdown, setShowFormatDropdown] = useState(false);
+
+  const DOWNLOAD_FORMATS = [
+    { label: 'PDF', ext: 'pdf' },
+    { label: 'PPTX', ext: 'pptx' },
+    { label: 'Word', ext: 'docx' },
+    { label: 'Excel', ext: 'xlsx' },
+  ];
+
+  const handleDownload = (ext: string) => {
     const a = document.createElement('a');
     a.href = fileUrl;
-    a.download = fileName;
+    const base = fileName.replace(/\.[^.]+$/, '');
+    a.download = `${base}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setShowFormatDropdown(false);
   };
 
   return (
@@ -460,13 +472,32 @@ export default function GenerateATRModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleDownload}
-            className="h-10 px-5 inline-flex items-center gap-2 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
-          >
-            <Download size={14} />
-            Download PDF
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowFormatDropdown(p => !p)}
+              className="h-10 px-5 inline-flex items-center gap-2 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
+            >
+              <Download size={14} />
+              Download
+              <ChevronDown size={13} className={`transition-transform ${showFormatDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showFormatDropdown && (
+              <>
+                <div className="fixed inset-0 z-[65]" onClick={() => setShowFormatDropdown(false)} />
+                <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-1 w-44 rounded-[8px] overflow-hidden">
+                  {DOWNLOAD_FORMATS.map(f => (
+                    <button
+                      key={f.ext}
+                      onClick={() => handleDownload(f.ext)}
+                      className="w-full text-left px-3 py-2 text-[12.5px] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                    >
+                      Download as {f.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </footer>
       </motion.div>
     </>

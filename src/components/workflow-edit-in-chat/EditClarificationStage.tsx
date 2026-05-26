@@ -104,11 +104,11 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
       <div className="shrink-0 px-8 pt-12 pb-4 max-w-[860px] mx-auto w-full text-center">
         <div className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-500 mb-4">
           <ChevronRight size={13} />
-          Identified ambiguity, asking for inputs
+          Asking a few clarifying questions
         </div>
-        <h1 className="text-[34px] font-bold tracking-tight text-ink-900 leading-[1.15]">
-          One quick check before I edit{' '}
-          <span className="text-ink-700">— pick what fits, or type your own.</span>
+        <h1 className="font-serif text-[36px] tracking-tight text-ink-900 leading-[1.15]">
+          One quick check before I edit.{' '}
+          <span className="text-ink-500 italic">Pick what fits, or type your own.</span>
         </h1>
       </div>
 
@@ -242,7 +242,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
                 }
               }}
               rows={1}
-              placeholder={`Or just type — I&apos;ll treat it as your answer to question ${currentPage + 1}.`}
+              placeholder={`Or just type. I'll treat it as your answer to question ${currentPage + 1}.`}
               className="w-full bg-transparent border-none outline-none resize-none py-3 pl-4 pr-24 text-[13.5px] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[160px] rounded-b-2xl"
             />
             <div className="absolute right-2 bottom-1.5 flex items-center gap-1">

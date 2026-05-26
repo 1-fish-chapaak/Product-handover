@@ -21,7 +21,7 @@ interface Props {
 const CLARIFICATION_STEPS: EditClarificationStep[] = [
   {
     id: 'date-range',
-    question: 'First — what date range should I cover?',
+    question: 'First, what date range should I cover?',
     options: ['Last 30 days', 'Last 90 days', 'Full FY26', 'Custom range'],
     shortLabel: 'Date range',
   },
@@ -161,8 +161,8 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
         role: 'ira',
         text:
           summary.length > 0
-            ? `Locked in your edit scope:\n${summary}\n\nI&apos;ve opened the workspace on the right — adjust anything inline, then hit **Confirm & Proceed**.`
-            : 'Skipped the quick check — opening the editor with current settings. Adjust anything on the right and hit **Confirm & Proceed** when ready.',
+            ? `Locked in your edit scope:\n${summary}\n\nI've opened the workspace on the right. Adjust anything inline, then hit **Confirm & Proceed**.`
+            : 'Skipped the quick check. Opening the editor with current settings. Adjust anything on the right and hit **Confirm & Proceed** when ready.',
       };
       setMessages([recap, ...initialMessages]);
       setPhase('editor');
@@ -178,7 +178,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
       {
         id: nextMsgId(),
         role: 'ira',
-        text: `Noted — “${text.slice(0, 80)}${text.length > 80 ? '…' : ''}”. I&apos;ve reflected that in the workspace on the right.`,
+        text: `Noted: "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}". I've reflected that in the workspace on the right.`,
       },
     ]);
   }, []);
@@ -200,7 +200,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
       {
         id: nextMsgId(),
         role: 'ira',
-        text: 'Mappings confirmed — opening review.',
+        text: 'Mappings confirmed. Opening review.',
       },
       {
         id: nextMsgId(),
@@ -226,7 +226,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
       {
         id: nextMsgId(),
         role: 'ira',
-        text: "Before I kick off the run, I've spotted a couple of ambiguities — pick what fits below.",
+        text: "Before I kick off the run, I've spotted a couple of ambiguities. Pick what fits below.",
       },
     ]);
     setValidateClarify({ index: 0, answers: {} });
@@ -245,7 +245,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
         {
           id: nextMsgId(),
           role: 'ira',
-          text: `Got it — running with **${tolerance}** amount tolerance.`,
+          text: `Got it. Running with **${tolerance}** amount tolerance.`,
         },
         {
           id: nextMsgId(),
@@ -410,7 +410,7 @@ function buildInitialMessages(workflowName: string): EditChatMessage[] {
       role: 'ira',
       text: 'Drop the required data files into the upload window so I can map them.',
       linkedSources: [
-        { source: 'SAP ERP — AP Module', target: 'Invoices' },
+        { source: 'SAP ERP: AP Module', target: 'Invoices' },
         { source: 'GL Transaction History', target: 'Purchase Orders' },
         { source: 'Vendor Master Data', target: 'Contracts Register' },
       ],
@@ -419,7 +419,7 @@ function buildInitialMessages(workflowName: string): EditChatMessage[] {
     {
       id: nextMsgId(),
       role: 'ira',
-      text: 'Files verified — moving to data mapping.',
+      text: 'Files verified. Moving to data mapping.',
     },
     {
       id: nextMsgId(),
@@ -427,7 +427,7 @@ function buildInitialMessages(workflowName: string): EditChatMessage[] {
       mappings: [
         {
           name: 'Invoices',
-          from: 'SAP ERP — AP Module',
+          from: 'SAP ERP: AP Module',
           cols: ['Invoice No', 'Vendor', 'PO Ref', 'Amount', 'Line Item', 'Invoice Date'],
           ofTotal: 6,
         },

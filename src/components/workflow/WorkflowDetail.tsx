@@ -151,6 +151,8 @@ interface Props {
   onOpenExecutor?: () => void;
   onEditInChat?: () => void;
   onViewVersionHistory?: () => void;
+  /** Which tab to land on. Defaults to 'overview'. */
+  initialTab?: TabId;
 }
 
 const RUN_HISTORY = [
@@ -830,6 +832,15 @@ type ResolvedWorkflow = {
   runs: number;
 };
 
+// Process Hub workflow data for resolution
+const BP_WORKFLOWS: Record<string, { name: string; desc: string }> = {
+  'wf-c1': { name: 'Three-Way PO Match', desc: 'Automated matching of PO, GRN, and Invoice before payment release.' },
+  'wf-c2': { name: 'Vendor Change Monitor', desc: 'Monitors vendor master data changes and validates approval chain.' },
+  'wf-c3': { name: 'Duplicate Invoice Detector', desc: 'Scans invoices against historical data to flag duplicates.' },
+  'wf-c4': { name: 'Payment Approval Review', desc: 'Manual review of high-value payment approvals.' },
+  'wf-c5': { name: 'PO Dual Sign-Off Check', desc: 'Validates dual authorization for purchase orders above threshold.' },
+};
+
 function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
   const wf = WORKFLOWS.find(w => w.id === workflowId);
   if (wf) {
@@ -854,12 +865,24 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       runs: 8,
     };
   }
+  // Process Hub workflows
+  const bpWf = BP_WORKFLOWS[workflowId];
+  if (bpWf) {
+    return {
+      id: workflowId,
+      code: workflowId.toUpperCase(),
+      name: bpWf.name,
+      desc: bpWf.desc,
+      steps: DEFAULT_STEPS,
+      runs: 5,
+    };
+  }
   return null;
 }
 
-export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory }: Props) {
+export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [expandedDataset, setExpandedDataset] = useState<{ stepIdx: number; dsName: string } | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<'Hourly' | 'Daily' | 'Weekly' | 'Monthly'>('Daily');

@@ -661,6 +661,13 @@ function WorkflowsCard(p: WorkflowsCardProps): JSX.Element {
             <Plus size={10} />
             Link manually
           </button>
+          <button
+            onClick={() => alert('Create Workflow — will open Workflow Builder.')}
+            className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10px] font-medium border transition-colors cursor-pointer bg-white text-ink-600 border-canvas-border hover:bg-canvas"
+          >
+            <Plus size={10} />
+            Create workflow
+          </button>
         </div>
       </div>
 

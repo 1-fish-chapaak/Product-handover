@@ -12,8 +12,9 @@ import {
   ChevronDown,
   FileText,
   History,
+  UserPlus,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, ACTION_HUB_SUMMARY } from '../../data/mockData';
+import { GRC_EXCEPTIONS, ACTION_HUB_SUMMARY, type GrcException } from '../../data/mockData';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import {
@@ -26,7 +27,7 @@ import ActionHubView, { CircularProgress } from './ActionHubView';
 import GenerateATRModal from './GenerateATRModal';
 import ExceptionsTable from './ExceptionsTable';
 import SampleDataModal, { type SampleDataPayload } from './SampleDataModal';
-import BulkClassifyModal from './BulkClassifyModal';
+import BulkClassifyModal, { type BulkClassifyPayload } from './BulkClassifyModal';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
 import { useToast } from '../shared/Toast';
 
@@ -41,6 +42,14 @@ interface ManageExceptionsViewProps {
   setRole: (role: ExceptionRole) => void;
   onBack: () => void;
   embedded?: boolean;
+  /** When provided, use this data instead of default GRC_EXCEPTIONS. */
+  exceptions?: GrcException[];
+  /** Called when exception state changes (classification, bulk actions, etc.). */
+  onExceptionsChange?: (exceptions: GrcException[]) => void;
+  /** Optional label shown in breadcrumb/header context. */
+  contextLabel?: string;
+  /** Callback for bulk assign action — when provided, shows "Mark as Case & Assign" button. */
+  onBulkAssign?: (selectedExceptionIds: string[]) => void;
 }
 
 function StatCard({
@@ -153,7 +162,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
   );
 }
 
-export default function ManageExceptionsView({ role, setRole, onBack, embedded = false }: ManageExceptionsViewProps) {
+export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign }: ManageExceptionsViewProps) {
   const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -176,7 +185,24 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     return REPORT_QUERIES_ATR[fromId] ? { id: fromId, ...REPORT_QUERIES_ATR[fromId] } : null;
   }, []);
 
-  const exceptions = GRC_EXCEPTIONS;
+  // Local exception state — initialized from props or default mock data
+  const [localExceptions, setLocalExceptions] = useState<GrcException[]>(propsExceptions || GRC_EXCEPTIONS);
+  // Sync if props change (e.g. new run generates more exceptions)
+  const propsKey = propsExceptions?.map(e => e.id).join(',') || '';
+  const [prevPropsKey, setPrevPropsKey] = useState(propsKey);
+  if (propsKey !== prevPropsKey) {
+    setPrevPropsKey(propsKey);
+    if (propsExceptions) setLocalExceptions(propsExceptions);
+  }
+  const exceptions = localExceptions;
+
+  const updateExceptions = (updater: (prev: GrcException[]) => GrcException[]) => {
+    setLocalExceptions(prev => {
+      const next = updater(prev);
+      onExceptionsChange?.(next);
+      return next;
+    });
+  };
 
   const drawerException = useMemo(
     () => (drawer ? exceptions.find(e => e.id === drawer.exceptionId) ?? null : null),
@@ -258,14 +284,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
       {/* Page header — title + subtitle + tabs (Knowledge Hub pattern) */}
       <div className="border-b border-canvas-border bg-canvas-elevated">
-        <div className="max-w-[1600px] mx-auto px-8 pt-8 pb-0">
+        <div className={`max-w-[1600px] mx-auto px-8 ${embedded ? 'pt-4 pb-0' : 'pt-8 pb-0'}`}>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
-                Exceptions · {activeNav === 'action-hub' ? 'Action Hub' : 'Manage'}
-              </div>
-              <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>
-              <p className="text-[14px] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
+              {!embedded && <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
+              {embedded ? (
+                <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
+              ) : (
+                <p className="text-[14px] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -283,10 +310,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           {/* Tabs row — left: tab buttons; right (Action Hub only): Report Health + Generate ATR */}
           <div className="flex items-center justify-between gap-6 -mb-px">
             <div className="flex items-center gap-0 border-b border-transparent">
-              {[
+              {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
-                { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
-              ].map(t => {
+                ...(!embedded ? [{ id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart }] : []),
+              ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
                 return (
@@ -313,23 +340,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
             {activeNav === 'action-hub' && (
               <div className="flex items-center gap-4 shrink-0 pb-2">
-                <div className="flex items-center gap-3">
-                  <CircularProgress
-                    pct={ACTION_HUB_SUMMARY.reportHealthPct}
-                    size={42}
-                    stroke={4}
-                    label={
-                      <span className="text-[11px] font-semibold text-brand-700 tabular-nums tracking-tight">
-                        {ACTION_HUB_SUMMARY.reportHealthPct}%
-                      </span>
-                    }
-                  />
-                  <div className="leading-tight">
-                    <div className="text-[10px] uppercase tracking-wider text-ink-500">Report Health</div>
-                    <div className="text-[13px] text-ink-900 font-medium tabular-nums">{ACTION_HUB_SUMMARY.reportHealthLabel}</div>
-                  </div>
+                <div className="flex items-baseline gap-1.5 leading-none">
+                  <span className="text-[11px] uppercase tracking-[0.12em] text-ink-500 font-medium">Report health</span>
+                  <span className="text-[13px] text-ink-900 font-medium">{ACTION_HUB_SUMMARY.reportHealthLabel}</span>
+                  <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
                 </div>
-                <div className="h-7 w-px bg-canvas-border" aria-hidden="true" />
+                <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
                 <button
                   onClick={() => setAtrModalOpen(true)}
                   className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
@@ -464,27 +480,66 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               }}
               onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
+              onAssign={(ex) => {
+                addToast({ type: 'info', message: `Assigning ${ex.id}…` });
+              }}
               headerLeading={
-                role === 'risk-owner' ? (
-                  <button
-                    disabled={selected.size === 0}
-                    onClick={() => setBulkClassifyOpen(true)}
-                    title={selected.size === 0 ? 'Select cases first' : `Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                    className={`flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border transition-colors ${
-                      selected.size === 0
-                        ? 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
-                        : 'text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer'
-                    }`}
-                  >
-                    <Tag size={13} />
-                    Bulk Classify
-                    {selected.size > 0 && (
+                <div className="flex items-center gap-1.5">
+                  {/* Bulk Classify + Bulk Assign only appear once one or more
+                      rows are checked; default toolbar stays uncluttered. */}
+                  {role === 'risk-owner' && selected.size > 0 && (
+                    <button
+                      onClick={() => setBulkClassifyOpen(true)}
+                      title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
+                    >
+                      <Tag size={13} />
+                      Bulk Classify
                       <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
                         {selected.size}
                       </span>
-                    )}
-                  </button>
-                ) : null
+                    </button>
+                  )}
+                  {role === 'risk-owner' && selected.size > 0 && (
+                    <button
+                      onClick={() => {
+                        if (onBulkAssign) {
+                          onBulkAssign(Array.from(selected));
+                        } else {
+                          addToast({ type: 'info', message: `Assigning ${selected.size} case${selected.size === 1 ? '' : 's'}…` });
+                        }
+                      }}
+                      title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 cursor-pointer transition-colors"
+                    >
+                      <UserPlus size={13} />
+                      Bulk Assign
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-100 rounded-full tabular-nums">
+                        {selected.size}
+                      </span>
+                    </button>
+                  )}
+                  {onBulkAssign && role !== 'risk-owner' && (
+                    <button
+                      disabled={selected.size === 0}
+                      onClick={() => onBulkAssign(Array.from(selected))}
+                      title={selected.size === 0 ? 'Select exceptions first' : `Mark ${selected.size} as case${selected.size === 1 ? '' : 's'} & assign`}
+                      className={`flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border transition-colors ${
+                        selected.size === 0
+                          ? 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
+                          : 'text-white bg-purple-600 border-purple-600 hover:bg-purple-500 cursor-pointer'
+                      }`}
+                    >
+                      <UserPlus size={13} />
+                      Mark as Case & Assign
+                      {selected.size > 0 && (
+                        <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                          {selected.size}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
               }
               headerExtras={
                 <button
@@ -561,7 +616,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             selectedCases={exceptions.filter(e => selected.has(e.id))}
             actionableId={`ACT${String(nextActionableNum).padStart(3, '0')}`}
             onClose={() => setBulkClassifyOpen(false)}
-            onApply={() => {
+            onApply={(payload: BulkClassifyPayload) => {
+              updateExceptions(prev => prev.map(e =>
+                payload.caseIds.includes(e.id)
+                  ? { ...e, severity: payload.severity, classification: payload.classification, classificationReview: 'Approved' as const, status: 'Under Review' as const, lastUpdated: new Date().toISOString().slice(0, 10) }
+                  : e
+              ));
               setNextActionableNum(n => n + 1);
               setSelected(new Set());
               setBulkClassifyOpen(false);

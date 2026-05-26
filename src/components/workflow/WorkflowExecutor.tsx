@@ -6,14 +6,15 @@ import {
   CheckCircle2, Clock, Loader2,
   ChevronDown, ChevronUp, X, Database, Search, Check,
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
+  Link2, RefreshCw, Info, Wand2,
 } from 'lucide-react';
 import PlanPanel, { type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
-import StepMapData from '../concierge-workflow-builder/StepMapData';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
   WorkflowDraft,
   JourneyFiles,
   JourneyAlignments,
+  ColumnAlignment,
   UploadedFile,
 } from '../concierge-workflow-builder/types';
 import { DATA_SOURCES } from '../../data/mockData';
@@ -133,6 +134,19 @@ const CLARIFICATION_OPTIONS = [
   'Not sure — recommend for me',
 ];
 
+type FileMapping = {
+  inputId: string;
+  sourceName: string | null;
+  sourceType: 'uploaded' | 'datasource';
+  status: 'mapped' | 'unmapped' | 'mismatch';
+};
+
+const AUTO_FILE_MAPPINGS: FileMapping[] = [
+  { inputId: 'ap_invoice_register', sourceName: 'SAP ERP: AP Module', sourceType: 'datasource', status: 'mapped' },
+  { inputId: 'vendor_master', sourceName: 'Invoice Archive 2026', sourceType: 'datasource', status: 'mapped' },
+  { inputId: 'gl_trial_balance', sourceName: 'Vendor Master Data', sourceType: 'datasource', status: 'mismatch' },
+];
+
 const RESULTS_DATA: ResultRow[] = [
   { invoiceNo: 'INV-2026-4871', vendor: 'Apex Industrial Supplies', amount: '$14,250.00', duplicateGroup: 'DG-001', confidence: 97 },
   { invoiceNo: 'INV-2026-4872', vendor: 'Apex Industrial Supplies', amount: '$14,250.00', duplicateGroup: 'DG-001', confidence: 97 },
@@ -192,7 +206,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
   const stepRef = useRef(0);
   const elapsedRef = useRef(0);
 
-  // Column-mapping pause (runs right after clarification is resolved)
+  // File-mapping pause (runs right after clarification is resolved)
+  const [fileMapPending, setFileMapPending] = useState(false);
+  const [fileMappings, setFileMappings] = useState<FileMapping[]>([]);
+
+  // Column-mapping pause (runs after file mapping is confirmed)
   const [columnMapPending, setColumnMapPending] = useState(false);
   const [alignments] = useState<JourneyAlignments>(() => seedAlignments(workflow));
 
@@ -357,6 +375,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
     setClarificationPending(false);
     setClarificationChoice(null);
     setClarificationOther('');
+    setFileMapPending(false);
+    setFileMappings([]);
     setColumnMapPending(false);
     advance();
   }, [hasRequired, advance]);
@@ -367,12 +387,19 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
     setCurrentStep(0);
     setProgress(0);
     setClarificationPending(false);
+    setFileMapPending(false);
     setColumnMapPending(false);
   }, []);
 
   const resolveClarification = useCallback(() => {
     clarificationAnsweredRef.current = true;
     setClarificationPending(false);
+    setFileMappings(AUTO_FILE_MAPPINGS.map(m => ({ ...m })));
+    setFileMapPending(true);
+  }, []);
+
+  const resolveFileMap = useCallback(() => {
+    setFileMapPending(false);
     setColumnMapPending(true);
   }, []);
 
@@ -822,14 +849,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
-                      {(clarificationPending || columnMapPending) ? (
+                      {(clarificationPending || fileMapPending || columnMapPending) ? (
                         <AlertCircle size={15} className="text-mitigated-700" />
                       ) : (
                         <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
                           <Loader2 size={15} className="text-brand-600" />
                         </motion.div>
                       )}
-                      {(clarificationPending || columnMapPending) ? 'Paused — waiting for input' : 'Running Workflow'}
+                      {(clarificationPending || fileMapPending || columnMapPending) ? 'Paused — waiting for input' : 'Running Workflow'}
                     </h3>
                     <div className="flex items-center gap-3">
                       <span className="text-[12px] font-mono font-bold text-brand-700">{progress}%</span>
@@ -1032,7 +1059,172 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
               )}
             </AnimatePresence>
 
-            {/* Column mapping (pauses execution after clarification) */}
+            {/* Step 1: File mapping (pauses execution after clarification) */}
+            <AnimatePresence>
+              {phase === 'running' && fileMapPending && (
+                <motion.section
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5 mb-6"
+                >
+                  <div className="flex items-start justify-between gap-4 mb-1">
+                    <div>
+                      <h3 className="text-[14px] font-bold text-ink-800 leading-snug">
+                        Confirm file mapping
+                      </h3>
+                      <p className="text-[11.5px] text-ink-500 mt-0.5">
+                        Review auto-detected file mappings. Re-assign any files that don&apos;t match before proceeding to column mapping.
+                      </p>
+                    </div>
+                    <span className="text-[12px] text-ink-400 shrink-0">Step 1 of 2</span>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5 mt-4">
+                    {workflow.inputs.map((input) => {
+                      const mapping = fileMappings.find(m => m.inputId === input.id);
+                      const isMapped = mapping?.status === 'mapped';
+                      const isMismatch = mapping?.status === 'mismatch';
+                      const isUnmapped = !mapping || mapping.status === 'unmapped';
+                      return (
+                        <div
+                          key={input.id}
+                          className={[
+                            'rounded-xl border p-4 transition-colors',
+                            isMapped
+                              ? 'border-compliant/30 bg-compliant-50/20'
+                              : isMismatch
+                                ? 'border-mitigated-200 bg-mitigated-50/30'
+                                : 'border-risk/30 bg-risk-50/20',
+                          ].join(' ')}
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={[
+                                'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+                                isMapped ? 'bg-compliant-50 text-compliant' : isMismatch ? 'bg-mitigated-50 text-mitigated-700' : 'bg-risk-50 text-risk',
+                              ].join(' ')}>
+                                {isMapped ? <CheckCircle2 size={14} /> : isMismatch ? <AlertTriangle size={14} /> : <AlertCircle size={14} />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[13px] font-semibold text-ink-800">{input.name}</div>
+                                <div className="text-[11px] text-ink-400">
+                                  {input.columns?.length ?? 0} columns · {input.type.toUpperCase()} · {input.required ? 'Required' : 'Optional'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isMapped && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25">
+                                  <Check size={10} strokeWidth={3} /> Mapped
+                                </span>
+                              )}
+                              {isMismatch && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10.5px] font-semibold border border-mitigated-200">
+                                  <AlertTriangle size={10} /> Needs review
+                                </span>
+                              )}
+                              {isUnmapped && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
+                                  <AlertCircle size={10} /> Unmapped
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 mt-2.5">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2">
+                                <Link2 size={12} className="text-ink-400 shrink-0" />
+                                <ArrowLeft size={11} className="text-ink-300 shrink-0" />
+                                {mapping?.sourceName ? (
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <Database size={12} className="text-brand-600 shrink-0" />
+                                    <span className="text-[12.5px] font-medium text-ink-700 truncate">{mapping.sourceName}</span>
+                                    {mapping.sourceType === 'datasource' && (
+                                      <span className="text-[10px] font-semibold uppercase rounded bg-brand-50 text-brand-600 px-1.5 py-0.5 shrink-0">Source</span>
+                                    )}
+                                    {mapping.sourceType === 'uploaded' && (
+                                      <span className="text-[10px] font-semibold uppercase rounded bg-canvas text-ink-500 px-1.5 py-0.5 shrink-0 border border-canvas-border">File</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[12px] text-ink-400 italic">No source mapped</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isMismatch && (
+                                <FileMapDropdown
+                                  inputId={input.id}
+                                  onSelect={(sourceName, sourceType) => {
+                                    setFileMappings(prev =>
+                                      prev.map(m =>
+                                        m.inputId === input.id
+                                          ? { ...m, sourceName, sourceType, status: 'mapped' }
+                                          : m
+                                      )
+                                    );
+                                  }}
+                                />
+                              )}
+                              {isUnmapped && (
+                                <FileMapDropdown
+                                  inputId={input.id}
+                                  onSelect={(sourceName, sourceType) => {
+                                    setFileMappings(prev => [
+                                      ...prev.filter(m => m.inputId !== input.id),
+                                      { inputId: input.id, sourceName, sourceType, status: 'mapped' },
+                                    ]);
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {isMismatch && (
+                            <div className="flex items-start gap-2 mt-2.5 px-1">
+                              <AlertTriangle size={11} className="text-mitigated-700 shrink-0 mt-0.5" />
+                              <span className="text-[11px] text-mitigated-700 leading-relaxed">
+                                Schema mismatch — the mapped source may not contain the expected columns. Choose a different file or data source.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-5">
+                    <button
+                      type="button"
+                      onClick={resolveFileMap}
+                      disabled={fileMappings.some(m => m.status === 'unmapped') || fileMappings.length < workflow.inputs.filter(i => i.required).length}
+                      className={[
+                        'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors',
+                        fileMappings.every(m => m.status !== 'unmapped') && fileMappings.length >= workflow.inputs.filter(i => i.required).length
+                          ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
+                          : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed',
+                      ].join(' ')}
+                    >
+                      Confirm file mapping & continue
+                      <ArrowRight size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resolveFileMap}
+                      className="text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </motion.section>
+              )}
+            </AnimatePresence>
+
+            {/* Step 2: Column alignment (after file mapping is confirmed) */}
             <AnimatePresence>
               {phase === 'running' && columnMapPending && (
                 <motion.section
@@ -1051,14 +1243,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
                         Review auto-mapped columns and resolve any that need attention before execution continues.
                       </p>
                     </div>
-                    <span className="text-[12px] text-ink-400 shrink-0">1 of 1</span>
+                    <span className="text-[12px] text-ink-400 shrink-0">Step 2 of 2</span>
                   </div>
 
-                  <StepMapData
+                  <ColumnAlignmentView
                     workflow={workflow}
-                    files={files}
-                    setFiles={setFiles}
                     alignments={alignments}
+                    fileMappings={fileMappings}
                   />
 
                   <div className="flex items-center justify-between mt-5">
@@ -1179,6 +1370,282 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
           visibleTabs={['plan']}
         />
       </div>
+    </div>
+  );
+}
+
+function ColumnAlignmentRow({ col }: { col: ColumnAlignment }) {
+  return (
+    <div className="grid grid-cols-[1fr_1fr] gap-4 items-center py-2.5 border-b border-canvas-border/30 last:border-b-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-0.5 h-6 rounded-full bg-brand-400 shrink-0" />
+        <span className="text-[12.5px] font-medium text-ink-800 truncate">{col.source.name}</span>
+        <span className="text-[9.5px] font-bold uppercase tracking-wide rounded bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
+          {col.source.dtype}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 min-w-0">
+        <ArrowRight size={12} className="text-ink-300 shrink-0" />
+        {col.target ? (
+          <div className="flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas px-2.5 py-1 min-w-0 flex-1">
+            <span className="text-[12.5px] font-medium text-brand-700 truncate">{col.target.name}</span>
+            <span className="text-[9.5px] font-bold uppercase tracking-wide rounded bg-brand-50 border border-brand-100 text-brand-600 px-1.5 py-0.5 shrink-0">
+              {col.target.dtype}
+            </span>
+            <ChevronDown size={11} className="text-ink-400 shrink-0 ml-auto" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-risk/40 bg-risk-50/30 px-2.5 py-1 min-w-0 flex-1">
+            <span className="text-[12px] text-risk italic">Unmapped</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ColumnAlignmentView({
+  workflow,
+  alignments,
+  fileMappings,
+}: {
+  workflow: WorkflowDraft;
+  alignments: JourneyAlignments;
+  fileMappings: FileMapping[];
+}) {
+  const [expanded, setExpanded] = useState<string | null>(workflow.inputs[0]?.id ?? null);
+  const [autoExpanded, setAutoExpanded] = useState<Record<string, boolean>>({});
+
+  return (
+    <div className="flex flex-col gap-3">
+      {workflow.inputs.map((input) => {
+        const cols: ColumnAlignment[] = alignments[input.id] ?? [];
+        const needsAttention = (c: ColumnAlignment) => c.reason !== null || c.target === null || c.confidence < 75;
+        const goodCols = cols.filter(c => !needsAttention(c));
+        const attentionCols = cols.filter(c => needsAttention(c));
+        const mappedCount = cols.filter(c => c.target !== null).length;
+        const totalCount = cols.length;
+        const isOpen = expanded === input.id;
+        const mapping = fileMappings.find(m => m.inputId === input.id);
+        const sourceName = mapping?.sourceName ?? 'No source';
+        const isAutoExpanded = autoExpanded[input.id] ?? false;
+
+        return (
+          <div
+            key={input.id}
+            className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden"
+          >
+            <button
+              type="button"
+              onClick={() => setExpanded(isOpen ? null : input.id)}
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-canvas/40 transition-colors cursor-pointer"
+            >
+              <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-[22px] font-bold text-ink-800 tabular-nums">{mappedCount}/{totalCount}</span>
+                <span className="text-[11px] text-ink-400 text-left leading-tight">column<br />mapped</span>
+                {isOpen ? <ChevronUp size={16} className="text-ink-400" /> : <ChevronDown size={16} className="text-ink-400" />}
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="border-t border-canvas-border">
+                {/* Mapped sources */}
+                <div className="px-5 py-4 border-b border-canvas-border/60">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+                      Mapped Sources
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[11px] font-bold border border-compliant/20">
+                      Linked
+                      <CheckCircle2 size={11} />
+                    </span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas px-3 py-1.5">
+                    <FileIcon size={12} className="text-ink-400" />
+                    <span className="text-[12.5px] text-ink-700 font-medium">{sourceName}</span>
+                    <button type="button" className="text-ink-400 hover:text-ink-600 transition-colors cursor-pointer">
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Column Alignment */}
+                <div className="px-5 pt-4 pb-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+                      Column Alignment
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
+                    >
+                      <Wand2 size={11} />
+                      Map by description
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_1fr] gap-4 pb-2 border-b border-canvas-border/60">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Source Column</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Target Schema</span>
+                  </div>
+                </div>
+
+                {/* Auto-mapped — collapsed by default */}
+                {goodCols.length > 0 && (
+                  <div className="px-5 pb-3">
+                    <button
+                      type="button"
+                      onClick={() => setAutoExpanded(prev => ({ ...prev, [input.id]: !prev[input.id] }))}
+                      className="w-full flex items-center justify-between py-2.5 cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-compliant" />
+                        <span className="text-[12px] font-semibold text-compliant-700">
+                          {goodCols.length} fields auto-mapped
+                        </span>
+                      </div>
+                      <span className="text-[11.5px] font-semibold text-ink-500 group-hover:text-brand-700 transition-colors">
+                        {isAutoExpanded ? 'Collapse ↑' : 'Expand ↓'}
+                      </span>
+                    </button>
+
+                    {isAutoExpanded && (
+                      <div className="flex flex-col">
+                        {goodCols.map((col) => (
+                          <ColumnAlignmentRow key={col.id} col={col} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Needs attention — always visible, yellow background */}
+                {attentionCols.length > 0 && (
+                  <div className="mx-5 mb-4 rounded-xl border border-amber-300/60 bg-amber-50/60 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-200/60">
+                      <AlertTriangle size={13} className="text-amber-600" />
+                      <span className="text-[11.5px] font-semibold text-amber-700">
+                        {attentionCols.length} {attentionCols.length === 1 ? 'field needs' : 'fields need'} attention
+                      </span>
+                      <span className="text-[11px] text-amber-600/70">
+                        — low confidence, type mismatch, or unmapped
+                      </span>
+                    </div>
+                    <div className="px-4 py-1">
+                      {attentionCols.map((col) => (
+                        <ColumnAlignmentRow key={col.id} col={col} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FileMapDropdown({
+  inputId,
+  onSelect,
+}: {
+  inputId: string;
+  onSelect: (sourceName: string, sourceType: 'uploaded' | 'datasource') => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtered = DATA_SOURCES.filter(
+    s => s.status === 'connected' && s.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
+      >
+        <RefreshCw size={11} />
+        Re-map
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-1.5 w-[280px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl z-50 overflow-hidden"
+          >
+            <div className="px-3 pt-3 pb-2">
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search data sources…"
+                  autoFocus
+                  className="w-full rounded-lg border border-canvas-border bg-canvas pl-7 pr-3 py-1.5 text-[12px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[180px] overflow-y-auto px-1.5 pb-1.5">
+              {filtered.length === 0 ? (
+                <div className="text-[11.5px] text-ink-400 text-center py-4">No matching sources</div>
+              ) : (
+                filtered.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(s.name, 'datasource');
+                      setOpen(false);
+                    }}
+                    className="w-full text-left flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-brand-50 transition-colors cursor-pointer"
+                  >
+                    <Database size={12} className="text-brand-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px] font-semibold text-ink-800 truncate">{s.name}</div>
+                      <div className="text-[10.5px] text-ink-400">{s.records} records · {s.type.toUpperCase()}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="border-t border-canvas-border px-3 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(`${inputId}_upload.csv`, 'uploaded');
+                  setOpen(false);
+                }}
+                className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-semibold text-ink-600 hover:bg-canvas hover:text-brand-700 transition-colors cursor-pointer"
+              >
+                <UploadCloud size={12} />
+                Upload a new file
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

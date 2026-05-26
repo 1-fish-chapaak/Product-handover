@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { useAppState } from './hooks/useAppState';
@@ -61,6 +61,9 @@ import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPane
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
 import NotificationDrawer from './components/notifications/NotificationDrawer';
 import { createNotification, type PlatformNotification } from './data/notifications';
+// V3 Configurable Engagement — dev-only preview (not wired to main flow)
+import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
+import EngagementFinalModule from './components/engagement-final/EngagementFinalModule';
 
 const LAUNCHED_FROM_REPORT =
   typeof window !== 'undefined' &&
@@ -81,7 +84,29 @@ const SHARED_DASHBOARD_OPTIONS = [
   { id: 'shared-3', name: 'GL Reconciliation Monitor', description: 'General Ledger reconciliation status', accent: 'bg-brand-50 text-brand-700', sharedBy: 'Sneha Desai' },
 ];
 
-export default function App() {
+// ─── Error Boundary ──────────────────────────────────────────────────────
+import React from 'react';
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, fontFamily: 'system-ui' }}>
+          <h2 style={{ color: '#c00', marginBottom: 12 }}>Something went wrong</h2>
+          <pre style={{ fontSize: 13, color: '#666', whiteSpace: 'pre-wrap', maxWidth: 800 }}>{this.state.error?.message}\n{this.state.error?.stack}</pre>
+          <button onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            style={{ marginTop: 16, padding: '8px 16px', background: '#6a12cd', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppInner() {
   const {
     state,
     setView,
@@ -104,8 +129,10 @@ export default function App() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
+    startWorkflowForEngagement,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -143,12 +170,57 @@ export default function App() {
   };
 
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const chatSplitContainerRef = useRef<HTMLDivElement>(null);
   const [viewLoading, setViewLoading] = useState(false);
+
+  // Artifact panel width in pixels (only meaningful when both panes are
+  // visible). Persisted to localStorage so the user's resize choice survives
+  // reloads. Default 464px; clamped at drag time so neither pane collapses.
+  const ARTIFACT_PANEL_PX_KEY = 'artifact-panel-px';
+  const ARTIFACT_PANEL_DEFAULT_PX = 464;
+  const ARTIFACT_PANEL_MIN_PX = 360;
+  const CHAT_MIN_PX = 480;
+  const [artifactPanelPx, setArtifactPanelPx] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(ARTIFACT_PANEL_PX_KEY);
+      const n = raw ? parseFloat(raw) : ARTIFACT_PANEL_DEFAULT_PX;
+      return Number.isFinite(n) && n >= ARTIFACT_PANEL_MIN_PX ? n : ARTIFACT_PANEL_DEFAULT_PX;
+    } catch { return ARTIFACT_PANEL_DEFAULT_PX; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(ARTIFACT_PANEL_PX_KEY, String(artifactPanelPx)); } catch { /* ignore */ }
+  }, [artifactPanelPx]);
+
+  const startSplitDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const containerW = chatSplitContainerRef.current?.offsetWidth ?? 1;
+    const startX = e.clientX;
+    const startWidth = artifactPanelPx;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    const onMove = (ev: MouseEvent) => {
+      // Splitter sits to the left of the artifact panel — dragging right
+      // shrinks the panel.
+      const delta = ev.clientX - startX;
+      const maxPx = Math.max(ARTIFACT_PANEL_MIN_PX, containerW - CHAT_MIN_PX);
+      const next = Math.max(ARTIFACT_PANEL_MIN_PX, Math.min(maxPx, startWidth - delta));
+      setArtifactPanelPx(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [artifactPanelPx]);
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
   const [controlDrawerData, setControlDrawerData] = useState<any>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
+  const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' };
   const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
@@ -186,12 +258,43 @@ export default function App() {
     return () => clearTimeout(t);
   }, [state.focusedNotificationRefId, setFocusedNotificationRefId]);
 
+  // Deep-link target for the post-bulk-run "Open report" toast action. The
+  // BulkRunProgress provider dispatches `irame:open-report`; we react by
+  // switching to the Reports view and passing the id down so ReportsView
+  // can open the report in its full-page view.
+  const [focusReportId, setFocusReportId] = useState<string | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (!id) return;
+      setView('reports');
+      setFocusReportId(id);
+    };
+    window.addEventListener('irame:open-report', handler);
+    return () => window.removeEventListener('irame:open-report', handler);
+  }, [setView]);
+
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
     setViewLoading(true);
     const t = setTimeout(() => setViewLoading(false), 400);
     return () => clearTimeout(t);
   }, [state.view]);
+
+  // ⌘\ (mac) / Ctrl+\ (win/linux) toggles the sidebar pin state. Skips when the
+  // user is typing in an input/textarea/contenteditable so it doesn't fight
+  // with the chat composer.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '\\' || !(e.metaKey || e.ctrlKey)) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      toggleSidebar();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [toggleSidebar]);
 
   // Ask AI removed from all pages per PRD 2026-04-06 decision
   // IRA AI is accessed exclusively via sidebar navigation to /chat
@@ -212,6 +315,8 @@ export default function App() {
         onManageExceptions={() => setShowExceptionModal(true)}
         onAddToReport={() => openReportBuilder('new')}
         onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
+        onOpenInKnowledgeHub={() => { setShowArtifacts(false); setView('knowledge-hub'); }}
+        onComposeInChat={(draft) => { setShowArtifacts(false); setChatComposerDraft(draft); }}
       />
     );
 
@@ -220,7 +325,7 @@ export default function App() {
     // to wrapper for proper 3D feel; transformStyle preserve-3d on the spinning
     // element so the back face renders correctly.
     return (
-      <div style={{ perspective: '1400px' }} className="flex-1 min-w-0 h-full">
+      <div style={{ perspective: '1400px' }} className="h-full w-full min-w-0">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={state.artifactMode}
@@ -272,11 +377,15 @@ export default function App() {
 
       case 'chat':
         return (
-          <div className="flex flex-1 h-full overflow-hidden">
-            <div className="flex-1 min-w-0 h-full"><ChatView
+          <div ref={chatSplitContainerRef} className="flex flex-1 h-full overflow-hidden">
+            <div
+              className="h-full min-w-0"
+              style={{ flex: '1 1 0%' }}
+            ><ChatView
               showChatHistory={state.showChatHistory}
               toggleChatHistory={toggleChatHistory}
               setShowArtifacts={setShowArtifacts}
+              showArtifacts={state.showArtifacts}
               setActiveArtifactTab={setActiveArtifactTab}
               setArtifactMode={setArtifactMode}
               setWorkflowCanvasStage={setWorkflowCanvasStage}
@@ -284,6 +393,8 @@ export default function App() {
               setQueryAssumptions={setQueryAssumptions}
               initialQuery={state.chatInitialQuery ?? undefined}
               onInitialQueryProcessed={() => setChatInitialQuery(null)}
+              composerDraft={state.chatComposerDraft}
+              onComposerDraftConsumed={() => setChatComposerDraft(null)}
               selectedChatId={state.selectedChatId}
               onChatLoaded={() => setSelectedChatId(null)}
               setView={setView}
@@ -346,10 +457,32 @@ export default function App() {
               }}
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={() => setView('reports')}
+              workflowEngagementContext={state.workflowBuilderEngagementName}
             /></div>
-            <AnimatePresence>
-              {renderArtifactPanel()}
-            </AnimatePresence>
+            {state.showArtifacts && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize chat / Workspace"
+                onMouseDown={startSplitDrag}
+                className="group relative w-px shrink-0 cursor-col-resize bg-canvas-border z-10"
+              >
+                {/* Wider hit target than the visible 1px line */}
+                <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-10 rounded-full bg-canvas-border group-hover:bg-brand-300 transition-colors"
+                />
+              </div>
+            )}
+            {state.showArtifacts && (
+              <div
+                className="h-full min-w-0"
+                style={{ width: `${artifactPanelPx}px`, flex: '0 0 auto' }}
+              >
+                {renderArtifactPanel()}
+              </div>
+            )}
           </div>
         );
 
@@ -363,13 +496,26 @@ export default function App() {
         );
 
       case 'workflow-detail': {
-        const fromLibrary = state.selectedWorkflowId?.startsWith('lw-');
+        const fromLibrary = state.selectedWorkflowId?.startsWith('lw-') || workflowBackView === 'workflow-library';
+        const fromProcessHub = workflowBackView === 'business-processes';
         return (
           <WorkflowDetail
             workflowId={state.selectedWorkflowId!}
-            onBack={() => fromLibrary ? setView('workflow-library') : setSelectedWorkflow(null)}
+            onBack={() => {
+              if (fromProcessHub) {
+                setSelectedWorkflow(null);
+                setView('business-processes' as any);
+                setWorkflowBackView(null);
+              } else if (fromLibrary) {
+                setView('workflow-library');
+                setWorkflowBackView(null);
+              } else {
+                setSelectedWorkflow(null);
+              }
+            }}
             onOpenExecutor={() => openWorkflowExecutor(state.selectedWorkflowId!)}
             onEditInChat={() => enterWorkflowMode({ workflowId: state.selectedWorkflowId! })}
+            initialTab={state.workflowDetailInitialTab}
           />
         );
       }
@@ -394,7 +540,7 @@ export default function App() {
                 category: 'workflow',
                 severity: 'info',
                 title: 'Workflow run completed',
-                message: `Run finished successfully — review the output for any flagged exceptions.`,
+                message: `Run finished successfully. Review the output for any flagged exceptions.`,
                 actor: 'Ira (AI)',
                 link: { view: 'workflow-detail', ref: { kind: 'workflow', id: workflowId } },
               }));
@@ -415,6 +561,11 @@ export default function App() {
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            onNavigateToExecution={(engId) => {
+              setEngagementBackView('programs');
+              openAuditExecution(engId);
+              setView('engagement-detail' as any);
+            }}
           />
         );
 
@@ -429,12 +580,10 @@ export default function App() {
               openAuditExecution(engId);
               setView('engagement-detail' as any);
             }}
-            onOpenRacmEditor={(racm) => openRacmFullEditor({
-              racmId: racm.id,
-              racmName: racm.name,
-              processLabel: racm.process,
-              backView: 'bp-detail',
-            })}
+            onOpenWorkflowDetail={(wfId) => {
+              setWorkflowBackView('business-processes');
+              setSelectedWorkflow(wfId);
+            }}
           />
         );
 
@@ -455,7 +604,6 @@ export default function App() {
           <EngagementExecutionV2
             engagementId={state.selectedEngagementId ?? undefined}
             onBack={() => setView(engagementBackView)}
-            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
 
@@ -515,6 +663,8 @@ export default function App() {
             }}
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
+            focusReportId={focusReportId}
+            onFocusReportConsumed={() => setFocusReportId(null)}
           />
         );
 
@@ -559,21 +709,32 @@ export default function App() {
             onOpenCaseManagement={openCaseManagement}
             onOpenRacmFullEditor={() => openRacmFullEditor({
               racmId: 'racm-procurement-fy26',
-              racmName: 'Procurement SOP — Budget to Payment RACM',
+              racmName: 'Procurement SOP · Budget to Payment RACM',
               processLabel: 'P2P',
               backView: 'engagement-overview',
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+            onOpenWorkflow={(id) => setSelectedWorkflow(id, 'runs')}
+            onCreateWorkflowForEngagement={startWorkflowForEngagement}
           />
         );
 
-      case 'engagement-case-management':
+      case 'engagement-case-management': {
+        // Deep-link filters (set when drilled in from an Overview chart in a new tab).
+        const sp = new URLSearchParams(window.location.search);
+        const initialFilters = {
+          severity: sp.get('severity') ?? undefined,
+          workflow: sp.get('workflow') ?? undefined,
+          status: sp.get('status') ?? undefined,
+        };
         return (
           <CaseManagementWorkspace
             engagementId={state.selectedEngagementId ?? ''}
             onBack={() => setView('engagement-overview')}
+            initialFilters={initialFilters}
           />
         );
+      }
 
       case 'my-queue':
         return (
@@ -595,11 +756,10 @@ export default function App() {
         return <AuditPlanningPage
           onOpenEngagements={() => setView('engagements')}
           onNavigateToExecution={(engId) => {
-            setEngagementBackView('audit-planning');
-            openAuditExecution(engId);
-            setView('engagement-detail' as any);
-          }}
-        />;
+          setEngagementBackView('audit-planning');
+          openAuditExecution(engId);
+          setView('engagement-detail' as any);
+        }} />;
 
       case 'knowledge-hub':
         return <KnowledgeHubView />;
@@ -620,7 +780,7 @@ export default function App() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
-            racmName={racmEditorContext?.racmName ?? 'Procurement SOP — Budget to Payment RACM'}
+            racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
           />
@@ -674,10 +834,6 @@ export default function App() {
           />
         );
 
-      // System
-      case 'platform-usage':
-        return <PlatformUsageView />;
-
       // Admin
       case 'admin-users':
         return <AdminView activeTab="users" />;
@@ -689,6 +845,22 @@ export default function App() {
         return <AdminView activeTab="integrations" />;
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
+
+      // V3 Configurable Engagement — dev-only preview route
+      case 'dev-configurable-engagement-v3':
+      case 'engagement-config':
+        return (
+          <div className="px-8 py-6 h-full overflow-y-auto">
+            <ConfigurableEngagementWizard onNavigateToView={setView} />
+          </div>
+        );
+
+      case 'engagement-final':
+        return (
+          <div className="px-8 py-6 h-full overflow-y-auto">
+            <EngagementFinalModule onOpenRacmFullEditor={(ctx) => openRacmFullEditor({ ...ctx, backView: 'engagement-final' })} />
+          </div>
+        );
 
       default:
         return (
@@ -834,5 +1006,13 @@ export default function App() {
       </div>
       </BulkRunProgressProvider>
     </ToastProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }

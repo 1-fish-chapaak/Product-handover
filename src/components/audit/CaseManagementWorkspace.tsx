@@ -524,14 +524,26 @@ function ExceptionRow({
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-interface Props { engagementId: string; onBack: () => void; }
+interface Props {
+  engagementId: string;
+  onBack: () => void;
+  /** When true, strips the full-page wrapper, back button, and header — for embedding inside a tab. */
+  embedded?: boolean;
+  /** Pre-applied filters — e.g. when drilled in from an Overview chart via deep-link. */
+  initialFilters?: { severity?: string; workflow?: string; status?: string };
+}
 
-export default function CaseManagementWorkspace({ engagementId, onBack }: Props): JSX.Element {
+export default function CaseManagementWorkspace({ engagementId, onBack, embedded, initialFilters }: Props): JSX.Element {
   const { addToast } = useToast();
   const eng: Engagement | undefined = useMemo(() => ENGAGEMENTS.find((e) => e.id === engagementId), [engagementId]);
   const allExceptions = useMemo(() => exceptionsForEngagement(engagementId), [engagementId]);
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...EMPTY_FILTERS,
+    ...(initialFilters?.severity ? { severity: initialFilters.severity as Filters['severity'] } : {}),
+    ...(initialFilters?.workflow ? { workflow: initialFilters.workflow } : {}),
+    ...(initialFilters?.status ? { status: initialFilters.status as Filters['status'] } : {}),
+  }));
   const [savedViews, setSavedViews] = useState<SavedView[]>(SEED_VIEWS);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -660,12 +672,14 @@ export default function CaseManagementWorkspace({ engagementId, onBack }: Props)
 
   if (!eng) {
     return (
-      <div className="min-h-screen bg-canvas">
-        <div className="max-w-[1400px] mx-auto px-6 py-8">
-          <button onClick={onBack}
-            className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
-            <ArrowLeft size={14} /> Back
-          </button>
+      <div className={embedded ? '' : 'min-h-screen bg-canvas'}>
+        <div className={embedded ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
+          {!embedded && (
+            <button onClick={onBack}
+              className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
+              <ArrowLeft size={14} /> Back
+            </button>
+          )}
           <div className="glass-card rounded-xl p-12 text-center">
             <AlertTriangle size={28} className="text-ink-400 mx-auto mb-3" />
             <p className="text-[14px] font-semibold text-ink-900 mb-1">Engagement not found</p>
@@ -677,30 +691,49 @@ export default function CaseManagementWorkspace({ engagementId, onBack }: Props)
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <div className="max-w-[1400px] mx-auto px-6 py-6">
-        {/* Back link */}
-        <button onClick={onBack}
-          className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
-          <ArrowLeft size={14} /> Back to {eng.code} {eng.name}
-        </button>
+    <div className={embedded ? '' : 'min-h-screen bg-canvas'}>
+      <div className={embedded ? '' : 'max-w-[1400px] mx-auto px-6 py-6'}>
+        {!embedded && (
+          <>
+            {/* Back link */}
+            <button onClick={onBack}
+              className="flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-brand-700 font-medium mb-4 cursor-pointer transition-colors">
+              <ArrowLeft size={14} /> Back to {eng.code} {eng.name}
+            </button>
 
-        {/* Header */}
-        <header className="glass-card rounded-2xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="font-display text-[22px] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
-            <p className="text-[12.5px] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <CountPill label="Open" value={totals.open} tone="risk" />
-            <CountPill label="Triaging" value={totals.triaging} tone="mitigated" />
-            <CountPill label="Resolved" value={totals.resolved} tone="compliant" />
+            {/* Header */}
+            <header className="glass-card rounded-2xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h1 className="font-display text-[22px] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
+                <p className="text-[12.5px] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <CountPill label="Open" value={totals.open} tone="risk" />
+                <CountPill label="Triaging" value={totals.triaging} tone="mitigated" />
+                <CountPill label="Resolved" value={totals.resolved} tone="compliant" />
+                <button onClick={() => addToast({ message: 'Refreshed exception list', type: 'info' })}
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
+                  <RefreshCw size={13} /> Refresh
+                </button>
+              </div>
+            </header>
+          </>
+        )}
+
+        {/* Embedded header — compact summary bar */}
+        {embedded && (
+          <header className="rounded-xl border border-border-light bg-white p-4 mb-3 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <CountPill label="Open" value={totals.open} tone="risk" />
+              <CountPill label="Triaging" value={totals.triaging} tone="mitigated" />
+              <CountPill label="Resolved" value={totals.resolved} tone="compliant" />
+            </div>
             <button onClick={() => addToast({ message: 'Refreshed exception list', type: 'info' })}
-              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas text-[12px] font-semibold cursor-pointer transition-colors">
               <RefreshCw size={13} /> Refresh
             </button>
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* Filter pane */}
         <section aria-label="Filters" className="glass-card rounded-2xl px-4 py-3.5 mb-3 flex items-center gap-2 flex-wrap">
@@ -964,11 +997,13 @@ export default function CaseManagementWorkspace({ engagementId, onBack }: Props)
       </AnimatePresence>
 
       {/* Audit pack export FAB */}
-      <button onClick={() => addToast({ message: 'Generating audit pack…', type: 'info' })}
-        className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 px-4 h-11 rounded-full bg-ink-900 hover:bg-ink-800 text-white text-[12.5px] font-semibold shadow-xl cursor-pointer transition-colors"
-        aria-label="Generate audit pack">
-        <FileSpreadsheet size={14} /> Audit pack export
-      </button>
+      {!embedded && (
+        <button onClick={() => addToast({ message: 'Generating audit pack…', type: 'info' })}
+          className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 px-4 h-11 rounded-full bg-ink-900 hover:bg-ink-800 text-white text-[12.5px] font-semibold shadow-xl cursor-pointer transition-colors"
+          aria-label="Generate audit pack">
+          <FileSpreadsheet size={14} /> Audit pack export
+        </button>
+      )}
     </div>
   );
 }

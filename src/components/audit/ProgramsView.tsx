@@ -29,6 +29,7 @@ interface BPItem {
 interface Props {
   selectedBPId: string | null;
   onSelectBP: (id: string | null) => void;
+  onNavigateToExecution?: (engagementId: string) => void;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────

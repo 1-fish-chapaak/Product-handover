@@ -343,7 +343,7 @@ export function AddToReportModal({
                           role="option"
                           disabled={disabled}
                           title={tooltip}
-                          aria-label={tooltip ? `${r.name} — ${tooltip}` : r.name}
+                          aria-label={tooltip ? `${r.name}: ${tooltip}` : r.name}
                           aria-selected={selectedId === r.id}
                           onClick={() => !disabled && setSelectedId(r.id)}
                           onMouseEnter={() => {
@@ -407,7 +407,7 @@ export function AddToReportModal({
                       setNameTouched(true);
                       if (hasOuterWhitespace) setNewName(trimmedName);
                     }}
-                    placeholder="e.g. FY26 Q1 — Duplicate Invoice Findings"
+                    placeholder="e.g. FY26 Q1: Duplicate Invoice Findings"
                     aria-invalid={!!nameError}
                     aria-describedby={nameError ? 'new-rpt-name-error' : 'new-rpt-name-hint'}
                     maxLength={NAME_MAX}

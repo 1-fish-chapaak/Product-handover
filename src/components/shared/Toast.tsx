@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Info, AlertTriangle, AlertOctagon, X } from 'lucide-react';
+import { CheckCircle, Info, AlertTriangle, AlertOctagon, Loader2, X } from 'lucide-react';
 
-export type ToastType = 'success' | 'info' | 'warning' | 'error';
+export type ToastType = 'loading' | 'success' | 'info' | 'warning' | 'error';
 
 interface Toast {
   id: string;
@@ -14,16 +14,18 @@ interface Toast {
 }
 
 interface ToastContextType {
-  addToast: (toast: Omit<Toast, 'id'>) => void;
+  addToast: (toast: Omit<Toast, 'id'>) => string;
+  updateToast: (id: string, patch: Partial<Omit<Toast, 'id'>>) => void;
 }
 
-const ToastContext = createContext<ToastContextType>({ addToast: () => {} });
+const ToastContext = createContext<ToastContextType>({ addToast: () => '', updateToast: () => {} });
 
 export function useToast() {
   return useContext(ToastContext);
 }
 
 const DISMISS_MS: Record<ToastType, number | null> = {
+  loading: null,
   info: 5000,
   success: 5000,
   warning: 8000,
@@ -33,9 +35,27 @@ const DISMISS_MS: Record<ToastType, number | null> = {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+  const addToast = useCallback((toast: Omit<Toast, 'id'>): string => {
     const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts(prev => [...prev, { ...toast, id }]);
+    setToasts(prev => {
+      // Dedupe — if a visually identical toast is already on screen (same
+      // type + message), skip the new one. Prevents rapid-click spam like
+      // a stack of "Opening … in source viewer…" from one button.
+      if (prev.some(t => t.type === toast.type && t.message === toast.message)) {
+        return prev;
+      }
+      // Cap at 5 — keeps the bottom-right corner readable even when many
+      // distinct actions fire in quick succession.
+      const next = [...prev, { ...toast, id }];
+      return next.length > 5 ? next.slice(next.length - 5) : next;
+    });
+    return id;
+  }, []);
+
+  // Patch a toast in place — resolves a 'loading' toast into its final
+  // 'success' / 'error' state once an async action settles.
+  const updateToast = useCallback((id: string, patch: Partial<Omit<Toast, 'id'>>) => {
+    setToasts(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -43,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ addToast }}>
+    <ToastContext.Provider value={{ addToast, updateToast }}>
       {children}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
         <AnimatePresence>
@@ -65,7 +85,8 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
   }, [toast.id, toast.type, onRemove]);
 
   const icons = {
-    success: <CheckCircle size={16} className="text-compliant" />,
+    loading: <Loader2 size={16} className="text-brand-600 animate-spin" />,
+    success: <CheckCircle size={16} className="text-brand-600" />,
     info: <Info size={16} className="text-evidence" />,
     warning: <AlertTriangle size={16} className="text-mitigated-700" />,
     error: <AlertOctagon size={16} className="text-risk-700" />,

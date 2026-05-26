@@ -108,6 +108,7 @@
 
   /* ── Typography ── */
   --font-display: 'Source Serif 4', ui-serif, Georgia, serif;
+  --font-serif:   'Instrument Serif', 'Source Serif 4', ui-serif, Georgia, serif;
   --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
@@ -142,17 +143,30 @@
   color: var(--color-brand-700);
 }
 
-/* ── Body / root ── */
+/* ── Body / root ──
+   Soft brand-tinted gradient mesh behind every surface so cards/pills read
+   as floating material instead of 1px-bordered rectangles on flat white. */
 body {
   margin: 0;
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11", "tnum";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-canvas);
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 0% 0%, rgba(247, 240, 255, 0.6) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(252, 250, 253, 0.9) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(237, 222, 254, 0.18) 0px, transparent 60%);
   color: var(--color-ink-800);
   line-height: 1.5;
   letter-spacing: 0;
+}
+
+/* Editorial serif utility — chat title + section headers. */
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+  font-weight: 400;
 }
 
 #root {
@@ -286,6 +300,18 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   background: var(--color-canvas);
 }
 
+/* ── Chat canvas mesh — Claude-aligned: near-flat off-white. The two
+ * whisper radial stops keep the canvas from reading as a sterile pure
+ * sheet, but the net read is calm and flat, the way Claude's chat reads.
+ * Stops were dialled back further so the page does not compete with the
+ * composer's hairline border. */
+.chat-canvas-mesh {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 18% 0%, rgba(247, 240, 255, 0.22) 0px, transparent 55%),
+    radial-gradient(at 82% 100%, rgba(243, 238, 229, 0.14) 0px, transparent 60%);
+}
+
 /* ── Skeleton ── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -357,18 +383,23 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   text-decoration: none;
 }
 
-/* ── Editorial AI border (replaces ai-border decorative spinner) ── */
+/* ── Editorial AI border — Claude-aligned composer.
+ * 20px radius matches Claude's empty-state composer shape. Flat at
+ * rest (no shadow); the canvas-border hairline does all the work. */
 .ai-border {
   position: relative;
   background: var(--color-canvas-elevated);
-  border: 1px solid var(--color-brand-200);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-canvas-border);
+  border-radius: 1.25rem; /* 20px — Claude's actual composer radius */
   isolation: isolate;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-shadow: none;
+  transition: border-color 100ms ease-out;
 }
 .ai-border:focus-within {
-  border-color: var(--color-brand-500);
-  box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.16);
+  /* Claude-style focus: border tone only. No ring, no glow, no shadow
+   * change. The border darkens by one step (brand-200 → brand-300) and
+   * that's the entire focus signal — calm, editorial, in-flow. */
+  border-color: var(--color-brand-300);
 }
 .ai-border::before,
 .ai-border::after,
@@ -499,6 +530,19 @@ select.no-focus-ring:focus-visible {
 .recharts-surface {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* Composer attachment-chip row — horizontal scroll without the scrollbar
+   itself; a right-edge fade mask signals there's more off-screen rather than
+   leaving a hard clipped edge. Applied to both empty-state and in-thread
+   composers so attachment overflow reads as deliberate. */
+.composer-chips-row {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+}
+.composer-chips-row::-webkit-scrollbar {
+  display: none;
 }
 
 /* react-grid-layout — match Editorial GRC styling */

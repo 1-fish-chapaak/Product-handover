@@ -100,6 +100,27 @@ export const ENGAGEMENTS: Engagement[] = [
     status: 'Active', periodStart: 'Jul 2025', periodEnd: 'Mar 2026', controls: 4,
     health: 91, openIssues: 6, lastActivity: '3d ago', nextScheduled: 'Weekly batch in 2d',
   },
+  {
+    id: 'ef-auto-001', code: 'EF-AUTO-001', name: 'AP Duplicate Invoice Monitor',
+    description: 'Continuous monitoring for duplicate AP invoice posting — daily scan against vendor, amount, invoice number, and date.',
+    type: 'Automation', subtype: 'CCM', process: 'P2P', framework: 'Internal Policy', owner: 'Priya Singh',
+    status: 'Active', periodStart: 'Oct 2025', periodEnd: 'Mar 2026', controls: 4,
+    health: 88, openIssues: 4, lastActivity: '3h ago', nextScheduled: 'in 8h',
+  },
+  {
+    id: 'ef-001', code: 'EF-001', name: 'P2P Internal Audit Review',
+    description: 'Internal audit of Procure to Pay process covering duplicate invoices, PO approvals, and vendor master changes.',
+    type: 'Internal Audit', process: 'P2P', framework: 'Internal Policy', owner: 'Karan Mehta',
+    status: 'In Progress', periodStart: 'Jan 2026', periodEnd: 'Jun 2026', controls: 8,
+    health: 68, openIssues: 5, lastActivity: '2h ago', nextScheduled: 'Pending review',
+  },
+  {
+    id: 'ef-comp-001', code: 'EF-COMP-001', name: 'P2P SOX Control Testing',
+    description: 'SOX ICFR compliance control testing for Procure-to-Pay — RACM, controls, sampling, evidence, attribute testing, and working paper.',
+    type: 'Compliance', process: 'P2P', framework: 'SOX ICFR', owner: 'Tushar Goel',
+    status: 'Active', periodStart: 'Jan 2026', periodEnd: 'Jun 2026', controls: 24,
+    health: 76, openIssues: 3, lastActivity: 'Today', nextScheduled: 'Continue Testing',
+  },
 ];
 
 export const PROCESS_COLORS: Record<ProcessCode, string> = {

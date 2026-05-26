@@ -116,7 +116,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
               Setup {pct}% complete
             </span>
             <span className="text-meta text-ink-500">
-              {remainingCount} step{remainingCount === 1 ? '' : 's'} left{remaining ? ` — next: ${remaining.label.toLowerCase()}` : ''}.
+              {remainingCount} step{remainingCount === 1 ? '' : 's'} left{remaining ? `. Next: ${remaining.label.toLowerCase()}` : ''}.
             </span>
           </div>
           {/* Tabular progress bar mirrors the full-panel one for continuity. */}
@@ -155,7 +155,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
           </div>
           <div>
             <div className="font-display text-[20px] font-[420] text-ink-900 leading-tight">
-              Set up your workspace <span className="font-mono font-normal text-xs text-ink-500 ml-1">— {completed}/{total} done</span>
+              Set up your workspace <span className="font-mono font-normal text-xs text-ink-500 ml-1">· {completed}/{total} done</span>
             </div>
             <p className="text-meta text-ink-500 mt-0.5">Get your workspace set up in a few quick steps.</p>
           </div>
@@ -1620,7 +1620,7 @@ const RECENT_SHARED: SharedItem[] = [
     id: 'rpt-sox-q1',
     kind: 'report',
     name: 'Q1 SOX Compliance Summary',
-    description: 'SOX testing roll-up — control coverage, exceptions, MW count.',
+    description: 'SOX testing roll-up: control coverage, exceptions, MW count.',
     sharedBy: 'Michael Chen',
     timeAgo: '45m ago',
     target: 'reports',
@@ -1915,7 +1915,7 @@ function OpenExceptionsSection({ setView, rangeDays }: { setView: Props['setView
                     <div className="text-ink-900 line-clamp-1">{e.title}</div>
                     <div className="text-xs text-ink-500 mt-0.5">{e.riskCategory} · {e.status}</div>
                   </td>
-                  <td className="px-2 text-ink-700">{e.assignedTo.name}</td>
+                  <td className="px-2 text-ink-700">{e.assignedTo?.name ?? '—'}</td>
                   <td className="px-4 text-right text-ink-500">{e.lastUpdated}</td>
                 </tr>
               ))}
@@ -1951,7 +1951,7 @@ interface WorkflowRun {
 const WORKFLOW_RUNS: WorkflowRun[] = [
   { id: 'r1', workflowId: 'wf-001', name: 'Duplicate Invoice Detector',     type: 'Detection',      ranAt: '2h ago',   ranAtDays: 0.08, duration: '3m 22s',  status: 'success',     exceptions: 3 },
   { id: 'r2', workflowId: 'wf-005', name: 'Journal Entry Anomaly Detector', type: 'Detection',      ranAt: '4h ago',   ranAtDays: 0.17, duration: '8m 45s',  status: 'success',     exceptions: 1 },
-  { id: 'r3', workflowId: 'wf-007', name: 'Three-Way PO Match',             type: 'Reconciliation', ranAt: '6h ago',   ranAtDays: 0.25, duration: '12m 03s', status: 'error',       exceptions: 0, errorMessage: 'Match validation failed at step 4 — missing GRN reference' },
+  { id: 'r3', workflowId: 'wf-007', name: 'Three-Way PO Match',             type: 'Reconciliation', ranAt: '6h ago',   ranAtDays: 0.25, duration: '12m 03s', status: 'error',       exceptions: 0, errorMessage: 'Match validation failed at step 4: missing GRN reference' },
   { id: 'r4', workflowId: 'wf-008', name: 'SOD Violation Detector',         type: 'Compliance',     ranAt: '1d ago',   ranAtDays: 1,    duration: '2m 15s',  status: 'success',     exceptions: 2 },
   { id: 'r5', workflowId: 'wf-002', name: 'Vendor Master Change Monitor',   type: 'Monitoring',     ranAt: '1d ago',   ranAtDays: 1,    duration: '1m 48s',  status: 'success',     exceptions: 0 },
   { id: 'r6', workflowId: 'wf-003', name: 'High-Value Payment Flagging',    type: 'Detection',      ranAt: '2d ago',   ranAtDays: 2,    duration: '5m 33s',  status: 'in-progress', exceptions: 0 },
@@ -2677,9 +2677,9 @@ function PinnedSection({
 type Persona = 'auditor' | 'manager' | 'cfo';
 
 const PERSONAS: { id: Persona; label: string; description: string; icon: React.ElementType }[] = [
-  { id: 'auditor', label: 'Internal Auditor', description: 'Daily fieldwork — your queue, engagements, and exceptions',   icon: ClipboardCheck },
-  { id: 'manager', label: 'Audit Manager',    description: 'Team orchestration — engagement portfolio and review queue',  icon: Briefcase      },
-  { id: 'cfo',     label: 'CFO',              description: 'Executive overview — financial controls, KPIs, board reports', icon: BarChart3      },
+  { id: 'auditor', label: 'Internal Auditor', description: 'Daily fieldwork: your queue, engagements, and exceptions',     icon: ClipboardCheck },
+  { id: 'manager', label: 'Audit Manager',    description: 'Team orchestration: engagement portfolio and review queue',    icon: Briefcase      },
+  { id: 'cfo',     label: 'CFO',              description: 'Executive overview: financial controls, KPIs, board reports',  icon: BarChart3      },
 ];
 
 const PERSONA_KEY = 'home.persona.v1';
@@ -2742,7 +2742,7 @@ const WIDGET_META: Record<WidgetKey, { label: string; description: string; icon:
   recents:       { label: 'Recent Ask IRA queries', description: 'Pick up where you left off',               icon: MessageSquare,  cols: 12 },
   engagements:   { label: 'Active engagements',     description: 'Audits in progress with control coverage', icon: Briefcase,      cols: 12 },
   exceptions:    { label: 'Open exceptions',        description: 'Unresolved findings flagged for review',   icon: AlertOctagon,   cols: 7  },
-  workflows:     { label: 'Workflow activity',      description: 'Recent run timeline — duration, status, exception output per execution', icon: Activity, cols: 8 },
+  workflows:     { label: 'Workflow activity',      description: 'Recent run timeline: duration, status, exception output per execution', icon: Activity, cols: 8 },
   sources:       { label: 'Connected data sources', description: 'Health of the systems IRA reads from',     icon: Database,       cols: 12 },
   processes:     { label: 'Business processes',     description: 'P2P / O2C / R2R / S2C coverage at a glance', icon: Layers,       cols: 8  },
   'reports-list':{ label: 'Recent reports',         description: 'Reports you and your team generated',      icon: FileText,       cols: 6  },
@@ -3216,7 +3216,7 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
 
   if (kind === 'sources') {
     const cards = [
-      { name: 'SAP ERP — AP',  type: 'sql', tone: 'bg-brand-50 text-brand-700',         ok: true  },
+      { name: 'SAP ERP: AP',   type: 'sql', tone: 'bg-brand-50 text-brand-700',         ok: true  },
       { name: 'Invoice 2026',   type: 'pdf', tone: 'bg-risk-50 text-risk-700',           ok: true  },
       { name: 'Vendor Master',  type: 'csv', tone: 'bg-compliant-50 text-compliant-700', ok: true  },
       { name: 'Contracts',       type: 'pdf', tone: 'bg-risk-50 text-risk-700',           ok: false },
