@@ -128,7 +128,7 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
 export const CUSTOM_TEMPLATES = [
   {
     id: 'ct-custom-01',
-    name: 'Custom Template - 01',
+    name: 'Third-Party Vendor Risk Scorecard',
     desc: 'Custom scorecard for third-party vendors with risk tiers, control gaps, and remediation SLAs.',
     category: 'Risk',
     icon: 'alert-triangle',
@@ -141,7 +141,7 @@ export const CUSTOM_TEMPLATES = [
   },
   {
     id: 'ct-custom-02',
-    name: 'Custom Template - 02',
+    name: 'Quarterly Audit Snapshot',
     desc: 'One-page executive snapshot of quarterly audit findings and status.',
     category: 'Audit',
     icon: 'file-text',
@@ -445,7 +445,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
             <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
             <button
-              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library!` }); onClose(); }}
+              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
               className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
             >
               Save Template
@@ -4092,7 +4092,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
-      addToast({ type: 'success', message: `Template "${template.name}" applied!` });
+      addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
   };
 
@@ -6173,7 +6173,7 @@ export default function ReportsView({
                         };
                         setGeneratedReports(prev => [newReport, ...prev]);
                         setViewingReport(newReport);
-                        addToast({ type: 'success', message: 'Report generated!' });
+                        addToast({ type: 'success', message: 'Report generated.' });
                       }, 1200);
                     }}
                     className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
@@ -6376,7 +6376,7 @@ export default function ReportsView({
                       };
                       setGeneratedReports(prev => [newReport, ...prev]);
                       setViewingReport(newReport);
-                      addToast({ type: 'success', message: 'Report generated!' });
+                      addToast({ type: 'success', message: 'Report generated.' });
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}

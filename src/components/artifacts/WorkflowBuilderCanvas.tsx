@@ -181,7 +181,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
 
   const handleSaveWorkflow = () => {
     setShowSavedBanner(true);
-    addToast({ message: 'Workflow saved successfully', type: 'success' });
+    addToast({ message: 'Workflow saved', type: 'success' });
     setTimeout(() => setShowSavedBanner(false), 2500);
   };
 

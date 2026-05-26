@@ -993,7 +993,7 @@ export default function ExceptionsTable({
     setSavedFilterSets(prev => [...prev, { id, name, filters: { ...filters } }]);
     setActiveFilterSetId(id);
     closeGenerateModal();
-    addToast({ type: 'success', message: 'Filter set has been created successfully' });
+    addToast({ type: 'success', message: 'Filter set has been created' });
   };
   const applyFilterSet = (set: SavedFilterSet) => {
     setFilters(set.filters);

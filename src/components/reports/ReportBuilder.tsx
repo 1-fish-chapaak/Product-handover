@@ -145,7 +145,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
     if (isGenerating) return;
     setIsGenerating(true);
     window.setTimeout(() => {
-      addToast({ type: 'success', message: 'PDF generated successfully!' });
+      addToast({ type: 'success', message: 'PDF generated.' });
       setIsGenerating(false);
     }, 800);
   };
@@ -694,7 +694,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }
                     setIsSavingTemplateModal(true);
                     window.setTimeout(() => {
-                      addToast({ type: 'success', message: 'Template saved to library!' });
+                      addToast({ type: 'success', message: 'Template saved to library.' });
                       setShowSaveTemplate(false);
                       setIsSavingTemplateModal(false);
                     }, 400);

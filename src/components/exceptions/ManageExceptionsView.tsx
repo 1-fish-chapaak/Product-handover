@@ -719,7 +719,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setActiveSheetId(id);
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
-              addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created successfully` });
+              addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
             }}
           />
         )}
