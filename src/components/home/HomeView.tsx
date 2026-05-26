@@ -43,6 +43,7 @@ interface Props {
   setSelectedWorkflow: (id: string | null) => void;
   openAuditExecution: (engagementId: string) => void;
   setSelectedBP: (id: string | null) => void;
+  onLaunchWorkflowBuilder?: (prompt: string) => void;
 }
 
 // ─── Onboarding checklist ────────────────────────────────────────────────────
@@ -2336,13 +2337,17 @@ function RecentReportsSection({
 // Distinct from Recent Ask IRA — Concierge is the specialized-tool surface
 // (forensics, table extraction, workflow building).
 
-const CONCIERGE_TOOLS: { view: View; label: string; description: string; icon: React.ElementType; tone: string }[] = [
+type ConciergeTool =
+  | { view: View; label: string; description: string; icon: React.ElementType; tone: string }
+  | { launchWorkflow: true; label: string; description: string; icon: React.ElementType; tone: string };
+
+const CONCIERGE_TOOLS: ConciergeTool[] = [
   { view: 'ai-concierge-forensics',        label: 'Document Forensics', description: 'Investigate exceptions and trace anomalies',  icon: Search,           tone: 'bg-risk-50 text-risk-700' },
   { view: 'ai-concierge-table-extractor',  label: 'Table Extractor',    description: 'Pull structured data from PDFs and scans',    icon: TableProperties,  tone: 'bg-brand-50 text-brand-700' },
-  { view: 'ai-concierge-workflow-builder', label: 'Workflow Builder',   description: 'Compose new automations from a description',  icon: Wand2,            tone: 'bg-compliant-50 text-compliant-700' },
+  { launchWorkflow: true,                  label: 'Workflow Builder',   description: 'Compose new automations from a description',  icon: Wand2,            tone: 'bg-compliant-50 text-compliant-700' },
 ];
 
-function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; rangeDays: number | null }) {
+function ConciergeSection({ setView, rangeDays, onLaunchWorkflowBuilder }: { setView: Props['setView']; rangeDays: number | null; onLaunchWorkflowBuilder?: Props['onLaunchWorkflowBuilder'] }) {
   const scale = scaleForRange(rangeDays);
   // Mock baseline: ~84 tool invocations YTD across the 3 tools.
   const usedInRange = Math.max(0, Math.round(84 * scale));
@@ -2363,10 +2368,15 @@ function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; r
       <div className="flex-1 overflow-auto divide-y divide-canvas-border/60">
         {CONCIERGE_TOOLS.map(tool => {
           const Icon = tool.icon;
+          const key = 'view' in tool ? tool.view : 'workflow-launcher';
+          const handleClick = () => {
+            if ('launchWorkflow' in tool) onLaunchWorkflowBuilder?.('');
+            else setView(tool.view);
+          };
           return (
             <button
-              key={tool.view}
-              onClick={() => setView(tool.view)}
+              key={key}
+              onClick={handleClick}
               className="w-full flex items-center gap-3 px-5 py-3 hover:bg-brand-50/40 cursor-pointer text-left transition-colors group"
             >
               <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${tool.tone}`}>
@@ -4125,7 +4135,7 @@ function CompactLayout({
 }
 
 export default function HomeView({
-  setView, notifications, onSelectNotification, onOpenNotificationDrawer, setChatInitialQuery, setSelectedWorkflow, openAuditExecution, setSelectedBP,
+  setView, notifications, onSelectNotification, onOpenNotificationDrawer, setChatInitialQuery, setSelectedWorkflow, openAuditExecution, setSelectedBP, onLaunchWorkflowBuilder,
 }: Props) {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1');
 
@@ -4276,7 +4286,7 @@ export default function HomeView({
       case 'sources':       return <ConnectedSourcesSection setView={setView} rangeDays={rangeDays} />;
       case 'processes':     return <BusinessProcessesSection setView={setView} rangeDays={rangeDays} setSelectedBP={setSelectedBP} />;
       case 'reports-list':  return <RecentReportsSection setView={setView} rangeDays={rangeDays} isPinned={pinnedStore.isPinned} togglePin={pinnedStore.toggle} />;
-      case 'concierge':     return <ConciergeSection setView={setView} rangeDays={rangeDays} />;
+      case 'concierge':     return <ConciergeSection setView={setView} rangeDays={rangeDays} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />;
       case 'calendar':      return <AuditCalendarSection setView={setView} rangeDays={rangeDays} openAuditExecution={openAuditExecution} />;
       case 'pinned':        return <PinnedSection setView={setView} setSelectedWorkflow={setSelectedWorkflow} openAuditExecution={openAuditExecution} pinned={pinnedStore.pinned} isPinned={pinnedStore.isPinned} toggle={pinnedStore.toggle} />;
     }

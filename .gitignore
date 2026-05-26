@@ -29,3 +29,6 @@ playwright-report/
 # Serena MCP project metadata
 .serena/
 .claude/
+
+# Impeccable skill scratch (design.json, pdf export artifacts)
+.impeccable/

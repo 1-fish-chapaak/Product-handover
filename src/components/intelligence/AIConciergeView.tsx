@@ -9,6 +9,7 @@ import GlowCard from '../shared/GlowCard';
 
 interface Props {
   setView: (v: View) => void;
+  onLaunchWorkflowBuilder?: (prompt: string) => void;
 }
 
 interface Tool {
@@ -19,6 +20,7 @@ interface Tool {
   tags: { label: string; color: string }[];
   beta?: boolean;
   view?: string;
+  isWorkflowLauncher?: boolean;
 }
 
 const tools: Tool[] = [
@@ -55,11 +57,13 @@ const tools: Tool[] = [
       { label: 'Builder', color: 'bg-fuchsia-100 text-fuchsia-700' },
     ],
     beta: true,
-    view: 'ai-concierge-workflow-builder',
+    // After the ChatView convergence, the workflow builder lives inside
+    // the chat surface. Click routes through onLaunchWorkflowBuilder('').
+    isWorkflowLauncher: true,
   },
 ];
 
-export default function AIConciergeView({ setView }: Props) {
+export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Props) {
   const [search, setSearch] = useState('');
 
   const filtered = tools.filter(
@@ -159,7 +163,11 @@ export default function AIConciergeView({ setView }: Props) {
               >
                 <GlowCard
                   onClick={() => {
-                    if (tool.view) setView(tool.view as View);
+                    if (tool.isWorkflowLauncher) {
+                      onLaunchWorkflowBuilder?.('');
+                    } else if (tool.view) {
+                      setView(tool.view as View);
+                    }
                   }}
                   className="bg-canvas-elevated border border-canvas-border"
                 >

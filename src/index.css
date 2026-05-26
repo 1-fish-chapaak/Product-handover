@@ -395,10 +395,14 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   box-shadow: none;
   transition: border-color 100ms ease-out;
 }
-.ai-border:focus-within {
+.ai-border:has(textarea:focus) {
   /* Claude-style focus: border tone only. No ring, no glow, no shadow
    * change. The border darkens by one step (brand-200 → brand-300) and
-   * that's the entire focus signal — calm, editorial, in-flow. */
+   * that's the entire focus signal — calm, editorial, in-flow.
+   * Uses :has(textarea:focus) — NOT :focus-within — so clicking the
+   * +/mode-toggle buttons inside the composer doesn't shift the border
+   * tone. Active state reflects typing, not internal button focus
+   * (those buttons get their own focus-visible:ring-2). */
   border-color: var(--color-brand-300);
 }
 .ai-border::before,

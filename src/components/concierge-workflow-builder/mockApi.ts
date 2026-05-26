@@ -171,6 +171,14 @@ export function getClarifyQuestions(w: WorkflowDraft): ClarifyQuestion[] {
   return [dateRange, materiality, vendorScope, outputFormat];
 }
 
+export function tolerancePctFromAnswer(answer: string | undefined): number {
+  if (!answer) return 5;
+  if (answer.startsWith('Strict')) return 1;
+  if (answer.startsWith('Moderate')) return 5;
+  if (answer.startsWith('Relaxed')) return 10;
+  return 5;
+}
+
 export async function runWorkflow(
   workflow: WorkflowDraft,
   files: JourneyFiles,
