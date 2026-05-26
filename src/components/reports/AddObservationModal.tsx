@@ -43,7 +43,7 @@ export type ObservationSavePayload = {
 
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
 export const ATTACHMENT_ACCEPT =
-  'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  'image/png,image/jpeg,image/gif,image/webp,application/pdf';
 
 export function isImageMime(mime: string): boolean {
   return mime.startsWith('image/');
