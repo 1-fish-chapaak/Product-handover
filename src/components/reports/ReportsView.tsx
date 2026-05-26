@@ -5561,7 +5561,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
