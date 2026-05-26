@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
   Send, Paperclip, Sparkles, History, X, FileText, FileSpreadsheet, PanelRightOpen, PanelRightClose,
+  PanelLeftClose, PanelLeftOpen,
   Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
-  Save, CheckCircle, Maximize2, Lock, Calendar,
+  Save, CheckCircle, Maximize2, Minimize2, Lock, Calendar,
   ExternalLink, Download, MoreHorizontal, Pencil, CornerDownLeft, ArrowUpRight,
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
@@ -646,7 +647,7 @@ function FullscreenChartModal({
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
-              <X size={16} />
+              <Minimize2 size={16} />
             </button>
           </div>
         </div>
@@ -1081,7 +1082,7 @@ function FullscreenTableModal({
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
-              <X size={16} />
+              <Minimize2 size={16} />
             </button>
           </div>
         </div>
@@ -1301,7 +1302,7 @@ function ClarificationBlock({
             title="Close — skip the rest"
             className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
           >
-            <X size={14} />
+            <Minimize2 size={14} />
           </button>
         </div>
 
@@ -1727,7 +1728,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
             aria-label="Close"
             className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <X size={16} />
+            <Minimize2 size={16} />
           </button>
         </div>
 
@@ -2636,6 +2637,101 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   useEffect(() => {
     if (workflowEngagementContext) setBuildWorkflowMode(true);
   }, [workflowEngagementContext]);
+
+  // ───────── Rotating placeholder (hero empty-state composer) ─────────
+  // Typewriter effect: types each prompt character-by-character, holds
+  // for a beat, erases, pauses, then types the next. No fade or blur —
+  // the deliberate keystrokes are the animation. Reads as "AI is
+  // composing a thought." Pauses while the user is typing in the
+  // textarea. Resets when mode toggles.
+  const queryPlaceholders = [
+    'Ask Ira about your audit data…',
+    'Find unusual journal entries in Q1…',
+    'Show me top vendor risk hotspots…',
+    'Investigate a P2P payment anomaly…',
+    'Summarize last quarter\'s findings…',
+    'Approvals above ₹1L without backup…',
+  ];
+  const workflowPlaceholders = [
+    'Ask Ira to build a workflow…',
+    'Design a duplicate-invoice detector…',
+    'Create a vendor master change monitor…',
+    'Build a three-way PO match flow…',
+    'Set up a SOX compliance checker…',
+  ];
+  const placeholderPool = buildWorkflowMode ? workflowPlaceholders : queryPlaceholders;
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [typedText, setTypedText] = useState('');
+  type TypingPhase = 'typing' | 'holding' | 'erasing' | 'pausing';
+  const [typingPhase, setTypingPhase] = useState<TypingPhase>('typing');
+
+  // Reset to start of the first prompt whenever the user flips Query ↔
+  // Workflow so the typewriter restarts cleanly with the new pool.
+  useEffect(() => {
+    setPlaceholderIdx(0);
+    setTypedText('');
+    setTypingPhase('typing');
+  }, [buildWorkflowMode]);
+
+  // Drives the typewriter state machine. Each tick advances one step
+  // (one char typed/erased or a phase change). Cancellation via the
+  // return cleanup means stopping/restarting is jank-free.
+  useEffect(() => {
+    // Pause completely while the user is typing in the textarea.
+    if (input.trim().length > 0) return;
+    // Reduced-motion users get the full text instantly, no animation.
+    if (prefersReducedMotion) {
+      setTypedText(placeholderPool[placeholderIdx]);
+      return;
+    }
+
+    const target = placeholderPool[placeholderIdx];
+    let delay = 0;
+
+    if (typingPhase === 'typing') {
+      if (typedText.length < target.length) {
+        // 38–62ms per char with jitter — feels like real typing, not
+        // a metronome. Slight slow-down on spaces for natural cadence.
+        const nextChar = target[typedText.length];
+        const base = nextChar === ' ' ? 65 : 38;
+        delay = base + Math.random() * 24;
+        const id = window.setTimeout(() => {
+          setTypedText(target.slice(0, typedText.length + 1));
+        }, delay);
+        return () => window.clearTimeout(id);
+      }
+      setTypingPhase('holding');
+      return;
+    }
+
+    if (typingPhase === 'holding') {
+      // 1.6s to read the full prompt before erasing.
+      const id = window.setTimeout(() => setTypingPhase('erasing'), 1600);
+      return () => window.clearTimeout(id);
+    }
+
+    if (typingPhase === 'erasing') {
+      if (typedText.length > 0) {
+        // Erase ~2× faster than typing — feels intentional, not slow.
+        const id = window.setTimeout(() => {
+          setTypedText(prev => prev.slice(0, -1));
+        }, 18);
+        return () => window.clearTimeout(id);
+      }
+      setTypingPhase('pausing');
+      return;
+    }
+
+    if (typingPhase === 'pausing') {
+      // Brief pause before the next prompt starts typing — gives the
+      // reader a beat to register that one prompt finished.
+      const id = window.setTimeout(() => {
+        setPlaceholderIdx(i => (i + 1) % placeholderPool.length);
+        setTypingPhase('typing');
+      }, 350);
+      return () => window.clearTimeout(id);
+    }
+  }, [input, prefersReducedMotion, placeholderPool, placeholderIdx, typedText, typingPhase]);
 
   // Save-as-workflow flow state (Path 3 — query → workflow flip)
   const [showSaveAsWfModal, setShowSaveAsWfModal] = useState(false);
@@ -4357,6 +4453,28 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   const isEmpty = messages.length === 0;
 
+  // Memoize the FloatingLines element so its canvas animation doesn't
+  // re-init on every parent re-render. Without this, the typewriter
+  // placeholder's ~50ms state updates trigger ChatView re-renders, and
+  // FloatingLines re-receives a new `enabledWaves` array reference each
+  // time — which bubbles through its internal initLines useCallback and
+  // re-randomizes all wave positions. Memoizing the element once means
+  // React reuses the same instance and skips the child reconciliation
+  // entirely, so the canvas animation runs continuously and undisturbed.
+  const floatingLinesBg = useMemo(() => (
+    <FloatingLines
+      enabledWaves={['top', 'middle', 'bottom']}
+      lineCount={5}
+      lineDistance={5}
+      bendRadius={5}
+      bendStrength={-0.5}
+      interactive={true}
+      parallax={true}
+      color="#6a12cd"
+      opacity={0.06}
+    />
+  ), []);
+
   // Workspace panel is contextual to a query — it shows the plan, sources,
   // code, and output of an in-flight or completed run. On an empty chat
   // there's nothing meaningful to display, so force-close any panel state
@@ -4459,7 +4577,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="Close (⌘.)"
                 className="size-7 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <X size={15} />
+                <PanelLeftClose size={15} />
               </button>
             </div>
 
@@ -4562,21 +4680,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         {chatHistoryPanel}
 
         <div className="flex-1 min-w-0 h-full flex flex-col chat-canvas-mesh relative">
-          <FloatingLines
-            enabledWaves={['top', 'middle', 'bottom']}
-            lineCount={5}
-            lineDistance={5}
-            bendRadius={5}
-            bendStrength={-0.5}
-            interactive={true}
-            parallax={true}
-            color="#6a12cd"
-            opacity={0.06}
-          />
+          {floatingLinesBg}
 
           <div className="absolute top-0 left-0 right-0 z-20 flex justify-between px-5 py-3">
             <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
-              <History size={18} />
+              <PanelLeftOpen size={18} />
             </button>
             <button onClick={() => requestNewChat()} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="New chat" title="New chat (⌘⇧O)">
               <Plus size={18} />
@@ -4609,7 +4717,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   onClick={onDismissPendingDashboard}
                   className="p-1 rounded-md text-brand-400 hover:text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
                 >
-                  <X size={14} />
+                  <Minimize2 size={14} />
                 </button>
               </div>
             </div>
@@ -4627,12 +4735,28 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   subtitle a comfortable gap to the shadowed composer below
                   (the composer's shadow adds its own visual cushion). */}
               <div className="flex flex-col justify-end pb-8">
-                <div className="mb-5">
+                {/* Hello mark — draws itself in on mount (SVG path stroke
+                    animation inside AuditifyHelloEffect), then continues
+                    with a gentle breathing motion: subtle y-bob + tiny
+                    scale pulse on a 5s loop. Starts after the initial
+                    draw-in finishes (~3.5s) so the two animations don't
+                    compete. Disabled for reduced-motion users. */}
+                <motion.div
+                  className="mb-5"
+                  animate={prefersReducedMotion ? undefined : { y: [0, -4, 0], scale: [1, 1.015, 1] }}
+                  transition={prefersReducedMotion ? undefined : {
+                    duration: 5,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: 3.5,
+                  }}
+                  style={{ transformOrigin: 'center' }}
+                >
                   <AuditifyHelloEffect
                     className="text-primary h-14 mx-auto"
                     speed={0.7}
                   />
-                </div>
+                </motion.div>
 
                 <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-3 text-ink-900/85">
                   Audit smarter.{' '}
@@ -4646,7 +4770,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   transition={{ delay: 2.5, duration: 0.6 }}
                   className="text-[15px] text-ink-500"
                 >
-                  Your AI copilot already knows what to look for. Just ask.
+                  Your AI copilot <span className="font-semibold text-[17px] text-ink-700 tracking-[-0.01em]">Ira</span> already knows what to look for. Just ask.
                 </motion.p>
               </div>
 
@@ -4661,12 +4785,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     </span>
                   </div>
                 )}
-              {/* Soft layered elevation only on the hero composer —
-                  in-chat composer (line ~6101) stays flat. Ambient
-                  ink shadow + brand-tinted halo for warmth.
-                  '!' overrides .ai-border's baked-in box-shadow:none. */}
+              {/* Hero composer elevation — Stripe-tight ink-only stack.
+                  Three close layers: hairline contact, close ambient,
+                  soft contained drop. No brand color at rest.
+                  Active ring uses :has(textarea:focus) — NOT focus-within —
+                  so clicking the +/mode-toggle buttons inside doesn't
+                  trigger the ring (which previously made it look like
+                  hover triggered it). Ring shows only while typing.
+                  '!' overrides .ai-border's baked-in box-shadow:none.
+                  In-chat composer (line ~6101) stays flat by design. */}
               <div
-                className="ai-border relative !shadow-[0_1px_2px_rgba(15,8,30,0.04),0_12px_32px_-12px_rgba(106,18,205,0.10),0_24px_48px_-24px_rgba(15,8,30,0.10)] hover:!shadow-[0_2px_4px_rgba(15,8,30,0.05),0_16px_40px_-12px_rgba(106,18,205,0.12),0_32px_56px_-24px_rgba(15,8,30,0.12)] transition-shadow duration-300 ease-out"
+                className="ai-border relative transition-shadow duration-200 ease-out
+                           !shadow-[0_1px_1px_rgba(15,8,30,0.04),0_2px_8px_-2px_rgba(15,8,30,0.06),0_12px_28px_-12px_rgba(15,8,30,0.10)]
+                           hover:!shadow-[0_1px_2px_rgba(15,8,30,0.05),0_3px_10px_-2px_rgba(15,8,30,0.07),0_16px_32px_-12px_rgba(15,8,30,0.12)]
+                           [&:has(textarea:focus)]:!shadow-[0_0_0_2px_rgba(106,18,205,0.10),0_1px_2px_rgba(15,8,30,0.05),0_3px_10px_-2px_rgba(15,8,30,0.07),0_16px_32px_-12px_rgba(15,8,30,0.12)]"
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -4737,18 +4869,37 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     composer because this is the hero entry point and the
                     surface should feel inviting. Claude-aligned 15px body,
                     1.55 line-height; padding tighter than before to match
-                    Claude's compact composer (px-3.5 / pt-3.5 / pb-1). */}
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handleComposerPaste}
-                  placeholder={buildWorkflowMode ? 'Ask Ira to build a workflow…' : 'Ask Ira about your audit data…'}
-                  aria-label="Message IRA"
-                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-800 placeholder:text-ink-400/85 placeholder:font-normal min-h-[88px] max-h-[260px] text-left"
-                  rows={1}
-                />
+                    Claude's compact composer (px-3.5 / pt-3.5 / pb-1).
+                    Placeholder is rendered as an animated overlay (below)
+                    instead of the native attribute — rotates through
+                    mode-aware example prompts every 2.8s when empty. */}
+                <div className="relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handleComposerPaste}
+                    aria-label="Message IRA"
+                    autoFocus
+                    className="no-focus-ring relative z-10 w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-800 min-h-[88px] max-h-[260px] text-left"
+                    rows={1}
+                  />
+                  {/* Typewriter placeholder overlay — renders typedText
+                      (driven by the state machine above). Each keystroke
+                      is a real React render — GPU-cheap, no transforms,
+                      no filters, no blur, no cross-fade muddy middle.
+                      text-left overrides the motion.div's inherited
+                      text-center so the placeholder aligns with the
+                      textarea caret. */}
+                  {input.length === 0 && (
+                    <div className="absolute top-4 left-4 right-4 h-[1.55em] pointer-events-none text-left">
+                      <span className="block text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-400/85 truncate">
+                        {typedText}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Action row — attach on the LEFT (input affordance),
                     mode picker + Send on the RIGHT. Putting the Query/
@@ -4843,68 +4994,58 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   Click fills the composer (no auto-send) so the user
                   can edit before sending. */}
               {(() => {
-                // Mode-aware suggestion chips — compact pills with a
-                // leading icon, single-row centered layout. Inspired by
-                // Claude's category chips but kept in our soft GRC pill
-                // aesthetic (rounded-full, brand-tinted hover).
-                //  • Workflow mode → existing workflow names with type-icon
-                //  • Query mode → recent chat titles (MessageSquare),
-                //    fallback to query examples (Sparkles)
-                const workflowTypeIcon = (type: string): LucideIcon => {
-                  switch (type) {
-                    case 'Detection': return Search;
-                    case 'Monitoring': return AlertTriangle;
-                    case 'Compliance': return ShieldCheck;
-                    case 'Reconciliation': return GitCompare;
-                    default: return Workflow;
-                  }
-                };
-                type Suggestion = { label: string; icon: LucideIcon };
-                const workflowSuggestions: Suggestion[] = WORKFLOWS.slice(0, 6).map(w => ({
-                  label: w.name,
-                  icon: workflowTypeIcon(w.type),
-                }));
-                const queryFallback: Suggestion[] = [
-                  { label: 'Find duplicate invoices in Q1', icon: Sparkles },
-                  { label: 'Top 5 vendors by spend YTD', icon: BarChart3 },
-                  { label: 'GL postings outside business hours', icon: Calendar },
-                  { label: 'Approvals above ₹1L without backup', icon: ShieldCheck },
-                  { label: 'Vendor master changes last 30 days', icon: History },
-                  { label: 'Journal entries posted on weekends', icon: AlertTriangle },
+                // 5 content-sized chips in a centered 3+2 layout, each with a
+                // contextual icon derived from its label keywords.
+                const workflowSuggestions: string[] = WORKFLOWS.slice(0, 5).map(w => w.name);
+                const queryFallback: string[] = [
+                  'Duplicate Invoice Check',
+                  'Vendor Spend Analysis',
+                  'After-Hours GL Postings',
+                  'Unbacked Approval Review',
+                  'Vendor Master Changes',
                 ];
-                const recentChats: Suggestion[] | null = CHAT_HISTORY.length > 0
-                  ? CHAT_HISTORY.slice(0, 6).map(c => ({ label: c.title, icon: MessageSquare }))
+                const recentChats: string[] | null = CHAT_HISTORY.length > 0
+                  ? [...CHAT_HISTORY.slice(0, 5).map(c => c.title), ...queryFallback].slice(0, 5)
                   : null;
                 const suggestions = buildWorkflowMode
                   ? workflowSuggestions
                   : (recentChats ?? queryFallback);
+                const ModeIcon: LucideIcon = buildWorkflowMode ? Workflow : MessageSquare;
                 return (
-                  <div className="pt-7 flex flex-wrap items-start content-start justify-center gap-2">
-                    {suggestions.map((s, i) => {
-                      const Icon = s.icon;
-                      return (
-                        <motion.button
-                          key={`empty-starter-${i}-${s.label}`}
-                          type="button"
-                          title={s.label}
-                          initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.92 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={prefersReducedMotion
-                            ? { duration: 0 }
-                            : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + i * 0.05 }
-                          }
-                          onClick={() => {
-                            setInput(s.label);
-                            textareaRef.current?.focus();
-                            requestAnimationFrame(() => handleTextareaInput());
-                          }}
-                          className="group inline-flex items-center gap-1.5 h-[32px] max-w-[16rem] pl-3 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.5px] font-medium tracking-[-0.005em] text-ink-700 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_2px_6px_rgba(106,18,205,0.05)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                        >
-                          <Icon size={13} strokeWidth={2} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-150" />
-                          <span className="truncate whitespace-nowrap">{s.label}</span>
-                        </motion.button>
-                      );
-                    })}
+                  <div className={`pt-7 mx-auto flex flex-col content-start gap-2.5 ${
+                    buildWorkflowMode ? 'items-center' : 'w-[44rem] items-start'
+                  }`}>
+                    {[suggestions.slice(0, 3), suggestions.slice(3, 5)].map((row, rowIdx) => (
+                      <div key={rowIdx} className={`flex items-center gap-2.5 ${
+                        buildWorkflowMode ? 'justify-center' : 'justify-start'
+                      }`}>
+                        {row.map((label, i) => {
+                          const globalI = rowIdx * 3 + i;
+                          return (
+                            <motion.button
+                              key={`empty-starter-${globalI}-${label}`}
+                              type="button"
+                              title={label}
+                              initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={prefersReducedMotion
+                                ? { duration: 0 }
+                                : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + globalI * 0.05 }
+                              }
+                              onClick={() => {
+                                setInput(label);
+                                textareaRef.current?.focus();
+                                requestAnimationFrame(() => handleTextareaInput());
+                              }}
+                              className="group inline-flex items-center gap-2 h-10 px-5 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium tracking-[-0.005em] text-ink-800 shadow-[0_1px_2px_rgba(15,8,30,0.025)] hover:border-brand-300/60 hover:text-brand-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(106,18,205,0.07)] transition-all duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            >
+                              <ModeIcon size={14} strokeWidth={1.75} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-200" />
+                              <span className="whitespace-nowrap">{label}</span>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 );
               })()}
@@ -4994,32 +5135,30 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               size="sm"
               iconOnly
               shape="md"
+              onClick={() => requestNewChat()}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus size={14} />
+            </Button>
+            {/* Workspace toggle — always visible. Renders in its
+                pressed/active state when the panel is open so the chat
+                header reflects "workspace is the active section." Icon
+                stays as PanelRightOpen in both states so it doesn't
+                visually duplicate the PanelRightClose inside the panel
+                header (which is the actual close affordance). */}
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              shape="md"
               pressed={showArtifacts}
               onClick={() => setShowArtifacts(!showArtifacts)}
               title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
               aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
               aria-expanded={showArtifacts}
             >
-              <motion.span
-                key={showArtifacts ? 'open' : 'closed'}
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-                className="inline-flex"
-              >
-                {showArtifacts ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-              </motion.span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              shape="md"
-              onClick={() => requestNewChat()}
-              title="New chat"
-              aria-label="New chat"
-            >
-              <Plus size={14} />
+              <PanelRightOpen size={14} />
             </Button>
           </div>
         </header>
@@ -5055,7 +5194,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 onClick={onDismissPendingDashboard}
                 aria-label="Dismiss"
               >
-                <X size={14} />
+                <Minimize2 size={14} />
               </Button>
             </div>
           </div>
@@ -6252,7 +6391,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           onClick={stopGenerating}
                           aria-label="Stop generating"
                           title="Stop generating (Esc)"
-                          className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-canvas-elevated hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-brand-700 text-white hover:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           <Square size={11} fill="currentColor" />
                         </button>

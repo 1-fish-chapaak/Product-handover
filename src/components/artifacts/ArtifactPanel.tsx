@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, ChevronDown, FileCode,
+  X, ChevronDown, FileCode, PanelRightClose,
   Database, BarChart3, Sparkles, Copy, Download,
   AlertTriangle, LayoutDashboard, Wand2, HelpCircle,
   Check, Pencil, Search, ListChecks, MessageSquare,
@@ -1174,13 +1174,17 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             );
           })}
         </div>
+        {/* Close lives inside the panel — the chat header's workspace
+            toggle only shows when the panel is closed (to open it),
+            then this button takes over while open. Single icon per
+            state, no duplication. */}
         <button
           onClick={onClose}
           aria-label="Close panel"
           title="Close panel"
           className="size-8 mb-1 inline-flex items-center justify-center shrink-0 text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
-          <X size={14} />
+          <PanelRightClose size={14} />
         </button>
       </div>
 
