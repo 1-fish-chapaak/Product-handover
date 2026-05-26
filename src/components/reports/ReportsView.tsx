@@ -4396,11 +4396,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
+  // Regenerate summary mock — overrides the summary section's content with an
+  // alternative blurb after a short simulated delay so the action feels real.
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
+    setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
 
@@ -5094,12 +5101,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             </div>
                             {hasQueries && (
                               <button
-                                onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
+                                onClick={() => {
+                                  if (isRegeneratingSummary) return;
+                                  setIsRegeneratingSummary(true);
+                                  setTimeout(() => {
+                                    setSummaryOverride(ALT_SUMMARY);
+                                    setIsRegeneratingSummary(false);
+                                    addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                  }, 1200);
+                                }}
+                                disabled={isRegeneratingSummary}
+                                aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
-                                Regenerate
+                                {isRegeneratingSummary ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                )}
+                                {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )}
                           </div>
@@ -5122,7 +5143,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                               </motion.div>
                             ))}
                           </div>
-                          <p className="text-[13px] text-text-secondary leading-relaxed">{section.content}</p>
+                          <p className="text-[13px] text-text-secondary leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
