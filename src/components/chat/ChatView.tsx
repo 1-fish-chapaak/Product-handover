@@ -5012,13 +5012,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   : (recentChats ?? queryFallback);
                 const ModeIcon: LucideIcon = buildWorkflowMode ? Workflow : MessageSquare;
                 return (
-                  <div className={`pt-7 mx-auto flex flex-col content-start gap-2.5 ${
-                    buildWorkflowMode ? 'items-center' : 'w-[44rem] items-start'
-                  }`}>
+                  // Match workflow-mode treatment in both modes:
+                  // content-sized chips, centered container + rows.
+                  // No w-[...] lock, no items-start (per the empty-state
+                  // chip layout feedback memory).
+                  <div className="pt-7 mx-auto flex flex-col items-center content-start gap-2.5">
                     {[suggestions.slice(0, 3), suggestions.slice(3, 5)].map((row, rowIdx) => (
-                      <div key={rowIdx} className={`flex items-center gap-2.5 ${
-                        buildWorkflowMode ? 'justify-center' : 'justify-start'
-                      }`}>
+                      <div key={rowIdx} className="flex items-center justify-center gap-2.5">
                         {row.map((label, i) => {
                           const globalI = rowIdx * 3 + i;
                           return (
