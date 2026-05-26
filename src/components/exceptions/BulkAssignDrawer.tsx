@@ -364,7 +364,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
                                   {visible.map((a, i) => (
                                     <span
                                       key={`${a.name}-${i}`}
-                                      className={`group/av relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
+                                      className={`group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
                                       aria-label={a.name}
                                     >
                                       {a.initials}
@@ -378,7 +378,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
                                   ))}
                                   {overflow > 0 && (
                                     <span
-                                      className="group/av relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
+                                      className="group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
                                       aria-label={`${overflow} more: ${overflowNames}`}
                                     >
                                       +{overflow}
