@@ -358,24 +358,36 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
                               const MAX_VISIBLE = 4;
                               const visible = allAssignees.slice(0, MAX_VISIBLE);
                               const overflow = allAssignees.length - visible.length;
-                              const allNames = allAssignees.map(a => a.name).join(', ');
+                              const overflowNames = allAssignees.slice(MAX_VISIBLE).map(a => a.name).join(', ');
                               return (
-                                <div className="inline-flex items-center" title={allNames}>
+                                <div className="inline-flex items-center">
                                   {visible.map((a, i) => (
                                     <span
                                       key={`${a.name}-${i}`}
-                                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 ${i === 0 ? '' : '-ml-2'}`}
+                                      className={`group/av relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
                                       aria-label={a.name}
                                     >
                                       {a.initials}
+                                      <span
+                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                                        role="tooltip"
+                                      >
+                                        {a.name}
+                                      </span>
                                     </span>
                                   ))}
                                   {overflow > 0 && (
                                     <span
-                                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 -ml-2"
-                                      aria-label={`${overflow} more`}
+                                      className="group/av relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
+                                      aria-label={`${overflow} more: ${overflowNames}`}
                                     >
                                       +{overflow}
+                                      <span
+                                        className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                                        role="tooltip"
+                                      >
+                                        {overflowNames}
+                                      </span>
                                     </span>
                                   )}
                                 </div>
