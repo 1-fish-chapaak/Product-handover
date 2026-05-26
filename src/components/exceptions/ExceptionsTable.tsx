@@ -636,12 +636,12 @@ function renderCell(
           </div>
         );
       }
-      return ex.assignedTo ? (
+      return allAssignees.length === 1 ? (
         <div className="inline-flex items-center gap-2 min-w-0">
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
-            {ex.assignedTo.initials}
+            {allAssignees[0].initials}
           </span>
-          <span className="text-ink-700 text-[12.5px] truncate">{ex.assignedTo.name}</span>
+          <span className="text-ink-700 text-[12.5px] truncate">{allAssignees[0].name}</span>
         </div>
       ) : (
         <button

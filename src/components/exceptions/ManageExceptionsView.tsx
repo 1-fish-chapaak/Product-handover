@@ -274,6 +274,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const { addToast } = useToast();
   const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  /** When set, opens the BulkAssignDrawer scoped to just this one case
+   *  (from a per-row "Assign" click). Mutually exclusive with bulkAssignOpen
+   *  at the UI level — closing either clears both. */
+  const [singleAssignCase, setSingleAssignCase] = useState<GrcException | null>(null);
   const [detailExceptionId, setDetailExceptionId] = useState<string | null>(null);
   const [nextActionableNum, setNextActionableNum] = useState(2);
   const [atrExpanded, setAtrExpanded] = useState(false);
@@ -603,7 +607,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
               onAssign={(ex) => {
-                addToast({ type: 'info', message: `Assigning ${ex.id}…` });
+                setSingleAssignCase(ex);
               }}
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
               onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
@@ -749,11 +753,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             }}
           />
         )}
-        {bulkAssignOpen && (
+        {(bulkAssignOpen || singleAssignCase) && (
           <BulkAssignDrawer
-            key="bulk-assign-drawer"
-            cases={exceptions.filter(e => selected.has(e.id))}
-            onClose={() => setBulkAssignOpen(false)}
+            key={singleAssignCase ? `single-assign-${singleAssignCase.id}` : 'bulk-assign-drawer'}
+            cases={singleAssignCase ? [singleAssignCase] : exceptions.filter(e => selected.has(e.id))}
+            onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); }}
             onApply={(payload: BulkAssignPayload) => {
               if (payload.assignees.length === 0) return;
               const today = new Date().toISOString().slice(0, 10);
@@ -795,8 +799,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 type: 'success',
                 message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
               });
-              setSelected(new Set());
+              // Only clear the selection set when the bulk drawer was the one
+              // that opened — single-row assigns don't touch the selection.
+              if (!singleAssignCase) setSelected(new Set());
               setBulkAssignOpen(false);
+              setSingleAssignCase(null);
             }}
           />
         )}
