@@ -5390,6 +5390,7 @@ export default function ReportsView({
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [tagFilter, setTagFilter] = useState<string>('All');
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
@@ -5558,23 +5559,34 @@ export default function ReportsView({
     return q ? byTag.filter(r => r.name.toLowerCase().includes(q)) : byTag;
   })();
 
+  const TAG_FILTER_OPTIONS = ['All', 'Internal Audit', 'Bulk Audit'];
+
   const TagFilterDropdown = () => (
-    <select
-      value={tagFilter}
-      onChange={e => setTagFilter(e.target.value)}
-      aria-label="Filter by tag"
-      className="h-7 px-2.5 pr-7 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary/40"
-      style={{
-        borderRadius: '8px',
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'right 8px center',
-      }}
-    >
-      <option value="All">All Tags</option>
-      <option value="Internal Audit">Internal Audit</option>
-      <option value="Bulk Audit">Bulk Audit</option>
-    </select>
+    <div className="relative">
+      <button
+        onClick={() => setShowTagDropdown(p => !p)}
+        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
+        style={{ borderRadius: '8px' }}
+      >
+        {tagFilter === 'All' ? 'All Tags' : tagFilter}
+        <ChevronDown size={10} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
+      </button>
+      {showTagDropdown && (
+        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1" style={{ borderRadius: '8px' }}>
+          {TAG_FILTER_OPTIONS.map(t => (
+            <button
+              key={t}
+              onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
+              className={`w-full text-left px-3 py-2 text-[12px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
+            >
+              {tagFilter === t && <span className="text-primary">✓</span>}
+              {tagFilter !== t && <span className="w-3" />}
+              {t === 'All' ? 'All Tags' : t}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
