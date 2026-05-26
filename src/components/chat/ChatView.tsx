@@ -12,7 +12,7 @@ import {
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard,
 } from 'lucide-react';
-import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
+import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
@@ -4615,46 +4615,53 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </div>
           )}
 
-          <div className="flex-1 flex justify-center items-center overflow-auto px-6">
+          <div className="flex-1 flex justify-center overflow-auto px-6">
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className="w-[52.5rem] max-w-full text-center"
+              className="w-[52.5rem] max-w-full text-center grid grid-rows-[1fr_auto_1fr] h-full"
             >
-              <div className="mb-4">
-                <AuditifyHelloEffect
-                  className="text-primary h-14 mx-auto"
-                  speed={0.7}
-                />
+              {/* Row 1 — heading group, anchored to the bottom of its row
+                  so it sits just above the centered input. Generous pb
+                  so the subtitle isn't hugging the composer edge. */}
+              <div className="flex flex-col justify-end pb-10">
+                <div className="mb-5">
+                  <AuditifyHelloEffect
+                    className="text-primary h-14 mx-auto"
+                    speed={0.7}
+                  />
+                </div>
+
+                <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-3 text-ink-900/85">
+                  Audit smarter.{' '}
+                  <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
+                    Not harder.
+                  </TextShimmer>
+                </h1>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 2.5, duration: 0.6 }}
+                  className="text-[15px] text-ink-500"
+                >
+                  Your AI copilot already knows what to look for. Just ask.
+                </motion.p>
               </div>
 
-              <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
-                Audit smarter.{' '}
-                <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
-                  Not harder.
-                </TextShimmer>
-              </h1>
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 2.5, duration: 0.6 }}
-                className="text-[15px] text-ink-500 mb-10"
-              >
-                Your AI copilot already knows what to look for. Just ask.
-              </motion.p>
-
-              {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
-              {workflowEngagementContext && (
-                <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
-                  <Workflow size={15} className="text-primary shrink-0" />
-                  <span className="text-[13px] text-text-secondary">
-                    Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
-                  </span>
-                </div>
-              )}
+              {/* Row 2 — input composer, the vertical centerpiece. */}
+              <div>
+                {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
+                {workflowEngagementContext && (
+                  <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
+                    <Workflow size={15} className="text-primary shrink-0" />
+                    <span className="text-[13px] text-text-secondary">
+                      Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
+                    </span>
+                  </div>
+                )}
               <div
-                className="ai-border relative mb-6"
+                className="ai-border relative"
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -4759,54 +4766,49 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     <div
                       role="radiogroup"
                       aria-label="Composer mode"
-                      className="relative inline-flex items-center rounded-full bg-paper-100/85 backdrop-blur-sm p-[3px] gap-[2px] shadow-[inset_0_0_0_1px_rgba(15,8,30,0.05),inset_0_1px_2px_rgba(15,8,30,0.04),0_1px_0_rgba(255,255,255,0.6)]"
+                      className="relative inline-flex items-center rounded-full bg-paper-100/90 p-1 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.035)]"
                     >
-                      <button
+                      {/* Single shared highlight — slides between positions on toggle.
+                          Width matches a single button exactly so the slide is
+                          symmetric and the cream gaps on either side stay equal. */}
+                      <motion.span
+                        aria-hidden
+                        initial={false}
+                        animate={{ x: buildWorkflowMode ? 88 : 0 }}
+                        transition={prefersReducedMotion
+                          ? { duration: 0 }
+                          : { type: 'spring', stiffness: 480, damping: 40, mass: 0.55 }
+                        }
+                        className="absolute top-1 left-1 h-[28px] w-[88px] rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.05),0_2px_6px_rgba(15,8,30,0.06)] pointer-events-none"
+                      />
+                      <motion.button
                         type="button"
                         role="radio"
                         aria-checked={!buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(false)}
                         title="Ask Ira a one-off question"
-                        className={`relative inline-flex items-center justify-center h-[26px] px-4 rounded-full text-[12px] tracking-[-0.005em] transition-colors duration-200 ease-out cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          !buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
+                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                          !buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
                         }`}
                       >
-                        {!buildWorkflowMode && (
-                          <motion.span
-                            layoutId="composer-mode-highlight"
-                            aria-hidden
-                            transition={prefersReducedMotion
-                              ? { duration: 0 }
-                              : { type: 'spring', stiffness: 520, damping: 32, mass: 0.7 }
-                            }
-                            className="absolute inset-0 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_0_0_0.5px_rgba(106,18,205,0.22),inset_0_1px_0_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(106,18,205,0.06)]"
-                          />
-                        )}
-                        <span className="relative">Ask</span>
-                      </button>
-                      <button
+                        Query
+                      </motion.button>
+                      <motion.button
                         type="button"
                         role="radio"
                         aria-checked={buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(true)}
                         title="Build a re-runnable audit workflow"
-                        className={`relative inline-flex items-center justify-center h-[26px] px-4 rounded-full text-[12px] tracking-[-0.005em] transition-colors duration-200 ease-out cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
+                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                          buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
                         }`}
                       >
-                        {buildWorkflowMode && (
-                          <motion.span
-                            layoutId="composer-mode-highlight"
-                            aria-hidden
-                            transition={prefersReducedMotion
-                              ? { duration: 0 }
-                              : { type: 'spring', stiffness: 520, damping: 32, mass: 0.7 }
-                            }
-                            className="absolute inset-0 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_0_0_0.5px_rgba(106,18,205,0.22),inset_0_1px_0_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(106,18,205,0.06)]"
-                          />
-                        )}
-                        <span className="relative">Build</span>
-                      </button>
+                        Workflow
+                      </motion.button>
                     </div>
 
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
@@ -4823,8 +4825,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </div>
                 </div>
               </div>
+              </div>
 
-              {/* Starter prompts — mode-aware AND user-aware:
+              {/* Row 3 — starter prompts, anchored to the top of the row
+                  so they sit just below the centered input.
+                  Mode-aware AND user-aware:
                   • If the user has prior chats, surface the 4 most-recent
                     titles as 'pick up where you left off' chips.
                   • If the user is fresh (no history yet), fall back to
@@ -4833,29 +4838,32 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   Click fills the composer (no auto-send) so the user
                   can edit before sending. */}
               {(() => {
-                const fallbackPrompts = buildWorkflowMode
-                  ? [
-                      'Duplicate invoice detection',
-                      'Three-way match (PO / GRN / Invoice)',
-                      'Vendor master change monitoring',
-                      'Aged AP balances over 90 days',
-                    ]
-                  : [
-                      'Find duplicate invoices in Q1',
-                      'Top 5 vendors by spend YTD',
-                      'GL postings outside business hours',
-                      'Approvals above ₹1L without backup',
-                    ];
-                const recentPrompts = CHAT_HISTORY.length > 0
-                  ? CHAT_HISTORY.slice(0, 4).map(c => c.title)
+                // Mode-aware suggestions — 6 chips arranged as a 3×2 grid
+                // that spans the composer's full 52.5rem width.
+                //  • Workflow mode → existing workflow names (re-run / clone starters)
+                //  • Query mode → recent chat titles, fallback to query examples
+                const workflowSuggestions = WORKFLOWS.slice(0, 6).map(w => w.name);
+                const queryFallback = [
+                  'Find duplicate invoices in Q1',
+                  'Top 5 vendors by spend YTD',
+                  'GL postings outside business hours',
+                  'Approvals above ₹1L without backup',
+                  'Vendor master changes last 30 days',
+                  'Journal entries posted on weekends',
+                ];
+                const recentChats = CHAT_HISTORY.length > 0
+                  ? CHAT_HISTORY.slice(0, 6).map(c => c.title)
                   : null;
-                const prompts = recentPrompts ?? fallbackPrompts;
+                const prompts = buildWorkflowMode
+                  ? workflowSuggestions
+                  : (recentChats ?? queryFallback);
                 return (
-                  <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+                  <div className="pt-10 grid grid-cols-3 gap-2.5 content-start">
                     {prompts.map((prompt, i) => (
                       <motion.button
                         key={`empty-starter-${i}-${prompt}`}
                         type="button"
+                        title={prompt}
                         initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.92 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         transition={prefersReducedMotion
@@ -4867,10 +4875,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           textareaRef.current?.focus();
                           requestAnimationFrame(() => handleTextareaInput());
                         }}
-                        className="group inline-flex items-center h-[34px] pl-4 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.75px] font-medium tracking-[-0.005em] text-ink-600 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_4px_14px_rgba(106,18,205,0.10)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="group inline-flex items-center justify-between w-full h-[34px] pl-4 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.75px] font-medium tracking-[-0.005em] text-ink-600 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_2px_6px_rgba(106,18,205,0.05)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
-                        <span>{prompt}</span>
-                        <ArrowUpRight size={13} strokeWidth={2.25} className="ml-1.5 -mr-0.5 text-ink-400 group-hover:text-brand-500 group-hover:translate-x-px group-hover:-translate-y-px transition-all duration-150 ease-out" />
+                        <span className="truncate whitespace-nowrap">{prompt}</span>
+                        <ArrowUpRight size={13} strokeWidth={2.25} className="shrink-0 ml-1.5 -mr-0.5 text-ink-400 group-hover:text-brand-500 group-hover:translate-x-px group-hover:-translate-y-px transition-all duration-150 ease-out" />
                       </motion.button>
                     ))}
                   </div>
