@@ -4574,7 +4574,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             opacity={0.06}
           />
 
-          <div className="relative z-10 flex justify-between px-5 py-3">
+          <div className="absolute top-0 left-0 right-0 z-20 flex justify-between px-5 py-3">
             <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
               <History size={18} />
             </button>
@@ -4615,7 +4615,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </div>
           )}
 
-          <div className="flex-1 flex justify-center items-center overflow-auto px-6 pb-[60px]">
+          <div className="flex-1 flex justify-center items-center overflow-auto px-6">
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -4732,9 +4732,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                   onKeyDown={handleKeyDown}
                   onPaste={handleComposerPaste}
-                  placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Message Ira…'}
+                  placeholder={buildWorkflowMode ? 'Ask Ira to build a workflow…' : 'Ask Ira about your audit data…'}
                   aria-label="Message IRA"
-                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
+                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-800 placeholder:text-ink-400/85 placeholder:font-normal min-h-[88px] max-h-[260px] text-left"
                   rows={1}
                 />
 
@@ -4759,35 +4759,53 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     <div
                       role="radiogroup"
                       aria-label="Composer mode"
-                      className="inline-flex items-center rounded-full bg-paper-100 p-0.5"
+                      className="relative inline-flex items-center rounded-full bg-paper-100/85 backdrop-blur-sm p-[3px] gap-[2px] shadow-[inset_0_0_0_1px_rgba(15,8,30,0.05),inset_0_1px_2px_rgba(15,8,30,0.04),0_1px_0_rgba(255,255,255,0.6)]"
                     >
                       <button
                         type="button"
                         role="radio"
                         aria-checked={!buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(false)}
-                        title="Query — ask Ira a question, get an answer"
-                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          !buildWorkflowMode
-                            ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
-                            : 'text-ink-500 font-medium hover:text-ink-800'
+                        title="Ask Ira a one-off question"
+                        className={`relative inline-flex items-center justify-center h-[26px] px-4 rounded-full text-[12px] tracking-[-0.005em] transition-colors duration-200 ease-out cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          !buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
                         }`}
                       >
-                        Query
+                        {!buildWorkflowMode && (
+                          <motion.span
+                            layoutId="composer-mode-highlight"
+                            aria-hidden
+                            transition={prefersReducedMotion
+                              ? { duration: 0 }
+                              : { type: 'spring', stiffness: 520, damping: 32, mass: 0.7 }
+                            }
+                            className="absolute inset-0 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_0_0_0.5px_rgba(106,18,205,0.22),inset_0_1px_0_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(106,18,205,0.06)]"
+                          />
+                        )}
+                        <span className="relative">Ask</span>
                       </button>
                       <button
                         type="button"
                         role="radio"
                         aria-checked={buildWorkflowMode}
                         onClick={() => setBuildWorkflowMode(true)}
-                        title="Workflow — build a re-runnable audit workflow"
-                        className={`inline-flex items-center h-7 px-3 rounded-full text-[13px] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          buildWorkflowMode
-                            ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
-                            : 'text-ink-500 font-medium hover:text-ink-800'
+                        title="Build a re-runnable audit workflow"
+                        className={`relative inline-flex items-center justify-center h-[26px] px-4 rounded-full text-[12px] tracking-[-0.005em] transition-colors duration-200 ease-out cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
                         }`}
                       >
-                        Workflow
+                        {buildWorkflowMode && (
+                          <motion.span
+                            layoutId="composer-mode-highlight"
+                            aria-hidden
+                            transition={prefersReducedMotion
+                              ? { duration: 0 }
+                              : { type: 'spring', stiffness: 520, damping: 32, mass: 0.7 }
+                            }
+                            className="absolute inset-0 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_0_0_0.5px_rgba(106,18,205,0.22),inset_0_1px_0_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(106,18,205,0.06)]"
+                          />
+                        )}
+                        <span className="relative">Build</span>
                       </button>
                     </div>
 
@@ -4832,28 +4850,29 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   ? CHAT_HISTORY.slice(0, 4).map(c => c.title)
                   : null;
                 const prompts = recentPrompts ?? fallbackPrompts;
-                const caption = recentPrompts ? 'Pick up where you left off' : 'Try one of these to get started';
                 return (
-                  <div className="mt-5 flex flex-col items-center gap-2">
-                    <span className="text-[11.5px] font-medium uppercase tracking-[0.10em] text-ink-400">
-                      {caption}
-                    </span>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      {prompts.map((prompt) => (
-                        <button
-                          key={prompt}
-                          type="button"
-                          onClick={() => {
-                            setInput(prompt);
-                            textareaRef.current?.focus();
-                            requestAnimationFrame(() => handleTextareaInput());
-                          }}
-                          className="inline-flex items-center h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                        >
-                          {prompt}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+                    {prompts.map((prompt, i) => (
+                      <motion.button
+                        key={`empty-starter-${i}-${prompt}`}
+                        type="button"
+                        initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.92 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={prefersReducedMotion
+                          ? { duration: 0 }
+                          : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + i * 0.05 }
+                        }
+                        onClick={() => {
+                          setInput(prompt);
+                          textareaRef.current?.focus();
+                          requestAnimationFrame(() => handleTextareaInput());
+                        }}
+                        className="group inline-flex items-center h-[34px] pl-4 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.75px] font-medium tracking-[-0.005em] text-ink-600 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_4px_14px_rgba(106,18,205,0.10)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      >
+                        <span>{prompt}</span>
+                        <ArrowUpRight size={13} strokeWidth={2.25} className="ml-1.5 -mr-0.5 text-ink-400 group-hover:text-brand-500 group-hover:translate-x-px group-hover:-translate-y-px transition-all duration-150 ease-out" />
+                      </motion.button>
+                    ))}
                   </div>
                 );
               })()}
