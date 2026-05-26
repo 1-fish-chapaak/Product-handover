@@ -1515,7 +1515,7 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded-md text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-md text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
