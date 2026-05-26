@@ -4623,9 +4623,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               className="w-[52.5rem] max-w-full text-center grid grid-rows-[1fr_auto_1fr] h-full"
             >
               {/* Row 1 — heading group, anchored to the bottom of its row
-                  so it sits just above the centered input. Generous pb
-                  so the subtitle isn't hugging the composer edge. */}
-              <div className="flex flex-col justify-end pb-10">
+                  so it sits just above the centered input. pb-8 gives the
+                  subtitle a comfortable gap to the shadowed composer below
+                  (the composer's shadow adds its own visual cushion). */}
+              <div className="flex flex-col justify-end pb-8">
                 <div className="mb-5">
                   <AuditifyHelloEffect
                     className="text-primary h-14 mx-auto"
@@ -4660,8 +4661,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     </span>
                   </div>
                 )}
+              {/* Soft layered elevation only on the hero composer —
+                  in-chat composer (line ~6101) stays flat. Ambient
+                  ink shadow + brand-tinted halo for warmth.
+                  '!' overrides .ai-border's baked-in box-shadow:none. */}
               <div
-                className="ai-border relative"
+                className="ai-border relative !shadow-[0_1px_2px_rgba(15,8,30,0.04),0_12px_32px_-12px_rgba(106,18,205,0.10),0_24px_48px_-24px_rgba(15,8,30,0.10)] hover:!shadow-[0_2px_4px_rgba(15,8,30,0.05),0_16px_40px_-12px_rgba(106,18,205,0.12),0_32px_56px_-24px_rgba(15,8,30,0.12)] transition-shadow duration-300 ease-out"
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -4838,49 +4843,68 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   Click fills the composer (no auto-send) so the user
                   can edit before sending. */}
               {(() => {
-                // Mode-aware suggestions — 6 chips arranged as a 3×2 grid
-                // that spans the composer's full 52.5rem width.
-                //  • Workflow mode → existing workflow names (re-run / clone starters)
-                //  • Query mode → recent chat titles, fallback to query examples
-                const workflowSuggestions = WORKFLOWS.slice(0, 6).map(w => w.name);
-                const queryFallback = [
-                  'Find duplicate invoices in Q1',
-                  'Top 5 vendors by spend YTD',
-                  'GL postings outside business hours',
-                  'Approvals above ₹1L without backup',
-                  'Vendor master changes last 30 days',
-                  'Journal entries posted on weekends',
+                // Mode-aware suggestion chips — compact pills with a
+                // leading icon, single-row centered layout. Inspired by
+                // Claude's category chips but kept in our soft GRC pill
+                // aesthetic (rounded-full, brand-tinted hover).
+                //  • Workflow mode → existing workflow names with type-icon
+                //  • Query mode → recent chat titles (MessageSquare),
+                //    fallback to query examples (Sparkles)
+                const workflowTypeIcon = (type: string): LucideIcon => {
+                  switch (type) {
+                    case 'Detection': return Search;
+                    case 'Monitoring': return AlertTriangle;
+                    case 'Compliance': return ShieldCheck;
+                    case 'Reconciliation': return GitCompare;
+                    default: return Workflow;
+                  }
+                };
+                type Suggestion = { label: string; icon: LucideIcon };
+                const workflowSuggestions: Suggestion[] = WORKFLOWS.slice(0, 6).map(w => ({
+                  label: w.name,
+                  icon: workflowTypeIcon(w.type),
+                }));
+                const queryFallback: Suggestion[] = [
+                  { label: 'Find duplicate invoices in Q1', icon: Sparkles },
+                  { label: 'Top 5 vendors by spend YTD', icon: BarChart3 },
+                  { label: 'GL postings outside business hours', icon: Calendar },
+                  { label: 'Approvals above ₹1L without backup', icon: ShieldCheck },
+                  { label: 'Vendor master changes last 30 days', icon: History },
+                  { label: 'Journal entries posted on weekends', icon: AlertTriangle },
                 ];
-                const recentChats = CHAT_HISTORY.length > 0
-                  ? CHAT_HISTORY.slice(0, 6).map(c => c.title)
+                const recentChats: Suggestion[] | null = CHAT_HISTORY.length > 0
+                  ? CHAT_HISTORY.slice(0, 6).map(c => ({ label: c.title, icon: MessageSquare }))
                   : null;
-                const prompts = buildWorkflowMode
+                const suggestions = buildWorkflowMode
                   ? workflowSuggestions
                   : (recentChats ?? queryFallback);
                 return (
-                  <div className="pt-10 grid grid-cols-3 gap-2.5 content-start">
-                    {prompts.map((prompt, i) => (
-                      <motion.button
-                        key={`empty-starter-${i}-${prompt}`}
-                        type="button"
-                        title={prompt}
-                        initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.92 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={prefersReducedMotion
-                          ? { duration: 0 }
-                          : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + i * 0.05 }
-                        }
-                        onClick={() => {
-                          setInput(prompt);
-                          textareaRef.current?.focus();
-                          requestAnimationFrame(() => handleTextareaInput());
-                        }}
-                        className="group inline-flex items-center justify-between w-full h-[34px] pl-4 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.75px] font-medium tracking-[-0.005em] text-ink-600 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_2px_6px_rgba(106,18,205,0.05)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                      >
-                        <span className="truncate whitespace-nowrap">{prompt}</span>
-                        <ArrowUpRight size={13} strokeWidth={2.25} className="shrink-0 ml-1.5 -mr-0.5 text-ink-400 group-hover:text-brand-500 group-hover:translate-x-px group-hover:-translate-y-px transition-all duration-150 ease-out" />
-                      </motion.button>
-                    ))}
+                  <div className="pt-7 flex flex-wrap items-start content-start justify-center gap-2">
+                    {suggestions.map((s, i) => {
+                      const Icon = s.icon;
+                      return (
+                        <motion.button
+                          key={`empty-starter-${i}-${s.label}`}
+                          type="button"
+                          title={s.label}
+                          initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.92 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={prefersReducedMotion
+                            ? { duration: 0 }
+                            : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + i * 0.05 }
+                          }
+                          onClick={() => {
+                            setInput(s.label);
+                            textareaRef.current?.focus();
+                            requestAnimationFrame(() => handleTextareaInput());
+                          }}
+                          className="group inline-flex items-center gap-1.5 h-[32px] max-w-[16rem] pl-3 pr-3.5 rounded-full border border-ink-300/25 bg-canvas-elevated/80 backdrop-blur-sm text-[12.5px] font-medium tracking-[-0.005em] text-ink-700 shadow-[0_1px_2px_rgba(15,8,30,0.03)] hover:border-brand-300/70 hover:text-brand-700 hover:bg-canvas-elevated hover:-translate-y-px hover:shadow-[0_2px_6px_rgba(106,18,205,0.05)] transition-all duration-150 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          <Icon size={13} strokeWidth={2} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-150" />
+                          <span className="truncate whitespace-nowrap">{s.label}</span>
+                        </motion.button>
+                      );
+                    })}
                   </div>
                 );
               })()}
