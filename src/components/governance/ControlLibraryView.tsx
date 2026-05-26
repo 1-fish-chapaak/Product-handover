@@ -170,7 +170,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
 
     setControls(prev => [newControl, ...prev]);
     setShowCreateDrawer(false);
-    addToast({ message: `Control ${controlId} "${data.name}" created successfully`, type: 'success' });
+    addToast({ message: `Control ${controlId} "${data.name}" created`, type: 'success' });
 
     // Open the new control's detail view
     setSelectedControlId(controlId);

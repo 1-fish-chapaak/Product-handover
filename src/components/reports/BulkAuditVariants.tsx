@@ -591,7 +591,7 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
     window.setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
-      addToast({ type: 'success', message: `Template "${template.name}" applied!` });
+      addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
   };
 
