@@ -5,7 +5,7 @@ import {
   Search, Upload, MoreHorizontal, Plus, X,
   Pencil, Trash2, Unplug, Check, CheckSquare,
   Globe, Cloud, MessageSquare,
-  LayoutGrid, Rows3,
+  LayoutGrid, Rows3, ArrowRight,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
@@ -15,20 +15,15 @@ import {
 } from '../shared/DateFilterPicker';
 import DataSourceDetailView from './DataSourceDetailView';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  TODAY, INTEGRATED_TYPES, TYPE_META, formatDate, SEED,
+  TODAY, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource, type SourceType,
 } from './sources';
-import { DATASET_FILES, type FileFormat } from './datasetFiles';
-
-// Mutable copy — supports inline rename without forcing a parent-level state lift.
-let SOURCES_STATE: DataSource[] | null = null;
-
-// First-render seed for the Knowledge Hub grid. Set to `[]` so the empty-state
-// welcome is visible on a fresh load. Flip to `SEED` (imported from ./sources)
-// to restore the 24 demo sources for screenshots / sales demos. Single-line
-// toggle on purpose — no env var, no flag, just edit this one constant.
-const INITIAL_SOURCES: DataSource[] = SEED;
+import {
+  DATASET_FILES, setSourceFiles, removeSourceFiles, type FileFormat,
+} from './datasetFiles';
+import { useKnowledgeSources } from '../../hooks/useKnowledgeSources';
 
 // ─── Upload helpers ──────────────────────────────────────────────────────────
 
@@ -78,16 +73,13 @@ function dedupeName(desired: string, taken: Set<string>): string {
 // databases/APIs/cloud/sessions into a single "Integrations" bucket. With
 // granular tabs each carries a count, so users can scope by exact source type.
 
-type TabId = 'all' | 'file' | 'folder' | 'database' | 'api' | 'cloud' | 'session';
+type TabId = 'all' | 'file' | 'folder' | 'integrated';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'all',      label: 'All',          icon: Layers },
-  { id: 'file',     label: 'Files',        icon: FileText },
-  { id: 'folder',   label: 'Folders',      icon: FolderOpen },
-  { id: 'database', label: 'Databases',    icon: Database },
-  { id: 'api',      label: 'APIs',         icon: Globe },
-  { id: 'cloud',    label: 'Cloud',        icon: Cloud },
-  { id: 'session',  label: 'Sessions',     icon: MessageSquare },
+  { id: 'all',        label: 'All',             icon: Layers },
+  { id: 'file',       label: 'Files',           icon: FileText },
+  { id: 'folder',     label: 'Folders',         icon: FolderOpen },
+  { id: 'integrated', label: 'Integrated DBs',  icon: Database },
 ];
 
 type ViewMode = 'grid' | 'list';
@@ -135,6 +127,28 @@ export interface HubStats {
   integrations: number;
   totalBytes: number;
   lastAdded?: string;
+  /** Count of integrations whose health reads as 'degraded' — drives the
+   *  Knowledge Hub attention rail. Zero when there is nothing to action. */
+  attentionCount: number;
+  /** First degraded integration's id — used so the attention rail can deep-
+   *  link straight into the side panel for that source. */
+  firstAttentionId?: string;
+  /** First degraded integration's display name — used in the rail copy so
+   *  the user sees what's broken before they click. */
+  firstAttentionName?: string;
+  /** Distinct source types currently connected (e.g. ['database','api','file']).
+   *  Used by the Knowledge Hub starter-prompt chips to show only those whose
+   *  required source-type is actually present. */
+  connectedTypes: SourceType[];
+  /** Per-type counts. Drives the "By type" breakdown card on the Knowledge
+   *  Hub. Excludes folders — those are counted separately in `folders`. */
+  typeBreakdown: Partial<Record<SourceType, number>>;
+  /** Last 3 sources by createdAt, newest first. Powers the "Recently added"
+   *  card so the page doesn't need a second hook subscription. */
+  recentSources: DataSource[];
+  /** Where the source list is currently stored. Drives the "Stored in this
+   *  browser" cue on the page header — pulled from useKnowledgeSources. */
+  backend: 'local' | 'cloud';
 }
 
 // ─── Time bucketing ──────────────────────────────────────────────────────────
@@ -164,8 +178,9 @@ function bucketByDate(items: DataSource[]): Bucket[] {
 interface SourceCardProps {
   source: DataSource;
   onOpen: () => void;
+  /** Signal that the user clicked Remove/Disconnect in the menu. The parent
+   *  shows a confirmation modal and only then performs the removal. */
   onRemove: (id: string) => void;
-  onRestore: (snapshot: DataSource) => void;
   onRenameInDetail: () => void;
   selectMode: boolean;
   selected: boolean;
@@ -173,20 +188,12 @@ interface SourceCardProps {
   viewMode: ViewMode;
 }
 
-// Shared remove + click handlers — used by both card and row renderers.
-function useCardActions(source: DataSource, onOpen: () => void, onRemove: (id: string) => void, onRestore: (snapshot: DataSource) => void, selectMode: boolean, onToggleSelect: (id: string) => void) {
-  const { addToast } = useToast();
+// Shared remove + click handlers — used by both card and row renderers. The
+// parent owns the confirmation modal and the post-confirm toast; this hook
+// just signals "user clicked Remove on this card" via onRemove(id).
+function useCardActions(source: DataSource, onOpen: () => void, onRemove: (id: string) => void, selectMode: boolean, onToggleSelect: (id: string) => void) {
   const isIntegrated = INTEGRATED_TYPES.includes(source.type);
-  const handleRemove = () => {
-    const snapshot = source;
-    onRemove(source.id);
-    const verb = isIntegrated ? 'Disconnected' : 'Removed';
-    addToast({
-      type: 'info',
-      message: `${verb} "${snapshot.name}".`,
-      action: { label: 'Undo', onClick: () => onRestore(snapshot) },
-    });
-  };
+  const handleRemove = () => onRemove(source.id);
   const handleCardClick = () => {
     if (selectMode) onToggleSelect(source.id);
     else onOpen();
@@ -214,7 +221,7 @@ function SourceCard(props: SourceCardProps) {
 // Grid tile — primary card, slightly richer than the previous version. Folders
 // get a count chip; integrations get a health dot + last sync.
 function SourceTile({
-  source, onOpen, onRemove, onRestore, onRenameInDetail,
+  source, onOpen, onRemove, onRenameInDetail,
   selectMode, selected, onToggleSelect,
 }: SourceCardProps) {
   const { icon: TypeIcon, tone: typeTone, label: typeLabel } = TYPE_META[source.type];
@@ -222,7 +229,7 @@ function SourceTile({
   const tone = source.isFolder ? 'text-evidence-700 bg-evidence-50' : typeTone;
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
-    source, onOpen, onRemove, onRestore, selectMode, onToggleSelect,
+    source, onOpen, onRemove, selectMode, onToggleSelect,
   );
   const health = isIntegrated ? integrationHealth(source.id) : null;
 
@@ -231,10 +238,10 @@ function SourceTile({
       <button
         type="button"
         onClick={handleCardClick}
-        className={`group w-full flex items-start gap-3 px-4 py-3.5 rounded-xl bg-canvas-elevated border transition-[colors,transform,box-shadow] cursor-pointer text-left active:scale-[0.99] ${
+        className={`group w-full flex items-start gap-3 px-4 py-4 rounded-xl bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
           selected
-            ? 'border-brand-600 bg-brand-50/30 shadow-sm'
-            : 'border-canvas-border hover:border-brand-200 hover:bg-brand-50/20 hover:shadow-sm'
+            ? 'border-brand-500 bg-brand-50/40 shadow-[0_2px_8px_rgb(106_18_205_/_0.10)]'
+            : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_4px_16px_rgb(15_8_30_/_0.06)]'
         }`}
       >
         {selectMode && (
@@ -297,7 +304,7 @@ function SourceTile({
 
 // Dense list row — single line, scannable. Same affordances as the tile.
 function SourceRow({
-  source, onOpen, onRemove, onRestore, onRenameInDetail,
+  source, onOpen, onRemove, onRenameInDetail,
   selectMode, selected, onToggleSelect,
 }: SourceCardProps) {
   const { icon: TypeIcon, tone: typeTone, label: typeLabel } = TYPE_META[source.type];
@@ -305,7 +312,7 @@ function SourceRow({
   const tone = source.isFolder ? 'text-evidence-700 bg-evidence-50' : typeTone;
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
-    source, onOpen, onRemove, onRestore, selectMode, onToggleSelect,
+    source, onOpen, onRemove, selectMode, onToggleSelect,
   );
   const health = isIntegrated ? integrationHealth(source.id) : null;
   const displayType = source.isFolder ? 'Folder' : typeLabel;
@@ -512,69 +519,17 @@ function PerTabEmptyState({
     );
   }
 
-  if (tab === 'database') {
+  if (tab === 'integrated') {
     return (
       <EmptyShell icon={Database}>
-        <p className="text-[0.875rem] text-ink-700 font-medium">No databases connected.</p>
+        <p className="text-[0.875rem] text-ink-700 font-medium">No integrations connected yet.</p>
         <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          Connect Snowflake, Postgres, BigQuery, Oracle, Athena and more from the Add source picker.
+          Connect Snowflake, Postgres, Oracle, BigQuery, Workday, NetSuite, JIRA, S3,
+          SharePoint and more from the Add source picker.
         </p>
         <div className="mt-4">
-          <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Connect database</Button>
+          <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Connect a source</Button>
         </div>
-      </EmptyShell>
-    );
-  }
-
-  if (tab === 'api') {
-    return (
-      <EmptyShell icon={Globe}>
-        <p className="text-[0.875rem] text-ink-700 font-medium">No API integrations yet.</p>
-        <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          REST and OAuth integrations are wired up by IT — Workday, NetSuite, JIRA, and more.
-        </p>
-        <div className="mt-4">
-          <a
-            href="mailto:support@irame.ai?subject=API%20integration%20request"
-            onClick={onRequestIntegration}
-            className="inline-flex items-center gap-2 px-3.5 h-9 rounded-lg bg-primary text-white text-sm font-medium shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150"
-          >
-            <Plus size={13} />
-            Request an API integration
-          </a>
-        </div>
-      </EmptyShell>
-    );
-  }
-
-  if (tab === 'cloud') {
-    return (
-      <EmptyShell icon={Cloud}>
-        <p className="text-[0.875rem] text-ink-700 font-medium">No cloud storage connected.</p>
-        <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          S3, Google Drive, SharePoint, and OneDrive get wired up by IT once per workspace.
-        </p>
-        <div className="mt-4">
-          <a
-            href="mailto:support@irame.ai?subject=Cloud%20storage%20integration%20request"
-            onClick={onRequestIntegration}
-            className="inline-flex items-center gap-2 px-3.5 h-9 rounded-lg bg-primary text-white text-sm font-medium shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md hover:shadow-brand-900/15 transition-[background-color,box-shadow] duration-150"
-          >
-            <Plus size={13} />
-            Request cloud connection
-          </a>
-        </div>
-      </EmptyShell>
-    );
-  }
-
-  if (tab === 'session') {
-    return (
-      <EmptyShell icon={MessageSquare}>
-        <p className="text-[0.875rem] text-ink-700 font-medium">No chat-attached files yet.</p>
-        <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          Drop a file into any IRA chat and it shows up here automatically — scoped to that conversation.
-        </p>
       </EmptyShell>
     );
   }
@@ -667,6 +622,9 @@ function CatalogLoadingSkeleton() {
 export interface DataSourcesViewHandle {
   /** Opens the Add-source picker modal. Used by the persistent header CTA. */
   openPicker: () => void;
+  /** Opens the side panel for a specific source id. Reserved for future deep-
+   *  link callers (e.g. notification → "review this source"). */
+  focusSource: (id: string) => void;
 }
 
 export type DisplayMode = 'empty' | 'loading' | 'loaded';
@@ -687,17 +645,33 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
   const [dateOpen, setDateOpen] = useState(false);
   const [activeSource, setActiveSource] = useState<DataSource | null>(null);
+  // Side-panel a11y refs: container we focus on open, and the element to
+  // restore focus to on close (typically the source row that was clicked).
+  const panelRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   // When the menu's Rename is clicked, we set this so the detail view enters
   // rename mode immediately on mount. Cleared after the detail view consumes it.
   const [pendingRename, setPendingRename] = useState(false);
-  // Local sources state. SOURCES_STATE wins across remounts within a session;
-  // first-time load uses INITIAL_SOURCES (the toggle near the top of the file).
-  const [sources, setSources] = useState<DataSource[]>(() => SOURCES_STATE ?? INITIAL_SOURCES);
+  // Source list comes from the swappable data hook. Today the hook is backed
+  // by localStorage; when a real backend ships we replace the hook body and
+  // nothing in this file changes. See src/hooks/useKnowledgeSources.ts.
+  const knowledge = useKnowledgeSources();
+  const sources = knowledge.sources;
+  // Keep a live ref to the latest list so the imperative handle's focusSource
+  // closure always sees fresh data without forcing the handle to re-create.
+  const sourcesRef = useRef<DataSource[]>(sources);
+  useEffect(() => { sourcesRef.current = sources; }, [sources]);
   // Single unified picker — same multi-tab UX as the chat composer's Add data.
+  // The picker is locked to the Upload tab in kh-add mode (DB connect is a
+  // backend-dependent flow; see DataPickerModal's KH_ADD_TABS comment).
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Expose an imperative `openPicker()` so the parent (KnowledgeHubView's
-  // header) can trigger the same flow that the toolbar's Add source button uses.
-  useImperativeHandle(ref, () => ({ openPicker: () => setPickerOpen(true) }), []);
+  useImperativeHandle(ref, () => ({
+    openPicker: () => setPickerOpen(true),
+    focusSource: (id: string) => {
+      const match = sourcesRef.current.find(s => s.id === id);
+      if (match) setActiveSource(match);
+    },
+  }), []);
   // Bulk-select state. selectMode reveals checkboxes; selectedIds tracks chosen ids.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -711,25 +685,88 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('kh:viewMode', viewMode);
   }, [viewMode]);
+
+  // ── Side-panel a11y ────────────────────────────────────────────────────────
+  // When the source detail drawer opens we (1) lock body scroll so the page
+  // behind doesn't scroll under the panel, (2) move keyboard focus onto the
+  // panel, (3) trap Tab inside the panel so users can't focus elements behind
+  // the backdrop, (4) close on Escape, (5) restore focus to the originating
+  // element on close. Standard modal-dialog expectations for any keyboard or
+  // screen-reader user.
+  useEffect(() => {
+    if (!activeSource) return;
+
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // Defer focus by one frame so motion.aside is mounted and visible.
+    const focusTimer = window.setTimeout(() => { panelRef.current?.focus(); }, 30);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveSource(null);
+        setPendingRename(false);
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) {
+        e.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last  = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const focusInside = active ? panelRef.current.contains(active) : false;
+      if (e.shiftKey) {
+        if (!focusInside || active === first || active === panelRef.current) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (!focusInside || active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      // Restore focus to the row that opened the panel (or wherever focus was).
+      returnFocusRef.current?.focus?.();
+      returnFocusRef.current = null;
+    };
+  }, [activeSource]);
+
   // First-run hint: tracks transition from 0 → 1 source to fire the @-mention nudge once.
   const prevSourcesLenRef = useRef<number>(sources.length);
 
   // Predicate fn per tab — single source of truth for counts + visibility.
   const tabPredicate = (id: TabId) => (d: DataSource): boolean => {
-    if (id === 'all')      return true;
-    if (id === 'file')     return d.type === 'file' && !d.isFolder;
-    if (id === 'folder')   return d.type === 'file' && d.isFolder === true;
-    return d.type === id;
+    if (id === 'all')        return true;
+    if (id === 'file')       return d.type === 'file' && !d.isFolder;
+    if (id === 'folder')     return d.type === 'file' && d.isFolder === true;
+    if (id === 'integrated') return INTEGRATED_TYPES.includes(d.type);
+    return false;
   };
 
   const tabCounts = useMemo<Record<TabId, number>>(() => ({
-    all:      sources.length,
-    file:     sources.filter(tabPredicate('file')).length,
-    folder:   sources.filter(tabPredicate('folder')).length,
-    database: sources.filter(tabPredicate('database')).length,
-    api:      sources.filter(tabPredicate('api')).length,
-    cloud:    sources.filter(tabPredicate('cloud')).length,
-    session:  sources.filter(tabPredicate('session')).length,
+    all:        sources.length,
+    file:       sources.filter(tabPredicate('file')).length,
+    folder:     sources.filter(tabPredicate('folder')).length,
+    integrated: sources.filter(tabPredicate('integrated')).length,
   }), [sources]);
 
   // Total count within the active tab — used to show "X of N" when filtered.
@@ -751,7 +788,12 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   useEffect(() => {
     if (!onStatsChange) return;
     if (displayMode !== 'loaded') {
-      onStatsChange({ total: 0, files: 0, folders: 0, integrations: 0, totalBytes: 0 });
+      onStatsChange({
+        total: 0, files: 0, folders: 0, integrations: 0, totalBytes: 0,
+        attentionCount: 0, connectedTypes: [],
+        typeBreakdown: {}, recentSources: [],
+        backend: knowledge.backend,
+      });
       return;
     }
     const total = sources.length;
@@ -762,8 +804,30 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     const lastAdded = sources
       .map(s => s.createdAt)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
-    onStatsChange({ total, files, folders, integrations, totalBytes, lastAdded });
-  }, [sources, onStatsChange, displayMode]);
+    const degraded = sources.filter(s => INTEGRATED_TYPES.includes(s.type) && integrationHealth(s.id) === 'degraded');
+    const connectedTypes = Array.from(new Set(sources.map(s => s.type)));
+    // Per-type counts. Folders are counted separately on HubStats; for the
+    // breakdown card we count files (non-folder) vs folder cards under
+    // 'file' too — UX treats both as "file sources".
+    const typeBreakdown = sources.reduce<Partial<Record<SourceType, number>>>((acc, s) => {
+      acc[s.type] = (acc[s.type] ?? 0) + 1;
+      return acc;
+    }, {});
+    // Last 3 by createdAt, newest first. Powers the "Recently added" card.
+    const recentSources = [...sources]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 3);
+    onStatsChange({
+      total, files, folders, integrations, totalBytes, lastAdded,
+      attentionCount: degraded.length,
+      firstAttentionId:   degraded[0]?.id,
+      firstAttentionName: degraded[0]?.name,
+      connectedTypes,
+      typeBreakdown,
+      recentSources,
+      backend: knowledge.backend,
+    });
+  }, [sources, onStatsChange, displayMode, knowledge.backend]);
 
   const dateActive = isDateFilterActive(dateFilter);
   const isFiltered = search.trim() !== '' || dateActive;
@@ -771,42 +835,49 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const clearAllFilters = () => { setSearch(''); setDateFilter(DEFAULT_DATE_FILTER); };
 
   const renameSource = (id: string, newName: string) => {
-    setSources(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, name: newName } : s);
-      SOURCES_STATE = next;
-      return next;
-    });
+    knowledge.rename(id, newName);
     setActiveSource(curr => curr && curr.id === id ? { ...curr, name: newName } : curr);
   };
 
-  // Plain remove — SourceCard / bulk bar own the undo toast so we don't fire it twice.
-  const removeSource = (id: string) => {
-    setSources(prev => {
-      const next = prev.filter(s => s.id !== id);
-      SOURCES_STATE = next;
-      return next;
-    });
+  // ── Destructive-action confirmation ──────────────────────────────────────
+  // Holds the snapshots queued for removal. Render is gated on this being
+  // non-null; ConfirmationModal at the bottom of the tree consumes it.
+  const [pendingRemove, setPendingRemove] = useState<DataSource[] | null>(null);
+
+  // Single-source path: SourceCard's menu Remove/Disconnect calls this. We
+  // look up the snapshot from current state and queue it for confirmation.
+  const requestRemove = (id: string) => {
+    const snap = sources.find(s => s.id === id);
+    if (snap) setPendingRemove([snap]);
   };
 
-  const restoreSource = (snapshot: DataSource) => {
-    setSources(prev => {
-      // Guard against double-restore (Undo clicked twice) so we don't duplicate.
-      if (prev.some(s => s.id === snapshot.id)) return prev;
-      const next = [snapshot, ...prev];
-      SOURCES_STATE = next;
-      return next;
-    });
+  // Bulk path: bulk action bar's Disconnect/Remove button calls this. All
+  // currently-selected sources get queued atomically.
+  const requestBulkRemove = () => {
+    const snapshots = sources.filter(s => selectedIds.has(s.id));
+    if (snapshots.length === 0) { exitSelectMode(); return; }
+    setPendingRemove(snapshots);
   };
 
-  const restoreManySources = (snapshots: DataSource[]) => {
-    setSources(prev => {
-      const existing = new Set(prev.map(s => s.id));
-      const additions = snapshots.filter(s => !existing.has(s.id));
-      if (additions.length === 0) return prev;
-      const next = [...additions, ...prev];
-      SOURCES_STATE = next;
-      return next;
+  // Confirmed: actually remove + show toast with Undo so a misclick on the
+  // confirm button is still recoverable. The hook's addMany dedupes by id so
+  // Undo is safe to fire even if the user re-added a same-id source manually.
+  const confirmRemove = () => {
+    if (!pendingRemove) return;
+    const snapshots = pendingRemove;
+    knowledge.removeMany(snapshots.map(s => s.id));
+    const allIntegrated = snapshots.every(s => INTEGRATED_TYPES.includes(s.type));
+    const verb = allIntegrated ? 'Disconnected' : 'Removed';
+    const target = snapshots.length === 1
+      ? `"${snapshots[0].name}"`
+      : `${snapshots.length} ${snapshots.length === 1 ? 'source' : 'sources'}`;
+    addToast({
+      type: 'info',
+      message: `${verb} ${target}.`,
+      action: { label: 'Undo', onClick: () => knowledge.addMany(snapshots) },
     });
+    setPendingRemove(null);
+    if (selectMode) exitSelectMode();
   };
 
   const toggleSelect = (id: string) => {
@@ -820,27 +891,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const exitSelectMode = () => {
     setSelectMode(false);
     setSelectedIds(new Set());
-  };
-
-  // Bulk remove: snapshot everything first, drop them, then surface a single undo.
-  const removeSelected = () => {
-    const snapshots = sources.filter(s => selectedIds.has(s.id));
-    if (snapshots.length === 0) { exitSelectMode(); return; }
-    const ids = new Set(snapshots.map(s => s.id));
-    setSources(prev => {
-      const next = prev.filter(s => !ids.has(s.id));
-      SOURCES_STATE = next;
-      return next;
-    });
-    const allIntegrated = snapshots.every(s => INTEGRATED_TYPES.includes(s.type));
-    const verb = allIntegrated ? 'Disconnected' : 'Removed';
-    const noun = snapshots.length === 1 ? 'source' : 'sources';
-    addToast({
-      type: 'info',
-      message: `${verb} ${snapshots.length} ${noun}.`,
-      action: { label: 'Undo', onClick: () => restoreManySources(snapshots) },
-    });
-    exitSelectMode();
   };
 
   // Reset search + date filter on tab switch so each tab opens "fresh". Avoids
@@ -902,80 +952,75 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     const totalFiles  = uploads.length;
 
     if (uploads.length > 0 || dbConnect.length > 0) {
-      setSources(prev => {
-        const taken = new Set(prev.map(s => s.name));
-        // Seed data is anchored to TODAY (2026-04-23); use the same anchor for
-        // new uploads so they land in the visible 'Today' bucket and pass the
-        // default date filter, which is computed relative to TODAY.
-        const nowIso = TODAY.toISOString();
-        const today  = nowIso.slice(0, 10);
+      const taken = new Set(sources.map(s => s.name));
+      // Anchor newly-added sources to "now" so they land in the visible
+      // Today bucket and pass the default date filter.
+      const nowIso = new Date().toISOString();
+      const today  = nowIso.slice(0, 10);
 
-        // ── Loose-file sources: one card per file ────────────────────────
-        const looseAdds: DataSource[] = loose.map(u => {
-          const finalName = dedupeName(u.name, taken);
-          taken.add(finalName);
-          const sourceId = `upl-${u.localId}`;
-          // Single-file content for the detail view.
-          DATASET_FILES[sourceId] = [{
-            id:         `${sourceId}-1`,
-            name:       u.name,
-            format:     fileFormat(u.name),
-            sizeBytes:  u.sizeBytes,
-            uploadedAt: today,
-            status:     'processed',
-          }];
-          return {
-            id:        sourceId,
-            name:      finalName,
-            type:      'file' as SourceType,
-            subtype:   `${formatExt(finalName)} · ${formatBytesShort(u.sizeBytes)}`,
-            createdAt: nowIso,
-          };
-        });
-
-        // ── Folder sources: one card per folder, files inside ────────────
-        const folderAdds: DataSource[] = [];
-        folders.forEach((files, folderName) => {
-          const finalName = dedupeName(folderName, taken);
-          taken.add(finalName);
-          const sourceId  = `upl-folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          const totalSize = files.reduce((sum, f) => sum + f.sizeBytes, 0);
-          // File contents — strip the root folder prefix so display is "Q1/sales.csv".
-          DATASET_FILES[sourceId] = files.map((f, i) => ({
-            id:         `${sourceId}-${i + 1}`,
-            name:       f.path ? f.path.replace(`${folderName}/`, '') : f.name,
-            format:     fileFormat(f.name),
-            sizeBytes:  f.sizeBytes,
-            uploadedAt: today,
-            status:     'processed',
-          }));
-          folderAdds.push({
-            id:        sourceId,
-            name:      finalName,
-            type:      'file' as SourceType,
-            isFolder:  true,
-            subtype:   `Folder · ${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytesShort(totalSize)}`,
-            createdAt: nowIso,
-          });
-        });
-
-        // ── DB sources ───────────────────────────────────────────────────
-        const dbAdds: DataSource[] = dbConnect.map(d => {
-          const finalName = dedupeName(d.name, taken);
-          taken.add(finalName);
-          return {
-            id:        `db-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            name:      finalName,
-            type:      'database' as SourceType,
-            subtype:   `${d.dbType} · ${d.database}`,
-            createdAt: nowIso,
-          };
-        });
-
-        const next = [...folderAdds, ...looseAdds, ...dbAdds, ...prev];
-        SOURCES_STATE = next;
-        return next;
+      // ── Loose-file sources: one card per file ────────────────────────
+      const looseAdds: DataSource[] = loose.map(u => {
+        const finalName = dedupeName(u.name, taken);
+        taken.add(finalName);
+        const sourceId = `upl-${u.localId}`;
+        // Persist single-file content for the detail view.
+        setSourceFiles(sourceId, [{
+          id:         `${sourceId}-1`,
+          name:       u.name,
+          format:     fileFormat(u.name),
+          sizeBytes:  u.sizeBytes,
+          uploadedAt: today,
+          status:     'processed',
+        }]);
+        return {
+          id:        sourceId,
+          name:      finalName,
+          type:      'file' as SourceType,
+          subtype:   `${formatExt(finalName)} · ${formatBytesShort(u.sizeBytes)}`,
+          createdAt: nowIso,
+        };
       });
+
+      // ── Folder sources: one card per folder, files inside ────────────
+      const folderAdds: DataSource[] = [];
+      folders.forEach((files, folderName) => {
+        const finalName = dedupeName(folderName, taken);
+        taken.add(finalName);
+        const sourceId  = `upl-folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const totalSize = files.reduce((sum, f) => sum + f.sizeBytes, 0);
+        // Persist folder contents — strip the root folder prefix so display is "Q1/sales.csv".
+        setSourceFiles(sourceId, files.map((f, i) => ({
+          id:         `${sourceId}-${i + 1}`,
+          name:       f.path ? f.path.replace(`${folderName}/`, '') : f.name,
+          format:     fileFormat(f.name),
+          sizeBytes:  f.sizeBytes,
+          uploadedAt: today,
+          status:     'processed',
+        })));
+        folderAdds.push({
+          id:        sourceId,
+          name:      finalName,
+          type:      'file' as SourceType,
+          isFolder:  true,
+          subtype:   `Folder · ${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytesShort(totalSize)}`,
+          createdAt: nowIso,
+        });
+      });
+
+      // ── DB sources ───────────────────────────────────────────────────
+      const dbAdds: DataSource[] = dbConnect.map(d => {
+        const finalName = dedupeName(d.name, taken);
+        taken.add(finalName);
+        return {
+          id:        `db-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name:      finalName,
+          type:      'database' as SourceType,
+          subtype:   `${d.dbType} · ${d.database}`,
+          createdAt: nowIso,
+        };
+      });
+
+      knowledge.addMany([...folderAdds, ...looseAdds, ...dbAdds]);
     }
 
     // Toast wording reflects what actually happened.
@@ -995,35 +1040,20 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   // Sort is implicit: newest-first within and across buckets.
   const buckets = bucketByDate(visible);
 
-  // Full-page detail replaces the grid when a source is active.
-  if (activeSource) {
-    return (
-      <DataSourceDetailView
-        source={activeSource}
-        onBack={() => { setActiveSource(null); setPendingRename(false); }}
-        onRename={(newName) => renameSource(activeSource.id, newName)}
-        startRenaming={pendingRename}
-        onStartRenamingConsumed={() => setPendingRename(false)}
-      />
-    );
-  }
-
   // ── Demo override: loading skeleton ──────────────────────────────────────
   if (displayMode === 'loading') {
     return <CatalogLoadingSkeleton />;
   }
 
   // ── True-empty state ─────────────────────────────────────────────────────
-  // Distinct from the filter-empty state below (which fires when there are
-  // sources but the search/date filters hide them). This one is the
-  // first-run welcome — no sources at all, OR the demo override is forcing
-  // the empty view. Calm, single-card layout: icon → headline → copy →
-  // primary CTA → supported-types footer.
+  // Editorial centered card with a clearly visible dashed brand-tinted border.
+  // Stronger contrast against the lavender page bg so the container reads as
+  // a distinct surface, not a faded smudge.
   if (displayMode === 'empty' || sources.length === 0) {
     return (
       <>
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated">
-          <div className="flex flex-col items-center justify-center text-center py-20 px-8">
+        <div className="rounded-2xl border-2 border-dashed border-brand-100 bg-canvas-elevated/95 shadow-[0_1px_3px_rgb(15_8_30_/_0.03)]">
+          <div className="flex flex-col items-center justify-center text-center py-24 px-8">
             <div className="w-14 h-14 rounded-2xl border border-paper-200 bg-paper-0 flex items-center justify-center mb-6">
               <Layers size={24} className="text-ink-400" strokeWidth={1.4} />
             </div>
@@ -1064,56 +1094,60 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
   return (
     <div className="space-y-5">
-      {/* ── Single tab row: granular type segment ── */}
-      {/* Wrapped in an overflow-x scroller so 7 segments survive narrow viewports
-          without wrapping. A soft hairline under the row separates filters from
-          content even when nothing is selected. */}
-      <div className="border-b border-canvas-border -mx-1">
-        <div className="flex items-center gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.map(t => {
-            const Icon = t.icon;
-            const isActive = tab === t.id;
-            const count = tabCounts[t.id];
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`relative flex items-center gap-2 px-3.5 h-10 text-[0.8125rem] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800'
-                }`}
-              >
-                <Icon size={13} className={isActive ? 'text-brand-700' : 'text-ink-400'} />
+      {/* ── Filter segmented control — connected pills inside one container.
+          Visually DIFFERENT from the underlined main tabs above so the
+          hierarchy reads "main tabs > filter control". Active button rides
+          a layoutId-animated white pill within the container. */}
+      <div className="inline-flex items-center p-1 rounded-xl border border-canvas-border bg-paper-50 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TABS.map(t => {
+          const Icon = t.icon;
+          const isActive = tab === t.id;
+          const count = tabCounts[t.id];
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`shrink-0 relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.8125rem] transition-colors cursor-pointer ${
+                isActive
+                  ? 'text-brand-700 font-semibold'
+                  : 'text-ink-600 font-medium hover:text-ink-900'
+              }`}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="kh-filter-pill-bg"
+                  className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-2">
+                <Icon size={14} className={isActive ? 'text-brand-700' : 'text-ink-500'} />
                 <span>{t.label}</span>
                 <span
-                  className={`tabular-nums text-[0.6875rem] px-1.5 h-4 rounded-full inline-flex items-center ${
-                    isActive ? 'bg-brand-100 text-brand-700 font-semibold' : 'bg-paper-100 text-ink-500'
+                  className={`tabular-nums text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${
+                    isActive ? 'bg-brand-100 text-brand-700' : 'bg-canvas-elevated text-ink-500'
                   }`}
                 >
                   {count}
                 </span>
-                {isActive && (
-                  <motion.div
-                    layoutId="kh-tab-underline"
-                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-brand-600 rounded-full"
-                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── One-row toolbar: search · date · view-toggle · select ── */}
+      {/* ── One-row toolbar — h-9 across the board (matches DateFilterPicker).
+          Add source is the only brand-filled primary CTA with subtle brand-
+          tinted shadow for "lift", matching Dashboard's recipe. */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[14rem] max-w-xl">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
           <input
             type="text"
             placeholder={`Search ${tab === 'all' ? 'all sources' : TABS.find(t => t.id === tab)!.label.toLowerCase()}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-8 h-9 rounded-lg border border-canvas-border bg-paper-50 text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:bg-canvas-elevated transition-colors"
+            className="w-full pl-10 pr-9 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 transition-all"
           />
           {search && (
             <button
@@ -1136,13 +1170,15 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           today={TODAY}
         />
 
-        {/* Grid / list toggle — segmented pair, single-click swap. */}
-        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-paper-50">
+        {/* Grid / list toggle — segmented pair on the same white-with-border
+            container as the rest of the toolbar. Active button gets a soft
+            brand-tinted pill so the choice reads clearly. */}
+        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <button
             type="button"
             onClick={() => setViewMode('grid')}
             className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer ${
-              viewMode === 'grid' ? 'bg-canvas-elevated text-brand-700 shadow-sm' : 'text-ink-400 hover:text-ink-700'
+              viewMode === 'grid' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800 hover:bg-paper-50'
             }`}
             aria-label="Grid view"
             aria-pressed={viewMode === 'grid'}
@@ -1154,7 +1190,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             type="button"
             onClick={() => setViewMode('list')}
             className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer ${
-              viewMode === 'list' ? 'bg-canvas-elevated text-brand-700 shadow-sm' : 'text-ink-400 hover:text-ink-700'
+              viewMode === 'list' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800 hover:bg-paper-50'
             }`}
             aria-label="List view"
             aria-pressed={viewMode === 'list'}
@@ -1166,7 +1202,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
         <Button
           variant="outline"
-          size="sm"
+          size="md"
           leftIcon={selectMode ? <X size={13} /> : <CheckSquare size={13} />}
           onClick={() => {
             if (selectMode) exitSelectMode();
@@ -1176,17 +1212,23 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           {selectMode ? 'Done' : 'Select'}
         </Button>
 
-        {/* Primary CTA — moved out of the page header so the chrome stays
-            calm; lives next to the other catalog-scoped controls. */}
-        <Button
-          variant="primary"
-          size="sm"
-          leftIcon={<Plus size={13} />}
+        {/* Visual divider — separates browse/view actions from the primary
+            create CTA on the right. */}
+        <div className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
+
+        {/* PRIMARY CTA — exact platform recipe (matches Dashboard's
+            "+ Create Dashboard" and Admin's "+ Invite User"): brand-filled,
+            white text, font-semibold, with a quiet brand-tinted shadow for
+            "lift" so the button reads as the page's primary action. */}
+        <button
+          type="button"
           onClick={() => setPickerOpen(true)}
           title="Add source (N)"
+          className="inline-flex items-center gap-2 px-4 h-9 rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-[0.8125rem] font-semibold shadow-[0_1px_2px_rgb(106_18_205_/_0.18),0_2px_8px_rgb(106_18_205_/_0.08)] hover:shadow-[0_1px_2px_rgb(106_18_205_/_0.25),0_4px_12px_rgb(106_18_205_/_0.15)] transition-all cursor-pointer"
         >
+          <Plus size={15} />
           Add source
-        </Button>
+        </button>
       </div>
 
       {/* ── Active filter chips — single inline strip when filters are on ── */}
@@ -1253,8 +1295,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       source={d}
                       viewMode="grid"
                       onOpen={() => setActiveSource(d)}
-                      onRemove={removeSource}
-                      onRestore={restoreSource}
+                      onRemove={requestRemove}
                       onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
                       selectMode={selectMode}
                       selected={selectedIds.has(d.id)}
@@ -1270,8 +1311,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       source={d}
                       viewMode="list"
                       onOpen={() => setActiveSource(d)}
-                      onRemove={removeSource}
-                      onRestore={restoreSource}
+                      onRemove={requestRemove}
                       onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
                       selectMode={selectMode}
                       selected={selectedIds.has(d.id)}
@@ -1285,7 +1325,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Shared add-data picker (Upload tab vs DB tab depends on entry button) ── */}
+      {/* ── Shared add-data picker — Upload-only in kh-add mode today. ── */}
       <DataPickerModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -1294,6 +1334,50 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         confirmLabel="Add"
         mode="kh-add"
       />
+
+      {/* ── Source detail — right-side panel ──
+          Replaces the old full-page replace. The grid stays mounted behind a
+          dim backdrop so users can scan multiple sources without losing the
+          list. Backdrop click and the detail's own onBack both close it. */}
+      <AnimatePresence>
+        {activeSource && (
+          <>
+            <motion.div
+              key="src-panel-backdrop"
+              className="fixed inset-0 z-40 bg-ink-900/25 backdrop-blur-[1px]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={() => { setActiveSource(null); setPendingRename(false); }}
+              aria-hidden
+            />
+            <motion.aside
+              key="src-panel"
+              ref={panelRef as React.RefObject<HTMLElement>}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Source detail: ${activeSource.name}`}
+              tabIndex={-1}
+              className="fixed top-0 right-0 bottom-0 w-[640px] max-w-[92vw] z-50 bg-canvas border-l border-canvas-border shadow-2xl overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 360, damping: 38 }}
+            >
+              <div className="p-6">
+                <DataSourceDetailView
+                  source={activeSource}
+                  onBack={() => { setActiveSource(null); setPendingRename(false); }}
+                  onRename={(newName) => renameSource(activeSource.id, newName)}
+                  startRenaming={pendingRename}
+                  onStartRenamingConsumed={() => setPendingRename(false)}
+                />
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── Sticky bulk action bar ──
           Surfaces once a card is selected. Label adapts (Remove vs Disconnect)
@@ -1319,7 +1403,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               <Button
                 variant="destructive"
                 leftIcon={allIntegrated ? <Unplug size={13} /> : <Trash2 size={13} />}
-                onClick={removeSelected}
+                onClick={requestBulkRemove}
               >
                 {allIntegrated ? 'Disconnect' : 'Remove'}
               </Button>
@@ -1327,6 +1411,34 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           );
         })()}
       </AnimatePresence>
+
+      {/* ── Destructive-action confirmation ──
+          Surfaced for both single-source menu Remove/Disconnect AND bulk
+          action bar Disconnect. Wording switches verb (Disconnect vs Remove)
+          based on whether every queued source is an integration. */}
+      {(() => {
+        const queued = pendingRemove ?? [];
+        const allIntegrated = queued.length > 0 && queued.every(s => INTEGRATED_TYPES.includes(s.type));
+        const verb = allIntegrated ? 'Disconnect' : 'Remove';
+        const name = queued.length === 1
+          ? `"${queued[0].name}"`
+          : `${queued.length} ${queued.length === 1 ? 'source' : 'sources'}`;
+        return (
+          <ConfirmationModal
+            open={!!pendingRemove}
+            title={`${verb} ${name}?`}
+            description={
+              allIntegrated
+                ? <>The connection settings are kept, but IRA can't read from {queued.length === 1 ? 'this source' : 'these sources'} until you re-connect. You can undo this from the toast that appears next.</>
+                : <>{queued.length === 1 ? 'This file is' : 'These files are'} removed from your Knowledge Hub. You can undo this from the toast that appears next.</>
+            }
+            confirmLabel={verb}
+            tone="destructive"
+            onConfirm={confirmRemove}
+            onClose={() => setPendingRemove(null)}
+          />
+        );
+      })()}
     </div>
   );
 });

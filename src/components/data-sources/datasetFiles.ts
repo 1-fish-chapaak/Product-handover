@@ -90,6 +90,74 @@ export const DATASET_FILES: Record<string, DatasetFile[]> = {
   ],
 };
 
+// ─── User-uploaded file persistence ─────────────────────────────────────────
+// The DATASET_FILES record above is hardcoded demo data; entries keyed `f-01`
+// through `f-16` are referenced by the SEED in `sources.ts`. When SEED is
+// empty (production default) those entries are dead weight in memory but
+// harmless — no source references them.
+//
+// User uploads add NEW entries to DATASET_FILES at runtime. To survive a page
+// reload, those entries are mirrored to localStorage via setSourceFiles /
+// removeSourceFiles below. On module load, anything previously persisted is
+// merged back into the in-memory map.
+//
+// This is the same swap pattern as `useKnowledgeSources` — when a backend
+// is wired, replace the two setters to POST/DELETE against the API and remove
+// the on-load hydration. No other call site needs to change.
+
+const USER_FILES_STORAGE_KEY = 'kh:datasetFiles:v1';
+
+function loadUserDatasetFiles(): Record<string, DatasetFile[]> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(USER_FILES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as Record<string, DatasetFile[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveUserDatasetFiles(map: Record<string, DatasetFile[]>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(USER_FILES_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // QuotaExceededError or similar — non-fatal; user just won't get persistence
+    // for this write. A real backend impl removes this failure mode.
+  }
+}
+
+// Hydrate persisted user uploads into the in-memory map on module load.
+if (typeof window !== 'undefined') {
+  const persisted = loadUserDatasetFiles();
+  for (const [sourceId, files] of Object.entries(persisted)) {
+    DATASET_FILES[sourceId] = files;
+  }
+}
+
+/** Set (or replace) the file list for a source id. Mirrors to localStorage so
+ *  the detail view survives a reload. Used by the picker confirm path. */
+export function setSourceFiles(sourceId: string, files: DatasetFile[]): void {
+  DATASET_FILES[sourceId] = files;
+  const userMap = loadUserDatasetFiles();
+  userMap[sourceId] = files;
+  saveUserDatasetFiles(userMap);
+}
+
+/** Remove the file list for a source id. Called when the source is deleted so
+ *  we don't leak orphan entries into localStorage. */
+export function removeSourceFiles(sourceId: string): void {
+  delete DATASET_FILES[sourceId];
+  const userMap = loadUserDatasetFiles();
+  if (sourceId in userMap) {
+    delete userMap[sourceId];
+    saveUserDatasetFiles(userMap);
+  }
+}
+
 // Per-format Editorial GRC tone token. Used by the file-row icon tile.
 export const FORMAT_TONES: Record<FileFormat, { bg: string; text: string }> = {
   PDF:  { bg: 'bg-risk-50',      text: 'text-risk' },

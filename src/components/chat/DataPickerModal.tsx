@@ -51,9 +51,13 @@ const CHAT_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'integrated', label: 'DB',       icon: Database },
 ];
 
+// kh-add mode currently surfaces only the Upload tab. The Connect-database
+// flow exists in this file (search for tab === 'connect') but the picker UI
+// does NOT expose it — connecting a database is a fake mechanic until a real
+// backend wires OAuth / credential storage / sync. Re-enable by restoring
+// the second entry below once the backend supports it.
 const KH_ADD_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'upload',  label: 'Upload',            icon: Upload },
-  { id: 'connect', label: 'Connect database',  icon: Database },
 ];
 
 export default function DataPickerModal({
