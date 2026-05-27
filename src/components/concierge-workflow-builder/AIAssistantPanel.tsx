@@ -773,7 +773,7 @@ function InlineClarifyCard({
   );
 }
 
-function ViewPreviewCard({ onClick, revealed }: ViewPreviewCardProps) {
+export function ViewPreviewCard({ onClick, revealed }: ViewPreviewCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -814,7 +814,7 @@ function severityForAbs(v: number): { label: string; bg: string; color: string }
   return { label: 'Relaxed', bg: 'rgba(15,110,86,0.12)', color: '#0F6E56' };
 }
 
-function ToleranceAdjustCard({
+export function ToleranceAdjustCard({
   state,
   onChange,
   onRun,

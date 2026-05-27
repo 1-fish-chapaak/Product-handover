@@ -47,6 +47,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 // cards so both surfaces render answers in exactly the same format.
 
 export function renderAssistantText(text: string): ReactNode {
+  if (!text) return null;
   return (
     <ReactMarkdown
       components={{

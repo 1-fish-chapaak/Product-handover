@@ -19,6 +19,7 @@ import {
   RACM_VERSIONS,
   racmRowsForProcess,
   groupRacmBySubProcess,
+  generateRacmForProcess,
   type RACMRow,
   type ControlAttribute,
   type ControlType,
@@ -50,7 +51,9 @@ export default function RACMTab(props: Props): JSX.Element {
   const { engagement, onOpenFullEditor } = props;
   const { addToast } = useToast();
 
-  const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
+  const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
+  const [uploadedRows, setUploadedRows] = useState<RACMRow[]>([]);
+  const allRows = uploadedRows.length > 0 ? uploadedRows : libraryRows;
 
   const [versionId, setVersionId] = useState<string>(RACM_VERSIONS[0].id);
   const [keyOnly, setKeyOnly] = useState<boolean>(false);
@@ -117,8 +120,10 @@ export default function RACMTab(props: Props): JSX.Element {
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const rows = generateRacmForProcess(engagement.process);
+      setUploadedRows(rows);
       addToast({
-        message: `Imported \`${file.name}\` — 24 rows parsed`,
+        message: `Imported \`${file.name}\` — ${rows.length} rows parsed`,
         type: 'success',
       });
     }
