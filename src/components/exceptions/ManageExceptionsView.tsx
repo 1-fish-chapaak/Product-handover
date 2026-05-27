@@ -14,8 +14,9 @@ import {
   History,
   UserPlus,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, ACTION_HUB_SUMMARY, type GrcException } from '../../data/mockData';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, ACTION_HUB_SUMMARY, type GrcException, type GrcExceptionSeverity, type GrcExceptionStatus, type GrcActivityEntry } from '../../data/mockData';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
+import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import {
   ReviewClassificationDrawer,
@@ -28,6 +29,8 @@ import GenerateATRModal from './GenerateATRModal';
 import ExceptionsTable from './ExceptionsTable';
 import SampleDataModal, { type SampleDataPayload } from './SampleDataModal';
 import BulkClassifyModal, { type BulkClassifyPayload } from './BulkClassifyModal';
+import BulkAssignDrawer, { type BulkAssignPayload } from './BulkAssignDrawer';
+import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
 import { useToast } from '../shared/Toast';
 
@@ -52,89 +55,184 @@ interface ManageExceptionsViewProps {
   onBulkAssign?: (selectedExceptionIds: string[]) => void;
 }
 
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  active,
-  onClick,
-}: {
+// ─── Editorial KPI bar ────────────────────────────────────────────────
+// One unified surface holding all four KPI cells, separated by 1px
+// vertical hairlines. No per-cell background tints — semantic tone is
+// reserved for a single 4px leading dot in the label row, never the
+// whole tile. Honors the No-RAG rule (no four-tone heatmap strip).
+
+type KpiTone = 'default' | 'info' | 'warning' | 'alert';
+type KpiCell = {
+  key: string;
   label: string;
   value: number;
   icon: React.ElementType;
-  tone: 'default' | 'info' | 'warning' | 'alert';
+  tone: KpiTone;
   active?: boolean;
   onClick?: () => void;
-}) {
-  const toneStyles = {
-    default: { bg: 'bg-canvas-elevated', border: 'border-canvas-border', iconBg: 'bg-[#F4F2F7]', iconColor: 'text-ink-500', valueColor: 'text-ink-900' },
-    info:    { bg: 'bg-brand-50/70',     border: 'border-brand-100',    iconBg: 'bg-brand-100',  iconColor: 'text-brand-700', valueColor: 'text-brand-700' },
-    warning: { bg: 'bg-mitigated-50/60', border: 'border-mitigated-50', iconBg: 'bg-mitigated-50',iconColor: 'text-mitigated-700', valueColor: 'text-mitigated-700' },
-    alert:   { bg: 'bg-high-50/60',      border: 'border-high-50',      iconBg: 'bg-high-50',    iconColor: 'text-high-700', valueColor: 'text-high-700' },
-  }[tone];
+};
 
-  const interactive = Boolean(onClick);
-  const activeRing = active ? 'ring-2 ring-brand-600 ring-offset-1' : '';
+const TONE_DOT: Record<KpiTone, string> = {
+  default: 'bg-ink-300',
+  info: 'bg-brand-500',
+  warning: 'bg-mitigated',
+  alert: 'bg-high',
+};
+
+function KpiBar({ cells, bare = false }: { cells: KpiCell[]; bare?: boolean }) {
+  const chrome = bare ? '' : 'border border-canvas-border rounded-[12px] overflow-hidden';
+  return (
+    <div
+      role="group"
+      aria-label="Exception KPIs"
+      className={`grid grid-cols-4 divide-x divide-canvas-border ${chrome}`}
+    >
+      {cells.map(cell => (
+        <KpiCell key={cell.key} cell={cell} />
+      ))}
+    </div>
+  );
+}
+
+function KpiCell({ cell }: { cell: KpiCell }) {
+  const { label, value, icon: Icon, tone, active, onClick } = cell;
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!interactive}
-      className={`${toneStyles.bg} border ${toneStyles.border} rounded-[12px] p-4 flex items-start justify-between text-left ${activeRing} ${
-        interactive ? 'cursor-pointer hover:border-brand-300 transition-colors' : 'cursor-default'
+      aria-pressed={!!active}
+      // Suppress the global 4px focus-ring halo (would float the cell off the row);
+      // the inline accent rule + number color shift carry the active state on their own.
+      className={`relative text-left px-6 py-5 transition-colors cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:shadow-none ${
+        active ? 'bg-brand-50/40' : 'hover:bg-paper-50/70'
       }`}
-      aria-pressed={interactive ? !!active : undefined}
     >
-      <div>
-        <div className="text-[12px] text-ink-500 mb-2">{label}</div>
-        <div className={`text-[28px] leading-none font-semibold tabular-nums ${toneStyles.valueColor}`}>{value}</div>
+      <div className="flex items-center gap-2 mb-3 text-ink-500">
+        <Icon size={13} strokeWidth={1.75} className="shrink-0" aria-hidden />
+        <span className="text-[11px] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
+        {tone !== 'default' && (
+          <span aria-hidden className={`w-1 h-1 rounded-full ${TONE_DOT[tone]} ml-0.5`} />
+        )}
       </div>
-      <div className={`w-8 h-8 ${toneStyles.iconBg} ${toneStyles.iconColor} rounded-full flex items-center justify-center shrink-0`}>
-        <Icon size={16} strokeWidth={1.75} />
+      <div className={`font-display text-[30px] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
+        {value}
       </div>
+      {active && (
+        <motion.span
+          layoutId="kpi-active-accent"
+          className="absolute left-4 right-4 bottom-0 h-[2px] bg-brand-600 rounded-t"
+          transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+        />
+      )}
     </button>
   );
 }
 
-function InlineStatTile({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  tone: 'default' | 'info' | 'warning' | 'alert';
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const toneStyles = {
-    default: { iconBg: 'bg-[#F4F2F7]',     iconColor: 'text-ink-500',       valueColor: 'text-ink-900' },
-    info:    { iconBg: 'bg-brand-100',     iconColor: 'text-brand-700',     valueColor: 'text-brand-700' },
-    warning: { iconBg: 'bg-mitigated-50',  iconColor: 'text-mitigated-700', valueColor: 'text-mitigated-700' },
-    alert:   { iconBg: 'bg-high-50',       iconColor: 'text-high-700',      valueColor: 'text-high-700' },
-  }[tone];
-  const activeRing = active ? 'ring-2 ring-brand-600 ring-offset-1' : '';
+// Inline variant — used inside the sourceQuery context card. Same
+// editorial logic, more compact for a horizontal embed.
+function KpiBarInline({ cells }: { cells: KpiCell[] }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-3 p-2 rounded-[10px] text-left cursor-pointer hover:bg-[#F4F2F7] transition-colors ${activeRing}`}
-      aria-pressed={!!active}
+    <div
+      role="group"
+      aria-label="Exception KPIs"
+      className="grid grid-cols-4 divide-x divide-canvas-border"
     >
-      <div className={`w-9 h-9 ${toneStyles.iconBg} ${toneStyles.iconColor} rounded-full flex items-center justify-center shrink-0`}>
-        <Icon size={16} strokeWidth={1.75} />
-      </div>
-      <div>
-        <div className={`text-[22px] leading-none font-semibold tabular-nums ${toneStyles.valueColor} mb-1`}>{value}</div>
-        <div className="text-[11px] text-ink-500 tracking-wide">{label}</div>
-      </div>
-    </button>
+      {cells.map(cell => {
+        const { label, value, icon: Icon, tone, active, onClick } = cell;
+        return (
+          <button
+            key={cell.key}
+            type="button"
+            onClick={onClick}
+            aria-pressed={!!active}
+            className={`relative text-left px-5 py-3 transition-colors cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:shadow-none ${
+              active ? 'bg-brand-50/40' : 'hover:bg-paper-50/70'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1.5 text-ink-500">
+              <Icon size={12} strokeWidth={1.75} className="shrink-0" aria-hidden />
+              <span className="text-[10.5px] uppercase tracking-[0.12em] font-medium leading-none">{label}</span>
+              {tone !== 'default' && (
+                <span aria-hidden className={`w-1 h-1 rounded-full ${TONE_DOT[tone]} ml-0.5`} />
+              )}
+            </div>
+            <div className={`font-display text-[22px] leading-none tabular-nums tracking-tight ${active ? 'text-brand-700' : 'text-ink-900'}`}>
+              {value}
+            </div>
+            {active && (
+              <motion.span
+                layoutId="kpi-inline-active-accent"
+                className="absolute left-3 right-3 bottom-0 h-[2px] bg-brand-600 rounded-t"
+                transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
+}
+
+// ─── Derive exceptions from a query's output table ───────────────────────
+// When the user lands on Manage Exceptions via ?from=Q01 we don't want to
+// show the generic GRC_EXCEPTIONS mock — we want the actual rows from
+// QUERY_TABLES[Q01] so the data columns (Vendor, Invoice Date, Match %, …)
+// align row-for-row with the cells the auditor saw in the query result.
+function deriveExceptionsFromOutputTable(
+  table: { columns: string[]; rows: string[][] },
+  riskCategory = 'Financial Controls',
+): GrcException[] {
+  const idxOf = (re: RegExp) => table.columns.findIndex(c => re.test(c));
+  const statusCol = idxOf(/^status$/i);
+  const matchCol = idxOf(/match|score|similarity/i);
+  const dateCol  = idxOf(/date/i);
+  const labelCol = table.columns.findIndex((c, i) => i > 0 && !/^status$/i.test(c));
+
+  return table.rows.map((row, i): GrcException => {
+    let severity: GrcExceptionSeverity = 'Medium';
+    if (matchCol >= 0) {
+      const pct = parseFloat(String(row[matchCol]).replace('%', ''));
+      if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
+    }
+    let status: GrcExceptionStatus = 'Open';
+    if (statusCol >= 0) {
+      const raw = String(row[statusCol]).toLowerCase();
+      if (raw.includes('review')) status = 'Under Review';
+      else if (raw.includes('resolved') || raw.includes('closed')) status = 'Closed';
+    }
+
+    // Seed flags + dueDate on a few rows so the demo shows Overdue/Bulk chips
+    // the same way the default GRC_EXCEPTIONS mock does.
+    const flags: Array<'Overdue' | 'Bulk'> = [];
+    let bulkId: string | undefined;
+    let dueDate: string | undefined;
+    if (i % 3 === 0) {
+      flags.push('Bulk');
+      bulkId = i % 6 === 0 ? 'ACT001' : 'ACT002';
+    }
+    if (i % 5 === 0) {
+      // Past due date so the dynamic Overdue chip renders via the dueDate path.
+      dueDate = '2026-04-15';
+    } else if (i % 7 === 0) {
+      // Future due date so the chip stays hidden (sanity check).
+      dueDate = '2026-08-30';
+    }
+
+    return {
+      id: `EXC${String(i + 1).padStart(3, '0')}`,
+      riskCategory,
+      severity,
+      status,
+      classification: 'Unclassified',
+      classificationReview: 'Pending',
+      actionReview: 'Pending',
+      lastUpdated: dateCol >= 0 ? String(row[dateCol]) : '—',
+      title: labelCol >= 0 ? `Case — ${row[labelCol]}` : `Case ${row[0]}`,
+      flags: flags.length ? flags : undefined,
+      bulkId,
+      dueDate,
+    };
+  });
 }
 
 function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: ExceptionRole) => void }) {
@@ -175,6 +273,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const { addToast } = useToast();
   const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  /** When set, opens the BulkAssignDrawer scoped to just this one case
+   *  (from a per-row "Assign" click). Mutually exclusive with bulkAssignOpen
+   *  at the UI level — closing either clears both. */
+  const [singleAssignCase, setSingleAssignCase] = useState<GrcException | null>(null);
+  const [detailExceptionId, setDetailExceptionId] = useState<string | null>(null);
   const [nextActionableNum, setNextActionableNum] = useState(2);
   const [atrExpanded, setAtrExpanded] = useState(false);
 
@@ -185,8 +289,17 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     return REPORT_QUERIES_ATR[fromId] ? { id: fromId, ...REPORT_QUERIES_ATR[fromId] } : null;
   }, []);
 
-  // Local exception state — initialized from props or default mock data
-  const [localExceptions, setLocalExceptions] = useState<GrcException[]>(propsExceptions || GRC_EXCEPTIONS);
+  // Local exception state — when the user landed via a source query we derive
+  // exceptions from that query's output table so the IDs and data columns
+  // match exactly. Props win when explicitly supplied by an embedded host.
+  const [localExceptions, setLocalExceptions] = useState<GrcException[]>(() => {
+    if (propsExceptions) return propsExceptions;
+    if (sourceQuery) {
+      const table = QUERY_TABLES[sourceQuery.id];
+      if (table) return deriveExceptionsFromOutputTable(table);
+    }
+    return GRC_EXCEPTIONS;
+  });
   // Sync if props change (e.g. new run generates more exceptions)
   const propsKey = propsExceptions?.map(e => e.id).join(',') || '';
   const [prevPropsKey, setPrevPropsKey] = useState(propsKey);
@@ -299,7 +412,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 onClick={() => setActivityDrawerOpen(true)}
                 title="View activity timeline"
                 aria-label="View activity timeline"
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center text-brand-700 bg-brand-50/60 border border-brand-100 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer"
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center text-ink-500 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
               >
                 <History size={15} />
               </button>
@@ -312,7 +425,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             <div className="flex items-center gap-0 border-b border-transparent">
               {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
-                ...(!embedded ? [{ id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart }] : []),
+                { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -368,89 +481,102 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           transition={{ duration: 0.2 }}
           className="flex-1 overflow-auto"
         >
-          <div className="px-8 py-6 max-w-[1600px] mx-auto min-h-full flex flex-col">
+          <div className="px-8 pt-4 pb-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
 
-            {sourceQuery ? (
-              <div className="mb-6 bg-canvas-elevated border border-canvas-border rounded-[10px] overflow-hidden">
-                {/* KPI strip */}
-                <div className="grid grid-cols-4 gap-3 px-6 py-5">
-                  <InlineStatTile label="Total Exceptions"        value={stats.total}                tone="default" icon={AlertTriangle} active={kpiFilter === null}                onClick={() => setKpiFilter(null)} />
-                  <InlineStatTile label="Exceptions Classified"   value={stats.classified}           tone="info"    icon={Tag}            active={kpiFilter === 'classified'}          onClick={() => toggleKpiFilter('classified')} />
-                  <InlineStatTile label="Unclassified Exceptions" value={stats.unclassified}         tone="warning" icon={Clock}          active={kpiFilter === 'unclassified'}        onClick={() => toggleKpiFilter('unclassified')} />
-                  <InlineStatTile label="Action Review Pending"   value={stats.actionReviewPending}  tone="alert"   icon={CheckCircle2}   active={kpiFilter === 'actionReviewPending'} onClick={() => toggleKpiFilter('actionReviewPending')} />
-                </div>
-                {/* Divider + source query ATR */}
-                <div className="px-6 py-5 border-t border-canvas-border">
-                  <div className="flex items-center gap-2 mb-3 text-[11px]">
-                    <span className="font-bold text-brand-700 uppercase tracking-wider">Query · {sourceQuery.id}</span>
+            {/* Single outer card holds KPI bar, optional sourceQuery summary, and the table — one continuous editorial surface, no center divisions. */}
+            <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden flex-1 flex flex-col min-h-0">
+              {/* KPI bar — neutral surface, hairline-separated cells, tone-as-dot. Wrapped with pt so it doesn't sit flush against the card's top border. */}
+              <div className="pt-4">
+              {sourceQuery ? (
+                <KpiBarInline
+                  cells={[
+                    { key: 'total',          label: 'Total Exceptions',        value: stats.total,                icon: AlertTriangle, tone: 'default', active: kpiFilter === null,                  onClick: () => setKpiFilter(null) },
+                    { key: 'classified',     label: 'Exceptions Classified',   value: stats.classified,           icon: Tag,            tone: 'info',    active: kpiFilter === 'classified',          onClick: () => toggleKpiFilter('classified') },
+                    { key: 'unclassified',   label: 'Unclassified Exceptions', value: stats.unclassified,         icon: Clock,          tone: 'warning', active: kpiFilter === 'unclassified',        onClick: () => toggleKpiFilter('unclassified') },
+                    { key: 'actionPending',  label: 'Action Review Pending',   value: stats.actionReviewPending,  icon: CheckCircle2,   tone: 'alert',   active: kpiFilter === 'actionReviewPending', onClick: () => toggleKpiFilter('actionReviewPending') },
+                  ]}
+                />
+              ) : (
+                <KpiBar
+                  bare
+                  cells={[
+                    { key: 'total',          label: 'Total Exceptions',        value: stats.total,                icon: AlertTriangle, tone: 'default', active: kpiFilter === null,                  onClick: () => setKpiFilter(null) },
+                    { key: 'classified',     label: 'Exceptions Classified',   value: stats.classified,           icon: Tag,            tone: 'info',    active: kpiFilter === 'classified',          onClick: () => toggleKpiFilter('classified') },
+                    { key: 'unclassified',   label: 'Unclassified Exceptions', value: stats.unclassified,         icon: Clock,          tone: 'warning', active: kpiFilter === 'unclassified',        onClick: () => toggleKpiFilter('unclassified') },
+                    { key: 'actionPending',  label: 'Action Review Pending',   value: stats.actionReviewPending,  icon: CheckCircle2,   tone: 'alert',   active: kpiFilter === 'actionReviewPending', onClick: () => toggleKpiFilter('actionReviewPending') },
+                  ]}
+                />
+              )}
+              </div>
+
+              {sourceQuery && (
+                <>
+                  {/* Source query ATR — flows directly under the KPI bar */}
+                  <div className="px-6 py-5">
+                    <div className="flex items-center gap-2 mb-3 text-[11px]">
+                      <span className="font-bold text-brand-700 uppercase tracking-wider">Query · {sourceQuery.id}</span>
+                    </div>
+                    <button
+                      onClick={() => setAtrExpanded(p => !p)}
+                      className="flex items-start gap-2 text-left w-full mb-4 cursor-pointer focus:outline-none focus-visible:outline-none focus:ring-0 group"
+                    >
+                      <motion.span
+                        animate={{ rotate: atrExpanded ? 0 : -90 }}
+                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                        className="inline-flex mt-1 text-brand-700"
+                      >
+                        <ChevronDown size={14} />
+                      </motion.span>
+                      <p className="text-[14px] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
+                        {sourceQuery.title}
+                      </p>
+                    </button>
+                    <p className="text-[13px] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
                   </div>
-                  <button
-                    onClick={() => setAtrExpanded(p => !p)}
-                    className="flex items-start gap-2 text-left w-full mb-4 cursor-pointer focus:outline-none focus-visible:outline-none focus:ring-0 group"
-                  >
-                    <motion.span
-                      animate={{ rotate: atrExpanded ? 0 : -90 }}
-                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                      className="inline-flex mt-1 text-brand-700"
-                    >
-                      <ChevronDown size={14} />
-                    </motion.span>
-                    <p className="text-[14px] text-ink-700 leading-relaxed transition-colors group-hover:text-ink-900">
-                      {sourceQuery.title}
-                    </p>
-                  </button>
-                  <p className="text-[13px] text-ink-500 leading-relaxed">{sourceQuery.summary}</p>
-                </div>
-                <AnimatePresence initial={false}>
-                  {atrExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-6 pb-6 border-t border-canvas-border pt-5">
-                        <div className="space-y-6">
-                          {[
-                            { title: 'Findings', items: sourceQuery.findings },
-                            { title: 'Observations', items: sourceQuery.observations },
-                          ].map(section => (
-                            <div key={section.title}>
-                              <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
-                              <ul className="space-y-2.5">
-                                {section.items.map((item, i) => (
-                                  <motion.li
-                                    key={i}
-                                    initial={{ opacity: 0, x: -4 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.08 + i * 0.05, duration: 0.3 }}
-                                    className="flex gap-2.5 text-[13px] text-ink-700 leading-relaxed"
-                                  >
-                                    <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
-                                    {item}
-                                  </motion.li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
+                  <AnimatePresence initial={false}>
+                    {atrExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-6 pb-6 pt-1">
+                          <div className="space-y-6">
+                            {[
+                              { title: 'Findings', items: sourceQuery.findings },
+                              { title: 'Observations', items: sourceQuery.observations },
+                            ].map(section => (
+                              <div key={section.title}>
+                                <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">{section.title}</h4>
+                                <ul className="space-y-2.5">
+                                  {section.items.map((item, i) => (
+                                    <motion.li
+                                      key={i}
+                                      initial={{ opacity: 0, x: -4 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: 0.08 + i * 0.05, duration: 0.3 }}
+                                      className="flex gap-2.5 text-[13px] text-ink-700 leading-relaxed"
+                                    >
+                                      <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
+                                      {item}
+                                    </motion.li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <StatCard label="Total Exceptions"        value={stats.total}                tone="default" icon={AlertTriangle} active={kpiFilter === null}                onClick={() => setKpiFilter(null)} />
-                <StatCard label="Exceptions Classified"   value={stats.classified}           tone="info"    icon={Tag}            active={kpiFilter === 'classified'}          onClick={() => toggleKpiFilter('classified')} />
-                <StatCard label="Unclassified Exceptions" value={stats.unclassified}         tone="warning" icon={Clock}          active={kpiFilter === 'unclassified'}        onClick={() => toggleKpiFilter('unclassified')} />
-                <StatCard label="Action Review Pending"   value={stats.actionReviewPending}  tone="alert"   icon={CheckCircle2}   active={kpiFilter === 'actionReviewPending'} onClick={() => toggleKpiFilter('actionReviewPending')} />
-              </div>
-            )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
 
-            {/* Table card */}
-            <ExceptionsTable
+              {/* Table — nested inside the same card, bare (no own border) */}
+              <ExceptionsTable
+                bare
               exceptions={visibleExceptions}
               role={role}
               selected={selected}
@@ -481,12 +607,13 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
               onAssign={(ex) => {
-                addToast({ type: 'info', message: `Assigning ${ex.id}…` });
+                setSingleAssignCase(ex);
               }}
+              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-1.5">
-                  {/* Bulk Classify + Bulk Assign only appear once one or more
-                      rows are checked; default toolbar stays uncluttered. */}
+                  {/* Risk owner role: Bulk Classify only. */}
                   {role === 'risk-owner' && selected.size > 0 && (
                     <button
                       onClick={() => setBulkClassifyOpen(true)}
@@ -500,43 +627,18 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       </span>
                     </button>
                   )}
-                  {role === 'risk-owner' && selected.size > 0 && (
+                  {/* Auditor role: Bulk Assign only. */}
+                  {role !== 'risk-owner' && selected.size > 0 && (
                     <button
-                      onClick={() => {
-                        if (onBulkAssign) {
-                          onBulkAssign(Array.from(selected));
-                        } else {
-                          addToast({ type: 'info', message: `Assigning ${selected.size} case${selected.size === 1 ? '' : 's'}…` });
-                        }
-                      }}
+                      onClick={() => setBulkAssignOpen(true)}
                       title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 cursor-pointer transition-colors"
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
                     >
                       <UserPlus size={13} />
                       Bulk Assign
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-100 rounded-full tabular-nums">
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
                         {selected.size}
                       </span>
-                    </button>
-                  )}
-                  {onBulkAssign && role !== 'risk-owner' && (
-                    <button
-                      disabled={selected.size === 0}
-                      onClick={() => onBulkAssign(Array.from(selected))}
-                      title={selected.size === 0 ? 'Select exceptions first' : `Mark ${selected.size} as case${selected.size === 1 ? '' : 's'} & assign`}
-                      className={`flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border transition-colors ${
-                        selected.size === 0
-                          ? 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
-                          : 'text-white bg-purple-600 border-purple-600 hover:bg-purple-500 cursor-pointer'
-                      }`}
-                    >
-                      <UserPlus size={13} />
-                      Mark as Case & Assign
-                      {selected.size > 0 && (
-                        <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                          {selected.size}
-                        </span>
-                      )}
                     </button>
                   )}
                 </div>
@@ -544,7 +646,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               headerExtras={
                 <button
                   onClick={() => setSampleModalOpen(true)}
-                  className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
                 >
                   <FlaskConical size={13} />
                   Sample Data
@@ -554,6 +656,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               activeSheetId={activeSheetId}
               onChangeSheet={setActiveSheetId}
             />
+            </div>
           </div>
         </motion.div>
       )}
@@ -564,7 +667,21 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="classify-drawer"
             exception={drawerException}
             onClose={() => setDrawer(null)}
-            onSave={() => setDrawer(null)}
+            onSave={(payload) => {
+              updateExceptions(prev => prev.map(e =>
+                e.id === drawerException.id
+                  ? {
+                      ...e,
+                      severity: payload.severity,
+                      classification: payload.classification as GrcException['classification'],
+                      classificationReview: 'Approved' as const,
+                      dueDate: payload.dueDate ?? e.dueDate,
+                      lastUpdated: new Date().toISOString().slice(0, 10),
+                    }
+                  : e
+              ));
+              setDrawer(null);
+            }}
           />
         )}
         {drawer?.type === 'classification' && drawerException && (
@@ -606,7 +723,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setActiveSheetId(id);
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
-              addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created successfully` });
+              addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
             }}
           />
         )}
@@ -619,7 +736,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onApply={(payload: BulkClassifyPayload) => {
               updateExceptions(prev => prev.map(e =>
                 payload.caseIds.includes(e.id)
-                  ? { ...e, severity: payload.severity, classification: payload.classification, classificationReview: 'Approved' as const, status: 'Under Review' as const, lastUpdated: new Date().toISOString().slice(0, 10) }
+                  ? {
+                      ...e,
+                      severity: payload.severity,
+                      classification: payload.classification,
+                      classificationReview: 'Approved' as const,
+                      status: 'Under Review' as const,
+                      dueDate: payload.dueDate ?? e.dueDate,
+                      lastUpdated: new Date().toISOString().slice(0, 10),
+                    }
                   : e
               ));
               setNextActionableNum(n => n + 1);
@@ -628,6 +753,72 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             }}
           />
         )}
+        {(bulkAssignOpen || singleAssignCase) && (
+          <BulkAssignDrawer
+            key={singleAssignCase ? `single-assign-${singleAssignCase.id}` : 'bulk-assign-drawer'}
+            cases={singleAssignCase ? [singleAssignCase] : exceptions.filter(e => selected.has(e.id))}
+            onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); }}
+            onApply={(payload: BulkAssignPayload) => {
+              if (payload.assignees.length === 0) return;
+              const today = new Date().toISOString().slice(0, 10);
+              // Update the exceptions — assignees only; assignedTo is no longer
+              // written by new flows (kept on the type for back-compat reads).
+              updateExceptions(prev => prev.map(e =>
+                payload.caseIds.includes(e.id)
+                  ? {
+                      ...e,
+                      assignees: payload.assignees,
+                      lastUpdated: today,
+                    }
+                  : e
+              ));
+              // Append an activity-log entry per assigned case so the
+              // assignment + note are auditable in the Review drawer's
+              // Activity Log.
+              const assigneeNames = payload.assignees.map(a => a.name).join(', ');
+              const nowIso = new Date().toISOString();
+              payload.caseIds.forEach(caseId => {
+                const detail = GRC_CASE_DETAILS[caseId];
+                if (!detail) return;
+                const entry: GrcActivityEntry = {
+                  id: `act-assign-${caseId}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Auditor',
+                  timestamp: nowIso,
+                  message: `Assigned to ${assigneeNames}`,
+                  comment: payload.note,
+                };
+                detail.activityLog = [entry, ...detail.activityLog];
+              });
+              const firstName = payload.assignees[0].name;
+              const assigneeLabel =
+                payload.assignees.length === 1
+                  ? firstName
+                  : `${firstName} and ${payload.assignees.length - 1} other${payload.assignees.length - 1 === 1 ? '' : 's'}`;
+              addToast({
+                type: 'success',
+                message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
+              });
+              // Only clear the selection set when the bulk drawer was the one
+              // that opened — single-row assigns don't touch the selection.
+              if (!singleAssignCase) setSelected(new Set());
+              setBulkAssignOpen(false);
+              setSingleAssignCase(null);
+            }}
+          />
+        )}
+        {detailExceptionId && (() => {
+          const ex = exceptions.find(e => e.id === detailExceptionId);
+          if (!ex) return null;
+          return (
+            <ExceptionDetailDrawer
+              key="exception-detail-drawer"
+              exception={ex}
+              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              onClose={() => setDetailExceptionId(null)}
+            />
+          );
+        })()}
         {activityDrawerOpen && (
           <ActivityTimelineDrawer
             key="activity-timeline-drawer"

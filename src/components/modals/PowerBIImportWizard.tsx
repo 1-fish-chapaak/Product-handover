@@ -35,7 +35,7 @@ export default function PowerBIImportWizard({ onClose }: Props) {
     setTimeout(() => {
       setImporting(false);
       setStep('done');
-      addToast({ type: 'success', message: 'Dashboard imported successfully!' });
+      addToast({ type: 'success', message: 'Dashboard imported.' });
     }, 1200);
   };
 

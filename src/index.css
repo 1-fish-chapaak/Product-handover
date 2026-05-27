@@ -586,3 +586,50 @@ select.no-focus-ring:focus-visible {
   z-index: 50;
   opacity: 0.95;
 }
+
+/* Print stylesheet — hide chrome (sidebar, headers, drawers, modals) and
+ * let the `.report-printable` surface print full-bleed in black ink. */
+@media print {
+  /* Hide everything that isn't the report being printed. */
+  header,
+  aside,
+  nav,
+  [role="dialog"],
+  [role="alertdialog"],
+  [data-drawer],
+  [data-sidebar],
+  [data-modal-overlay] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Force the printable report region to full-bleed black text. */
+  .report-printable,
+  .report-printable * {
+    color: #000000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .report-printable {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  /* Avoid awkward breaks inside cards / list items. */
+  .report-printable section,
+  .report-printable article,
+  .report-printable li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Strip interactive affordances. */
+  button,
+  .no-print {
+    display: none !important;
+  }
+}

@@ -29,7 +29,6 @@ import {
 import {
   GRC_CASE_DETAILS,
   type GrcException,
-  type GrcExceptionSeverity,
   type GrcExceptionStatus,
   type GrcExceptionClassification,
   type GrcActionStatus,
@@ -38,11 +37,6 @@ import type { ExceptionRole } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 
 // ─── Tokens ───
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
-};
 const STATUS_STYLE: Record<GrcExceptionStatus, string> = {
   Open:           'bg-evidence-50 text-evidence-700',
   'Under Review': 'bg-mitigated-50 text-mitigated-700',
@@ -154,11 +148,14 @@ function GhostButton({ children, icon, onClick }: { children: React.ReactNode; i
 }
 
 // ─── Column types ───
-export type ColumnKey =
+// Canonical exception columns use the literal names below. Dynamic data
+// columns (sourced from QUERY_TABLES) use a `data:<column-name>` key so the
+// rest of the system can detect them by prefix.
+export type ColumnKey = string;
+type CanonicalColumnKey =
   | 'select'
   | 'id'
   | 'riskCategory'
-  | 'severity'
   | 'status'
   | 'classification'
   | 'actionReview'
@@ -186,7 +183,6 @@ interface ColumnDef {
   minWidth?: number;
 }
 
-const ALL_SEVERITIES: GrcExceptionSeverity[] = ['High', 'Medium', 'Low'];
 const ALL_STATUS_LABELS: string[] = ['Open', 'In-Progress', 'Closed'];
 const ALL_CLASSIFICATIONS: GrcExceptionClassification[] = [
   'Unclassified', 'Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Business as Usual', 'False Positive',
@@ -221,19 +217,35 @@ function actionAuditAccessor(ex: GrcException): string {
     : 'View';
 }
 
-function buildColumnDefs(role: ExceptionRole, riskCategories: string[]): ColumnDef[] {
+function buildColumnDefs(
+  role: ExceptionRole,
+  riskCategories: string[],
+  dataColumnNames: string[] = [],
+): ColumnDef[] {
   const isAuditor = role === 'auditor';
+  // Dynamic columns sourced from the source query's output table — keys are
+  // namespaced `data:<name>` so the rest of the table system (filter, render,
+  // visibility) can detect them by prefix.
+  const dataColDefs: ColumnDef[] = dataColumnNames.map(name => ({
+    key: `data:${name}`,
+    label: name,
+    draggable: true,
+    filterable: false,
+    minWidth: 140,
+  }));
   const base: ColumnDef[] = [
-    { key: 'select',         label: '',               alwaysVisible: true,  draggable: false, minWidth: 40 },
-    { key: 'id',             label: 'Exception ID',   alwaysVisible: true,  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.id },
+    { key: 'select',         label: '',               alwaysVisible: true,  draggable: false, alwaysPinned: 'left', minWidth: 40 },
+    { key: 'id',             label: 'Exception ID',   alwaysVisible: true,  draggable: true, defaultPin: 'left', filterable: true, filterMode: 'text', accessor: (e) => e.id },
+    // Data columns from the source query's output table flow directly after
+    // the Exception ID so the auditor sees the case data first.
+    ...dataColDefs,
     { key: 'riskCategory',   label: 'Risk Category',  draggable: true, filterable: true, filterMode: 'multi', filterOptions: riskCategories, accessor: (e) => e.riskCategory },
-    { key: 'severity',       label: 'Severity',       draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_SEVERITIES, accessor: (e) => e.severity },
     { key: 'status',         label: 'Status',         draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_STATUS_LABELS, accessor: (e) => STATUS_LABEL[e.status] },
     { key: 'classification', label: 'Classification', draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_CLASSIFICATIONS, accessor: (e) => e.classification },
     { key: 'actionReview',   label: 'Action Review',  draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_COMBINED_REVIEW_LABELS, accessor: combinedReviewAccessor, minWidth: 220 },
     { key: 'actionableId',   label: 'Actionable ID',  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.bulkId ?? '', minWidth: 110 },
     { key: 'lastUpdated',    label: 'Last Updated',   draggable: true, filterable: false, accessor: (e) => e.lastUpdated },
-    { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => e.assignedTo?.name ?? '', minWidth: 160 },
+    { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => (e.assignees ?? (e.assignedTo ? [e.assignedTo] : [])).map(a => a.name).join(', '), minWidth: 160 },
   ];
   // Risk Owner gets the Classify CTA; Auditor only sees the Action CTA.
   if (!isAuditor) {
@@ -308,7 +320,7 @@ function ColumnsToggle({
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer"
       >
         <Eye size={13} />
         Columns
@@ -497,9 +509,38 @@ function renderCell(
   onOpenAction: () => void,
   onOpenActionable: (bulkId: string) => void,
   onAssign: () => void,
+  dataRow: string[] | undefined,
+  dataColumnNames: string[],
+  onOpenDetail?: (ex: GrcException) => void,
 ): React.ReactNode {
-  const isOverdue = ex.flags?.includes('Overdue');
+  // Overdue is dynamically derived from the action-plan due date set during
+  // classification. The legacy `flags: ['Overdue']` array on the default mock
+  // still wins so the demo data continues to render the chip.
+  const dueDate = ex.dueDate;
+  const dueDateOverdue = (() => {
+    if (!dueDate) return false;
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    return due.getTime() < today.getTime();
+  })();
+  const isOverdue = dueDateOverdue || ex.flags?.includes('Overdue');
   const isBulk = ex.flags?.includes('Bulk');
+  const overdueTooltip = dueDate
+    ? `Due date was ${new Date(dueDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : 'Past action due date';
+
+  // Dynamic data column from the source-query output table.
+  if (col.startsWith('data:')) {
+    const name = col.slice(5);
+    const idx = dataColumnNames.indexOf(name);
+    const value = idx >= 0 ? dataRow?.[idx + 1] : undefined;
+    return value
+      ? <span className="text-ink-800 text-[12.5px]">{value}</span>
+      : <span className="text-ink-400 text-[12.5px]">—</span>;
+  }
 
   switch (col) {
     case 'select':
@@ -515,13 +556,19 @@ function renderCell(
     case 'id':
       return (
         <div className="flex flex-col gap-1">
-          <button className="text-brand-700 font-medium text-[12.5px] font-mono hover:underline cursor-pointer text-left">
+          <button
+            onClick={() => onOpenDetail?.(ex)}
+            className="text-brand-700 font-medium text-[12.5px] font-mono hover:underline cursor-pointer text-left"
+          >
             {ex.id}
           </button>
           {(isOverdue || isBulk) && (
             <div className="flex items-center gap-1">
               {isOverdue && (
-                <span className="inline-flex items-center gap-1 h-5 px-2 text-[10px] font-medium bg-risk-50 text-risk-700 rounded-full">
+                <span
+                  title={overdueTooltip}
+                  className="inline-flex items-center gap-1 h-5 px-2 text-[10px] font-medium bg-risk-50 text-risk-700 rounded-full cursor-help"
+                >
                   <AlertTriangle size={9} />
                   Overdue
                 </span>
@@ -537,8 +584,6 @@ function renderCell(
       );
     case 'riskCategory':
       return <span className="text-ink-800 text-[12.5px]">{ex.riskCategory}</span>;
-    case 'severity':
-      return <Pill className={SEVERITY_STYLE[ex.severity]}>{ex.severity}</Pill>;
     case 'status':
       return <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>;
     case 'classification':
@@ -552,7 +597,7 @@ function renderCell(
       return ex.bulkId ? (
         <button
           onClick={() => onOpenActionable(ex.bulkId!)}
-          className="inline-flex items-center h-6 px-2.5 text-[11.5px] font-mono font-semibold bg-brand-50 text-brand-700 rounded-full hover:bg-brand-100 transition-colors cursor-pointer"
+          className="inline-flex items-center h-6 px-2.5 text-[11.5px] font-mono bg-brand-50 text-brand-700 rounded-full hover:bg-brand-100 transition-colors cursor-pointer"
           title={`Open ${ex.bulkId} group`}
         >
           {ex.bulkId}
@@ -562,13 +607,53 @@ function renderCell(
       );
     case 'lastUpdated':
       return <span className="text-ink-500 text-[11.5px] tabular-nums whitespace-nowrap">{ex.lastUpdated}</span>;
-    case 'assignedTo':
-      return ex.assignedTo ? (
+    case 'assignedTo': {
+      const allAssignees = ex.assignees ?? (ex.assignedTo ? [ex.assignedTo] : []);
+      if (allAssignees.length > 1) {
+        const MAX_VISIBLE = 4;
+        const visible = allAssignees.slice(0, MAX_VISIBLE);
+        const overflow = allAssignees.length - visible.length;
+        const overflowNames = allAssignees.slice(MAX_VISIBLE).map(a => a.name).join(', ');
+        return (
+          <div className="inline-flex items-center min-w-0">
+            {visible.map((a, i) => (
+              <span
+                key={`${a.name}-${i}`}
+                className={`group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 ${i === 0 ? '' : '-ml-2'}`}
+                aria-label={a.name}
+              >
+                {a.initials}
+                <span
+                  className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                  role="tooltip"
+                >
+                  {a.name}
+                </span>
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span
+                className="group/av relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold border-2 border-canvas-elevated shrink-0 hover:z-10 -ml-2"
+                aria-label={`${overflow} more: ${overflowNames}`}
+              >
+                +{overflow}
+                <span
+                  className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/av:opacity-100 transition-opacity z-50"
+                  role="tooltip"
+                >
+                  {overflowNames}
+                </span>
+              </span>
+            )}
+          </div>
+        );
+      }
+      return allAssignees.length === 1 ? (
         <div className="inline-flex items-center gap-2 min-w-0">
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
-            {ex.assignedTo.initials}
+            {allAssignees[0].initials}
           </span>
-          <span className="text-ink-700 text-[12.5px] truncate">{ex.assignedTo.name}</span>
+          <span className="text-ink-700 text-[12.5px] truncate">{allAssignees[0].name}</span>
         </div>
       ) : (
         <button
@@ -581,6 +666,7 @@ function renderCell(
           Assign
         </button>
       );
+    }
     case 'classify': {
       if (role === 'risk-owner') {
         return ex.classification === 'Unclassified' ? (
@@ -624,6 +710,15 @@ export interface ExceptionsTableProps {
   sampleSheets?: { id: string; name: string }[];
   activeSheetId?: string;
   onChangeSheet?: (id: string) => void;
+  /** When true, skip the outer border + rounded chrome so the table can be
+   *  composed inside a parent card (e.g. merged with a source-query header). */
+  bare?: boolean;
+  /** Source query's output table — when present, its non-first columns are
+   *  merged into the exceptions table right after the Exception ID. Rows
+   *  join to exceptions on the first column (treated as a Case ID). */
+  extraColumns?: { columns: string[]; rows: string[][] };
+  /** Fired when a row's Exception ID is clicked — opens the detail drawer. */
+  onOpenDetail?: (ex: GrcException) => void;
 }
 
 type VisibilityMap = Record<ColumnKey, boolean>;
@@ -644,13 +739,31 @@ export default function ExceptionsTable({
   headerExtras,
   sampleSheets = [],
   activeSheetId = 'all',
+  bare = false,
+  extraColumns,
+  onOpenDetail,
   onChangeSheet,
 }: ExceptionsTableProps) {
   const riskCategories = useMemo(
     () => Array.from(new Set(exceptions.map(e => e.riskCategory))).sort(),
     [exceptions],
   );
-  const defs = useMemo(() => buildColumnDefs(role, riskCategories), [role, riskCategories]);
+  // Data-column names from the source query (skip the first column — it's
+  // the join key matched against ex.id).
+  const dataColumnNames = useMemo(
+    () => (extraColumns?.columns ?? []).slice(1),
+    [extraColumns],
+  );
+  // Lookup map: ex.id → matched data row (or undefined).
+  const dataRowByCaseId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    extraColumns?.rows.forEach(row => { if (row[0]) map.set(row[0], row); });
+    return map;
+  }, [extraColumns]);
+  const defs = useMemo(
+    () => buildColumnDefs(role, riskCategories, dataColumnNames),
+    [role, riskCategories, dataColumnNames],
+  );
   const defByKey = useMemo(() => Object.fromEntries(defs.map(d => [d.key, d])) as Record<ColumnKey, ColumnDef>, [defs]);
 
   const defaultOrder = useMemo(() => defs.map(d => d.key), [defs]);
@@ -675,7 +788,8 @@ export default function ExceptionsTable({
   const [pins, setPins] = useState<PinsMap>(defaultPins);
   const [filters, setFilters] = useState<FiltersMap>(emptyFilters);
 
-  // Keep order/visibility/pins consistent when role changes (e.g. Auditor adds 'action' column).
+  // Keep order/visibility/pins consistent when role OR data columns change.
+  const dataColumnsKey = dataColumnNames.join('|');
   useEffect(() => {
     setOrder(prev => {
       const known = new Set(prev);
@@ -703,7 +817,7 @@ export default function ExceptionsTable({
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+  }, [role, dataColumnsKey]);
 
   const resetVisibility = useCallback(() => setVisibility(defaultVisibility), [defaultVisibility]);
 
@@ -891,7 +1005,7 @@ export default function ExceptionsTable({
     setSavedFilterSets(prev => [...prev, { id, name, filters: { ...filters } }]);
     setActiveFilterSetId(id);
     closeGenerateModal();
-    addToast({ type: 'success', message: 'Filter set has been created successfully' });
+    addToast({ type: 'success', message: 'Filter set has been created' });
   };
   const applyFilterSet = (set: SavedFilterSet) => {
     setFilters(set.filters);
@@ -917,7 +1031,7 @@ export default function ExceptionsTable({
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-    <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden flex-1 flex flex-col min-h-0">
+    <div className={`${bare ? '' : 'border border-canvas-border rounded-[12px]'} overflow-hidden flex-1 flex flex-col min-h-0`}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-canvas-border gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Filter Set dropdown — replaces the previous "N Exceptions" label */}
@@ -1119,7 +1233,7 @@ export default function ExceptionsTable({
       <div className="overflow-auto flex-1 min-h-0">
         <table className="w-full text-[12.5px]">
           <thead>
-            <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
+            <tr className="bg-canvas-elevated border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
               {renderOrder.map((key) => {
                 const def = defByKey[key];
                 if (!def) return null;
@@ -1132,7 +1246,7 @@ export default function ExceptionsTable({
                       position: 'sticky',
                       [pinned === 'left' ? 'left' : 'right']: offset,
                       zIndex: 5,
-                      background: '#FAFAFB',
+                      background: '#FFFFFF',
                       boxShadow: pinned === 'left' ? '1px 0 0 var(--color-canvas-border)' : '-1px 0 0 var(--color-canvas-border)',
                     }
                   : {};
@@ -1241,14 +1355,19 @@ export default function ExceptionsTable({
                 </td>
               </tr>
             ) : (
-              pagedExceptions.map((ex) => {
-                const isOverdue = ex.flags?.includes('Overdue');
+              pagedExceptions.map((ex, rowIndex) => {
                 const sel = selected.has(ex.id);
                 // Selection wins over the overdue tint — selection is the
                 // user's active UI state and needs to read first; the
                 // Overdue pill in the ID cell still carries that signal.
-                const rowBg = sel ? 'bg-brand-50' : isOverdue ? 'bg-risk-50/40' : 'hover:bg-[#FAFAFB]';
-                const rowBgForPin = sel ? '#F7F0FF' : isOverdue ? '#FEF3F2' : '#FFFFFF';
+                const rowBg = sel ? 'bg-brand-50' : 'hover:bg-[#FAFAFB]';
+                const rowBgForPin = sel ? '#F7F0FF' : '#FFFFFF';
+                // Data-row lookup: prefer Case-ID match; fall back to row
+                // index so mock data without a real ID link still renders.
+                const dataRow = dataRowByCaseId.get(ex.id)
+                  ?? (extraColumns?.rows.length
+                    ? extraColumns.rows[rowIndex % extraColumns.rows.length]
+                    : undefined);
                 return (
                   <tr key={ex.id} className={`border-b border-canvas-border last:border-b-0 transition-colors ${rowBg}`}>
                     {renderOrder.map((key) => {
@@ -1284,6 +1403,9 @@ export default function ExceptionsTable({
                             () => onOpenAction(ex),
                             (bulkId) => onOpenActionable?.(bulkId),
                             () => onAssign?.(ex),
+                            dataRow,
+                            dataColumnNames,
+                            onOpenDetail,
                           )}
                         </td>
                       );

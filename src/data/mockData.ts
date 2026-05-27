@@ -371,6 +371,11 @@ export interface GrcException {
   bulkId?: string;
   title: string;
   assignedTo?: { name: string; initials: string };
+  /** Full list of bulk-assigned users; `assignedTo` remains the primary (first) for back-compat readers. */
+  assignees?: Array<{ name: string; initials: string }>;
+  /** Action-plan due date set during classification (ISO YYYY-MM-DD).
+   *  When today > dueDate, the row is computed as overdue. */
+  dueDate?: string;
 }
 
 export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner';

@@ -10,8 +10,11 @@ import {
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
   ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink, Copy,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
-  Star, Layers, Check, CloudUpload, RefreshCw,
+  Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
 } from 'lucide-react';
+import EmptyState from '../shared/EmptyState';
+import { SkeletonRow } from '../shared/Skeleton';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
@@ -27,6 +30,15 @@ import { KpiCountUp } from '../shared/KpiTile';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
+import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
+import AddObservationModal, {
+  computeNextObservationId,
+  isImageMime,
+  formatFileSize,
+  attachmentVisual,
+  type EditingObservationInput,
+  type ObservationAttachment,
+} from './AddObservationModal';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -50,42 +62,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Executive: 'text-indigo-600 bg-indigo-50',
 };
 
-// Observation attachments — auditors evidence files. Any number, any
-// type (image/pdf/csv/xlsx/doc/docx). Stored as base64 data URLs so the
-// preview/lightbox doesn't depend on any backend.
-type ObservationAttachment = {
-  id: string;
-  name: string;
-  size: number;
-  mimeType: string;
-  dataUrl: string;
-};
-
-const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
-const ATTACHMENT_ACCEPT =
-  'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-function isImageMime(mime: string): boolean {
-  return mime.startsWith('image/');
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Maps mime type → { Icon, tint } for the chip rendering. Falls back to a
-// generic paperclip so an unrecognized but otherwise-valid mime still
-// renders something coherent.
-function attachmentVisual(mime: string): { Icon: React.ElementType; tone: string } {
-  if (mime === 'application/pdf') return { Icon: FileText, tone: 'text-risk-700' };
-  if (mime === 'text/csv' || mime.includes('spreadsheet') || mime === 'application/vnd.ms-excel')
-    return { Icon: FileSpreadsheet, tone: 'text-compliant-700' };
-  if (mime === 'application/msword' || mime.includes('wordprocessing'))
-    return { Icon: FileText, tone: 'text-evidence-700' };
-  return { Icon: Paperclip, tone: 'text-text-muted' };
-}
+// Observation attachment type + helpers live in AddObservationModal.
 
 // Report tag chip — maps the freeform tag string to the GRC semantic
 // palette instead of one-off hex pairs. Keeps the colour vocabulary the
@@ -141,13 +118,17 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   description?: string;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
+  /** Explicit override for read-only state (Shared with me, archived). */
+  isReadOnly?: boolean;
+  /** Display name of the user who shared the report — surfaces in the chip. */
+  sharedByName?: string;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
 export const CUSTOM_TEMPLATES = [
   {
     id: 'ct-custom-01',
-    name: 'Custom Template - 01',
+    name: 'Third-Party Vendor Risk Scorecard',
     desc: 'Custom scorecard for third-party vendors with risk tiers, control gaps, and remediation SLAs.',
     category: 'Risk',
     icon: 'alert-triangle',
@@ -160,7 +141,7 @@ export const CUSTOM_TEMPLATES = [
   },
   {
     id: 'ct-custom-02',
-    name: 'Custom Template - 02',
+    name: 'Quarterly Audit Snapshot',
     desc: 'One-page executive snapshot of quarterly audit findings and status.',
     category: 'Audit',
     icon: 'file-text',
@@ -282,7 +263,7 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
         onClick={() => scroll('left')}
         disabled={!canScrollLeft}
         aria-label="Scroll left"
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer"
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronLeft size={16} />
       </button>
@@ -293,12 +274,19 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
       >
         {children}
       </div>
+      {/* Right-edge fade — only when more content sits past the viewport. */}
+      {canScrollRight && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 bottom-3 w-12 bg-gradient-to-l from-white to-transparent"
+        />
+      )}
       <button
         type="button"
         onClick={() => scroll('right')}
         disabled={!canScrollRight}
         aria-label="Scroll right"
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer"
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronRight size={16} />
       </button>
@@ -311,6 +299,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
   const { addToast } = useToast();
   const [step, setStep] = useState<'upload' | 'selected' | 'converting' | 'converted'>('upload');
   const [templateName, setTemplateName] = useState('SOX Report Template');
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const DETECTED_SECTIONS = [
     'Executive Summary', 'Findings', 'Risk Assessment',
@@ -328,6 +318,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -454,7 +445,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
             <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
             <button
-              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library!` }); onClose(); }}
+              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
               className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
             >
               Save Template
@@ -470,11 +461,14 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: typeof REPORT_TEMPLATES[0]; onClose: () => void; onEdit: () => void; onUse: () => void }) {
   const Icon = ICON_MAP[template.icon] || FileText;
   const color = CATEGORY_COLORS[template.category] || 'text-ink-500 bg-paper-50';
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -558,6 +552,8 @@ function ChooseReportModal({
 }) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const filtered = reports.filter(r => r.name.toLowerCase().includes(search.trim().toLowerCase()));
   const selected = reports.find(r => r.id === selectedId) || null;
@@ -566,6 +562,7 @@ function ChooseReportModal({
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -747,11 +744,93 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
   const [headerText, setHeaderText] = useState('Confidential — For Internal Use Only');
   const [footerText, setFooterText] = useState('Generated by Auditify Copilot');
   const [sections, setSections] = useState(template.sections || []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<{ field: 'copyName' | 'brand' | 'sections'; label: string }[]>([]);
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+
+  const copyNameRef = useRef<HTMLInputElement>(null);
+  const brandRef = useRef<HTMLInputElement>(null);
+  const sectionsRef = useRef<HTMLDivElement>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Initial state captured at mount for dirty-detection.
+  const initialRef = useRef({
+    copyName: `Copy of ${template.name}`,
+    brand: 'Auditify',
+    theme: 'Purple & White',
+    headerText: 'Confidential — For Internal Use Only',
+    footerText: 'Generated by Auditify Copilot',
+    sections: template.sections || [],
+  });
+  const isDirty =
+    (isCopy && copyName !== initialRef.current.copyName) ||
+    brand !== initialRef.current.brand ||
+    theme !== initialRef.current.theme ||
+    headerText !== initialRef.current.headerText ||
+    footerText !== initialRef.current.footerText ||
+    sections !== initialRef.current.sections;
+
+  const attemptClose = () => {
+    if (isDirty && !isSaving) {
+      setShowAbandonConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+  useFocusTrap(containerRef, true, attemptClose);
+
+  const fieldRefs: Record<string, React.RefObject<HTMLElement | null>> = {
+    copyName: copyNameRef,
+    brand: brandRef,
+    sections: sectionsRef,
+  };
+
+  const handleSave = () => {
+    // Required-field validation: brand is always required; copyName is
+    // required in the Copy flow; sections must be non-empty.
+    const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
+    if (isCopy && !copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
+    if (!brand.trim()) next.push({ field: 'brand', label: 'Brand Name' });
+    if (!sections || sections.length === 0) next.push({ field: 'sections', label: 'At least one section' });
+    if (next.length > 0) {
+      setErrors(next);
+      const first = fieldRefs[next[0].field]?.current;
+      first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      first?.focus?.();
+      return;
+    }
+    setErrors([]);
+    setIsSaving(true);
+    // Simulate an async save so the spinner is observable.
+    window.setTimeout(() => {
+      if (isCopy && onSaveCopy) {
+        const finalName = copyName.trim() || `Copy of ${template.name}`;
+        if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
+          setIsSaving(false);
+          addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
+          return;
+        }
+        onSaveCopy({
+          ...template,
+          id: `ct-copy-${Date.now()}`,
+          name: finalName,
+          sections,
+        });
+        addToast({ type: 'success', message: 'Copy saved to Custom Templates.' });
+      } else {
+        addToast({ type: 'success', message: 'Template saved.' });
+      }
+      setIsSaving(false);
+      onClose();
+    }, 320);
+  };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={attemptClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -767,26 +846,51 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
               <p className="text-[11px] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={attemptClose} aria-label="Close" className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {errors.length > 0 && (
+            <div
+              role="alert"
+              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12.5px] text-risk-800"
+            >
+              <div className="font-semibold mb-1">Please complete the following before saving:</div>
+              <ul className="space-y-0.5">
+                {errors.map(err => (
+                  <li key={err.field}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = fieldRefs[err.field]?.current;
+                        el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        el?.focus?.();
+                      }}
+                      className="underline hover:text-risk-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                    >
+                      {err.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* Template Name (Copy flow) + Brand */}
           {isCopy ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Template Name</label>
-                <input value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
               <div>
                 <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-                <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
             </div>
           ) : (
             <div>
               <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-              <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+              <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
             </div>
           )}
 
@@ -823,7 +927,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           </div>
 
           {/* Page Layout Preview */}
-          <div>
+          <div ref={sectionsRef} tabIndex={-1}>
             <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Page Layout Preview</label>
             <div className="border border-border-light rounded-xl p-4 bg-surface-2">
               <div className="bg-white rounded-lg shadow-sm border border-border-light overflow-hidden flex flex-col">
@@ -853,31 +957,30 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         </div>
 
         <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer">Cancel</button>
           <button
-            onClick={() => {
-              if (isCopy && onSaveCopy) {
-                const finalName = copyName.trim() || `Copy of ${template.name}`;
-                if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
-                  addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
-                  return;
-                }
-                onSaveCopy({
-                  ...template,
-                  id: `ct-copy-${Date.now()}`,
-                  name: finalName,
-                  sections,
-                });
-                addToast({ type: 'success', message: 'Copy saved to Custom Templates!' });
-              } else {
-                addToast({ type: 'success', message: 'Template saved!' });
-              }
-              onClose();
-            }}
-            className="px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
-          >{isCopy ? 'Save Copy' : 'Save Template'}</button>
+            onClick={attemptClose}
+            disabled={isSaving}
+            className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          >Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          >
+            {isSaving && <Loader2 size={12} className="animate-spin" />}
+            {isSaving ? 'Saving…' : isCopy ? 'Save Copy' : 'Save Template'}
+          </button>
         </div>
       </motion.div>
+      <ConfirmDialog
+        open={showAbandonConfirm}
+        onClose={() => setShowAbandonConfirm(false)}
+        onConfirm={() => { setShowAbandonConfirm(false); onClose(); }}
+        title="Discard changes?"
+        description={<>You have unsaved changes to this template. Closing now will discard them.</>}
+        confirmLabel="Discard"
+        destructive
+      />
     </motion.div>
   );
 }
@@ -1412,13 +1515,13 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-text-secondary hover:text-primary cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-md text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
-        <span>Manage Exceptions</span>
+        <span>Manage exceptions</span>
         <ArrowRight
-          size={11}
+          size={16}
           className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
         />
       </button>
@@ -1561,6 +1664,8 @@ function ConfirmDialog({
   cancelLabel?: string;
   destructive?: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, open, onClose);
   if (!open) return null;
   const titleId = `confirm-${title.replace(/\s+/g, '-').toLowerCase()}`;
   const descId = `${titleId}-desc`;
@@ -1576,12 +1681,14 @@ function ConfirmDialog({
       >
         <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
         <motion.div
+          ref={containerRef}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="alertdialog"
+          aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descId}
           className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[440px] max-w-[calc(100vw-32px)] p-6"
@@ -1697,7 +1804,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     aria-label="Comments on this query"
                     className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-md cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
                   >
-                    <MessageSquare size={14} className="shrink-0" />
+                    <MessageSquare size={16} className="shrink-0" />
                     {myComments > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[9px] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
                         {myComments}
@@ -1713,7 +1820,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   aria-label="More options"
                   className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
                 >
-                  <MoreVertical size={15} />
+                  <MoreVertical size={16} />
                 </button>
                 {menuOpen && (
                   <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
@@ -1907,13 +2014,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         title="Remove Query Card?"
-        description="This will permanently remove this query card from the report. This action cannot be undone."
+        description="Remove this query card from the report?"
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
           setShowDeleteConfirm(false);
           onDelete?.();
-          addToast({ type: 'success', message: 'Query card removed.' });
         }}
       />
 
@@ -1969,11 +2075,8 @@ function QueryWidgetModal({
   onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; table: boolean }) => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(() => new Set(initialKpis));
   const [selCharts, setSelCharts] = useState<Set<string>>(() => new Set(initialCharts));
@@ -2007,12 +2110,14 @@ function QueryWidgetModal({
       >
         <div className="absolute inset-0 bg-ink-900/45 backdrop-blur-[2px]" />
         <motion.div
+          ref={containerRef}
           initial={{ opacity: 0, scale: 0.97, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 10 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
+          aria-modal="true"
           aria-labelledby="query-widget-title"
           className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
         >
@@ -2045,12 +2150,12 @@ function QueryWidgetModal({
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {totalItems === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mb-3">
-                  <BarChart3 size={20} className="text-text-muted" />
-                </div>
-                <p className="text-[13px] font-semibold text-text mb-1">Nothing to add for this query yet</p>
-              </div>
+              <EmptyState
+                icon={BarChart3}
+                title="Nothing to add yet"
+                body="Attach a graph, KPI or table to start building insights."
+                size="compact"
+              />
             ) : (
               <div className="space-y-5">
                 {/* Selection summary + all/none */}
@@ -2226,7 +2331,11 @@ function CommentDrawer({
   const [activeTab, setActiveTab] = useState<'comments' | 'source-files'>(initialTab);
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const seed = query.id.charCodeAt(query.id.length - 1);
   const sourceFiles = [
@@ -2248,10 +2357,15 @@ function CommentDrawer({
 
   const handlePost = () => {
     const body = text.trim();
-    if (!body) return;
+    if (!body || isPosting) return;
+    setIsPosting(true);
+    // Optimistic — clear inputs immediately so the new entry appears posted.
     onAddComment?.(query.id, query.title, body, attachment ?? undefined);
     setText('');
     setAttachment(null);
+    // Release the busy state on the next frame; the parent state update has
+    // already flushed by then.
+    window.setTimeout(() => setIsPosting(false), 120);
   };
 
   return (
@@ -2265,12 +2379,14 @@ function CommentDrawer({
         onClick={onClose}
       />
       <motion.aside
+        ref={(el) => { containerRef.current = el as HTMLElement | null; }}
         initial={{ x: 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-border-light flex flex-col z-[60]"
         role="dialog"
+        aria-modal="true"
         aria-label={activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
       >
         {/* Tab strip + close */}
@@ -2278,7 +2394,6 @@ function CommentDrawer({
           <div role="tablist" aria-label="Query side-sheet tabs" className="flex items-center gap-1">
             {[
               { id: 'comments' as const, label: 'Comments', count: totalComments, icon: MessageSquare },
-              { id: 'source-files' as const, label: 'Source Files', count: sourceFiles.length, icon: Database },
             ].map(tab => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
@@ -2364,16 +2479,16 @@ function CommentDrawer({
                   <button
                     type="button"
                     onClick={handlePost}
-                    disabled={!text.trim()}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[6px] transition-colors ${
-                      text.trim()
+                    disabled={!text.trim() || isPosting}
+                    className={`w-7 h-7 flex items-center justify-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                      text.trim() && !isPosting
                         ? 'bg-[#6a12cd] text-white hover:bg-primary-hover cursor-pointer'
                         : 'text-text-muted/50 cursor-not-allowed'
                     }`}
                     aria-label="Post comment"
                     title="Post comment"
                   >
-                    <Send size={14} />
+                    {isPosting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
                 </div>
               </div>
@@ -2389,7 +2504,7 @@ function CommentDrawer({
             </section>
 
             {/* Shared activity log */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Activity log</h3>
                 <span className="text-[11px] text-text-muted tabular-nums">
@@ -2397,7 +2512,12 @@ function CommentDrawer({
                 </span>
               </div>
               {queryGroups.length === 0 ? (
-                <p className="text-[13px] text-text-muted italic">No comments yet. Be the first to share a note.</p>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="No comments yet"
+                  body="Notes, questions, and decisions on this query will appear here."
+                  size="compact"
+                />
               ) : (
                 <div className="space-y-4">
                   {queryGroups.map(group => (
@@ -2412,31 +2532,49 @@ function CommentDrawer({
                         </span>
                       </header>
                       <ol className="divide-y divide-border-light">
-                        {group.items.slice().reverse().map(c => (
-                          <li key={c.id} className="px-3 py-3">
-                            <div className="flex items-start gap-2.5">
-                              <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold tracking-wider">
-                                {c.initials}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums whitespace-nowrap">
-                                    <ClockIcon size={10} />
-                                    {c.timestamp}
-                                  </span>
+                        {group.items.slice().reverse().map(c => {
+                          const isLong = c.text.length > 1000;
+                          const isExpanded = expandedComments.has(c.id);
+                          const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                          return (
+                            <li key={c.id} className="px-3 py-3">
+                              <div className="flex items-start gap-2.5">
+                                <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold tracking-wider">
+                                  {c.initials}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums whitespace-nowrap">
+                                      <ClockIcon size={10} />
+                                      {c.timestamp}
+                                    </span>
+                                  </div>
+                                  <p className="text-[12.5px] text-text leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  {isLong && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedComments(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+                                        return next;
+                                      })}
+                                      className="mt-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                                    >
+                                      {isExpanded ? 'Show less' : 'Show more'}
+                                    </button>
+                                  )}
+                                  {c.attachment && (
+                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
+                                      <Paperclip size={10} />
+                                      {c.attachment}
+                                    </span>
+                                  )}
                                 </div>
-                                <p className="text-[12.5px] text-text leading-relaxed">{c.text}</p>
-                                {c.attachment && (
-                                  <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
-                                    <Paperclip size={10} />
-                                    {c.attachment}
-                                  </span>
-                                )}
                               </div>
-                            </div>
-                          </li>
-                        ))}
+                            </li>
+                          );
+                        })}
                       </ol>
                     </section>
                   ))}
@@ -2536,18 +2674,23 @@ function ReportActivityLogDrawer({
 }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   // Newest first.
   const sorted = [...comments].reverse();
 
   const handlePost = () => {
     const body = text.trim();
-    if (!body) return;
+    if (!body || isPosting) return;
+    setIsPosting(true);
     // Report-level entries are tagged as global so they show across all surfaces.
     onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachment ?? undefined);
     setText('');
     setAttachment(null);
+    window.setTimeout(() => setIsPosting(false), 120);
   };
 
   return (
@@ -2561,12 +2704,14 @@ function ReportActivityLogDrawer({
         onClick={onClose}
       />
       <motion.aside
+        ref={(el) => { containerRef.current = el as HTMLElement | null; }}
         initial={{ x: 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-border-light flex flex-col z-[60]"
         role="dialog"
+        aria-modal="true"
         aria-label="Report activity log"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-border-light">
@@ -2631,23 +2776,28 @@ function ReportActivityLogDrawer({
           <div className="mt-2 flex justify-end">
             <button
               onClick={handlePost}
-              disabled={!text.trim()}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-semibold rounded-[8px] transition-colors ${
-                text.trim()
+              disabled={!text.trim() || isPosting}
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                text.trim() && !isPosting
                   ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer'
                   : 'bg-primary/40 text-white/80 cursor-not-allowed'
               }`}
             >
-              <Send size={12} />
-              Post
+              {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {isPosting ? 'Posting…' : 'Post'}
             </button>
           </div>
         </section>
 
         {/* Activity feed */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
           {sorted.length === 0 ? (
-            <p className="text-center text-[12.5px] text-text-muted py-10">No activity recorded yet.</p>
+            <EmptyState
+              icon={History}
+              title="No activity yet"
+              body="Edits, comments, and downloads will be tracked here."
+              size="compact"
+            />
           ) : (
             <ol className="space-y-4">
               {sorted.map(c => (
@@ -3422,6 +3572,7 @@ function AttachedQueryCard({ query, index, onRemove }: {
 }) {
   const KindIcon = query.kind === 'query' ? MessageSquare : query.kind === 'upload' ? Upload : Database;
   const kindLabel = query.kind === 'query' ? 'Saved Query' : query.kind === 'upload' ? 'Uploaded File' : 'Data Source';
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   // Resolve the modal label to a REPORT_QUERIES_ATR entry. Only saved queries
   // map to canned data; uploads and ad-hoc data sources have no preview.
@@ -3460,13 +3611,22 @@ function AttachedQueryCard({ query, index, onRemove }: {
           <h3 className="text-[14.5px] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
         </div>
         <button
-          onClick={() => onRemove(query.id)}
+          onClick={() => setShowRemoveConfirm(true)}
           aria-label="Remove attached query"
-          className="p-1.5 rounded-lg text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0"
+          className="p-1.5 rounded-lg text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
         >
           <X size={14} />
         </button>
       </div>
+      <ConfirmDialog
+        open={showRemoveConfirm}
+        onClose={() => setShowRemoveConfirm(false)}
+        onConfirm={() => { setShowRemoveConfirm(false); onRemove(query.id); }}
+        title="Remove attached query?"
+        description={<>This will detach <span className="font-semibold text-text">{query.label}</span> from the report. You can re-attach it later.</>}
+        confirmLabel="Remove"
+        destructive
+      />
 
       <AnimatePresence mode="wait">
         {phase === 'syncing' && (
@@ -3600,6 +3760,9 @@ function AddQueryModal({ open, onClose, onAttach }: {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [isAttaching, setIsAttaching] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, open, onClose);
 
   if (!open) return null;
 
@@ -3618,19 +3781,25 @@ function AddQueryModal({ open, onClose, onAttach }: {
   };
 
   const handleAttach = () => {
-    if ((activeTab === 'recent' || activeTab === 'saved') && selectedQuery) {
-      onAttach({ kind: 'query', label: selectedQuery });
-      handleClose();
-    } else if (activeTab === 'upload' && uploadedFile) {
-      onAttach({ kind: 'upload', label: uploadedFile.name });
-      handleClose();
-    } else if ((activeTab === 'all' || activeTab === 'files' || activeTab === 'db') && selectedSource) {
-      const src = allSources.find(s => s.id === selectedSource);
-      if (src) {
-        onAttach({ kind: 'source', label: src.name });
+    if (isAttaching) return;
+    setIsAttaching(true);
+    // Resolve once parent state has settled.
+    window.setTimeout(() => {
+      if ((activeTab === 'recent' || activeTab === 'saved') && selectedQuery) {
+        onAttach({ kind: 'query', label: selectedQuery });
         handleClose();
+      } else if (activeTab === 'upload' && uploadedFile) {
+        onAttach({ kind: 'upload', label: uploadedFile.name });
+        handleClose();
+      } else if ((activeTab === 'all' || activeTab === 'files' || activeTab === 'db') && selectedSource) {
+        const src = allSources.find(s => s.id === selectedSource);
+        if (src) {
+          onAttach({ kind: 'source', label: src.name });
+          handleClose();
+        }
       }
-    }
+      setIsAttaching(false);
+    }, 120);
   };
 
   return (
@@ -3645,10 +3814,14 @@ function AddQueryModal({ open, onClose, onAttach }: {
         >
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
           <motion.div
+            ref={containerRef}
             initial={{ opacity: 0, scale: 0.96, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
             transition={{ duration: 0.2 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add Query"
             className="relative bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[820px] h-[600px]"
             onClick={e => e.stopPropagation()}
           >
@@ -3864,13 +4037,13 @@ function AddQueryModal({ open, onClose, onAttach }: {
                 return (
                   <button
                     onClick={handleAttach}
-                    disabled={!enabled}
-                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
-                      enabled ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
+                    disabled={!enabled || isAttaching}
+                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                      enabled && !isAttaching ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
-                    <Check size={14} />
-                    Attach
+                    {isAttaching ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    {isAttaching ? 'Attaching…' : 'Attach'}
                   </button>
                 );
               })()}
@@ -3895,11 +4068,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
-  const { addToast, updateToast } = useToast();
+  const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   // QueryCard "Generate Cases" phase, lifted up so it survives template
   // switches that re-mount QueryCards. Keyed by query.id.
   const [casesPhases, setCasesPhases] = useState<Record<string, CasesPhase>>({});
@@ -3922,7 +4095,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
-      addToast({ type: 'success', message: `Template "${template.name}" applied!` });
+      addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
   };
 
@@ -4225,11 +4398,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
+  // Regenerate summary mock — overrides the summary section's content with an
+  // alternative blurb after a short simulated delay so the action feels real.
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
+    setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
 
@@ -4248,9 +4428,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   // ─── Add-Observation modal state ───
   const [showAddObservation, setShowAddObservation] = useState(false);
-  const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
-  const [editingObservationObsId, setEditingObservationObsId] = useState<string | null>(null);
-  const [obsForm, setObsForm] = useState<{ name: string; description: string; attachments: ObservationAttachment[] }>({ name: '', description: '', attachments: [] });
+  const [editingObservation, setEditingObservation] = useState<EditingObservationInput | null>(null);
   // Separate stream of observations added to applied-template view (where the body is template-driven)
   const [appliedObservations, setAppliedObservations] = useState<ObservationItem[]>([]);
 
@@ -4260,35 +4438,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       .filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation')
       .map(s => s.obsId);
     const inApplied = appliedObservations.map(o => o.obsId);
-    const all = [...inSections, ...inApplied];
-    const maxN = all.reduce((max, id) => {
-      const m = id.match(/^OBS-(\d+)$/i);
-      const n = m ? parseInt(m[1], 10) : 0;
-      return n > max ? n : max;
-    }, 0);
-    return `OBS-${String(maxN + 1).padStart(3, '0')}`;
+    return computeNextObservationId([...inSections, ...inApplied]);
   };
 
   const openAddObservation = () => {
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
-    setObsForm({ name: '', description: '', attachments: [] });
+    setEditingObservation(null);
     setShowAddObservation(true);
   };
   const openEditObservation = (obs: { id: string; obsId: string; title: string; description: string; attachments?: ObservationAttachment[] }) => {
-    setEditingObservationId(obs.id);
-    setEditingObservationObsId(obs.obsId);
-    setObsForm({
+    setEditingObservation({
+      id: obs.id,
+      obsId: obs.obsId,
       name: obs.title,
       description: obs.description,
-      attachments: obs.attachments ? [...obs.attachments] : [],
+      attachments: obs.attachments,
     });
     setShowAddObservation(true);
   };
   const closeAddObservation = () => {
     setShowAddObservation(false);
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
+    setEditingObservation(null);
   };
 
   const toggleObservationAttachment = (id: string) => {
@@ -4302,114 +4471,19 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ));
   };
 
-  const handleObservationAttachments = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const queue = Array.from(files);
-    let rejectedSize = 0;
-    queue.forEach((file) => {
-      if (file.size > ATTACHMENT_MAX_BYTES) {
-        rejectedSize += 1;
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = String(e.target?.result ?? '');
-        if (!dataUrl) return;
-        setObsForm(prev => ({
-          ...prev,
-          attachments: [
-            ...prev.attachments,
-            {
-              id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              name: file.name,
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream',
-              dataUrl,
-            },
-          ],
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-    if (rejectedSize > 0) {
-      addToast({
-        type: 'info',
-        message: rejectedSize === 1
-          ? '1 file skipped — over the 10 MB per-file limit.'
-          : `${rejectedSize} files skipped — over the 10 MB per-file limit.`,
-      });
-    }
-  };
-
-  const removeObservationAttachment = (id: string) => {
-    setObsForm(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter(a => a.id !== id),
-    }));
-  };
-
-  // Drag-and-drop into the Add Observation modal. dragCounter tracks
-  // enter/leave nesting across child elements so the overlay doesn't
-  // flicker when dragging over inner inputs.
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-  const dragCounter = useRef(0);
-
-  const handleModalDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!e.dataTransfer.types.includes('Files')) return;
-    dragCounter.current += 1;
-    setIsDraggingFiles(true);
-  };
-  const handleModalDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) setIsDraggingFiles(false);
-  };
-  const handleModalDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-  const handleModalDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = 0;
-    setIsDraggingFiles(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleObservationAttachments(e.dataTransfer.files);
-      e.dataTransfer.clearData();
-    }
-  };
-
-  // Reset the drag counter whenever the modal closes so a stale count
-  // from a previous interaction can't pin the overlay open next time.
-  useEffect(() => {
-    if (!showAddObservation) {
-      dragCounter.current = 0;
-      setIsDraggingFiles(false);
-    }
-  }, [showAddObservation]);
-
-  const saveObservation = () => {
-    const name = obsForm.name.trim();
-    if (!name) return;
-    const description = obsForm.description.trim();
-    const attachments = obsForm.attachments.length > 0 ? obsForm.attachments : undefined;
-    if (editingObservationId) {
+  const handleObservationSave = ({ name, description, attachments }: { name: string; description: string; attachments?: ObservationAttachment[] }) => {
+    if (editingObservation) {
       setSections(prev => prev.map(s =>
-        s.id === editingObservationId && s.kind === 'observation'
+        s.id === editingObservation.id && s.kind === 'observation'
           ? { ...s, title: name, description, attachments }
           : s
       ));
       setAppliedObservations(prev => prev.map(o =>
-        o.id === editingObservationId
+        o.id === editingObservation.id
           ? { ...o, title: name, description, attachments }
           : o
       ));
-      addToast({ type: 'success', message: `${editingObservationObsId ?? 'Observation'} updated.` });
+      addToast({ type: 'success', message: `${editingObservation.obsId} updated.` });
     } else {
       const obsId = nextObservationId();
       const newItem: ObservationItem = {
@@ -4427,9 +4501,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       }
       addToast({ type: 'success', message: `${obsId} added.` });
     }
-    setShowAddObservation(false);
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
+    closeAddObservation();
   };
 
   // ─── Contents (table of contents) state + handlers ───
@@ -4518,6 +4590,19 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   // Report-level activity log drawer (consolidates activity across all query cards).
   const [activityLogOpen, setActivityLogOpen] = useState(false);
 
+  // Sync activity drawer state to the URL so a link can deep-link back to it.
+  // No react-router in this app — use history.replaceState directly.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (activityLogOpen) {
+      url.searchParams.set('drawer', 'activity');
+    } else if (url.searchParams.get('drawer') === 'activity') {
+      url.searchParams.delete('drawer');
+    }
+    window.history.replaceState({}, '', url.toString());
+  }, [activityLogOpen]);
+
   // Add Query modal — shown from the empty-state report layout.
   const [addQueryOpen, setAddQueryOpen] = useState(false);
 
@@ -4543,78 +4628,73 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ]);
   };
 
+  const isReadOnly = report.isReadOnly === true || report.tag === 'Shared';
+  const sharedByName = report.sharedByName ?? (report as { sharedBy?: string }).sharedBy;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={launching ? { opacity: 0.88, x: 16 } : { opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-      className="h-full overflow-y-auto bg-surface-2"
+      className="report-printable h-full overflow-y-auto bg-surface-2"
     >
-      <div className="mx-auto px-8 py-6 max-w-6xl">
+      <div className="mx-auto px-8 py-6 max-w-6xl flex-col md:flex-row">
         {/* Top bar */}
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer">
-            <ArrowLeft size={14} /> Back to Reports
-          </button>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded">
+              <ArrowLeft size={14} /> Back to Reports
+            </button>
+            {isReadOnly && (
+              <span className="bg-paper-50 border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[11px] text-ink-500">
+                <Lock size={11} aria-hidden="true" />
+                <span>
+                  View-only{sharedByName ? <> · shared by {sharedByName}</> : ''}
+                </span>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 relative">
-            <div className="relative">
-              <button
-                onClick={() => setShowApplyTemplate(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
-              >
-                <Layout size={13} />
-                <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
-                <motion.span
-                  animate={{ rotate: showApplyTemplate ? 180 : 0 }}
-                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                  className="inline-flex"
+            {!isReadOnly && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowApplyTemplate(p => !p)}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1" style={{ borderRadius: '8px' }}
                 >
-                  <ChevronDown size={13} />
-                </motion.span>
-              </button>
-              <AnimatePresence>
-                {showApplyTemplate && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-                    <ApplyTemplateDropdown
-                      onSelect={handleApplyTemplate}
-                      onClose={() => setShowApplyTemplate(false)}
-                    />
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+                  <Layout size={13} />
+                  <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
+                  <motion.span
+                    animate={{ rotate: showApplyTemplate ? 180 : 0 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    className="inline-flex"
+                  >
+                    <ChevronDown size={13} />
+                  </motion.span>
+                </button>
+                <AnimatePresence>
+                  {showApplyTemplate && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
+                      <ApplyTemplateDropdown
+                        onSelect={handleApplyTemplate}
+                        onClose={() => setShowApplyTemplate(false)}
+                      />
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             {onShare && (
               <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}>
                 <Share2 size={13} /> Share
               </button>
             )}
-            <div className="relative">
-              <button
-                onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
-              >
-                <Download size={13} /> Download <ChevronDown size={11} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
-              </button>
-              {showDownloadDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-36" style={{ borderRadius: '8px' }}>
-                  {[
-                    { label: 'PDF', ext: 'pdf' },
-                    { label: 'Word (DOC)', ext: 'doc' },
-                    { label: 'PowerPoint', ext: 'ppt' },
-                    { label: 'Excel', ext: 'xlsx' },
-                  ].map(({ label, ext }) => (
-                    <button
-                      key={ext}
-                      onClick={() => { startReportDownload(addToast, updateToast, report.name, ext); setShowDownloadDropdown(false); }}
-                      className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
+            >
+              <Download size={13} /> Download
+            </button>
           </div>
         </div>
 
@@ -4655,26 +4735,32 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
-                    {report.tag && (
-                      <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
-                        style={{
-                          borderRadius: '8px',
-                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                        }}
-                      >
-                        {report.tag}
-                      </span>
-                    )}
+                    {report.tag && (() => {
+                      const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                          style={{
+                            borderRadius: '8px',
+                            background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                            color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                          }}
+                        >
+                          <TagIcon size={10} aria-hidden="true" />
+                          {report.tag}
+                        </span>
+                      );
+                    })()}
                   </div>
-                  <button
-                    onClick={() => setAddQueryOpen(true)}
-                    className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                  >
-                    <Plus size={13} />
-                    Add Query
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => setAddQueryOpen(true)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Plus size={13} />
+                      Add Query
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -4805,18 +4891,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
-                    {report.tag && (
-                      <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
-                        style={{
-                          borderRadius: '8px',
-                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                        }}
-                      >
-                        {report.tag}
-                      </span>
-                    )}
+                    {/* When a template is applied, show only the applied-template chip — the default report.tag chip is hidden to avoid duplicate badges. */}
                     <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                       {appliedTemplate.name}
                     </span>
@@ -4843,13 +4918,15 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <List size={16} className="text-primary" />
                     <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
                   </div>
-                  <button
-                    onClick={openAddObservation}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
-                  >
-                    <Plus size={13} />
-                    Add Observation
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={openAddObservation}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Plus size={13} />
+                      Add Observation
+                    </button>
+                  )}
                 </div>
                 <Reorder.Group
                   axis="y"
@@ -4894,7 +4971,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             )}
 
             {/* Summary Stats Bar */}
-            <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               {activeStats.map(stat => (
                 <div key={stat.label} className="glass-card rounded-xl p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
                   <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
@@ -5026,12 +5103,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             </div>
                             {hasQueries && (
                               <button
-                                onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
+                                onClick={() => {
+                                  if (isRegeneratingSummary) return;
+                                  setIsRegeneratingSummary(true);
+                                  setTimeout(() => {
+                                    setSummaryOverride(ALT_SUMMARY);
+                                    setIsRegeneratingSummary(false);
+                                    addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                  }, 1200);
+                                }}
+                                disabled={isRegeneratingSummary}
+                                aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
-                                Regenerate
+                                {isRegeneratingSummary ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                )}
+                                {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )}
                           </div>
@@ -5054,7 +5145,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                               </motion.div>
                             ))}
                           </div>
-                          <p className="text-[13px] text-text-secondary leading-relaxed">{section.content}</p>
+                          <p className="text-[13px] text-text-secondary leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5086,7 +5177,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         index={i}
                         sectionProps={sectionProps}
                         onOpenQuery={onOpenQuery}
-                        onDelete={() => removeSection(section.id)}
+                        onDelete={() => {
+                          // Snapshot the card and its position so Undo restores both.
+                          const snapshot = sections.find(s => s.id === section.id);
+                          const snapshotIndex = sections.findIndex(s => s.id === section.id);
+                          setSections(prev => prev.filter(s => s.id !== section.id));
+                          addToast({
+                            type: 'success',
+                            message: 'Query card removed.',
+                            action: snapshot ? {
+                              label: 'Undo',
+                              onClick: () => {
+                                setSections(prev => {
+                                  if (prev.some(s => s.id === snapshot.id)) return prev;
+                                  const next = [...prev];
+                                  next.splice(Math.max(0, snapshotIndex), 0, snapshot);
+                                  return next;
+                                });
+                              },
+                            } : undefined,
+                          });
+                        }}
                         comments={comments}
                         onAddComment={addComment}
                       />
@@ -5155,6 +5266,70 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         )}
       </AnimatePresence>
 
+      {/* Download Preview Modal — PDF / PPT / DOCX tabs, preview before export */}
+      <AnimatePresence>
+        {showDownloadModal && (
+          <ReportDownloadModal
+            reportName={report.name}
+            reportTag={report.tag}
+            generatedBy={report.generatedBy}
+            generatedAt={report.generatedAt}
+            sections={sections.map((s): DownloadPreviewSection => {
+              if (s.kind === 'query') {
+                const q = s.query;
+                const kpis = computeQueryKpis(q).map(k => ({ label: k.label, value: k.value }));
+                const charts = QUERY_GRAPHS[q.id] ?? [];
+                const table = QUERY_TABLES[q.id] ?? null;
+                return {
+                  id: s.id,
+                  kind: 'query',
+                  title: s.title,
+                  queryId: q.id,
+                  queryTitle: q.title,
+                  severity: q.severity,
+                  risk: q.risk,
+                  summary: q.summary,
+                  answer: q.answer,
+                  findings: q.findings,
+                  observations: q.observations,
+                  kpis,
+                  charts,
+                  table,
+                };
+              }
+              if (s.kind === 'workflow') {
+                const w = s.workflow;
+                return {
+                  id: s.id,
+                  kind: 'workflow',
+                  title: s.title,
+                  workflowId: w.workflowId,
+                  workflowName: w.name,
+                  severity: w.severity,
+                  summary: w.findings[0] ?? '',
+                  findings: w.findings,
+                  observations: w.observations,
+                };
+              }
+              if (s.kind === 'observation') {
+                return {
+                  id: s.id,
+                  kind: 'observation',
+                  title: s.title,
+                  obsId: s.obsId,
+                  description: s.description,
+                };
+              }
+              if (s.kind === 'summary' || s.kind === 'note') {
+                return { id: s.id, kind: s.kind, title: s.title, content: s.content };
+              }
+              return { id: s.id, kind: s.kind, title: s.title };
+            })}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Add Query modal — opened from empty-state cover */}
       <AddQueryModal
         open={addQueryOpen}
@@ -5186,177 +5361,15 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         destructive
       />
 
-      {/* Add Observation modal */}
-      {showAddObservation && createPortal(
-        <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
-            onClick={closeAddObservation}
-          >
-            <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              onDragEnter={handleModalDragEnter}
-              onDragLeave={handleModalDragLeave}
-              onDragOver={handleModalDragOver}
-              onDrop={handleModalDrop}
-              role="dialog"
-              aria-labelledby="add-observation-title"
-              className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[520px] max-w-[calc(100vw-32px)] p-6"
-            >
-              {/* Drop overlay — visible only while files are being dragged
-                  over the dialog. pointer-events-none so drag events still
-                  hit the modal handlers underneath. */}
-              {isDraggingFiles && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-primary bg-primary-xlight/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
-                >
-                  <div className="text-center">
-                    <CloudUpload size={28} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
-                    <div className="text-[14px] font-semibold text-primary">Drop to attach files</div>
-                    <div className="text-[11px] text-text-secondary mt-1">PNG, JPG, PDF, CSV, XLSX, DOC</div>
-                  </div>
-                </motion.div>
-              )}
-              <button
-                onClick={closeAddObservation}
-                aria-label="Close"
-                className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-              <h3 id="add-observation-title" className="text-[16px] font-bold text-text tracking-tight mb-5">{editingObservationId ? 'Edit observation' : 'Add observation'}</h3>
+      {/* Add Observation modal — shared component */}
+      <AddObservationModal
+        open={showAddObservation}
+        editing={editingObservation}
+        nextObsId={nextObservationId()}
+        onClose={closeAddObservation}
+        onSave={handleObservationSave}
+      />
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
-                  <input
-                    type="text"
-                    value={editingObservationObsId ?? nextObservationId()}
-                    readOnly
-                    className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[13px] font-mono text-text tabular-nums cursor-default"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Name <span className="text-risk normal-case font-normal">*</span></label>
-                  <input
-                    type="text"
-                    value={obsForm.name}
-                    onChange={(e) => setObsForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. Vendor master review gap"
-                    autoFocus
-                    className="w-full bg-white border border-border-light rounded-[8px] px-3 py-2 text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
-                  <div className="bg-white border border-border-light rounded-[8px] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-all overflow-hidden">
-                    <textarea
-                      value={obsForm.description}
-                      onChange={(e) => setObsForm(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Add observation details, evidence, and recommended actions."
-                      rows={4}
-                      className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-text focus:outline-none focus:ring-0 resize-none"
-                    />
-                    {obsForm.attachments.length > 0 && (
-                      <ul className="px-3 pb-2 space-y-1.5">
-                        {obsForm.attachments.map(att => {
-                          const isImage = isImageMime(att.mimeType);
-                          const { Icon, tone } = attachmentVisual(att.mimeType);
-                          return (
-                            <li
-                              key={att.id}
-                              className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[6px]"
-                            >
-                              {isImage ? (
-                                <div className="w-8 h-8 rounded-[4px] border border-border-light overflow-hidden bg-white shrink-0">
-                                  <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className={`w-8 h-8 rounded-[4px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
-                                  <Icon size={15} />
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                                <div className="text-[10.5px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeObservationAttachment(att.id)}
-                                aria-label={`Remove ${att.name}`}
-                                className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
-                              >
-                                <X size={13} />
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
-                      <label
-                        title="Attach files (PNG, JPG, PDF, CSV, XLSX, DOC)"
-                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[11.5px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
-                      >
-                        <Paperclip size={13} />
-                        <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
-                        <input
-                          type="file"
-                          multiple
-                          accept={ATTACHMENT_ACCEPT}
-                          onChange={(e) => {
-                            handleObservationAttachments(e.target.files);
-                            // Reset value so picking the same file twice re-fires onChange.
-                            e.target.value = '';
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                      {obsForm.attachments.length > 0 && (
-                        <span className="text-[10.5px] text-text-muted tabular-nums pr-1">
-                          {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 mt-6">
-                <button
-                  onClick={closeAddObservation}
-                  className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveObservation}
-                  disabled={!obsForm.name.trim()}
-                  className="inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
-                  {editingObservationId ? 'Update observation' : 'Save observation'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>,
-        document.body,
-      )}
     </motion.div>
   );
 }
@@ -5371,6 +5384,7 @@ export default function ReportsView({
   focusReportId,
   onFocusReportConsumed,
 }: ReportsViewProps = {}) {
+  const { addToast, updateToast } = useToast();
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -5393,6 +5407,7 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => [t, ...prev]);
   };
   const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v7';
+  const [hydrationFailed, setHydrationFailed] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
@@ -5400,12 +5415,57 @@ export default function ReportsView({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed as GeneratedReport[];
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Defer to an effect so the toast call can happen after mount.
+      setTimeout(() => setHydrationFailed(true), 0);
+    }
     return [...GENERATED_REPORTS];
   });
+  // Brief hydration flag — `true` for the first render only so list views can
+  // show skeletons while the persisted blob is read. Flips after first paint.
+  const [isHydrating, setIsHydrating] = useState(true);
   useEffect(() => {
-    try { localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports)); } catch { /* ignore */ }
-  }, [generatedReports]);
+    const id = window.setTimeout(() => setIsHydrating(false), 120);
+    return () => window.clearTimeout(id);
+  }, []);
+  // Surface the rare read failure once.
+  useEffect(() => {
+    if (hydrationFailed) {
+      addToast({
+        type: 'error',
+        message: "Couldn't load your saved reports — starting from defaults.",
+      });
+    }
+  }, [hydrationFailed, addToast]);
+  // Persist on change. If the write fails (quota, private mode), tell the
+  // user once per session rather than swallowing it silently.
+  const persistFailedOnceRef = useRef(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports));
+    } catch {
+      if (persistFailedOnceRef.current) return;
+      persistFailedOnceRef.current = true;
+      addToast({
+        type: 'error',
+        message: "Couldn't save your work locally — your browser storage may be full.",
+      });
+    }
+  }, [generatedReports, addToast]);
+  // Offline banner — listens to online/offline events.
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== 'undefined' && navigator.onLine === false,
+  );
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Hot-receive new reports generated by a Bulk Run (BulkRunProgress dispatches
   // this when its run completes). Prepend so it appears at the top of My Reports.
@@ -5421,12 +5481,18 @@ export default function ReportsView({
 
   // Toast "Open report" click flows through App.tsx, which sets focusReportId.
   // When it changes, jump into the full-page view of that report.
+  const [missingFocusReport, setMissingFocusReport] = useState(false);
   useEffect(() => {
     if (!focusReportId) return;
     const report = generatedReports.find(r => r.id === focusReportId);
     if (report) {
       setActiveTab('my-reports');
       setViewingReport(report);
+      setMissingFocusReport(false);
+      onFocusReportConsumed?.();
+    } else if (generatedReports.length > 0) {
+      // Hydration has occurred but the requested id is absent.
+      setMissingFocusReport(true);
       onFocusReportConsumed?.();
     }
   }, [focusReportId, generatedReports, onFocusReportConsumed]);
@@ -5476,7 +5542,6 @@ export default function ReportsView({
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportTemplate, setNewReportTemplate] = useState('');
   const [newReportTemplatePrefilled, setNewReportTemplatePrefilled] = useState(false);
-  const { addToast, updateToast } = useToast();
 
   const openNewReportModal = () => {
     setNewReportName('');
@@ -5530,7 +5595,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -5568,6 +5633,33 @@ export default function ReportsView({
 
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
+      {isOffline && (
+        <div
+          role="status"
+          aria-live="assertive"
+          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px]"
+        >
+          <WifiOff size={13} aria-hidden="true" />
+          <span>You're offline — recent changes will sync once you reconnect.</span>
+        </div>
+      )}
+      {missingFocusReport && (
+        <div className="px-[124px] py-12">
+          <EmptyState
+            icon={AlertTriangle}
+            title="Report not found"
+            body="It may have been deleted or moved. Return to the reports list."
+            action={
+              <button
+                onClick={() => setMissingFocusReport(false)}
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              >
+                <ArrowLeft size={14} /> Back to reports
+              </button>
+            }
+          />
+        </div>
+      )}
       <div className="px-[124px] py-8 relative flex flex-col min-h-full">
         {/* Header + Tabs share a single full-bleed white strip — bg-white
             extends past the page's horizontal/top insets so the strip reads
@@ -5582,7 +5674,7 @@ export default function ReportsView({
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0">
+          <div className="flex flex-wrap gap-x-0 gap-y-2">
           <button
             onClick={() => setActiveTab('my-reports')}
             className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
@@ -5618,7 +5710,14 @@ export default function ReportsView({
 
         {/* My Reports — modern AI-SaaS table: minimal chrome, sentence-case
             headers, no grid lines, generous rows, very quiet hover. */}
-        {activeTab === 'my-reports' && viewMode === 'list' && (
+        {activeTab === 'my-reports' && viewMode === 'list' && isHydrating && (
+          <div className="flex-1 px-5 py-6 space-y-4" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
+        )}
+        {activeTab === 'my-reports' && viewMode === 'list' && !isHydrating && (
           <SmartTable
             className="flex-1"
             variant="modern"
@@ -5626,14 +5725,52 @@ export default function ReportsView({
             keyField="id"
             searchPlaceholder="Search reports..."
             searchKeys={['name', 'generatedBy']}
-            paginated={false}
-            emptyMessage={
-              generatedReports.length === 0
-                ? 'No reports yet. Create your first report to see it here.'
-                : tagFilter !== 'All'
-                  ? `No reports match the "${tagFilter}" filter.`
-                  : 'No reports match your search.'
-            }
+            paginated
+            pageSize={20}
+            hideResultCount
+            emptyContent={generatedReports.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="No reports yet"
+                body="Reports you generate from a template will appear here."
+                size="compact"
+              />
+            ) : (
+              ({ search, clearSearch }) => (
+                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={18} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700">
+                    {tagFilter !== 'All' && search
+                      ? `No reports match "${search}" in "${tagFilter}".`
+                      : tagFilter !== 'All'
+                        ? `No reports match the "${tagFilter}" filter.`
+                        : 'No reports match your search.'}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    {tagFilter !== 'All' && (
+                      <button
+                        type="button"
+                        onClick={() => setTagFilter('All')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={clearSearch}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
             headerExtra={
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
@@ -5666,7 +5803,7 @@ export default function ReportsView({
                         const n = String(item.name);
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
-                          <span className="relative group/nt inline-flex min-w-0">
+                          <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
                             <span className="text-[14px] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
                               <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
@@ -5692,7 +5829,7 @@ export default function ReportsView({
                 <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
@@ -5731,16 +5868,48 @@ export default function ReportsView({
               </div>
             </div>
             {filteredReports.length === 0 ? (
-              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
-                <FileText size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[13px] text-text-secondary max-w-[280px]">
-                  {generatedReports.length === 0
-                    ? 'No reports yet. Generate one from a template to see it here.'
-                    : tagFilter !== 'All'
-                      ? `No reports match the "${tagFilter}" filter.`
-                      : 'No reports match your search.'}
+              generatedReports.length === 0 ? (
+                <div className="px-6 py-12">
+                  <EmptyState
+                    icon={FileText}
+                    title="No reports yet"
+                    body="Reports you generate from a template will appear here."
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={18} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                    {tagFilter !== 'All' && gridSearch
+                      ? `No reports match "${gridSearch}" in "${tagFilter}".`
+                      : tagFilter !== 'All'
+                        ? `No reports match the "${tagFilter}" filter.`
+                        : 'No reports match your search.'}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    {tagFilter !== 'All' && (
+                      <button
+                        type="button"
+                        onClick={() => setTagFilter('All')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                    {gridSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setGridSearch('')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
             ) : (
             <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
               {filteredReports.map((r, i) => {
@@ -5760,7 +5929,7 @@ export default function ReportsView({
                           {r.tag}
                         </div>
                       ) : <span />}
-                      <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-0.5 -mt-1 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
                         <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
                         <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={13} /></button>
@@ -5791,12 +5960,36 @@ export default function ReportsView({
             keyField="id"
             searchPlaceholder="Search shared reports..."
             searchKeys={['name', 'sharedBy', 'sharedWith']}
-            paginated={false}
-            emptyMessage={
-              SHARED_REPORTS.length === 0
-                ? 'No reports have been shared with you yet.'
-                : 'No shared reports match your search.'
-            }
+            paginated
+            pageSize={20}
+            hideResultCount
+            emptyContent={SHARED_REPORTS.length === 0 ? (
+              <EmptyState
+                icon={Share2}
+                title="No shared reports"
+                body="Reports shared with you by your team will appear here."
+              />
+            ) : (
+              ({ search, clearSearch }) => (
+                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={18} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700">
+                    No shared reports match your search.
+                  </div>
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )
+            )}
             headerExtra={
               <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
                 <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
@@ -5832,7 +6025,7 @@ export default function ReportsView({
                 <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
@@ -5876,14 +6069,33 @@ export default function ReportsView({
               </div>
             </div>
             {filteredSharedReports.length === 0 ? (
-              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
-                <Share2 size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[13px] text-text-secondary max-w-[280px]">
-                  {SHARED_REPORTS.length === 0
-                    ? 'Nothing shared with you yet. Reports your team shares will land here.'
-                    : 'No shared reports match your search.'}
+              SHARED_REPORTS.length === 0 ? (
+                <div className="px-6 py-12">
+                  <EmptyState
+                    icon={Share2}
+                    title="No shared reports"
+                    body="Reports shared with you by your team will appear here."
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={18} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                    No shared reports match your search.
+                  </div>
+                  {sharedGridSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setSharedGridSearch('')}
+                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )
             ) : (
             <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
               {filteredSharedReports.map((r, i) => (
@@ -5978,7 +6190,7 @@ export default function ReportsView({
                         };
                         setGeneratedReports(prev => [newReport, ...prev]);
                         setViewingReport(newReport);
-                        addToast({ type: 'success', message: 'Report generated!' });
+                        addToast({ type: 'success', message: 'Report generated.' });
                       }, 1200);
                     }}
                     className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
@@ -6003,9 +6215,12 @@ export default function ReportsView({
               <section>
                 <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
                 {customTemplates.length === 0 ? (
-                  <div className="py-10 text-[13px] text-text-muted max-w-[420px]">
-                    No custom templates yet. Generate one from an existing report or upload a file to get started.
-                  </div>
+                  <EmptyState
+                    icon={Upload}
+                    title="No custom templates"
+                    body="Upload a template to reuse it across reports."
+                    size="compact"
+                  />
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
                     {customTemplates.map((rt, i) => renderCard(rt as any, i, false))}
@@ -6178,7 +6393,7 @@ export default function ReportsView({
                       };
                       setGeneratedReports(prev => [newReport, ...prev]);
                       setViewingReport(newReport);
-                      addToast({ type: 'success', message: 'Report generated!' });
+                      addToast({ type: 'success', message: 'Report generated.' });
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}
@@ -6224,18 +6439,36 @@ export default function ReportsView({
       <ConfirmDialog
         open={!!reportToDelete}
         onClose={() => setReportToDelete(null)}
-        title="Delete File?"
+        title="Delete report?"
         description={reportToDelete && (
-          <>Are you sure you want to delete <span className="font-semibold text-text">{reportToDelete.name}</span>? This action cannot be undone.</>
+          <>This will remove <span className="font-semibold text-text">{reportToDelete.name}</span> from My Reports. You can undo this from the toast for a few seconds.</>
         )}
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
           if (!reportToDelete) return;
           const name = reportToDelete.name;
-          setGeneratedReports(prev => prev.filter(r => r.id !== reportToDelete.id));
+          const id = reportToDelete.id;
+          // Snapshot the report and its position so Undo restores both.
+          const snapshot = generatedReports.find(r => r.id === id);
+          const snapshotIndex = generatedReports.findIndex(r => r.id === id);
+          setGeneratedReports(prev => prev.filter(r => r.id !== id));
           setReportToDelete(null);
-          addToast({ type: 'success', message: `${name} deleted.` });
+          addToast({
+            type: 'success',
+            message: `${name} deleted.`,
+            action: snapshot ? {
+              label: 'Undo',
+              onClick: () => {
+                setGeneratedReports(prev => {
+                  if (prev.some(r => r.id === id)) return prev;
+                  const next = [...prev];
+                  next.splice(Math.max(0, snapshotIndex), 0, snapshot);
+                  return next;
+                });
+              },
+            } : undefined,
+          });
         }}
       />
     </div>
