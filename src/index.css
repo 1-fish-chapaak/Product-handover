@@ -456,6 +456,18 @@ select.no-focus-ring:focus-visible {
   box-shadow: none;
 }
 
+/* Reports: focus shows the border only — no ring/glow box-shadow. Kills both
+   the global focus-visible ring and any Tailwind focus:ring on report inputs.
+   Higher specificity than both, so the border (focus:border-*) stays. */
+.reports-focus-noring input:focus,
+.reports-focus-noring input:focus-visible,
+.reports-focus-noring textarea:focus,
+.reports-focus-noring textarea:focus-visible,
+.reports-focus-noring select:focus,
+.reports-focus-noring select:focus-visible {
+  box-shadow: none;
+}
+
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

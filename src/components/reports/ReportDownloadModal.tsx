@@ -61,6 +61,13 @@ const FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'docx', label: 'DOCX', ext: 'docx' },
 ];
 
+// Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
+function severityBadgeClass(severity: string): string {
+  if (severity === 'Medium') return 'bg-mitigated-50 text-mitigated-700';
+  if (severity === 'Low') return 'bg-compliant-50 text-compliant-700';
+  return 'bg-risk-50 text-risk-700';
+}
+
 export default function ReportDownloadModal({
   reportName,
   reportTag,
@@ -139,62 +146,51 @@ export default function ReportDownloadModal({
           aria-modal="true"
           aria-label={`Download preview for ${reportName}`}
           tabIndex={-1}
-          className="relative w-full max-w-[1080px] h-[88vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-[840px] h-[88vh] flex flex-col bg-white rounded-[16px] shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-border-light">
+          <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
-                <Download size={15} />
+              <div className="p-2 rounded-[8px] bg-primary/10 text-primary shrink-0">
+                <Download size={16} />
               </div>
               <h2 className="text-[15px] font-bold text-text">Download Report</h2>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="p-1.5 rounded-[8px] text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               aria-label="Close preview"
             >
               <X size={16} />
             </button>
           </div>
 
-          {/* Format Tabs + inline Download CTA */}
+          {/* Format Tabs */}
           <div className="shrink-0 px-6 border-b border-border-light bg-surface-1/40">
-            <div className="flex items-center justify-between gap-3">
-              <div role="tablist" aria-label="Download format" className="flex items-center gap-1">
-                {FORMATS.map(f => {
-                  const isActive = format === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setFormat(f.id)}
-                      className={`relative inline-flex items-center h-11 px-4 text-[13px] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-md ${
-                        isActive ? 'text-primary' : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      <span>{f.label}</span>
-                      {isActive && (
-                        <motion.span
-                          layoutId="download-tab-indicator"
-                          className="absolute left-2 right-2 -bottom-px h-[2px] bg-primary rounded-t"
-                          transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={handleDownload}
-                disabled={isDownloading}
-                aria-busy={isDownloading || undefined}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer shadow-[0_1px_2px_rgba(106,18,205,0.18)] disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-              >
-                {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                {isDownloading ? 'Preparing…' : 'Download'}
-              </button>
+            <div role="tablist" aria-label="Download format" className="flex items-center gap-1">
+              {FORMATS.map(f => {
+                const isActive = format === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setFormat(f.id)}
+                    className={`relative inline-flex items-center h-11 px-4 text-[13px] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px] ${
+                      isActive ? 'text-primary' : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    {isActive && (
+                      <motion.span
+                        layoutId="download-tab-indicator"
+                        className="absolute left-2 right-2 -bottom-px h-[2px] bg-primary rounded-t"
+                        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -242,6 +238,19 @@ export default function ReportDownloadModal({
             </AnimatePresence>
           </div>
 
+          {/* Footer — primary Download action */}
+          <div className="shrink-0 px-6 py-4 border-t border-border-light bg-white flex items-center justify-end">
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              aria-busy={isDownloading || undefined}
+              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            >
+              {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {isDownloading ? 'Preparing…' : 'Download'}
+            </button>
+          </div>
+
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -281,11 +290,11 @@ function PdfPreview({
           </p>
           <div className="grid grid-cols-2 gap-4 text-[11px] max-w-[60%] mx-auto">
             <div>
-              <div className="text-[9.5px] uppercase tracking-wider text-text-muted mb-0.5">Author</div>
+              <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Author</div>
               <div className="font-semibold text-text">{generatedBy}</div>
             </div>
             <div>
-              <div className="text-[9.5px] uppercase tracking-wider text-text-muted mb-0.5">Date</div>
+              <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Date</div>
               <div className="font-semibold text-text">{generatedAt}</div>
             </div>
           </div>
@@ -340,9 +349,6 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
 function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-3">
-        Contents
-      </div>
       <h2 className="font-display text-[22px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
         Table of Contents
       </h2>
@@ -438,7 +444,7 @@ function ReportTagBadge({ tag }: { tag: string }) {
       <div className="leading-none">
         <div className="font-bold text-[11px] tracking-[0.04em]">{first}</div>
         {rest && (
-          <div className="text-[6.5px] tracking-[0.18em] font-semibold opacity-70 mt-[1px]">
+          <div className="text-[6px] tracking-[0.18em] font-semibold opacity-70 mt-[1px]">
             {rest.toUpperCase()}
           </div>
         )}
@@ -508,7 +514,7 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, reportT
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[10.5px] font-mono tabular-nums text-text-muted">{pageNo} / {totalPages}</span>
+          <span className="text-[10px] font-mono tabular-nums text-text-muted">{pageNo} / {totalPages}</span>
         </div>
       </div>
       <FooterChevronBand />
@@ -529,7 +535,7 @@ function PptPreview({
   generatedAt: string;
   sections: DownloadPreviewSection[];
 }) {
-  const total = sections.length + 1;
+  const total = sections.length + 2;
   return (
     <div className="flex flex-col items-center gap-5">
       {/* Title slide */}
@@ -547,10 +553,15 @@ function PptPreview({
         </div>
       </PptSlide>
 
+      {/* Contents slide */}
+      <PptSlide slideNo={2} total={total} reportName={reportName}>
+        <PdfContents sections={sections} />
+      </PptSlide>
+
       {/* Content slides — one section per slide, widgets included.
           Query slides use a 2-column split (chart left, meta/KPIs/findings right). */}
       {sections.map((s, i) => (
-        <PptSlide key={s.id} slideNo={i + 2} total={total} reportName={reportName}>
+        <PptSlide key={s.id} slideNo={i + 3} total={total} reportName={reportName}>
           <div className="h-full flex flex-col overflow-hidden">
             {s.kind === 'query'
               ? <PptQuerySlideBody section={s} />
@@ -586,7 +597,7 @@ function PptSlide({ slideNo, total, reportName, children }: {
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[10.5px] font-mono tabular-nums text-text-muted">{slideNo} / {total}</span>
+          <span className="text-[10px] font-mono tabular-nums text-text-muted">{slideNo} / {total}</span>
         </div>
       </div>
       <FooterChevronBand />
@@ -609,8 +620,8 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
         <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted mb-1">{section.queryId}</div>
         <h2 className="font-display text-[18px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">{section.queryTitle}</h2>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
-            <AlertTriangle size={9} /> {section.severity}
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
+            <AlertTriangle size={12} /> {section.severity}
           </span>
           <span className="text-text-muted">·</span>
           <span className="text-text-secondary">{section.risk}</span>
@@ -620,11 +631,11 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
       {/* 2-column body */}
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left: chart */}
-        <div className="bg-canvas-elevated border border-border-light rounded-lg p-3 flex flex-col min-h-0">
+        <div className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 flex flex-col min-h-0">
           {firstChart ? (
             <>
-              <div className="flex items-center gap-1.5 mb-1.5 text-[9.5px] font-bold uppercase tracking-[0.14em] text-text-secondary shrink-0">
-                <BarChart3 size={10} /> {firstChart.title}
+              <div className="flex items-center gap-1.5 mb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-text-secondary shrink-0">
+                <BarChart3 size={12} /> {firstChart.title}
               </div>
               <div className="flex-1 min-h-0">
                 <ConfigurableChart
@@ -662,7 +673,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-text-muted mb-1">Findings</div>
               <ul className="space-y-0.5">
                 {section.findings.slice(0, 3).map((f, i) => (
-                  <li key={i} className="text-[10.5px] leading-[1.4] text-ink-800 flex gap-1.5">
+                  <li key={i} className="text-[10px] leading-[1.4] text-ink-800 flex gap-1.5">
                     <span className="text-primary mt-[3px] shrink-0">•</span>
                     <span className="line-clamp-2">{f}</span>
                   </li>
@@ -689,10 +700,10 @@ function DocxPreview({
   generatedAt: string;
   sections: DownloadPreviewSection[];
 }) {
-  // Same pagination model as PDF: cover, then summary pairs with the next
-  // section, queries follow one per page.
+  // Same pagination model as PDF: cover, contents, then summary pairs with
+  // the next section, queries follow one per page.
   const blocks = useMemo(() => groupSectionsIntoBlocks(sections), [sections]);
-  const totalPages = blocks.length + 1;
+  const totalPages = blocks.length + 2;
   return (
     <div className="flex flex-col items-center gap-6">
       {/* Cover-style title page */}
@@ -708,9 +719,14 @@ function DocxPreview({
         </div>
       </PdfPage>
 
+      {/* Contents page */}
+      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfContents sections={sections} />
+      </PdfPage>
+
       {/* Content pages */}
       {blocks.map((block, i) => (
-        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
           <PageBlockBody block={block} typeface="serif" />
         </PdfPage>
       ))}
@@ -729,7 +745,7 @@ function SectionContent({ section, typeface, compact = false }: {
     ? 'font-display text-[18px] leading-[1.25] font-semibold text-ink-900 tracking-tight'
     : 'font-display text-[20px] leading-[1.2] font-semibold text-ink-900 tracking-tight';
   const bodyClass = typeface === 'serif'
-    ? 'font-display text-[12.5px] leading-[1.65] text-ink-800'
+    ? 'font-display text-[12px] leading-[1.65] text-ink-800'
     : 'text-[13px] leading-[1.55] text-ink-800';
   const labelClass = 'text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted';
 
@@ -753,9 +769,9 @@ function SectionContent({ section, typeface, compact = false }: {
       <div>
         <div className={labelClass + ' mb-2'}>{section.queryId}</div>
         <h2 className={titleClass + ' mb-3'}>{section.queryTitle}</h2>
-        <div className="flex items-center gap-2 mb-4 text-[10.5px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
-            <AlertTriangle size={9} /> {section.severity}
+        <div className="flex items-center gap-2 mb-4 text-[10px]">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
+            <AlertTriangle size={12} /> {section.severity}
           </span>
           <span className="text-text-muted">·</span>
           <span className="text-text-secondary">{section.risk}</span>
@@ -767,7 +783,7 @@ function SectionContent({ section, typeface, compact = false }: {
             {kpis.map(k => (
               <span key={k.label} className="flex items-baseline gap-1.5">
                 <span className="text-[15px] font-semibold text-ink-900 leading-none">{k.value}</span>
-                <span className="text-[10.5px] text-text-muted font-medium">{k.label}</span>
+                <span className="text-[10px] text-text-muted font-medium">{k.label}</span>
               </span>
             ))}
           </div>
@@ -777,9 +793,9 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Charts — render each available chart with the canonical renderer */}
         {!compact && charts.map(g => (
-          <div key={g.id} className="bg-canvas-elevated border border-border-light rounded-lg p-3 mb-3">
+          <div key={g.id} className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary">
-              <BarChart3 size={10} /> {g.title}
+              <BarChart3 size={12} /> {g.title}
             </div>
             <div className="h-[160px]">
               <ConfigurableChart
@@ -796,11 +812,11 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Results table */}
         {!compact && table && table.rows.length > 0 && (
-          <div className="bg-canvas-elevated border border-border-light rounded-lg p-3 mb-3">
+          <div className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary">
-              <LayoutGrid size={10} /> Results Table
+              <LayoutGrid size={12} /> Results Table
             </div>
-            <div className="overflow-hidden rounded-md border border-border-light">
+            <div className="overflow-hidden rounded-[12px] border border-border-light">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-paper-50">
@@ -846,12 +862,12 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <ShieldAlert size={10} className="text-primary" /> {section.workflowId}
+          <ShieldAlert size={12} className="text-primary" /> {section.workflowId}
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.workflowName}</h2>
-        <div className="flex items-center gap-2 mb-4 text-[10.5px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
-            <AlertTriangle size={9} /> {section.severity}
+        <div className="flex items-center gap-2 mb-4 text-[10px]">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
+            <AlertTriangle size={12} /> {section.severity}
           </span>
         </div>
         <p className={bodyClass + ' mb-4'}>{section.summary}</p>
@@ -869,7 +885,7 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <FileText size={10} className="text-primary" /> Note
+          <FileText size={12} className="text-primary" /> Note
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.title}</h2>
         <p className={bodyClass}>{section.content}</p>
@@ -881,7 +897,7 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <CheckCircle2 size={10} className="text-primary" /> {section.obsId}
+          <CheckCircle2 size={12} className="text-primary" /> {section.obsId}
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.title}</h2>
         <p className={bodyClass}>{section.description}</p>

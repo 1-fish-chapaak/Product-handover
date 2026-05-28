@@ -39,6 +39,12 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
   hideResultCount?: boolean;
+  /** Background utility class for the search input. Defaults to 'bg-white';
+   *  pass e.g. 'bg-paper-50' to match an adjacent filter control. */
+  searchBg?: string;
+  /** Show the resting sort-hint icon on sortable column headers even in the
+   *  'modern' variant (which otherwise hides it until a column is active). */
+  showSortHint?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -74,6 +80,8 @@ export default function SmartTable<T extends Record<string, unknown>>({
   animateRows = true,
   variant = 'default',
   hideResultCount = false,
+  searchBg = 'bg-white',
+  showSortHint = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -153,7 +161,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                className={`w-full pl-8 pr-8 py-1.5 border border-border ${searchBg} text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all`} style={{ borderRadius: '8px' }}
               />
               {search && (
                 <button
@@ -196,7 +204,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   <span className="inline-flex items-center gap-1.5">
                     {col.label}
                     {col.sortable !== false && (
-                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern} />
+                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
                     )}
                   </span>
                 </th>

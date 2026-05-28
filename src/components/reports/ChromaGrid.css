@@ -1,0 +1,94 @@
+/* Light-theme adaptation of the React Bits ChromaGrid effect.
+   Reports have no images and the app is light-themed, so the existing report
+   cards stay as-is — we only layer the cursor-following spotlight glow, a gentle
+   grid-wide torch (colours outside the cursor circle are muted), and a colored
+   hover border per card. */
+
+.chroma-grid-lite {
+  position: relative;
+  --x: 50%;
+  --y: 50%;
+  --r: 300px;
+}
+
+/* Per-card soft glow that follows the cursor inside the card. The tint is mixed
+   from the card's own border colour so each card glows in its tag colour. */
+.chroma-card-lite {
+  position: relative;
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  --card-border: var(--color-primary);
+  --spotlight-color: color-mix(in srgb, var(--card-border) 6%, transparent);
+}
+
+.chroma-card-lite::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    220px circle at var(--mouse-x) var(--mouse-y),
+    var(--spotlight-color),
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 1;
+}
+
+.chroma-card-lite:hover::after {
+  opacity: 1;
+}
+
+/* Light, low-opacity purple hover border (single colour for every card). */
+.chroma-card-lite:hover {
+  border-color: color-mix(in srgb, var(--card-border) 30%, transparent) !important;
+}
+
+/* Grid-wide torch: gently desaturate everything outside the cursor circle so the
+   area under the cursor reads in full colour. Kept subtle to suit the light app. */
+.chroma-overlay-lite,
+.chroma-fade-lite {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  backdrop-filter: saturate(0.45);
+  -webkit-backdrop-filter: saturate(0.45);
+}
+
+.chroma-overlay-lite {
+  z-index: 5;
+  mask-image: radial-gradient(
+    circle var(--r) at var(--x) var(--y),
+    transparent 0%,
+    transparent 18%,
+    rgba(0, 0, 0, 0.35) 55%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    circle var(--r) at var(--x) var(--y),
+    transparent 0%,
+    transparent 18%,
+    rgba(0, 0, 0, 0.35) 55%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
+}
+
+.chroma-fade-lite {
+  z-index: 6;
+  mask-image: radial-gradient(
+    circle var(--r) at var(--x) var(--y),
+    rgba(0, 0, 0, 0.75) 0%,
+    rgba(0, 0, 0, 0.35) 45%,
+    transparent 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    circle var(--r) at var(--x) var(--y),
+    rgba(0, 0, 0, 0.75) 0%,
+    rgba(0, 0, 0, 0.35) 45%,
+    transparent 100%
+  );
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
