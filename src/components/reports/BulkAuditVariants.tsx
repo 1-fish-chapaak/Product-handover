@@ -374,7 +374,7 @@ function DeleteObservationConfirm({
           aria-modal="true"
           aria-labelledby="delete-obs-title"
           tabIndex={-1}
-          className="w-full max-w-[420px] bg-white border border-border-light rounded-[16px] shadow-2xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-border-light rounded-[16px] shadow-2xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
             <h3 id="delete-obs-title" className="text-[15px] font-semibold text-text mb-2">Remove observation?</h3>
@@ -385,13 +385,13 @@ function DeleteObservationConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove observation
             </button>
@@ -447,7 +447,7 @@ function DeleteWorkflowConfirm({
           aria-modal="true"
           aria-labelledby="delete-wf-title"
           tabIndex={-1}
-          className="w-full max-w-[420px] bg-white border border-border-light rounded-[16px] shadow-2xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-border-light rounded-[16px] shadow-2xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
             <h3 id="delete-wf-title" className="text-[15px] font-semibold text-text mb-2">Remove workflow from this report?</h3>
@@ -459,13 +459,13 @@ function DeleteWorkflowConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove workflow
             </button>
@@ -1858,14 +1858,14 @@ function AddOutputModal({
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAttach}
                 disabled={selection.size === 0}
-                className={`inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-primary/40 text-white/85 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover text-white'}`}
+                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-primary/40 text-white/85 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover text-white'}`}
               >
                 Add to report
               </button>

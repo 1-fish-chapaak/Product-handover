@@ -300,7 +300,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
           aria-modal="true"
           aria-labelledby="add-observation-title"
           tabIndex={-1}
-          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[520px] max-w-[calc(100vw-32px)] p-6"
+          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[560px] max-w-[calc(100vw-32px)] p-6"
         >
           {isDraggingFiles && (
             <motion.div
@@ -470,7 +470,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
             <button
               onClick={onClose}
               disabled={isSaving}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
@@ -507,14 +507,14 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="discard-obs-title"
-                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[400px] p-6"
+                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[320px] p-6"
               >
                 <h3 id="discard-obs-title" className="text-[16px] font-bold text-text tracking-tight mb-2">Discard changes?</h3>
                 <p className="text-[13px] text-text-secondary leading-relaxed mb-6">Your observation has unsaved changes. Discard them?</p>
                 <div className="flex items-center justify-end gap-2.5">
                   <button
                     onClick={() => setShowDiscardConfirm(false)}
-                    className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
                   >
                     Keep editing
                   </button>

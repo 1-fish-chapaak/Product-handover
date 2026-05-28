@@ -536,7 +536,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
           <button
             onClick={onBack}
             disabled={isGenerating}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-border text-[13px] font-semibold text-text-secondary hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-border-light bg-white text-[13px] font-semibold text-text hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <ArrowLeft size={14} />
             Back
@@ -545,7 +545,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
             onClick={handleGenerate}
             disabled={isGenerating}
             aria-busy={isGenerating || undefined}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
           >
             {isGenerating && <Loader2 size={14} className="animate-spin" />}
             {isGenerating ? 'Generating…' : 'Generate Report'}
@@ -569,7 +569,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-[16px] shadow-2xl w-[420px] overflow-hidden"
+              className="relative bg-white rounded-[16px] shadow-2xl w-[560px] overflow-hidden"
               onClick={e => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -678,7 +678,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 <button
                   onClick={() => setShowSaveTemplate(false)}
                   disabled={isSavingTemplateModal}
-                  className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   Cancel
                 </button>
@@ -699,7 +699,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   }}
                   disabled={isSavingTemplateModal}
                   aria-busy={isSavingTemplateModal || undefined}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   {isSavingTemplateModal && <Loader2 size={12} className="animate-spin" />}
                   {isSavingTemplateModal ? 'Saving…' : 'Save Template'}

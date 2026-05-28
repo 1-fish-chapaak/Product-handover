@@ -323,7 +323,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Upload Template"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
@@ -369,7 +369,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
               </div>
               <button
                 onClick={() => setStep('converting')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer rounded-[8px]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-all cursor-pointer rounded-[8px]"
               >
                 <Sparkles size={14} /> Convert to Template
               </button>
@@ -443,10 +443,10 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 
         {step === 'converted' && (
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
+            <button onClick={onClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
             <button
               onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
-              className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer rounded-[8px]"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer rounded-[8px]"
             >
               Save Template
             </button>
@@ -473,7 +473,7 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Template Preview"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
@@ -518,13 +518,13 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         <div className="px-6 py-4 border-t border-border-light flex justify-between shrink-0">
           <button
             onClick={() => { onClose(); onEdit(); }}
-            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"
           >
             <Edit3 size={12} /> Edit Template
           </button>
           <button
             onClick={onUse}
-            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             <Sparkles size={12} /> Use This Template
           </button>
@@ -567,7 +567,7 @@ function ChooseReportModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Choose Report"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[85vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -640,14 +640,14 @@ function ChooseReportModal({
         <div className="px-6 py-4 border-t border-border-light flex items-center gap-3 shrink-0">
           <button
             onClick={onCancel}
-            className="flex-1 px-5 py-2.5 rounded-[8px] border border-border-light text-text-secondary text-[13px] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-border-light text-text bg-white text-[13px] font-semibold hover:bg-paper-50 transition-colors cursor-pointer"
           >
             Back
           </button>
           <button
             onClick={() => { if (selected) onContinue(selected); }}
             disabled={!selected}
-            className="flex-1 px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
             title={`Apply "${template.name}"`}
           >
             Continue
@@ -835,7 +835,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[600px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
@@ -960,12 +960,12 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           <button
             onClick={attemptClose}
             disabled={isSaving}
-            className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             {isSaving && <Loader2 size={12} className="animate-spin" />}
             {isSaving ? 'Saving…' : isCopy ? 'Save Copy' : 'Save Template'}
@@ -1705,7 +1705,7 @@ function ConfirmDialog({
           <div className="flex items-center justify-end gap-2.5">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               {cancelLabel}
             </button>
@@ -2119,7 +2119,7 @@ function QueryWidgetModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="query-widget-title"
-          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
+          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[840px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
@@ -2296,7 +2296,7 @@ function QueryWidgetModal({
           <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-light bg-paper-50/40">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -3822,7 +3822,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
             role="dialog"
             aria-modal="true"
             aria-label="Add Query"
-            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[820px] h-[600px]"
+            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[840px] h-[600px]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -3964,7 +3964,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                           <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('add-query-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
@@ -4026,7 +4026,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
               <p className="text-[12px] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
-              <button onClick={handleClose} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+              <button onClick={handleClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer">
                 Cancel
               </button>
               {(() => {
@@ -4038,8 +4038,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
                   <button
                     onClick={handleAttach}
                     disabled={!enabled || isAttaching}
-                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
-                      enabled && !isAttaching ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
+                    className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                      enabled && !isAttaching ? 'bg-primary hover:bg-primary-hover text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
                     {isAttaching ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -5649,7 +5649,7 @@ export default function ReportsView({
             action={
               <button
                 onClick={() => setMissingFocusReport(false)}
-                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 <ArrowLeft size={14} /> Back to reports
               </button>
@@ -6394,7 +6394,7 @@ export default function ReportsView({
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
                 >
                   Continue <ArrowRight size={14} />
                 </button>
