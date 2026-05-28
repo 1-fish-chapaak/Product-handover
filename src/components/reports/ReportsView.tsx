@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
+import { ChromaGrid, handleChromaCardMove } from './ChromaGrid';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
@@ -72,7 +73,7 @@ function reportTagChip(tag: string): { classes: string; label: string } {
     return { classes: 'bg-evidence-50 text-evidence-700', label: tag };
   }
   if (tag === 'Bulk Audit') {
-    return { classes: 'bg-mitigated-50 text-mitigated-700', label: tag };
+    return { classes: 'bg-brand-50 text-brand-700', label: tag };
   }
   return { classes: 'bg-paper-100 text-ink-600', label: tag };
 }
@@ -1425,7 +1426,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
 }
 
 // ─── Query Card Component ───
-type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
+type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
 function parseNumeric(v: string): number {
   const match = String(v).match(/-?\d[\d,.]*/);
@@ -1725,7 +1726,7 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
-  const safeQuery = query ?? { id: '', status: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
+  const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1738,10 +1739,6 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const [tableAttached, setTableAttached] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
-
-  const statusStyle = safeQuery.status === 'Completed'
-    ? { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' }
-    : { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' };
 
   const severityStyle = safeQuery.severity === 'High'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
@@ -1786,11 +1783,6 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               <span className="flex items-center gap-1.5 shrink-0">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
                 <span className={query.severity === 'High' ? 'text-risk-700' : query.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}>{query.severity}</span>
-              </span>
-              <span aria-hidden className="text-ink-300 select-none">·</span>
-              <span className="flex items-center gap-1.5 shrink-0">
-                <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
-                <span className={query.status === 'Completed' ? 'text-compliant-700' : 'text-mitigated-700'}>{query.status}</span>
               </span>
             </div>
             <div className="flex items-center gap-4 shrink-0">
@@ -4080,7 +4072,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   const DEFAULT_QUERIES = [
     {
-      id: 'Q01', status: 'In Review', risk: 'Financial Risk', severity: 'High',
+      id: 'Q01', risk: 'Financial Risk', severity: 'High',
       ...REPORT_QUERIES_ATR.Q01,
       addedBy: report.generatedBy,
       kpis: [
@@ -4092,7 +4084,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       chartData: [40, 55, 80, 65, 90, 75, 95, 70, 85, 100],
     },
     {
-      id: 'Q02', status: 'Completed', risk: 'Compliance Risk', severity: 'High',
+      id: 'Q02', risk: 'Compliance Risk', severity: 'High',
       ...REPORT_QUERIES_ATR.Q02,
       addedBy: 'AI Copilot',
       kpis: [
@@ -4109,7 +4101,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const TEMPLATE_QUERIES: Record<string, typeof DEFAULT_QUERIES> = {
     'rt-002': [ // Risk Assessment Summary
       {
-        id: 'RA01', status: 'Completed', risk: 'Aggregate Risk', severity: 'High',
+        id: 'RA01', risk: 'Aggregate Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.RA01,
         addedBy: report.generatedBy,
         kpis: [
@@ -4120,7 +4112,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         chartData: [12, 10, 11, 9, 12, 10, 8, 12, 11, 12],
       },
       {
-        id: 'RA02', status: 'In Review', risk: 'Mitigation Gap', severity: 'High',
+        id: 'RA02', risk: 'Mitigation Gap', severity: 'High',
         ...REPORT_QUERIES_ATR.RA02,
         addedBy: 'AI Copilot',
         kpis: [
@@ -4134,7 +4126,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-003': [ // Control Effectiveness Report
       {
-        id: 'CE01', status: 'Completed', risk: 'Control Gap', severity: 'High',
+        id: 'CE01', risk: 'Control Gap', severity: 'High',
         ...REPORT_QUERIES_ATR.CE01,
         addedBy: report.generatedBy,
         kpis: [
@@ -4148,7 +4140,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-004': [ // Workflow Analytics Report
       {
-        id: 'WA01', status: 'Completed', risk: 'Operational Risk', severity: 'High',
+        id: 'WA01', risk: 'Operational Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.WA01,
         addedBy: 'AI Copilot',
         kpis: [
@@ -4160,7 +4152,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         chartData: [85, 88, 90, 87, 92, 94, 91, 93, 95, 94],
       },
       {
-        id: 'WA02', status: 'In Review', risk: 'Processing Risk', severity: 'High',
+        id: 'WA02', risk: 'Processing Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.WA02,
         addedBy: report.generatedBy,
         kpis: [
@@ -4174,7 +4166,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-006': [ // Executive Dashboard Export
       {
-        id: 'EX01', status: 'Completed', risk: 'Strategic Risk', severity: 'High',
+        id: 'EX01', risk: 'Strategic Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.EX01,
         addedBy: report.generatedBy,
         kpis: [
@@ -5599,7 +5591,7 @@ export default function ReportsView({
           />
         </div>
       )}
-      <div className="px-[124px] py-8 relative flex flex-col min-h-full">
+      <div className="reports-focus-noring px-[124px] py-8 relative flex flex-col min-h-full">
         {/* Header + Tabs share a single full-bleed white strip — bg-white
             extends past the page's horizontal/top insets so the strip reads
             as the page's header section, separate from the content below. */}
@@ -5660,6 +5652,8 @@ export default function ReportsView({
           <SmartTable
             className="flex-1"
             variant="modern"
+            searchBg="bg-paper-50"
+            showSortHint
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search reports..."
@@ -5726,15 +5720,16 @@ export default function ReportsView({
                 </span>
               )},
               { key: 'name', label: 'Report', render: (item) => {
-                const tagTone = item.tag === 'Internal Audit' ? 'text-evidence-700' : item.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
                 return (
                   <div className="cursor-pointer min-w-0" onClick={() => {
                     const report = generatedReports.find(r => r.id === item.id);
                     if (report) setViewingReport(report);
                   }}>
                     {Boolean(item.tag) && (
-                      <div className={`text-[9px] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
-                        {String(item.tag)}
+                      <div className="mb-1.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(String(item.tag)).classes}`}>
+                          {String(item.tag)}
+                        </span>
                       </div>
                     )}
                     <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
@@ -5743,7 +5738,7 @@ export default function ReportsView({
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
                           <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
-                            <span className="text-[14px] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
+                            <span className="font-display text-[16px] font-[460] tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
                               <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-[8px] max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
@@ -5769,9 +5764,9 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5787,7 +5782,7 @@ export default function ReportsView({
                   value={gridSearch}
                   onChange={e => setGridSearch(e.target.value)}
                   placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {gridSearch && (
                   <button
@@ -5850,41 +5845,37 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
-              {filteredReports.map((r, i) => {
-                const tagTone = r.tag === 'Internal Audit' ? 'text-evidence-700' : r.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
-                return (
+            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
+              {filteredReports.map((r, i) => (
                   <motion.div
                     key={r.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="bg-white border border-border-light rounded-[12px] p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                    className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
+                    onMouseMove={handleChromaCardMove}
                     onClick={() => setViewingReport(r)}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-start justify-between gap-3 mb-3.5">
                       {r.tag ? (
-                        <div className={`text-[9px] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(r.tag).classes}`}>
                           {r.tag}
-                        </div>
+                        </span>
                       ) : <span />}
-                      <div className="flex items-center gap-0.5 -mt-1 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" title="Delete"><Trash2 size={14} /></button>
+                      <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                        <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                        <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                       </div>
                     </div>
-                    <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                    <div className="text-[11px] text-text-muted font-mono tabular-nums">
-                      {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
-                    </div>
-                    <div className="mt-auto pt-4 flex items-center justify-end">
-                      <span className="font-mono text-[11px] text-text-muted tabular-nums">{r.generatedAt}</span>
+                    <h3 className="font-display text-[18px] font-[460] leading-[1.28] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2" title={r.name}>{r.name}</h3>
+                    <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] tabular-nums text-ink-500">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                      <span className="font-mono text-[11px] tabular-nums text-ink-400">{r.generatedAt}</span>
                     </div>
                   </motion.div>
-                );
-              })}
-            </div>
+              ))}
+            </ChromaGrid>
             )}
           </div>
         )}
@@ -5895,6 +5886,8 @@ export default function ReportsView({
           <SmartTable
             className="flex-1"
             variant="modern"
+            searchBg="bg-paper-50"
+            showSortHint
             data={SHARED_REPORTS as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search shared reports..."
@@ -5965,8 +5958,8 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5991,7 +5984,7 @@ export default function ReportsView({
                   value={sharedGridSearch}
                   onChange={e => setSharedGridSearch(e.target.value)}
                   placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {sharedGridSearch && (
                   <button
@@ -6036,40 +6029,41 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
+            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
               {filteredSharedReports.map((r, i) => (
                 <motion.div
                   key={r.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="bg-white border border-border-light rounded-[12px] p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                  className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
+                  onMouseMove={handleChromaCardMove}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-evidence-700">
+                  <div className="flex items-start justify-between gap-3 mb-3.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400 mt-0.5 truncate">
                       Shared with {r.sharedWith}
-                    </div>
-                    <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
+                    </span>
+                    <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                      <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                      <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                     </div>
                   </div>
-                  <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                  <div className="text-[11px] text-text-muted font-mono tabular-nums">
-                    {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
-                  </div>
-                  <div className="mt-auto pt-4 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0">
+                  <h3 className="font-display text-[18px] font-[460] leading-[1.28] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2" title={r.name}>{r.name}</h3>
+                  <div className="mt-auto pt-3.5 border-t border-border-light/70 flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] tabular-nums text-ink-500">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                      <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.sharedAt}</span>
+                    </div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0 tabular-nums">
                         {r.sharedBy.split(' ').map(n => n[0]).join('')}
                       </div>
-                      <span className="text-[11px] text-text-secondary truncate">{r.sharedBy}</span>
+                      <span className="text-[12px] text-ink-600 truncate">{r.sharedBy}</span>
                     </div>
-                    <span className="font-mono text-[11px] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
                   </div>
                 </motion.div>
               ))}
-            </div>
+            </ChromaGrid>
             )}
           </div>
           );
