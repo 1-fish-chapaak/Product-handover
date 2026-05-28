@@ -1862,7 +1862,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="font-display text-[20px] text-text leading-[1.3] tracking-[-0.005em] mb-4"
+          className="text-[20px] font-semibold text-text leading-[1.3] tracking-[-0.005em] mb-4"
         >
           {query.title}
         </motion.h3>
@@ -5500,24 +5500,24 @@ export default function ReportsView({
     <div className="relative">
       <button
         onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer rounded-[8px]"
+        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-ink-700 bg-paper-50 border border-canvas-border hover:border-brand-200 transition-colors cursor-pointer rounded-[8px]"
       >
         {tagFilter === 'All' ? 'All Tags' : tagFilter}
         <ChevronDown size={12} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
       </button>
       {showTagDropdown && (
-        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1 rounded-[8px]">
-          {TAG_FILTER_OPTIONS.map(t => (
-            <button
-              key={t}
-              onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
-              className={`w-full text-left px-3 py-2 text-[12px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
-            >
-              {tagFilter === t && <span className="text-primary">✓</span>}
-              {tagFilter !== t && <span className="w-3" />}
-              {t === 'All' ? 'All Tags' : t}
-            </button>
-          ))}
+        <div className="absolute left-0 top-full mt-1 w-40 bg-canvas-elevated shadow-lg border border-canvas-border z-50 py-2 rounded-lg">
+          <div className="px-1.5">
+            {TAG_FILTER_OPTIONS.map(t => (
+              <button
+                key={t}
+                onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
+                className={`w-full text-left px-2.5 py-1.5 rounded-md text-[12.5px] cursor-pointer transition-colors ${tagFilter === t ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'}`}
+              >
+                {t === 'All' ? 'All Tags' : t}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -5725,20 +5725,13 @@ export default function ReportsView({
                     const report = generatedReports.find(r => r.id === item.id);
                     if (report) setViewingReport(report);
                   }}>
-                    {Boolean(item.tag) && (
-                      <div className="mb-1.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(String(item.tag)).classes}`}>
-                          {String(item.tag)}
-                        </span>
-                      </div>
-                    )}
                     <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
                       {(() => {
                         const n = String(item.name);
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
                           <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
-                            <span className="font-display text-[16px] font-[460] tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
+                            <span className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
                               <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-[8px] max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
@@ -5753,8 +5746,13 @@ export default function ReportsView({
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
-                      {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}</span>
+                      {Boolean(item.tag) && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(String(item.tag)).classes}`}>
+                          {String(item.tag)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -5856,22 +5854,24 @@ export default function ReportsView({
                     onMouseMove={handleChromaCardMove}
                     onClick={() => setViewingReport(r)}
                   >
-                    <div className="flex items-start justify-between gap-3 mb-3.5">
-                      {r.tag ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(r.tag).classes}`}>
-                          {r.tag}
-                        </span>
-                      ) : <span />}
-                      <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-start justify-between gap-3 mb-2.5">
+                      <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                      <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                         <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                         <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                       </div>
                     </div>
-                    <h3 className="font-display text-[18px] font-[460] leading-[1.28] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2" title={r.name}>{r.name}</h3>
                     <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] tabular-nums text-ink-500">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
-                      <span className="font-mono text-[11px] tabular-nums text-ink-400">{r.generatedAt}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                        {r.tag && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(r.tag).classes}`}>
+                            {r.tag}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.generatedAt}</span>
                     </div>
                   </motion.div>
               ))}
@@ -5936,12 +5936,9 @@ export default function ReportsView({
               )},
               { key: 'name', label: 'Report', render: (item) => (
                 <div className="min-w-0">
-                  <div className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
-                    Shared report
-                  </div>
-                  <div className="text-[14px] text-text font-medium truncate">{String(item.name)}</div>
+                  <div className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate">{String(item.name)}</div>
                   <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
-                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'} · shared with {String(item.sharedWith)}
+                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
                   </div>
                 </div>
               )},
@@ -6039,27 +6036,24 @@ export default function ReportsView({
                   className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
                   onMouseMove={handleChromaCardMove}
                 >
-                  <div className="flex items-start justify-between gap-3 mb-3.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400 mt-0.5 truncate">
-                      Shared with {r.sharedWith}
-                    </span>
-                    <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <div className="flex items-start justify-between gap-3 mb-2.5">
+                    <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                    <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                       <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                       <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                     </div>
                   </div>
-                  <h3 className="font-display text-[18px] font-[460] leading-[1.28] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2" title={r.name}>{r.name}</h3>
-                  <div className="mt-auto pt-3.5 border-t border-border-light/70 flex flex-col gap-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] tabular-nums text-ink-500">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
-                      <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.sharedAt}</span>
-                    </div>
+                  <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0 tabular-nums">
-                        {r.sharedBy.split(' ').map(n => n[0]).join('')}
+                      <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0 tabular-nums">
+                          {r.sharedBy.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span className="text-[12px] text-ink-600 truncate">{r.sharedBy}</span>
                       </div>
-                      <span className="text-[12px] text-ink-600 truncate">{r.sharedBy}</span>
                     </div>
+                    <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.sharedAt}</span>
                   </div>
                 </motion.div>
               ))}

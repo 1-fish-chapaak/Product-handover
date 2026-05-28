@@ -292,7 +292,7 @@ export default function ObservationCard({
                   aria-label={`Show ${overflowItems.length} more attachments`}
                   className="w-[88px] h-[88px] rounded-[12px] border border-border-light bg-paper-50 hover:border-primary/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
-                  <span className="font-display text-[18px] leading-none font-semibold text-ink-900 tabular-nums">+{overflowItems.length}</span>
+                  <span className="text-[18px] leading-none font-semibold text-ink-900 tabular-nums">+{overflowItems.length}</span>
                   <span className="text-[10px] text-ink-500 uppercase tracking-wider">more</span>
                 </button>
                 {overflowOpen && (
