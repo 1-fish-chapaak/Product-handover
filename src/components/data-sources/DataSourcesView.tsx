@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Database, FileText, Layers, FolderOpen,
   Search, Upload, MoreHorizontal, Plus, X,
-  Pencil, Trash2, Unplug, Check, CheckSquare,
-  Globe, Cloud, MessageSquare,
-  LayoutGrid, Rows3, ArrowRight,
+  Pencil, Trash2, Unplug, Check,
+  MessageSquare,
+  LayoutGrid, Rows3,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
@@ -29,10 +29,12 @@ import { useKnowledgeSources } from '../../hooks/useKnowledgeSources';
 
 const KB = 1024;
 const MB = KB * 1024;
+const GB = MB * 1024;
 function formatBytesShort(bytes: number): string {
   if (bytes < KB) return `${bytes} B`;
   if (bytes < MB) return `${(bytes / KB).toFixed(1)} KB`;
-  return `${(bytes / MB).toFixed(1)} MB`;
+  if (bytes < GB) return `${(bytes / MB).toFixed(1)} MB`;
+  return `${(bytes / GB).toFixed(1)} GB`;
 }
 
 function formatExt(name: string): string {
@@ -84,6 +86,9 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
 
 type ViewMode = 'grid' | 'list';
 
+const PAGE_SIZE = 6;
+
+
 // Parse "Folder · 12 files · 84.2 MB" or "CSV · 4.8 MB" — best-effort size sum
 // so the header can show total indexed bytes. Unrecognized sources contribute 0.
 function parseSizeBytes(subtype: string): number {
@@ -100,8 +105,12 @@ function parseSizeBytes(subtype: string): number {
 
 // Deterministic pseudo-health for live integrations — used purely for visual
 // signal. Most read healthy; ~10% degraded so the dot vocabulary is visible.
-function integrationHealth(id: string): 'healthy' | 'degraded' {
+function integrationHealth(source: DataSource): 'healthy' | 'degraded' {
+  // Explicit override (seed data) wins; otherwise fall back to a deterministic
+  // hash so live-uploaded integrations still show a mix of healthy/degraded.
+  if (source.health) return source.health;
   let h = 0;
+  const id = source.id;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
   return Math.abs(h) % 10 === 0 ? 'degraded' : 'healthy';
 }
@@ -182,20 +191,31 @@ interface SourceCardProps {
    *  shows a confirmation modal and only then performs the removal. */
   onRemove: (id: string) => void;
   onRenameInDetail: () => void;
-  selectMode: boolean;
+  /** True whenever ANY source is currently selected — promotes the hover-only
+   *  checkbox into a persistent visible one across all cards. */
+  isSelecting: boolean;
   selected: boolean;
-  onToggleSelect: (id: string) => void;
+  /** Shift-clicks come through with shift=true so the parent can range-extend. */
+  onToggleSelect: (id: string, opts?: { shift?: boolean }) => void;
   viewMode: ViewMode;
 }
 
 // Shared remove + click handlers — used by both card and row renderers. The
 // parent owns the confirmation modal and the post-confirm toast; this hook
 // just signals "user clicked Remove on this card" via onRemove(id).
-function useCardActions(source: DataSource, onOpen: () => void, onRemove: (id: string) => void, selectMode: boolean, onToggleSelect: (id: string) => void) {
+function useCardActions(
+  source: DataSource,
+  onOpen: () => void,
+  onRemove: (id: string) => void,
+  isSelecting: boolean,
+  onToggleSelect: (id: string, opts?: { shift?: boolean }) => void,
+) {
   const isIntegrated = INTEGRATED_TYPES.includes(source.type);
   const handleRemove = () => onRemove(source.id);
-  const handleCardClick = () => {
-    if (selectMode) onToggleSelect(source.id);
+  // Body click: in selection mode, any click toggles. Outside selection,
+  // open the detail. Shift always toggles (and ranges).
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (isSelecting || e.shiftKey) onToggleSelect(source.id, { shift: e.shiftKey });
     else onOpen();
   };
   return { handleRemove, handleCardClick, isIntegrated };
@@ -227,19 +247,18 @@ function SourceCard(props: SourceCardProps) {
 // get a count chip; integrations get a health dot + last sync.
 function SourceTile({
   source, onOpen, onRemove, onRenameInDetail,
-  selectMode, selected, onToggleSelect,
+  isSelecting, selected, onToggleSelect,
 }: SourceCardProps) {
-  const { icon: TypeIcon } = TYPE_META[source.type];
-  const Icon = source.isFolder ? FolderOpen : TypeIcon;
-  // All icon tiles use the brand tone — consistent visual identity matching
-  // the platform's design reference. Type identity comes from icon + footer
-  // label, not tile color.
+  // One generic file glyph for every card — folders, files, and integrations
+  // all read the same. Type identity is carried by the uppercase FORMAT label
+  // in the footer ("FOLDER" / "SQL" / "PDF" / etc.), not by the icon.
+  const Icon: React.ElementType = FileText;
   const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
-    source, onOpen, onRemove, selectMode, onToggleSelect,
+    source, onOpen, onRemove, isSelecting, onToggleSelect,
   );
-  const health = isIntegrated ? integrationHealth(source.id) : null;
+  const health = isIntegrated ? integrationHealth(source) : null;
 
   // Uppercase format label for the footer — extracted from the subtype's
   // first token for files ("PDF · 2.4 MB" → "PDF"), or canonical name for
@@ -267,35 +286,60 @@ function SourceTile({
       <button
         type="button"
         onClick={handleCardClick}
+        aria-pressed={selected || undefined}
         className={`group w-full flex items-start gap-3.5 px-5 py-5 rounded-2xl bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
           selected
             ? 'border-brand-500 bg-brand-50/40 shadow-[0_2px_8px_rgb(106_18_205_/_0.10)]'
             : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_4px_16px_rgb(15_8_30_/_0.06)]'
         }`}
       >
-        {selectMode && (
-          <span
-            className={`mt-1 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-              selected ? 'bg-brand-600 border-brand-600 text-white' : 'bg-paper-0 border-canvas-border'
+        {/* Icon tile + overlaid hover checkbox. The checkbox is absolute
+            inside the icon container so layout never shifts between selecting
+            and non-selecting states. Hover or `isSelecting` reveals it; the
+            icon stays visible underneath at reduced opacity so users still
+            see the file type at a glance. */}
+        <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
+          <Icon
+            size={20}
+            className={`transition-opacity duration-150 ${
+              selected ? 'opacity-0' : isSelecting ? 'opacity-30 group-hover:opacity-0' : 'opacity-100 group-hover:opacity-30'
             }`}
-            aria-hidden
+          />
+          <span
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={selected ? `Deselect ${source.name}` : `Select ${source.name}`}
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(source.id, { shift: e.shiftKey }); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                e.preventDefault();
+                onToggleSelect(source.id, { shift: e.shiftKey });
+              }
+            }}
+            className={`absolute inset-0 m-auto w-5 h-5 rounded-md border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+              selected
+                ? 'bg-brand-600 border-brand-600 text-white opacity-100'
+                : isSelecting
+                  ? 'bg-paper-0 border-ink-300 opacity-100 hover:border-brand-500'
+                  : 'bg-paper-0 border-ink-300 opacity-0 group-hover:opacity-100 hover:border-brand-500'
+            }`}
           >
-            {selected && <Check size={11} strokeWidth={3} />}
+            {selected && <Check size={13} strokeWidth={3} />}
           </span>
-        )}
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
-          <Icon size={20} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[0.9375rem] font-semibold text-ink-900 truncate leading-tight" title={source.name}>
             {source.name}
           </div>
-          {/* Single-line footer: FORMAT · size/count · date    OR    FORMAT · Connected
-              Uppercase format label + plain text dates — matches the reference
-              design language. */}
-          <div className="mt-2 flex items-center gap-1.5 text-[0.75rem] text-ink-500 tabular-nums flex-wrap">
+          {/* Footer: FORMAT · size/count · date  OR  FORMAT · Connected.
+              Uses inline display so the natural line-wrap kicks in only when
+              the whole line genuinely overflows — flex containers were
+              breaking after every span on narrow cards. */}
+          <div className="mt-2 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
             <span className="font-semibold text-ink-700 uppercase tracking-wide text-[0.6875rem]">{formatLabel}</span>
-            <span className="text-ink-300" aria-hidden>·</span>
+            <span className="text-ink-300 mx-1.5" aria-hidden>·</span>
             {isIntegrated ? (
               <span className={`font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-brand-700'}`}>
                 {health === 'degraded' ? 'Needs reconnection' : 'Connected'}
@@ -303,30 +347,28 @@ function SourceTile({
             ) : (
               <>
                 {sizeTail && <>
-                  <span>{sizeTail}</span>
-                  <span className="text-ink-300" aria-hidden>·</span>
+                  <span className="whitespace-nowrap">{sizeTail}</span>
+                  <span className="text-ink-300 mx-1.5" aria-hidden>·</span>
                 </>}
-                <span>{formatDate(source.createdAt)}</span>
+                <span className="whitespace-nowrap">{formatDate(source.displayDate ?? source.createdAt)}</span>
               </>
             )}
           </div>
         </div>
-        {!selectMode && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-            className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-50 transition-opacity cursor-pointer shrink-0 ${
-              menuOpen ? 'opacity-100' : 'opacity-30 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
-            }`}
-            aria-label="Source actions"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-          >
-            <MoreHorizontal size={16} />
-          </span>
-        )}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-50 transition-opacity cursor-pointer shrink-0 ${
+            menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+          }`}
+          aria-label="Source actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <MoreHorizontal size={16} />
+        </span>
       </button>
       {menuOpen && (
         <SourceMenu
@@ -343,16 +385,16 @@ function SourceTile({
 // Dense list row — single line, scannable. Same affordances as the tile.
 function SourceRow({
   source, onOpen, onRemove, onRenameInDetail,
-  selectMode, selected, onToggleSelect,
+  isSelecting, selected, onToggleSelect,
 }: SourceCardProps) {
-  const { icon: TypeIcon, tone: typeTone, label: typeLabel } = TYPE_META[source.type];
-  const Icon = source.isFolder ? FolderOpen : TypeIcon;
-  const tone = source.isFolder ? 'text-evidence-700 bg-evidence-50' : typeTone;
+  const { label: typeLabel } = TYPE_META[source.type];
+  const Icon: React.ElementType = FileText;
+  const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
-    source, onOpen, onRemove, selectMode, onToggleSelect,
+    source, onOpen, onRemove, isSelecting, onToggleSelect,
   );
-  const health = isIntegrated ? integrationHealth(source.id) : null;
+  const health = isIntegrated ? integrationHealth(source) : null;
   const displayType = source.isFolder ? 'Folder' : typeLabel;
 
   return (
@@ -360,24 +402,45 @@ function SourceRow({
       <button
         type="button"
         onClick={handleCardClick}
+        aria-pressed={selected || undefined}
         className={`group w-full flex items-center gap-3 px-3.5 h-12 rounded-lg border transition-colors cursor-pointer text-left ${
           selected
             ? 'border-brand-600 bg-brand-50/30'
             : 'border-transparent hover:border-canvas-border hover:bg-canvas-elevated'
         }`}
       >
-        {selectMode && (
-          <span
-            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-              selected ? 'bg-brand-600 border-brand-600 text-white' : 'bg-paper-0 border-canvas-border'
+        {/* Hover-revealed checkbox overlaying the type-icon tile. Same layout
+            slot regardless of state so nothing shifts. */}
+        <div className={`relative w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
+          <Icon
+            size={14}
+            className={`transition-opacity duration-150 ${
+              selected ? 'opacity-0' : isSelecting ? 'opacity-40 group-hover:opacity-0' : 'opacity-100 group-hover:opacity-30'
             }`}
-            aria-hidden
+          />
+          <span
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={selected ? `Deselect ${source.name}` : `Select ${source.name}`}
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(source.id, { shift: e.shiftKey }); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                e.preventDefault();
+                onToggleSelect(source.id, { shift: e.shiftKey });
+              }
+            }}
+            className={`absolute inset-0 m-auto w-4 h-4 rounded-[5px] border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+              selected
+                ? 'bg-brand-600 border-brand-600 text-white opacity-100'
+                : isSelecting
+                  ? 'bg-paper-0 border-ink-300 opacity-100 hover:border-brand-500'
+                  : 'bg-paper-0 border-ink-300 opacity-0 group-hover:opacity-100 hover:border-brand-500'
+            }`}
           >
             {selected && <Check size={11} strokeWidth={3} />}
           </span>
-        )}
-        <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
-          <Icon size={14} />
         </div>
         <div className="flex-1 min-w-0 text-[0.8125rem] font-semibold text-ink-900 truncate" title={source.name}>
           {source.name}
@@ -392,24 +455,22 @@ function SourceRow({
           {health && <HealthDot health={health} />}
         </div>
         <div className="text-[0.75rem] text-ink-400 tabular-nums shrink-0 w-24 text-right">
-          {formatDate(source.createdAt)}
+          {formatDate(source.displayDate ?? source.createdAt)}
         </div>
-        {!selectMode && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-            className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-opacity cursor-pointer shrink-0 ${
-              menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
-            }`}
-            aria-label="Source actions"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-          >
-            <MoreHorizontal size={15} />
-          </span>
-        )}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-opacity cursor-pointer shrink-0 ${
+            menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+          }`}
+          aria-label="Source actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <MoreHorizontal size={15} />
+        </span>
       </button>
       {menuOpen && (
         <SourceMenu
@@ -710,9 +771,18 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
       if (match) setActiveSource(match);
     },
   }), []);
-  // Bulk-select state. selectMode reveals checkboxes; selectedIds tracks chosen ids.
-  const [selectMode, setSelectMode] = useState(false);
+  // Selection state. Mode is derived: any time at least one source is
+  // selected, the UI treats the surface as "in selection mode" — checkboxes
+  // become persistent on every card and the bulk bar surfaces. There's no
+  // separate `selectMode` flag because hover-to-reveal handles the entry.
+  // lastSelectedId is the anchor for Shift+Click range selection.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const isSelecting = selectedIds.size > 0;
+  // Page-size limit applied to the flat (pre-bucket) visible list. "Load more
+  // data" expands by another PAGE_SIZE; resets to PAGE_SIZE on tab/search/date
+  // changes so users don't carry a deep scroll into a fresh slice.
+  const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   // View mode — grid (rich tiles) vs list (dense rows). Persisted to localStorage.
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'grid';
@@ -842,7 +912,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     const lastAdded = sources
       .map(s => s.createdAt)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
-    const degraded = sources.filter(s => INTEGRATED_TYPES.includes(s.type) && integrationHealth(s.id) === 'degraded');
+    const degraded = sources.filter(s => INTEGRATED_TYPES.includes(s.type) && integrationHealth(s) === 'degraded');
     const connectedTypes = Array.from(new Set(sources.map(s => s.type)));
     // Per-type counts. Folders are counted separately on HubStats; for the
     // breakdown card we count files (non-folder) vs folder cards under
@@ -893,8 +963,22 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   // currently-selected sources get queued atomically.
   const requestBulkRemove = () => {
     const snapshots = sources.filter(s => selectedIds.has(s.id));
-    if (snapshots.length === 0) { exitSelectMode(); return; }
+    if (snapshots.length === 0) { clearSelection(); return; }
     setPendingRemove(snapshots);
+  };
+
+  // Bulk path: bulk action bar's "Add to chat" button. Placeholder action —
+  // surfaces a toast confirming the intent; the actual chat-attach flow lives
+  // in the chat composer's @-mention model and will be wired once the back-
+  // end-attach API exists.
+  const addSelectedToChat = () => {
+    const n = selectedIds.size;
+    if (n === 0) return;
+    addToast({
+      type: 'success',
+      message: `Started a new chat with ${n} ${n === 1 ? 'source' : 'sources'} attached.`,
+    });
+    clearSelection();
   };
 
   // Confirmed: actually remove + show toast with Undo so a misclick on the
@@ -915,20 +999,53 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
       action: { label: 'Undo', onClick: () => knowledge.addMany(snapshots) },
     });
     setPendingRemove(null);
-    if (selectMode) exitSelectMode();
+    clearSelection();
   };
 
-  const toggleSelect = (id: string) => {
+  // Toggle a single source. With `shift`, extend the range from the last
+  // selected id through this one (in the rendered/visible order). Without
+  // `shift`, behave as a normal toggle and update the range anchor.
+  const toggleSelect = (id: string, opts?: { shift?: boolean }) => {
+    if (opts?.shift && lastSelectedId && lastSelectedId !== id) {
+      const order = paginatedVisible.map(s => s.id);
+      const i1 = order.indexOf(lastSelectedId);
+      const i2 = order.indexOf(id);
+      if (i1 >= 0 && i2 >= 0) {
+        const [lo, hi] = i1 < i2 ? [i1, i2] : [i2, i1];
+        setSelectedIds(prev => {
+          const next = new Set(prev);
+          for (let i = lo; i <= hi; i++) next.add(order[i]);
+          return next;
+        });
+        // Anchor stays at the original lastSelectedId so a follow-up shift
+        // can extend further from the same start point.
+        return;
+      }
+    }
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    setLastSelectedId(id);
   };
 
-  const exitSelectMode = () => {
-    setSelectMode(false);
+  // Per-bucket "Select all" — flip every item in the bucket on if any is
+  // unselected; otherwise clear them all.
+  const toggleBucketSelect = (items: DataSource[]) => {
+    const allIn = items.every(d => selectedIds.has(d.id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allIn) items.forEach(d => next.delete(d.id));
+      else items.forEach(d => next.add(d.id));
+      return next;
+    });
+    if (!allIn && items.length > 0) setLastSelectedId(items[items.length - 1].id);
+  };
+
+  const clearSelection = () => {
     setSelectedIds(new Set());
+    setLastSelectedId(null);
   };
 
   // Reset search + date filter on tab switch so each tab opens "fresh". Avoids
@@ -936,10 +1053,32 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   useEffect(() => {
     setSearch('');
     setDateFilter(DEFAULT_DATE_FILTER);
-    // Exiting select-mode on tab change keeps the bulk bar coherent with what's visible.
-    exitSelectMode();
+    setVisibleLimit(PAGE_SIZE);
+    // Clearing selection on tab change keeps the bulk bar coherent with what's visible.
+    clearSelection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // Esc clears the current selection — the conventional way out of selection
+  // mode when there's no explicit "Done" button. Skipped while the source
+  // detail panel is open (Esc there belongs to the panel's own dismiss).
+  useEffect(() => {
+    if (!isSelecting || activeSource) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearSelection();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSelecting, activeSource]);
+
+  // Reset Load-more pagination whenever the filter set changes — otherwise a
+  // user who paged deep, then typed in the search, would see a smaller set
+  // still capped at the previous expanded limit (no visual problem, just
+  // confusing when "Load more" appears for a narrow result).
+  useEffect(() => {
+    setVisibleLimit(PAGE_SIZE);
+  }, [search, dateFilter]);
 
   // First-run hint: when sources transitions from 0 → 1, nudge with the @-mention pattern.
   useEffect(() => {
@@ -954,11 +1093,12 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   }, [sources.length]);
 
 
-  // Keep selectedIds in sync with the actual source list — drop ids for sources
-  // that have been removed (e.g. via undo-rollback or filter switching).
+  // Keep selectedIds + range anchor in sync with the actual source list —
+  // drop ids for sources that have been removed (undo-rollback, deletion).
   useEffect(() => {
-    if (selectedIds.size === 0) return;
     const ids = new Set(sources.map(s => s.id));
+    if (lastSelectedId && !ids.has(lastSelectedId)) setLastSelectedId(null);
+    if (selectedIds.size === 0) return;
     let changed = false;
     const next = new Set<string>();
     selectedIds.forEach(id => { if (ids.has(id)) next.add(id); else changed = true; });
@@ -1076,7 +1216,9 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
   // Always group by relative-date buckets (Today / Last 7 days / Earlier).
   // Sort is implicit: newest-first within and across buckets.
-  const buckets = bucketByDate(visible);
+  const paginatedVisible = useMemo(() => visible.slice(0, visibleLimit), [visible, visibleLimit]);
+  const buckets = bucketByDate(paginatedVisible);
+  const hasMore = visible.length > visibleLimit;
 
   // ── Demo override: loading skeleton ──────────────────────────────────────
   if (displayMode === 'loading') {
@@ -1122,7 +1264,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           onConfirm={handlePickerConfirm}
-          title="Add data"
+          title="Add data source"
           confirmLabel="Add"
           mode="kh-add"
         />
@@ -1132,9 +1274,10 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
   return (
     <div className="space-y-5">
-      {/* ── Top row: filter segmented control LEFT + primary CTA RIGHT.
-          Container has a subtle outline + faint canvas-elevated bg (the
-          "track"); active pill is raised inside with white bg + border. */}
+      {/* ── Top row: filter pills LEFT + primary CTA RIGHT. Pill + CTA styles
+          mirror the platform pattern (see AutomationPortfolioView /
+          EngagementLibraryView) so the page reads as native rather than
+          a one-off. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map(t => {
@@ -1171,31 +1314,31 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             );
           })}
         </div>
-        {/* PRIMARY CTA — same row as filter pills, right-aligned. Brand-filled
-            with brand-tinted shadow lift. */}
+        {/* Primary CTA — matches the DashboardListPage "Create Dashboard"
+            button: solid brand-600, no gradient, simple color-shift hover. */}
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          title="Add source (N)"
-          className="shrink-0 inline-flex items-center gap-2 px-5 h-10 rounded-2xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-[0.875rem] font-semibold shadow-[0_1px_2px_rgb(106_18_205_/_0.20),0_4px_12px_rgb(106_18_205_/_0.15)] hover:shadow-[0_1px_2px_rgb(106_18_205_/_0.28),0_6px_18px_rgb(106_18_205_/_0.22)] transition-all cursor-pointer"
+          className="shrink-0 flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
-          <Plus size={16} />
+          <Plus size={14} />
           Add source
         </button>
       </div>
 
-      {/* ── One-row toolbar — h-9 across the board (matches DateFilterPicker).
-          Add source is the only brand-filled primary CTA with subtle brand-
-          tinted shadow for "lift", matching Dashboard's recipe. */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[14rem] max-w-xl">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+      {/* ── Toolbar — search + "All time" picker. Field styles mirror the
+          DashboardListPage search exactly (rounded-md, bg-canvas-elevated,
+          py-2, ink-800 text, brand-300 focus border) so the page sits in
+          the same visual family. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[14rem]">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
           <input
             type="text"
             placeholder={`Search ${tab === 'all' ? 'all sources' : TABS.find(t => t.id === tab)!.label.toLowerCase()}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-9 h-10 rounded-xl border border-transparent bg-paper-50 text-[0.875rem] text-ink-900 placeholder:text-ink-400 hover:bg-paper-100/70 focus:outline-none focus:bg-canvas-elevated focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 transition-all"
+            className="w-full pl-9 pr-9 py-2 border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 transition-all"
           />
           {search && (
             <button
@@ -1209,18 +1352,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           )}
         </div>
 
-        <DateFilterPicker
-          filter={dateFilter}
-          open={dateOpen}
-          onToggle={() => setDateOpen(p => !p)}
-          onClose={() => setDateOpen(false)}
-          onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
-          today={TODAY}
-        />
-
-        {/* Grid / list toggle — segmented pair on the same white-with-border
-            container as the rest of the toolbar. Active button gets a soft
-            brand-tinted pill so the choice reads clearly. */}
         <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <button
             type="button"
@@ -1248,19 +1379,14 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           </button>
         </div>
 
-        <Button
-          variant="outline"
-          size="md"
-          leftIcon={selectMode ? <X size={13} /> : <CheckSquare size={13} />}
-          onClick={() => {
-            if (selectMode) exitSelectMode();
-            else setSelectMode(true);
-          }}
-        >
-          {selectMode ? 'Done' : 'Select'}
-        </Button>
-        {/* Primary "+ Add source" CTA lives in the page header now (matches
-            Dashboard pattern). Toolbar only carries browse/view controls. */}
+        <DateFilterPicker
+          filter={dateFilter}
+          open={dateOpen}
+          onToggle={() => setDateOpen(p => !p)}
+          onClose={() => setDateOpen(false)}
+          onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
+          today={TODAY}
+        />
       </div>
 
       {/* ── Active filter chips — single inline strip when filters are on ── */}
@@ -1312,13 +1438,30 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             />
           )}
 
-          {buckets.map(b => (
-            <div key={b.id}>
-              {/* Bucket header — friendly mixed-case label, no mono/uppercase.
-                  Matches the design reference: "Today · 50 items". */}
-              <div className="text-[0.875rem] font-medium text-ink-800 tabular-nums mb-4">
-                {b.label}
-                <span className="text-ink-400 ml-1.5">· {b.items.length} {b.items.length === 1 ? 'item' : 'items'}</span>
+          {buckets.map(b => {
+            const allInBucket = b.items.length > 0 && b.items.every(d => selectedIds.has(d.id));
+            const anyInBucket = b.items.some(d => selectedIds.has(d.id));
+            return (
+            <div key={b.id} className="group/bucket">
+              {/* Bucket header — label + count on left, per-bucket Select all
+                  link on right. The link surfaces persistently while selecting,
+                  and on hover otherwise. Toggles between "Select all" and
+                  "Clear" depending on bucket state. */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-[0.875rem] font-medium text-ink-800 tabular-nums">
+                  {b.label}
+                  <span className="text-ink-400 ml-1.5">· {b.items.length}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleBucketSelect(b.items)}
+                  className={`text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer transition-opacity ${
+                    isSelecting ? 'opacity-100' : 'opacity-0 group-hover/bucket:opacity-100 focus-visible:opacity-100'
+                  }`}
+                  aria-label={allInBucket ? `Clear selection in ${b.label}` : `Select all in ${b.label}`}
+                >
+                  {allInBucket ? 'Clear' : anyInBucket ? 'Select all' : 'Select all'}
+                </button>
               </div>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1330,7 +1473,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       onOpen={() => setActiveSource(d)}
                       onRemove={requestRemove}
                       onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
-                      selectMode={selectMode}
+                      isSelecting={isSelecting}
                       selected={selectedIds.has(d.id)}
                       onToggleSelect={toggleSelect}
                     />
@@ -1346,7 +1489,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       onOpen={() => setActiveSource(d)}
                       onRemove={requestRemove}
                       onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
-                      selectMode={selectMode}
+                      isSelecting={isSelecting}
                       selected={selectedIds.has(d.id)}
                       onToggleSelect={toggleSelect}
                     />
@@ -1354,15 +1497,28 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Result count footer — "Showing X of Y sources". Centered below
-          the grid. Helps users orient when filtered. */}
+      {/* ── Result count + "Load more data". Centered below the grid. The
+          count reflects what's actually rendered ("9 of 1602") so users know
+          there's more to fetch — and the button reveals the next page. */}
       {sources.length > 0 && (
-        <div className="text-center text-[0.8125rem] text-ink-500 pt-2 tabular-nums">
-          Showing <span className="font-semibold text-ink-700">{visible.length}</span> of <span className="font-semibold text-ink-700">{sources.length}</span> {sources.length === 1 ? 'source' : 'sources'}
+        <div className="flex flex-col items-center gap-4 pt-2">
+          <div className="text-[0.8125rem] text-ink-500 tabular-nums">
+            Showing <span className="font-semibold text-ink-700">{paginatedVisible.length}</span> of <span className="font-semibold text-ink-700">{sources.length}</span> {sources.length === 1 ? 'source' : 'sources'}
+          </div>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setVisibleLimit(l => l + PAGE_SIZE)}
+              className="inline-flex items-center px-6 h-11 rounded-2xl bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-paper-50 hover:border-ink-300 transition-colors cursor-pointer"
+            >
+              Load more data
+            </button>
+          )}
         </div>
       )}
 
@@ -1371,7 +1527,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onConfirm={handlePickerConfirm}
-        title="Add data"
+        title="Add data source"
         confirmLabel="Add"
         mode="kh-add"
       />
@@ -1421,33 +1577,58 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
       </AnimatePresence>
 
       {/* ── Sticky bulk action bar ──
-          Surfaces once a card is selected. Label adapts (Remove vs Disconnect)
-          based on whether every selected source is integrated. */}
+          Surfaces whenever the user has anything selected. Three actions
+          today: Add to chat (works for any source), Remove or Disconnect
+          (verb adapts to whether every selected source is an integration),
+          and a quiet Cancel/×. */}
       <AnimatePresence>
-        {selectMode && selectedIds.size > 0 && (() => {
+        {isSelecting && (() => {
           const selected = sources.filter(s => selectedIds.has(s.id));
           const allIntegrated = selected.length > 0 && selected.every(s => INTEGRATED_TYPES.includes(s.type));
           return (
             <motion.div
               key="bulk-bar"
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-3 py-2 rounded-lg bg-canvas-elevated border border-canvas-border shadow-md"
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+              role="toolbar"
+              aria-label="Bulk actions for selected sources"
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-2xl bg-ink-900 text-paper-0 shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-ink-800/60"
             >
-              <span className="text-[0.75rem] font-medium text-ink-800 tabular-nums pl-1">
+              <span className="text-[0.8125rem] font-semibold tabular-nums">
                 {selectedIds.size} selected
               </span>
-              <div className="w-px h-5 bg-canvas-border" aria-hidden />
-              <Button variant="ghost" onClick={exitSelectMode}>Cancel</Button>
-              <Button
-                variant="destructive"
-                leftIcon={allIntegrated ? <Unplug size={13} /> : <Trash2 size={13} />}
-                onClick={requestBulkRemove}
+              <div className="w-px h-5 bg-ink-700/60 mx-1" aria-hidden />
+              <button
+                type="button"
+                onClick={addSelectedToChat}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[0.8125rem] font-medium text-paper-0/90 hover:text-paper-0 hover:bg-ink-800 cursor-pointer transition-colors"
               >
+                <MessageSquare size={14} />
+                Add to chat
+              </button>
+              <button
+                type="button"
+                onClick={requestBulkRemove}
+                className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[0.8125rem] font-medium cursor-pointer transition-colors ${
+                  allIntegrated
+                    ? 'text-paper-0/90 hover:text-paper-0 hover:bg-ink-800'
+                    : 'text-risk-300 hover:text-paper-0 hover:bg-risk-700'
+                }`}
+              >
+                {allIntegrated ? <Unplug size={14} /> : <Trash2 size={14} />}
                 {allIntegrated ? 'Disconnect' : 'Remove'}
-              </Button>
+              </button>
+              <div className="w-px h-5 bg-ink-700/60 mx-1" aria-hidden />
+              <button
+                type="button"
+                onClick={clearSelection}
+                aria-label="Cancel selection"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-paper-0/70 hover:text-paper-0 hover:bg-ink-800 cursor-pointer transition-colors"
+              >
+                <X size={15} />
+              </button>
             </motion.div>
           );
         })()}

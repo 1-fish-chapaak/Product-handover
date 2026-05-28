@@ -46,7 +46,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import type { DataSource } from '../components/data-sources/sources';
+import { TODAY, type DataSource } from '../components/data-sources/sources';
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -79,13 +79,71 @@ export interface KnowledgeSourcesAPI {
 
 // ─── localStorage impl (today) ──────────────────────────────────────────────
 
-/** Versioned key so future schema changes can ignore old data without crashing. */
-const STORAGE_KEY = 'kh:sources:v1';
+/** Versioned key so future schema changes can ignore old data without crashing.
+ *  v3 adds `health` (integration override) and ships a much wider seed
+ *  catalogue covering every source type + edge cases (0 B, GB, very-long
+ *  names, degraded integration). */
+const STORAGE_KEY = 'kh:sources:v3';
+
+// First-run seed — the catalog the user sees before they've added anything.
+// Mirrors the reference design's example surface: a handful of recent files,
+// a folder, and a connected database. Dates are computed at module load so
+// the items always land in the "Today" bucket on first run.
+//
+// IMPORTANT: only used when localStorage has NEVER been written. Once the
+// user adds/removes anything, their stored list wins — clearing the catalog
+// to empty stays empty.
+function makeSeedSources(): DataSource[] {
+  // Anchor seed timestamps to TODAY noon (the app's reference "now") so the
+  // top six items land cleanly in the Today bucket. Older entries fan out
+  // across "Last 7 days" and "Earlier" so the bucket breakdown looks real.
+  // When the production wiring lands, swap this for Date.now().
+  const ref = TODAY.getTime() + 12 * 60 * 60 * 1000;
+  const MIN = 60 * 1000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  return [
+    // ── TODAY (6) — exact reference match ────────────────────────────────
+    { id: 'seed-csv',     name: 'Department_Audit.csv',       type: 'file',                  subtype: 'CSV · 815 B',         createdAt: new Date(ref -  10 * MIN).toISOString() },
+    { id: 'seed-pdf-1',   name: 'Employee_Audit_Details.pdf', type: 'file',                  subtype: 'PDF · 4.2 KB',        createdAt: new Date(ref -  20 * MIN).toISOString() },
+    { id: 'seed-xlsx',    name: 'drill-test (1).xlsx',        type: 'file',                  subtype: 'XLSX · 77.1 KB',      createdAt: new Date(ref -  30 * MIN).toISOString() },
+    { id: 'seed-pdf-2',   name: '1900035291 (1).pdf',         type: 'file',                  subtype: 'PDF · 305.7 KB',      createdAt: new Date(ref -  40 * MIN).toISOString() },
+    { id: 'seed-folder',  name: 'Internal_Audit_Archive',     type: 'file', isFolder: true,  subtype: 'Folder · 12 Files',   createdAt: new Date(ref -  50 * MIN).toISOString(), displayDate: '2026-06-12T12:00:00.000Z' },
+    { id: 'seed-db',      name: 'Enterprise_Main_DB',         type: 'database',              subtype: 'SQL · production',    createdAt: new Date(ref -  60 * MIN).toISOString(), health: 'healthy' },
+
+    // ── LAST 7 DAYS (10) — mixed formats, sizes, and source types ────────
+    { id: 'seed-l-1',     name: 'SOX_Q1_Controls.xlsx',       type: 'file',                  subtype: 'XLSX · 1.2 MB',       createdAt: new Date(ref -  1 * DAY -  2 * HOUR).toISOString() },
+    { id: 'seed-l-2',     name: 'Vendor_Risk_Assessment.pdf', type: 'file',                  subtype: 'PDF · 884 KB',        createdAt: new Date(ref -  2 * DAY).toISOString() },
+    { id: 'seed-l-3',     name: 'Snowflake_Finance',          type: 'database',              subtype: 'Snowflake · finance', createdAt: new Date(ref -  2 * DAY -  4 * HOUR).toISOString(), health: 'degraded' },
+    { id: 'seed-l-4',     name: 'Compliance_Report_Apr.pdf',  type: 'file',                  subtype: 'PDF · 1.4 MB',        createdAt: new Date(ref -  3 * DAY).toISOString() },
+    { id: 'seed-l-5',     name: 'Risk_Register.xlsx',         type: 'file',                  subtype: 'XLSX · 612 KB',       createdAt: new Date(ref -  3 * DAY -  5 * HOUR).toISOString() },
+    { id: 'seed-l-6',     name: 'Q1_Policies',                type: 'file', isFolder: true,  subtype: 'Folder · 8 Files',    createdAt: new Date(ref -  4 * DAY).toISOString() },
+    { id: 'seed-l-7',     name: 'Workday_HRIS',               type: 'api',                   subtype: 'Workday · v2 REST',   createdAt: new Date(ref -  4 * DAY -  6 * HOUR).toISOString(), health: 'healthy' },
+    { id: 'seed-l-8',     name: 'chat_db59abca.xlsx',         type: 'file',                  subtype: 'XLSX · 948.9 KB',     createdAt: new Date(ref -  5 * DAY).toISOString() },
+    { id: 'seed-l-9',     name: '1. 21 to 30 Jan (5).xlsx',   type: 'file',                  subtype: 'XLSX · 18.1 MB',      createdAt: new Date(ref -  5 * DAY -  3 * HOUR).toISOString() },
+    { id: 'seed-l-10',    name: 'Additonal Flying Allowances.csv', type: 'file',             subtype: 'CSV · 537 B',         createdAt: new Date(ref -  6 * DAY).toISOString() },
+
+    // ── EARLIER (8) — older, plus the edge-case rows ──────────────────────
+    { id: 'seed-e-1',     name: 'SOC2_Type_II_Report.pdf',    type: 'file',                  subtype: 'PDF · 3.2 MB',        createdAt: new Date(ref - 10 * DAY).toISOString() },
+    { id: 'seed-e-2',     name: 'Postgres_AuditLogs',         type: 'database',              subtype: 'PostgreSQL · audit',  createdAt: new Date(ref - 14 * DAY).toISOString(), health: 'healthy' },
+    { id: 'seed-e-3',     name: 'Annual_Audit_Plan_FY26.docx', type: 'file',                 subtype: 'DOC · 245 KB',        createdAt: new Date(ref - 18 * DAY).toISOString() },
+    { id: 'seed-e-4',     name: 'SharePoint_Compliance',      type: 'cloud',                 subtype: 'SharePoint · /compliance', createdAt: new Date(ref - 22 * DAY).toISOString(), health: 'healthy' },
+    { id: 'seed-e-5',     name: 'Test_Workpapers',            type: 'file', isFolder: true,  subtype: 'Folder · 24 Files',   createdAt: new Date(ref - 28 * DAY).toISOString() },
+    // ── Edge cases ───────────────────────────────────────────────────────
+    { id: 'seed-edge-empty', name: 'corrupted_data.csv',      type: 'file',                  subtype: 'CSV · 0 B',           createdAt: new Date(ref - 35 * DAY).toISOString() },
+    { id: 'seed-edge-long',  name: 'very_long_file_name_that_should_truncate_gracefully_in_the_card_layout.pdf', type: 'file', subtype: 'PDF · 12.4 MB', createdAt: new Date(ref - 42 * DAY).toISOString() },
+    { id: 'seed-edge-gb',    name: 'quarterly_data_dump.xlsx', type: 'file',                 subtype: 'XLSX · 1.5 GB',       createdAt: new Date(ref - 60 * DAY).toISOString() },
+  ];
+}
 
 function loadFromLocal(): DataSource[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
+    // Distinct from "[]": a missing key means the user has never interacted
+    // with the catalog. Seed in that case so the surface isn't blank-and-
+    // confusing on first load. Empty-but-present means the user cleared it.
+    if (raw === null) return makeSeedSources();
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];

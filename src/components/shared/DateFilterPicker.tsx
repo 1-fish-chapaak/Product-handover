@@ -94,15 +94,15 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     <div className="relative">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-1.5 px-3 h-9 rounded-md border text-[0.75rem] font-medium transition-colors cursor-pointer ${
+        className={`flex items-center gap-2 px-3 h-9 rounded-md border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
             : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
         }`}
       >
-        <Calendar size={12} />
+        <Calendar size={14} />
         {label}
-        <ChevronDown size={12} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (

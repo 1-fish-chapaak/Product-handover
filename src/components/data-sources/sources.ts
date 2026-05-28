@@ -14,15 +14,24 @@ export interface DataSource {
   /** Sub-detail shown under the name (file format, db engine, api method, cloud provider, etc.) */
   subtype: string;
   createdAt: string; // ISO date
+  /** Optional override for the date shown on the card. When set, the card
+   *  renders this date instead of `createdAt` — useful for folders whose
+   *  "last modified" / "indexed at" reads differently from when they were
+   *  added to the catalog. Bucketing + sort still use `createdAt`. */
+  displayDate?: string; // ISO date
   /** Available columns this source exposes. For databases the full schema
    *  lives in DB_SCHEMAS keyed by id; this flat list is the file equivalent
    *  (and the fallback surface for non-DB sources). */
   columns?: string[];
   /** True for folder-aggregate sources (one card per uploaded folder). */
   isFolder?: boolean;
+  /** Optional explicit health for integrations. When set, overrides the
+   *  hash-based fallback so seeded data can force a "Needs reconnection"
+   *  card for demos. Ignored for non-integration source types. */
+  health?: 'healthy' | 'degraded';
 }
 
-export const TODAY = new Date('2026-04-23');
+export const TODAY = new Date('2026-05-28');
 
 const dayOffset = (n: number): string => {
   const d = new Date(TODAY);
@@ -115,5 +124,5 @@ export const TYPE_META: Record<SourceType, { icon: React.ElementType; tone: stri
 };
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
