@@ -192,15 +192,19 @@ export default function KnowledgeHubView() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6"
           >
-            <div className="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-500">
-              Knowledge Hub <span className="text-ink-300 mx-1">·</span> {activeTabLabel}
+            {/* Header — breadcrumb · title · subhead. Add source CTA lives
+                on the filter row inside DataSourcesView (matches reference). */}
+            <div className="min-w-0">
+              <div className="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-500">
+                Knowledge Hub <span className="text-ink-300 mx-1">·</span> {activeTabLabel}
+              </div>
+              <h1 className="mt-2 font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+                Knowledge Hub
+              </h1>
+              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+                Sources IRA can read, and what IRA has learned from working with you.
+              </p>
             </div>
-            <h1 className="mt-2 font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
-              Knowledge Hub
-            </h1>
-            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
-              Sources IRA can read, and what IRA has learned from working with you.
-            </p>
           </motion.div>
 
           {/* Tabs at the bottom of the strip — strip's border-b serves as

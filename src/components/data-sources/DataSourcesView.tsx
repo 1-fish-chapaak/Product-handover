@@ -201,13 +201,18 @@ function useCardActions(source: DataSource, onOpen: () => void, onRemove: (id: s
   return { handleRemove, handleCardClick, isIntegrated };
 }
 
-// Health dot for integrations — outlined, single color, three-state vocabulary.
+// Health pill for integrations — small status chip with colored dot + label.
+// Reads stronger than a single grey "healthy" text label so the card's
+// status is scannable at a glance.
 function HealthDot({ health }: { health: 'healthy' | 'degraded' }) {
-  const cls = health === 'healthy' ? 'bg-compliant' : 'bg-mitigated';
+  const tone = health === 'healthy'
+    ? 'bg-compliant-50 text-compliant-700'
+    : 'bg-mitigated-50 text-mitigated-700';
+  const dot = health === 'healthy' ? 'bg-compliant' : 'bg-mitigated';
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`w-1.5 h-1.5 rounded-full ${cls}`} aria-hidden />
-      <span className="text-[0.6875rem] text-ink-500 capitalize">{health}</span>
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold uppercase tracking-wider ${tone}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
+      {health}
     </span>
   );
 }
@@ -224,21 +229,45 @@ function SourceTile({
   source, onOpen, onRemove, onRenameInDetail,
   selectMode, selected, onToggleSelect,
 }: SourceCardProps) {
-  const { icon: TypeIcon, tone: typeTone, label: typeLabel } = TYPE_META[source.type];
+  const { icon: TypeIcon } = TYPE_META[source.type];
   const Icon = source.isFolder ? FolderOpen : TypeIcon;
-  const tone = source.isFolder ? 'text-evidence-700 bg-evidence-50' : typeTone;
+  // All icon tiles use the brand tone — consistent visual identity matching
+  // the platform's design reference. Type identity comes from icon + footer
+  // label, not tile color.
+  const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
     source, onOpen, onRemove, selectMode, onToggleSelect,
   );
   const health = isIntegrated ? integrationHealth(source.id) : null;
 
+  // Uppercase format label for the footer — extracted from the subtype's
+  // first token for files ("PDF · 2.4 MB" → "PDF"), or canonical name for
+  // folders/integrations.
+  const formatLabel = source.isFolder
+    ? 'FOLDER'
+    : source.type === 'file'
+      ? (source.subtype.split('·')[0] ?? 'FILE').trim().toUpperCase()
+      : source.type === 'database'
+        ? 'SQL'
+        : source.type === 'api'
+          ? 'API'
+          : source.type === 'cloud'
+            ? 'CLOUD'
+            : 'SESSION';
+
+  // For files/folders: pull the size/count tail (everything after the format)
+  // so the footer reads "PDF · 4.2 KB · May 28, 2026" cleanly.
+  const sizeTail = !isIntegrated
+    ? source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ')
+    : '';
+
   return (
     <div className="relative">
       <button
         type="button"
         onClick={handleCardClick}
-        className={`group w-full flex items-start gap-3 px-4 py-4 rounded-xl bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
+        className={`group w-full flex items-start gap-3.5 px-5 py-5 rounded-2xl bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
           selected
             ? 'border-brand-500 bg-brand-50/40 shadow-[0_2px_8px_rgb(106_18_205_/_0.10)]'
             : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_4px_16px_rgb(15_8_30_/_0.06)]'
@@ -254,23 +283,32 @@ function SourceTile({
             {selected && <Check size={11} strokeWidth={3} />}
           </span>
         )}
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.06] ${tone}`}>
-          <Icon size={17} />
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
+          <Icon size={20} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="text-[0.875rem] font-semibold text-ink-900 truncate" title={source.name}>{source.name}</div>
+          <div className="text-[0.9375rem] font-semibold text-ink-900 truncate leading-tight" title={source.name}>
+            {source.name}
           </div>
-          <div className="text-[0.75rem] text-ink-500 mt-0.5 tabular-nums truncate">
-            {source.subtype}
-          </div>
-          {/* Footer line — health/last sync for integrations, type/date for files. */}
-          <div className="mt-2 flex items-center gap-2 text-[0.6875rem] text-ink-400 tabular-nums">
-            {health && <HealthDot health={health} />}
-            {health && <span className="text-ink-300" aria-hidden>·</span>}
-            <span>{isIntegrated ? `Synced ${formatRel(source.createdAt, TODAY)}` : typeLabel}</span>
+          {/* Single-line footer: FORMAT · size/count · date    OR    FORMAT · Connected
+              Uppercase format label + plain text dates — matches the reference
+              design language. */}
+          <div className="mt-2 flex items-center gap-1.5 text-[0.75rem] text-ink-500 tabular-nums flex-wrap">
+            <span className="font-semibold text-ink-700 uppercase tracking-wide text-[0.6875rem]">{formatLabel}</span>
             <span className="text-ink-300" aria-hidden>·</span>
-            <span>{formatDate(source.createdAt)}</span>
+            {isIntegrated ? (
+              <span className={`font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-brand-700'}`}>
+                {health === 'degraded' ? 'Needs reconnection' : 'Connected'}
+              </span>
+            ) : (
+              <>
+                {sizeTail && <>
+                  <span>{sizeTail}</span>
+                  <span className="text-ink-300" aria-hidden>·</span>
+                </>}
+                <span>{formatDate(source.createdAt)}</span>
+              </>
+            )}
           </div>
         </div>
         {!selectMode && (
@@ -1094,46 +1132,56 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
   return (
     <div className="space-y-5">
-      {/* ── Filter segmented control — connected pills inside one container.
-          Visually DIFFERENT from the underlined main tabs above so the
-          hierarchy reads "main tabs > filter control". Active button rides
-          a layoutId-animated white pill within the container. */}
-      <div className="inline-flex items-center p-1 rounded-xl border border-canvas-border bg-paper-50 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map(t => {
-          const Icon = t.icon;
-          const isActive = tab === t.id;
-          const count = tabCounts[t.id];
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`shrink-0 relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.8125rem] transition-colors cursor-pointer ${
-                isActive
-                  ? 'text-brand-700 font-semibold'
-                  : 'text-ink-600 font-medium hover:text-ink-900'
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="kh-filter-pill-bg"
-                  className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
-              )}
-              <span className="relative z-10 flex items-center gap-2">
-                <Icon size={14} className={isActive ? 'text-brand-700' : 'text-ink-500'} />
-                <span>{t.label}</span>
-                <span
-                  className={`tabular-nums text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${
-                    isActive ? 'bg-brand-100 text-brand-700' : 'bg-canvas-elevated text-ink-500'
-                  }`}
-                >
-                  {count}
+      {/* ── Top row: filter segmented control LEFT + primary CTA RIGHT.
+          Container has a subtle outline + faint canvas-elevated bg (the
+          "track"); active pill is raised inside with white bg + border. */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map(t => {
+            const Icon = t.icon;
+            const isActive = tab === t.id;
+            const count = tabCounts[t.id];
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`shrink-0 relative inline-flex items-center gap-2.5 px-3.5 h-9 rounded-xl text-[0.875rem] transition-colors cursor-pointer ${
+                  isActive
+                    ? 'text-brand-700 font-semibold'
+                    : 'text-ink-700 font-medium hover:text-ink-900'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="kh-filter-pill-bg"
+                    className="absolute inset-0 bg-canvas-elevated rounded-xl shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  <Icon size={15} className={isActive ? 'text-brand-700' : 'text-ink-600'} />
+                  <span>{t.label}</span>
+                  <span className={`tabular-nums font-bold text-[0.8125rem] ${
+                    isActive ? 'text-ink-900' : 'text-ink-500'
+                  }`}>
+                    {count}
+                  </span>
                 </span>
-              </span>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
+        {/* PRIMARY CTA — same row as filter pills, right-aligned. Brand-filled
+            with brand-tinted shadow lift. */}
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          title="Add source (N)"
+          className="shrink-0 inline-flex items-center gap-2 px-5 h-10 rounded-2xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-[0.875rem] font-semibold shadow-[0_1px_2px_rgb(106_18_205_/_0.20),0_4px_12px_rgb(106_18_205_/_0.15)] hover:shadow-[0_1px_2px_rgb(106_18_205_/_0.28),0_6px_18px_rgb(106_18_205_/_0.22)] transition-all cursor-pointer"
+        >
+          <Plus size={16} />
+          Add source
+        </button>
       </div>
 
       {/* ── One-row toolbar — h-9 across the board (matches DateFilterPicker).
@@ -1147,7 +1195,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             placeholder={`Search ${tab === 'all' ? 'all sources' : TABS.find(t => t.id === tab)!.label.toLowerCase()}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-9 h-9 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 transition-all"
+            className="w-full pl-10 pr-9 h-10 rounded-xl border border-transparent bg-paper-50 text-[0.875rem] text-ink-900 placeholder:text-ink-400 hover:bg-paper-100/70 focus:outline-none focus:bg-canvas-elevated focus:border-brand-600 focus:ring-4 focus:ring-brand-600/10 transition-all"
           />
           {search && (
             <button
@@ -1211,24 +1259,8 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         >
           {selectMode ? 'Done' : 'Select'}
         </Button>
-
-        {/* Visual divider — separates browse/view actions from the primary
-            create CTA on the right. */}
-        <div className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
-
-        {/* PRIMARY CTA — exact platform recipe (matches Dashboard's
-            "+ Create Dashboard" and Admin's "+ Invite User"): brand-filled,
-            white text, font-semibold, with a quiet brand-tinted shadow for
-            "lift" so the button reads as the page's primary action. */}
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          title="Add source (N)"
-          className="inline-flex items-center gap-2 px-4 h-9 rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-[0.8125rem] font-semibold shadow-[0_1px_2px_rgb(106_18_205_/_0.18),0_2px_8px_rgb(106_18_205_/_0.08)] hover:shadow-[0_1px_2px_rgb(106_18_205_/_0.25),0_4px_12px_rgb(106_18_205_/_0.15)] transition-all cursor-pointer"
-        >
-          <Plus size={15} />
-          Add source
-        </button>
+        {/* Primary "+ Add source" CTA lives in the page header now (matches
+            Dashboard pattern). Toolbar only carries browse/view controls. */}
       </div>
 
       {/* ── Active filter chips — single inline strip when filters are on ── */}
@@ -1282,10 +1314,11 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
           {buckets.map(b => (
             <div key={b.id}>
-              {/* Bucket header — mono uppercase carries the section opener
-                  on its own. No decorative hairline. */}
-              <div className="text-[0.75rem] font-mono uppercase tracking-wider text-ink-500 tabular-nums mb-3">
-                {b.label} <span className="text-ink-400">· {b.items.length}</span>
+              {/* Bucket header — friendly mixed-case label, no mono/uppercase.
+                  Matches the design reference: "Today · 50 items". */}
+              <div className="text-[0.875rem] font-medium text-ink-800 tabular-nums mb-4">
+                {b.label}
+                <span className="text-ink-400 ml-1.5">· {b.items.length} {b.items.length === 1 ? 'item' : 'items'}</span>
               </div>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1324,6 +1357,14 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           ))}
         </motion.div>
       </AnimatePresence>
+
+      {/* ── Result count footer — "Showing X of Y sources". Centered below
+          the grid. Helps users orient when filtered. */}
+      {sources.length > 0 && (
+        <div className="text-center text-[0.8125rem] text-ink-500 pt-2 tabular-nums">
+          Showing <span className="font-semibold text-ink-700">{visible.length}</span> of <span className="font-semibold text-ink-700">{sources.length}</span> {sources.length === 1 ? 'source' : 'sources'}
+        </div>
+      )}
 
       {/* ── Shared add-data picker — Upload-only in kh-add mode today. ── */}
       <DataPickerModal
