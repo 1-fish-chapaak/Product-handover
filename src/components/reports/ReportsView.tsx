@@ -323,18 +323,18 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Upload Template"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><Upload size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><Upload size={16} /></div>
             <div>
               <h3 className="text-[15px] font-semibold text-text">Upload Template</h3>
               <p className="text-[11px] text-text-muted">Convert a document into a report template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -343,10 +343,10 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <button
                 onClick={() => setStep('selected')}
-                className="w-full border-2 border-dashed border-border-light hover:border-primary/40 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-primary/[0.02] cursor-pointer group"
+                className="w-full border-2 border-dashed border-border-light hover:border-primary/40 rounded-[12px] p-10 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-primary/[0.02] cursor-pointer group"
               >
-                <div className="p-3 bg-primary/5 rounded-2xl group-hover:bg-primary/10 transition-colors">
-                  <Upload size={28} className="text-primary/50 group-hover:text-primary transition-colors" />
+                <div className="p-3 bg-primary/5 rounded-[8px] group-hover:bg-primary/10 transition-colors">
+                  <Upload size={32} className="text-primary/50 group-hover:text-primary transition-colors" />
                 </div>
                 <div className="text-center">
                   <p className="text-[13px] font-medium text-text">Drop your template file here or click to browse</p>
@@ -359,17 +359,17 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           {/* File Selected */}
           {step === 'selected' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-xl">
-                <div className="p-2 bg-primary/10 rounded-lg"><FileText size={18} className="text-primary" /></div>
+              <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-[12px]">
+                <div className="p-2 bg-primary/10 rounded-[8px]"><FileText size={20} className="text-primary" /></div>
                 <div className="flex-1">
                   <p className="text-[13px] font-semibold text-text">SOX_Report_Template.docx</p>
                   <p className="text-[11px] text-text-muted">2.4 MB</p>
                 </div>
-                <CheckCircle2 size={18} className="text-compliant-700" />
+                <CheckCircle2 size={20} className="text-compliant-700" />
               </div>
               <button
                 onClick={() => setStep('converting')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer" style={{ borderRadius: '8px' }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer rounded-[8px]"
               >
                 <Sparkles size={14} /> Convert to Template
               </button>
@@ -403,7 +403,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           {/* Conversion Complete */}
           {step === 'converted' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-              <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-xl">
+              <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-[12px]">
                 <CheckCircle2 size={20} className="text-compliant-700" />
                 <div>
                   <p className="text-[13px] font-semibold text-primary">Template converted!</p>
@@ -420,9 +420,9 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.08 }}
-                      className="flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-lg"
+                      className="flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-[8px]"
                     >
-                      <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">{i + 1}</div>
+                      <div className="w-5 h-5 rounded-[8px] bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">{i + 1}</div>
                       <span className="text-[12px] text-text font-medium">{section}</span>
                     </motion.div>
                   ))}
@@ -434,7 +434,7 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                 <input
                   value={templateName}
                   onChange={e => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" style={{ borderRadius: '8px' }}
+                  className="w-full px-3 py-2.5 border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 rounded-[8px]"
                 />
               </div>
             </motion.div>
@@ -443,10 +443,10 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 
         {step === 'converted' && (
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
             <button
               onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
-              className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+              className="px-5 py-2 bg-primary text-white text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer rounded-[8px]"
             >
               Save Template
             </button>
@@ -473,22 +473,22 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Template Preview"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-xl ${color}`}><Icon size={16} /></div>
+            <div className={`p-2 rounded-[8px] ${color}`}><Icon size={16} /></div>
             <div>
               <h3 className="text-[15px] font-semibold text-text">{template.name}</h3>
               <p className="text-[11px] text-text-muted">{template.category} template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <p className="text-[12.5px] text-text-secondary leading-relaxed">{template.desc}</p>
+          <p className="text-[12px] text-text-secondary leading-relaxed">{template.desc}</p>
 
           <div>
             <label className="text-[12px] font-semibold text-text mb-3 block">Template Structure</label>
@@ -501,9 +501,9 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.06 }}
-                    className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-xl hover:bg-primary/[0.03] transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-[12px] hover:bg-primary/[0.03] transition-colors"
                   >
-                    <div className="p-1.5 rounded-lg bg-white border border-border-light shadow-sm">
+                    <div className="p-1.5 rounded-[8px] bg-white border border-border-light shadow-sm">
                       <SectionIcon size={14} className="text-primary" />
                     </div>
                     <span className="text-[13px] text-text font-medium">{section.name}</span>
@@ -518,13 +518,13 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         <div className="px-6 py-4 border-t border-border-light flex justify-between shrink-0">
           <button
             onClick={() => { onClose(); onEdit(); }}
-            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer"
           >
             <Edit3 size={12} /> Edit Template
           </button>
           <button
             onClick={onUse}
-            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             <Sparkles size={12} /> Use This Template
           </button>
@@ -567,25 +567,25 @@ function ChooseReportModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Choose Report"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[85vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[520px] max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><PackageOpen size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><PackageOpen size={16} /></div>
             <div>
               <h3 className="text-[15px] font-semibold text-text">Choose Report</h3>
               <p className="text-[12px] text-text-muted">Select an existing report or create a new report</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* Search */}
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border-light focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-[8px] border border-border-light focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
             <Search size={14} className="text-text-muted shrink-0" />
             <input
               value={search}
@@ -606,7 +606,7 @@ function ChooseReportModal({
                 <button
                   key={r.id}
                   onClick={() => setSelectedId(r.id)}
-                  className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
+                  className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-[12px] border transition-colors cursor-pointer ${
                     isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border-light hover:border-primary/30 hover:bg-surface-2'
                   }`}
                 >
@@ -630,7 +630,7 @@ function ChooseReportModal({
           {/* Add New Report */}
           <button
             onClick={onAddNew}
-            className="w-full px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
+            className="w-full px-4 py-3 rounded-[8px] bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
           >
             + Add New Report
           </button>
@@ -640,14 +640,14 @@ function ChooseReportModal({
         <div className="px-6 py-4 border-t border-border-light flex items-center gap-3 shrink-0">
           <button
             onClick={onCancel}
-            className="flex-1 px-5 py-2.5 rounded-lg border border-border-light text-text-secondary text-[13px] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
+            className="flex-1 px-5 py-2.5 rounded-[8px] border border-border-light text-text-secondary text-[13px] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
           >
             Back
           </button>
           <button
             onClick={() => { if (selected) onContinue(selected); }}
             disabled={!selected}
-            className="flex-1 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
+            className="flex-1 px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
             title={`Apply "${template.name}"`}
           >
             Continue
@@ -665,7 +665,7 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-xl shadow-xl border border-border-light z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-border-light z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-light">
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
@@ -677,9 +677,9 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
             <button
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
+              className="w-full text-left px-3 py-2.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
             >
-              <div className={`p-1.5 rounded-md ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
@@ -711,7 +711,7 @@ function TemplateSectionRow({
       value={section}
       dragListener={false}
       dragControls={controls}
-      className="group flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-lg"
+      className="group flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-[8px]"
     >
       <button
         onPointerDown={(e) => controls.start(e)}
@@ -720,7 +720,7 @@ function TemplateSectionRow({
       >
         <GripVertical size={12} />
       </button>
-      <div className="p-1 rounded-md bg-white border border-border-light shadow-sm">
+      <div className="p-1 rounded-[8px] bg-white border border-border-light shadow-sm">
         <SectionIcon size={12} className="text-primary" />
       </div>
       <span className="text-[12px] text-text font-medium">{section.name}</span>
@@ -835,25 +835,25 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[600px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><Settings size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><Settings size={16} /></div>
             <div>
               <h3 className="text-[15px] font-semibold text-text">Edit Template</h3>
               <p className="text-[11px] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
             </div>
           </div>
-          <button onClick={attemptClose} aria-label="Close" className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} className="text-text-muted" /></button>
+          <button onClick={attemptClose} aria-label="Close" className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {errors.length > 0 && (
             <div
               role="alert"
-              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12.5px] text-risk-800"
+              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
             >
               <div className="font-semibold mb-1">Please complete the following before saving:</div>
               <ul className="space-y-0.5">
@@ -879,24 +879,24 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           {isCopy ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Template Name</label>
-                <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={14} /> Template Name</label>
+                <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
               <div>
-                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-                <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={14} /> Brand Name</label>
+                <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
             </div>
           ) : (
             <div>
-              <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-              <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+              <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={14} /> Brand Name</label>
+              <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
             </div>
           )}
 
           {/* Theme */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Palette size={13} /> Color Theme</label>
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Palette size={14} /> Color Theme</label>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { name: 'Purple & White', colors: ['#6a12cd', '#f8f9fc'] },
@@ -904,7 +904,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                 { name: 'Teal & Light', colors: ['#0d9488', '#f0fdfa'] },
                 { name: 'Slate & Blue', colors: ['#334155', '#3b82f6'] },
               ].map(t => (
-                <button key={t.name} onClick={() => setTheme(t.name)} className={`p-2.5 rounded-lg border-2 text-center transition-all cursor-pointer ${theme === t.name ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
+                <button key={t.name} onClick={() => setTheme(t.name)} className={`p-2.5 rounded-[12px] border-2 text-center transition-all cursor-pointer ${theme === t.name ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
                   <div className="flex gap-1 justify-center mb-1.5">
                     {t.colors.map((c, i) => <div key={i} className="w-5 h-5 rounded-full border border-white shadow-sm" style={{ background: c }} />)}
                   </div>
@@ -916,21 +916,21 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
 
           {/* Header */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Type size={13} /> Header Text</label>
-            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Type size={14} /> Header Text</label>
+            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Footer */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Layout size={13} /> Footer Text</label>
-            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Layout size={14} /> Footer Text</label>
+            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Page Layout Preview */}
           <div ref={sectionsRef} tabIndex={-1}>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={13} /> Page Layout Preview</label>
-            <div className="border border-border-light rounded-xl p-4 bg-surface-2">
-              <div className="bg-white rounded-lg shadow-sm border border-border-light overflow-hidden flex flex-col">
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={14} /> Page Layout Preview</label>
+            <div className="border border-border-light rounded-[12px] p-4 bg-surface-2">
+              <div className="bg-white rounded-[12px] shadow-sm border border-border-light overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-2.5 bg-primary/5 flex items-center justify-between">
                   <span className="text-[11px] font-bold text-primary">{brand}</span>
@@ -960,12 +960,12 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
           <button
             onClick={attemptClose}
             disabled={isSaving}
-            className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             {isSaving && <Loader2 size={12} className="animate-spin" />}
             {isSaving ? 'Saving…' : isCopy ? 'Save Copy' : 'Save Template'}
@@ -1009,18 +1009,18 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Section nav */}
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
               <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Executive Summary */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
           <p className="text-[12px] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
         </div>
         {/* Control Testing Results — Excel-style */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light flex items-center justify-between">
             <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
             <span className="text-[10px] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
@@ -1056,16 +1056,16 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           </div>
         </div>
         {/* Deficiency Detail */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
               { id: 'DEF-001', control: 'CTR-003', title: 'Vendor Master Change — Missing Dual Approval', severity: 'Significant', status: 'In Remediation', due: 'Mar 31, 2026', owner: 'Deepak Bansal', desc: '7 vendor master changes processed without dual-approval. Includes 3 bank account modifications.' },
               { id: 'DEF-002', control: 'CTR-008', title: 'Journal Entry Override — Approval Bypass', severity: 'Material Weakness', status: 'Evidence Submitted', due: 'Mar 31, 2026', owner: 'Rohan Patel', desc: '7 journal entries posted bypassing approval workflow. Total value: 12.4L. Root cause: system configuration gap.' },
             ].map(d => (
-              <div key={d.id} className="rounded-xl border border-border-light p-4 hover:shadow-sm transition-shadow">
+              <div key={d.id} className="rounded-[12px] border border-border-light p-4 hover:shadow-sm transition-shadow">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-md bg-risk">{d.id}</span>
+                  <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-[8px] bg-risk">{d.id}</span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
                   <span className="text-[10px] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
                 </div>
@@ -1106,13 +1106,13 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
               <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Risk Heatmap */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
           <div className="flex gap-6">
             <div className="flex-1">
@@ -1122,7 +1122,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   [1,2,3,4,5].map(impact => {
                     const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact);
                     return (
-                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-lg flex items-center justify-center text-[9px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
+                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-[8px] flex items-center justify-center text-[9px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
                         {risksInCell.length > 0 ? risksInCell.map(r => r.id.split('-')[1]).join(',') : ''}
                       </div>
                     );
@@ -1142,7 +1142,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           </div>
         </div>
         {/* Risk Register */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
             <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
           </div>
@@ -1162,7 +1162,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 text-text-secondary">{r.process}</td>
                   <td className="px-4 py-2.5 text-center">{r.likelihood}</td>
                   <td className="px-4 py-2.5 text-center">{r.impact}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
+                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-[8px] text-[10px] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
                   <td className="px-4 py-2.5 text-center font-semibold">{r.controls}</td>
                   <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
                 </tr>
@@ -1186,7 +1186,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
               <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
@@ -1194,7 +1194,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Effectiveness Scorecards */}
         <div className="grid grid-cols-4 gap-3">
           {processes.map(p => (
-            <div key={p.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
+            <div key={p.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
               <div className="text-[11px] font-semibold text-text-muted mb-2">{p.name}</div>
               <div className="text-[28px] font-bold text-text leading-none">{p.rate}%</div>
               <div className="text-[10px] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
@@ -1210,7 +1210,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           ))}
         </div>
         {/* Gap Analysis Table */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
             <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
           </div>
@@ -1241,12 +1241,12 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           </table>
         </div>
         {/* Improvement Plan */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
           <div className="space-y-2">
             {['Automate 5 manual detective controls in P2P — target: 98% effectiveness', 'Accelerate S2C control testing — hire 1 contractor for April-June sprint', 'Deploy AI anomaly detection on R2R reconciliation — reduce deficiency rate by 50%', 'Implement continuous monitoring for all preventive controls by Q2'].map((item, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-lg">
-                <span className="text-[9px] font-bold text-primary bg-primary/10 w-5 h-5 rounded-md flex items-center justify-center shrink-0">{i + 1}</span>
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-[8px]">
+                <span className="text-[9px] font-bold text-primary bg-primary/10 w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0">{i + 1}</span>
                 <span className="text-[11px] text-text-secondary leading-relaxed">{item}</span>
               </div>
             ))}
@@ -1268,7 +1268,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
               <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
@@ -1276,7 +1276,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Workflow Performance Cards */}
         <div className="grid grid-cols-2 gap-3">
           {workflows.map(w => (
-            <div key={w.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
+            <div key={w.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[12px] font-semibold text-text">{w.name}</h4>
                 <span className="text-[10px] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
@@ -1301,7 +1301,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           ))}
         </div>
         {/* Exception Breakdown */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
             <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
           </div>
@@ -1343,7 +1343,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
               <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
@@ -1355,7 +1355,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
             { label: 'Controls Effective', value: '48/54', delta: '89%', sub: 'effectiveness rate', color: 'text-compliant-700' },
             { label: 'Audit Progress', value: '58%', delta: 'On track', sub: '54 of 87 controls tested', color: 'text-evidence-700' },
           ].map(m => (
-            <div key={m.label} className="bg-white rounded-xl border border-border-light p-5 text-center">
+            <div key={m.label} className="bg-white rounded-[12px] border border-border-light p-5 text-center">
               <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
               <div className={`text-[32px] font-bold leading-none ${m.color}`}>{m.value}</div>
               <div className="text-[11px] font-semibold text-compliant-700 mt-1">{m.delta}</div>
@@ -1364,7 +1364,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           ))}
         </div>
         {/* Process Breakdown */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
           <div className="space-y-3">
             {[
@@ -1386,12 +1386,12 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           </div>
         </div>
         {/* Strategic Recommendations */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
           <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
           <div className="space-y-2">
             {['Approve additional AI workflow investment for S2C process — projected 3x ROI based on P2P results', 'Remediate DEF-002 (journal entry override) before March 31 — material weakness impacting filing', 'Reallocate Tushar Goel from P2P to S2C support in April — P2P is 72% complete, S2C needs acceleration', 'Expand vendor master monitoring to O2C process — similar risk profile to P2P where it saved 2.4L'].map((rec, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-lg border border-primary/5">
-                <span className="text-[9px] font-bold text-white bg-primary w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-[8px] border border-primary/5">
+                <span className="text-[9px] font-bold text-white bg-primary w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
                 <span className="text-[11px] text-text leading-relaxed">{rec}</span>
               </div>
             ))}
@@ -1406,7 +1406,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
     <div className="space-y-5">
       <div className="flex gap-2 flex-wrap">
         {sections.map((s, i) => (
-          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
             <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
           </div>
         ))}
@@ -1414,9 +1414,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       {sections.map((s) => {
         const SIcon = SECTION_ICONS[s.icon] || FileText;
         return (
-          <div key={s.name} className="bg-white rounded-xl border border-border-light p-5">
+          <div key={s.name} className="bg-white rounded-[12px] border border-border-light p-5">
             <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
-            <div className="h-16 bg-paper-50 rounded-lg flex items-center justify-center text-[11px] text-text-muted border border-dashed border-border-light">
+            <div className="h-16 bg-paper-50 rounded-[12px] flex items-center justify-center text-[11px] text-text-muted border border-dashed border-border-light">
               Section content generated from {report.name} data
             </div>
           </div>
@@ -1515,7 +1515,7 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-md text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
@@ -1539,10 +1539,10 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       }`}
       style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
     >
-      <ShieldAlert size={13} className="shrink-0 relative z-10" />
+      <ShieldAlert size={14} className="shrink-0 relative z-10" />
       <span className="relative z-10">Manage Exceptions</span>
       <ArrowRight
-        size={13}
+        size={14}
         className={`shrink-0 relative z-10 ${launching ? '' : 'transition-transform duration-200 group-hover:translate-x-0.5'}`}
         style={launching ? { animation: 'launch-arrow-eject 340ms cubic-bezier(0.2, 0, 0, 1) forwards' } : undefined}
       />
@@ -1579,10 +1579,10 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       {launching && (
         <span
           aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[10.5px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
           style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
         >
-          <ArrowRight size={10} className="-rotate-45" />
+          <ArrowRight size={12} className="-rotate-45" />
           Opening in new tab…
         </span>
       )}
@@ -1696,7 +1696,7 @@ function ConfirmDialog({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -1778,7 +1778,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           className="mb-4"
         >
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10.5px] font-semibold uppercase tracking-wider">
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10px] font-semibold uppercase tracking-wider">
               <span className="font-mono text-[12px] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="text-text-muted shrink-0">{query.risk}</span>
@@ -1802,7 +1802,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     onClick={() => setDrawerTab('comments')}
                     title="Comments on this query"
                     aria-label="Comments on this query"
-                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-md cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
+                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-[8px] cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
                   >
                     <MessageSquare size={16} className="shrink-0" />
                     {myComments > 0 && (
@@ -1818,42 +1818,42 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   onClick={() => setMenuOpen(o => !o)}
                   title="More options"
                   aria-label="More options"
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
+                  className="w-7 h-7 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
                 >
                   <MoreVertical size={16} />
                 </button>
                 {menuOpen && (
-                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[8px] shadow-xl py-1">
                     <button
                       onClick={() => {
                         setMenuOpen(false);
                         onOpenQuery?.({ id: query.id, title: query.title });
                       }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <ExternalLink size={13} />
+                      <ExternalLink size={14} />
                       Open Query
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <LayoutGrid size={13} />
+                      <LayoutGrid size={14} />
                       Add Widgets
                     </button>
                     <button
                       onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <Download size={13} />
+                      <Download size={14} />
                       Download
                     </button>
                     <div className="my-1 border-t border-border-light" />
                     <button
                       onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                       Delete Query
                     </button>
                   </div>
@@ -1908,7 +1908,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+            className="bg-canvas-elevated border border-border-light rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
@@ -1919,9 +1919,9 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
                 title="Remove graph"
                 aria-label="Remove graph"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
-                <X size={13} />
+                <X size={14} />
               </button>
             </div>
             <div className="h-[200px]">
@@ -1943,7 +1943,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+            className="bg-canvas-elevated border border-border-light rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
@@ -1954,19 +1954,19 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setTableAttached(false)}
                 title="Remove table"
                 aria-label="Remove table"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
-                <X size={13} />
+                <X size={14} />
               </button>
             </div>
-            <div className="overflow-x-auto rounded-lg border border-border-light">
+            <div className="overflow-x-auto rounded-[12px] border border-border-light">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-paper-50">
                     {queryTable.columns.map(c => (
                       <th
                         key={c}
-                        className="px-3 py-2 text-left text-[10.5px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
+                        className="px-3 py-2 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
                       >
                         {c}
                       </th>
@@ -2124,14 +2124,14 @@ function QueryWidgetModal({
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-[10px] bg-primary-xlight flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-[8px] bg-primary-xlight flex items-center justify-center shrink-0">
                 <FileText size={16} className="text-primary" />
               </div>
               <div className="min-w-0">
                 <h3 id="query-widget-title" className="text-[16px] font-bold text-text tracking-tight">
                   Choose What to Include
                 </h3>
-                <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">
+                <p className="text-[12px] text-text-secondary mt-0.5 truncate">
                   <span className="font-mono text-[11px] text-primary">{queryId}</span>
                   <span className="mx-1.5 text-text-muted">·</span>
                   {queryTitle}
@@ -2141,9 +2141,9 @@ function QueryWidgetModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
             >
-              <X size={17} />
+              <X size={20} />
             </button>
           </div>
 
@@ -2169,14 +2169,14 @@ function QueryWidgetModal({
                     <button
                       type="button"
                       onClick={selectAll}
-                      className="text-[11.5px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
+                      className="text-[11px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
                     >
                       Select all
                     </button>
                     <button
                       type="button"
                       onClick={clearAll}
-                      className="text-[11.5px] font-semibold text-text-muted hover:text-text cursor-pointer"
+                      className="text-[11px] font-semibold text-text-muted hover:text-text cursor-pointer"
                     >
                       Clear
                     </button>
@@ -2235,7 +2235,7 @@ function QueryWidgetModal({
                               aria-checked={on}
                               aria-label={g.title}
                               onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
-                              className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                              className={`text-left bg-white border-2 rounded-[12px] p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                                 on
                                   ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
                                   : 'border-border-light hover:border-primary/40'
@@ -2243,9 +2243,9 @@ function QueryWidgetModal({
                             >
                               <div className="flex items-center gap-2 mb-2">
                                 <Checkbox checked={on} accent="brand" />
-                                <span className="text-[12.5px] font-semibold text-text truncate">{g.title}</span>
+                                <span className="text-[12px] font-semibold text-text truncate">{g.title}</span>
                               </div>
-                              <div className="h-[150px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
+                              <div className="h-[150px] bg-canvas-elevated rounded-[12px] p-1.5 pointer-events-none">
                                 <ConfigurableChart
                                   type={g.type}
                                   xAxis={g.xAxis}
@@ -2304,7 +2304,7 @@ function QueryWidgetModal({
               onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
               className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
             >
-              <FileText size={13} />
+              <FileText size={14} />
               Add to Card
             </button>
           </div>
@@ -2409,7 +2409,7 @@ function CommentDrawer({
                 >
                   <Icon size={14} className="shrink-0" />
                   {tab.label}
-                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10.5px] font-semibold rounded-full tabular-nums ${
+                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full tabular-nums ${
                     isActive ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-text-muted'
                   }`}>
                     {tab.count}
@@ -2439,7 +2439,7 @@ function CommentDrawer({
           <h2 className="text-[16px] font-semibold text-text leading-tight">
             {activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
           </h2>
-          <p className="text-[12.5px] text-text-muted mt-0.5 leading-snug">
+          <p className="text-[12px] text-text-muted mt-0.5 leading-snug">
             {activeTab === 'comments' ? 'Commenting on ' : 'Files used to build '}
             <span className="font-mono font-semibold text-primary">{query.id}</span> — {query.title}
           </p>
@@ -2480,7 +2480,7 @@ function CommentDrawer({
                     type="button"
                     onClick={handlePost}
                     disabled={!text.trim() || isPosting}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       text.trim() && !isPosting
                         ? 'bg-[#6a12cd] text-white hover:bg-primary-hover cursor-pointer'
                         : 'text-text-muted/50 cursor-not-allowed'
@@ -2494,8 +2494,8 @@ function CommentDrawer({
               </div>
               {attachment && (
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11.5px] font-medium rounded-full">
-                    <Paperclip size={11} />
+                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
+                    <Paperclip size={12} />
                     {attachment}
                   </span>
                   <button onClick={() => setAttachment(null)} className="text-[11px] text-text-muted hover:text-risk-700 cursor-pointer">remove</button>
@@ -2521,13 +2521,13 @@ function CommentDrawer({
               ) : (
                 <div className="space-y-4">
                   {queryGroups.map(group => (
-                    <section key={group.queryId} className="border border-border-light rounded-[10px] overflow-hidden">
+                    <section key={group.queryId} className="border border-border-light rounded-[12px] overflow-hidden">
                       <header className={`px-3 py-2 bg-paper-50 border-b border-border-light flex items-center justify-between ${group.queryId === query.id ? 'bg-primary/5' : ''}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11.5px] font-bold text-primary shrink-0">{group.queryId}</span>
-                          <span className="text-[11.5px] text-text-muted truncate">{group.queryTitle}</span>
+                          <span className="font-mono text-[11px] font-bold text-primary shrink-0">{group.queryId}</span>
+                          <span className="text-[11px] text-text-muted truncate">{group.queryTitle}</span>
                         </div>
-                        <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">
+                        <span className="text-[10px] text-text-muted tabular-nums shrink-0">
                           {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
                         </span>
                       </header>
@@ -2544,13 +2544,13 @@ function CommentDrawer({
                                 </span>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
+                                    <span className="text-[12px] font-semibold text-text">{c.author}</span>
                                     <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums whitespace-nowrap">
-                                      <ClockIcon size={10} />
+                                      <ClockIcon size={12} />
                                       {c.timestamp}
                                     </span>
                                   </div>
-                                  <p className="text-[12.5px] text-text leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  <p className="text-[12px] text-text leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
                                   {isLong && (
                                     <button
                                       type="button"
@@ -2559,14 +2559,14 @@ function CommentDrawer({
                                         if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
                                         return next;
                                       })}
-                                      className="mt-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                                      className="mt-1 text-[11px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
                                     >
                                       {isExpanded ? 'Show less' : 'Show more'}
                                     </button>
                                   )}
                                   {c.attachment && (
                                     <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
-                                      <Paperclip size={10} />
+                                      <Paperclip size={12} />
                                       {c.attachment}
                                     </span>
                                   )}
@@ -2587,13 +2587,13 @@ function CommentDrawer({
             <div className="flex-1 overflow-y-auto px-6 py-5">
               {sourceFiles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-3">
-                    <FileText size={18} className="text-text-muted/50" />
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-3">
+                    <FileText size={20} className="text-text-muted/50" />
                   </div>
                   <p className="text-[13px] font-medium text-text-secondary">No source files attached to this query yet.</p>
                 </div>
               ) : (
-                <ul className="divide-y divide-border-light border border-border-light rounded-[10px] overflow-hidden">
+                <ul className="divide-y divide-border-light border border-border-light rounded-[12px] overflow-hidden">
                   {sourceFiles.map(f => {
                     const pillClass = f.type === 'excel'
                       ? 'bg-compliant-50 text-compliant-700'
@@ -2605,10 +2605,10 @@ function CommentDrawer({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-mono text-[12.5px] font-semibold text-text truncate">{f.name}</span>
+                            <span className="font-mono text-[12px] font-semibold text-text truncate">{f.name}</span>
                             <span className={`inline-flex items-center h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider rounded ${pillClass}`}>{f.type}</span>
                           </div>
-                          <div className="text-[11.5px] text-text-muted tabular-nums">
+                          <div className="text-[11px] text-text-muted tabular-nums">
                             {f.size} · {f.rows.toLocaleString()} rows · {f.source} · {f.modified}
                           </div>
                         </div>
@@ -2632,7 +2632,7 @@ function CommentDrawer({
                 </ul>
               )}
             </div>
-            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[11.5px] text-text-muted tabular-nums">
+            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[11px] text-text-muted tabular-nums">
               {sourceFiles.length} files
             </footer>
           </>
@@ -2716,12 +2716,12 @@ function ReportActivityLogDrawer({
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-border-light">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-[10px] bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <History size={18} />
+            <div className="w-10 h-10 rounded-[8px] bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <History size={20} />
             </div>
             <div>
               <h2 className="text-[16px] font-semibold text-text leading-tight">Report Activity Log</h2>
-              <p className="text-[12.5px] text-text-muted mt-0.5 leading-snug">
+              <p className="text-[12px] text-text-muted mt-0.5 leading-snug">
                 All actions and comments across every query card on this report.
               </p>
             </div>
@@ -2765,11 +2765,11 @@ function ReportActivityLogDrawer({
             </button>
           </div>
           {attachment && (
-            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11.5px] font-medium rounded-full">
-              <Paperclip size={11} />
+            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11px] font-medium rounded-full">
+              <Paperclip size={12} />
               {attachment}
               <button onClick={() => setAttachment(null)} className="hover:text-primary/70 cursor-pointer" aria-label="Remove attachment">
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           )}
@@ -2777,7 +2777,7 @@ function ReportActivityLogDrawer({
             <button
               onClick={handlePost}
               disabled={!text.trim() || isPosting}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                 text.trim() && !isPosting
                   ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer'
                   : 'bg-primary/40 text-white/80 cursor-not-allowed'
@@ -2807,7 +2807,7 @@ function ReportActivityLogDrawer({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3 mb-0.5">
-                      <span className="text-[12.5px] font-semibold text-text">{c.author}</span>
+                      <span className="text-[12px] font-semibold text-text">{c.author}</span>
                       <span className="text-[11px] text-text-muted tabular-nums whitespace-nowrap">{c.timestamp}</span>
                     </div>
                     <div className="text-[11px] text-text-muted mb-1.5">
@@ -2816,10 +2816,10 @@ function ReportActivityLogDrawer({
                       </span>{' '}
                       <span className="ml-1 line-clamp-1">{c.queryTitle}</span>
                     </div>
-                    <p className="text-[12.5px] text-text leading-relaxed">{c.text}</p>
+                    <p className="text-[12px] text-text leading-relaxed">{c.text}</p>
                     {c.attachment && (
-                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11.5px] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
-                        <Paperclip size={11} />
+                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11px] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
+                        <Paperclip size={12} />
                         {c.attachment}
                       </button>
                     )}
@@ -2865,16 +2865,16 @@ function ContentsRow({
       value={section}
       dragControls={controls}
       dragListener={false}
-      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
+      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
     >
       <button
         onPointerDown={(e) => { controls.start(e); }}
         aria-label="Drag to reorder"
         className="shrink-0 p-1 text-text-muted/40 hover:text-text-muted cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
       >
-        <GripVertical size={13} />
+        <GripVertical size={14} />
       </button>
-      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[10px] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -2886,12 +2886,12 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[12.5px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
+          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-[8px] px-2 py-1 text-[12px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[12.5px] text-text-secondary truncate transition-colors cursor-pointer"
+          className="flex-1 min-w-0 text-left text-[12px] text-text-secondary truncate transition-colors cursor-pointer"
         >
           {section.title}
         </button>
@@ -2901,16 +2901,16 @@ function ContentsRow({
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
-            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+            className="p-1.5 rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
           >
-            <Edit3 size={13} />
+            <Edit3 size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             aria-label="Delete section"
-            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
           </button>
         </div>
       )}
@@ -2988,36 +2988,36 @@ function ObservationActionsMenu({
         aria-label="More options"
         className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
       >
-        <MoreVertical size={15} />
+        <MoreVertical size={16} />
       </button>
       {open && createPortal(
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-border-light rounded-[10px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-border-light rounded-[8px] shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
           >
-            <Edit3 size={13} />
+            <Edit3 size={14} />
             Edit observation
           </button>
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
             >
-              {attachmentHidden ? <Eye size={13} /> : <EyeOff size={13} />}
+              {attachmentHidden ? <Eye size={14} /> : <EyeOff size={14} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
             </button>
           )}
           <div className="my-1 border-t border-border-light/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
             Delete observation
           </button>
         </div>,
@@ -3076,7 +3076,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-2xl'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -3143,7 +3143,7 @@ function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
+                    className="block w-[88px] h-[88px] rounded-[12px] border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -3159,11 +3159,11 @@ function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-md hover:border-primary/40 hover:bg-white transition-colors group"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-[8px] hover:border-primary/40 hover:bg-white transition-colors group"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
                   <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
-                  <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[10px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -3186,7 +3186,7 @@ function ObservationCard({
             aria-label="Close preview"
             className="absolute top-5 right-5 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
           {imageAttachments.length > 1 && (
             <>
@@ -3220,7 +3220,7 @@ function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-2xl cursor-default"
           />
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
@@ -3325,19 +3325,19 @@ function WorkflowResultCard({
                 aria-label="More options"
                 className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
               >
-                <MoreVertical size={15} />
+                <MoreVertical size={16} />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[8px] shadow-xl py-1">
                   <button
                     onClick={() => {
                       setMenuOpen(false);
                       navigator.clipboard?.writeText(workflow.workflowId);
                       addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
                     }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                   >
-                    <Copy size={13} />
+                    <Copy size={14} />
                     Copy Workflow ID
                   </button>
                   {onDelete && (
@@ -3345,9 +3345,9 @@ function WorkflowResultCard({
                       <div className="my-1 border-t border-border-light" />
                       <button
                         onClick={() => { setMenuOpen(false); onDelete(); }}
-                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                         Delete
                       </button>
                     </>
@@ -3383,12 +3383,12 @@ function WorkflowResultCard({
                   if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
                 }}
                 placeholder="e.g., Priya Mehta"
-                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-[8px] focus:outline-none focus:border-primary"
               />
             ) : workflow.riskOwner ? (
               <button
                 onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
-                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-primary-xlight transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer"
               >
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold tabular-nums">
                   {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
@@ -3422,7 +3422,7 @@ function WorkflowResultCard({
                 )}
               </h4>
               {section.items.length === 0 ? (
-                <p className="text-[12.5px] text-text-muted italic">{section.emptyCopy}</p>
+                <p className="text-[12px] text-text-muted italic">{section.emptyCopy}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {section.items.map((item, i) => (
@@ -3451,14 +3451,14 @@ function WorkflowResultCard({
                   {workflow.outputTable.rows.length}
                 </span>
               </h4>
-              <div className="border border-border-light rounded-xl overflow-hidden">
-                <table className="w-full border-collapse text-[12.5px]">
+              <div className="border border-border-light rounded-[12px] overflow-hidden">
+                <table className="w-full border-collapse text-[12px]">
                   <thead>
                     <tr className="bg-paper-50/70">
                       {workflow.outputTable.columns.map((col, ci) => (
                         <th
                           key={col}
-                          className={`px-3 py-2 text-[10.5px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                          className={`px-3 py-2 text-[10px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
                         >
                           {col}
                         </th>
@@ -3483,7 +3483,7 @@ function WorkflowResultCard({
                             >
                               {isSeverity ? (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-semibold ${
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[10px] font-semibold ${
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
@@ -3518,7 +3518,7 @@ function WorkflowResultCard({
                     onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
                     className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
                   >
-                    <Download size={11} />
+                    <Download size={12} />
                     Download CSV
                   </button>
                 </div>
@@ -3596,24 +3596,24 @@ function AttachedQueryCard({ query, index, onRemove }: {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="bg-white border border-border-light rounded-2xl px-6 py-5"
+      className="bg-white border border-border-light rounded-[12px] px-6 py-5"
     >
       <div className="flex items-start gap-3">
-        <div className="size-9 rounded-[10px] bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
-          <KindIcon size={15} className="text-primary" />
+        <div className="size-9 rounded-[8px] bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
+          <KindIcon size={16} className="text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
-            <span className="text-[10.5px] text-text-muted">·</span>
-            <span className="text-[10.5px] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
+            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
+            <span className="text-[10px] text-text-muted">·</span>
+            <span className="text-[10px] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
           </div>
-          <h3 className="text-[14.5px] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
+          <h3 className="text-[14px] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
         </div>
         <button
           onClick={() => setShowRemoveConfirm(true)}
           aria-label="Remove attached query"
-          className="p-1.5 rounded-lg text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          className="p-1.5 rounded-[8px] text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
         >
           <X size={14} />
         </button>
@@ -3635,12 +3635,12 @@ function AttachedQueryCard({ query, index, onRemove }: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-brand-200 rounded-[10px] bg-brand-50/40 px-5 py-4 flex items-center gap-3"
+            className="mt-4 border border-dashed border-brand-200 rounded-[12px] bg-brand-50/40 px-5 py-4 flex items-center gap-3"
           >
             <Loader2 size={14} className="text-primary animate-spin shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold text-primary mb-0.5">Data syncing</p>
-              <p className="text-[11.5px] text-text-muted">Running query against your data — preview will appear in a moment.</p>
+              <p className="text-[12px] font-semibold text-primary mb-0.5">Data syncing</p>
+              <p className="text-[11px] text-text-muted">Running query against your data — preview will appear in a moment.</p>
             </div>
           </motion.div>
         )}
@@ -3655,8 +3655,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             {/* Summary */}
             <div>
-              <div className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
-              <p className="text-[12.5px] leading-relaxed text-text">{resolved.summary}</p>
+              <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
+              <p className="text-[12px] leading-relaxed text-text">{resolved.summary}</p>
             </div>
 
             {/* Findings */}
@@ -3664,9 +3664,9 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Lightbulb size={12} className="text-evidence-700" />
-                  <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
-                  <span className="text-[10.5px] text-text-muted">·</span>
-                  <span className="text-[10.5px] text-text-muted">{resolved.findings.length}</span>
+                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
+                  <span className="text-[10px] text-text-muted">·</span>
+                  <span className="text-[10px] text-text-muted">{resolved.findings.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.findings.map((f, i) => (
@@ -3684,9 +3684,9 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye size={12} className="text-primary" />
-                  <span className="text-[10.5px] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
-                  <span className="text-[10.5px] text-text-muted">·</span>
-                  <span className="text-[10.5px] text-text-muted">{resolved.observations.length}</span>
+                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
+                  <span className="text-[10px] text-text-muted">·</span>
+                  <span className="text-[10px] text-text-muted">{resolved.observations.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.observations.map((o, i) => (
@@ -3707,12 +3707,12 @@ function AttachedQueryCard({ query, index, onRemove }: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-border-light rounded-[10px] bg-paper-50/40 px-5 py-4 flex items-center gap-3"
+            className="mt-4 border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-5 py-4 flex items-center gap-3"
           >
             <PackageOpen size={14} className="text-text-muted shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold text-text mb-0.5">Preview not available</p>
-              <p className="text-[11.5px] text-text-muted">
+              <p className="text-[12px] font-semibold text-text mb-0.5">Preview not available</p>
+              <p className="text-[11px] text-text-muted">
                 {query.kind === 'upload'
                   ? 'Uploaded files render once the parser finishes — wire your data pipeline to enable preview.'
                   : query.kind === 'source'
@@ -3822,14 +3822,14 @@ function AddQueryModal({ open, onClose, onAttach }: {
             role="dialog"
             aria-modal="true"
             aria-label="Add Query"
-            className="relative bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[820px] h-[600px]"
+            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[820px] h-[600px]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-4 border-b border-canvas-border">
               <h2 className="text-[16px] font-bold text-ink-900 shrink-0">Add Query</h2>
               <div className="flex-1 mx-5 relative">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
                   type="text"
                   value={search}
@@ -3838,7 +3838,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                   className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                 />
               </div>
-              <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
+              <button onClick={handleClose} className="p-1.5 rounded-[8px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
                 <X size={20} className="text-ink-400" />
               </button>
             </div>
@@ -3891,7 +3891,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                                     <button
                                       key={q}
                                       onClick={() => setSelectedQuery(q)}
-                                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all cursor-pointer text-left ${
                                         selectedQuery === q ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                                       }`}
                                     >
@@ -3935,7 +3935,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       onDragLeave={() => setDragging(false)}
                       onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) setUploadedFile(f); }}
                       onClick={() => !uploadedFile && document.getElementById('add-query-file-input')?.click()}
-                      className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center text-center transition-all min-h-[300px] ${
+                      className={`border-2 border-dashed rounded-[12px] p-12 flex flex-col items-center justify-center text-center transition-all min-h-[300px] ${
                         dragging
                           ? 'border-brand-500 bg-brand-50'
                           : uploadedFile
@@ -3945,7 +3945,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                     >
                       {uploadedFile ? (
                         <div>
-                          <CloudUpload size={28} className="text-green-600 mx-auto mb-3" />
+                          <CloudUpload size={32} className="text-green-600 mx-auto mb-3" />
                           <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
                           <p className="text-[13px] text-compliant font-medium mb-1">
                             {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
@@ -3959,12 +3959,12 @@ function AddQueryModal({ open, onClose, onAttach }: {
                         </div>
                       ) : (
                         <>
-                          <Upload size={28} className="text-ink-300 mb-3" />
+                          <Upload size={32} className="text-ink-300 mb-3" />
                           <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
                           <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('add-query-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-lg transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
@@ -3992,11 +3992,11 @@ function AddQueryModal({ open, onClose, onAttach }: {
                               <button
                                 key={source.id}
                                 onClick={() => setSelectedSource(isSelected ? null : source.id)}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all cursor-pointer text-left ${
                                   isSelected ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                                 }`}
                               >
-                                <div className={`size-8 rounded-md flex items-center justify-center shrink-0 ${meta.tone}`}>
+                                <div className={`size-8 rounded-[8px] flex items-center justify-center shrink-0 ${meta.tone}`}>
                                   <Icon size={14} />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -4038,7 +4038,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                   <button
                     onClick={handleAttach}
                     disabled={!enabled || isAttaching}
-                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       enabled && !isAttaching ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
@@ -4138,22 +4138,22 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             rows={2}
             placeholder="Add a description for this report…"
             autoFocus
-            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-white text-[13px] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
+            className="w-full bg-white/10 border border-white/25 rounded-[8px] px-3 py-2 text-white text-[13px] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={saveEditDesc}
-              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[11.5px] font-semibold rounded-md hover:bg-white/90 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[11px] font-semibold rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer"
             >
               <Check size={12} /> Save
             </button>
             <button
               onClick={cancelEditDesc}
-              className="h-7 px-2.5 text-white/75 text-[11.5px] font-medium hover:text-white transition-colors cursor-pointer"
+              className="h-7 px-2.5 text-white/75 text-[11px] font-medium hover:text-white transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <span className="text-white/40 text-[10.5px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
+            <span className="text-white/40 text-[10px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
           </div>
         </div>
       );
@@ -4166,9 +4166,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         <button
           onClick={startEditDesc}
           aria-label="Edit description"
-          className="shrink-0 p-1 -mt-0.5 rounded-md text-white/55 hover:text-white hover:bg-white/15 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer"
+          className="shrink-0 p-1 -mt-0.5 rounded-[8px] text-white/55 hover:text-white hover:bg-white/15 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer"
         >
-          <Edit3 size={11} />
+          <Edit3 size={12} />
         </button>
       </div>
     );
@@ -4554,7 +4554,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             onClick={openAddObservation}
             className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
           >
-            <Plus size={13} />
+            <Plus size={14} />
             Add Observation
           </button>
         </div>
@@ -4647,7 +4647,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             </button>
             {isReadOnly && (
               <span className="bg-paper-50 border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[11px] text-ink-500">
-                <Lock size={11} aria-hidden="true" />
+                <Lock size={12} aria-hidden="true" />
                 <span>
                   View-only{sharedByName ? <> · shared by {sharedByName}</> : ''}
                 </span>
@@ -4659,16 +4659,16 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               <div className="relative">
                 <button
                   onClick={() => setShowApplyTemplate(p => !p)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1" style={{ borderRadius: '8px' }}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
                 >
-                  <Layout size={13} />
+                  <Layout size={14} />
                   <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
                   <motion.span
                     animate={{ rotate: showApplyTemplate ? 180 : 0 }}
                     transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                     className="inline-flex"
                   >
-                    <ChevronDown size={13} />
+                    <ChevronDown size={14} />
                   </motion.span>
                 </button>
                 <AnimatePresence>
@@ -4685,15 +4685,15 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               </div>
             )}
             {onShare && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}>
-                <Share2 size={13} /> Share
+              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]">
+                <Share2 size={14} /> Share
               </button>
             )}
             <button
               onClick={() => setShowDownloadModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]"
             >
-              <Download size={13} /> Download
+              <Download size={14} /> Download
             </button>
           </div>
         </div>
@@ -4710,7 +4710,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               <motion.div
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
-                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-2xl shadow-lg"
+                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[12px] shadow-lg"
               >
                 <Loader2 size={20} className="text-primary animate-spin" />
                 <span className="text-[14px] font-semibold text-text">Applying template...</span>
@@ -4722,7 +4722,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         {report.isEmpty ? (
           <>
             {/* Empty-state Cover — same chrome, simpler body */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
+            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="relative z-10 px-8 py-7">
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 {reportTemplate && (
@@ -4739,14 +4739,13 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
                       return (
                         <span
-                          className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                          className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
                           style={{
-                            borderRadius: '8px',
                             background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
                             color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
                           }}
                         >
-                          <TagIcon size={10} aria-hidden="true" />
+                          <TagIcon size={12} aria-hidden="true" />
                           {report.tag}
                         </span>
                       );
@@ -4755,9 +4754,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   {!isReadOnly && (
                     <button
                       onClick={() => setAddQueryOpen(true)}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     >
-                      <Plus size={13} />
+                      <Plus size={14} />
                       Add Query
                     </button>
                   )}
@@ -4792,9 +4791,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         >
                           <div className="flex items-center gap-2.5 px-1">
                             <Icon size={16} className="text-primary" />
-                            <h3 className="text-[14.5px] font-bold text-text tracking-tight">{section.name}</h3>
-                            <span className="text-[10.5px] text-text-muted">·</span>
-                            <span className="text-[10.5px] text-text-muted">{attached.length}</span>
+                            <h3 className="text-[14px] font-bold text-text tracking-tight">{section.name}</h3>
+                            <span className="text-[10px] text-text-muted">·</span>
+                            <span className="text-[10px] text-text-muted">{attached.length}</span>
                           </div>
                           <AnimatePresence>
                             {attached.map((q, qi) => (
@@ -4816,14 +4815,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.04 }}
-                        className="bg-white border border-border-light rounded-2xl px-6 py-5"
+                        className="bg-white border border-border-light rounded-[12px] px-6 py-5"
                       >
                         <div className="flex items-center gap-2.5 mb-3">
                           <Icon size={16} className="text-primary" />
-                          <h3 className="text-[14.5px] font-bold text-text tracking-tight">{section.name}</h3>
+                          <h3 className="text-[14px] font-bold text-text tracking-tight">{section.name}</h3>
                         </div>
-                        <div className="border border-dashed border-border-light rounded-[10px] bg-paper-50/40 px-6 py-7 text-center">
-                          <p className="text-[12.5px] text-text-muted/80">
+                        <div className="border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-6 py-7 text-center">
+                          <p className="text-[12px] text-text-muted/80">
                             {attached.length > 0
                               ? `${section.name} will be generated from your attached queries.`
                               : `Section content generated from ${report.name} data`}
@@ -4838,9 +4837,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <div className="space-y-3">
                       <div className="flex items-center gap-2.5 px-1">
                         <MessageSquare size={16} className="text-primary" />
-                        <h3 className="text-[14.5px] font-bold text-text tracking-tight">Attached Queries</h3>
-                        <span className="text-[10.5px] text-text-muted">·</span>
-                        <span className="text-[10.5px] text-text-muted">{attached.length}</span>
+                        <h3 className="text-[14px] font-bold text-text tracking-tight">Attached Queries</h3>
+                        <span className="text-[10px] text-text-muted">·</span>
+                        <span className="text-[10px] text-text-muted">{attached.length}</span>
                       </div>
                       <AnimatePresence>
                         {attached.map((q, qi) => (
@@ -4856,7 +4855,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   )}
 
                   {(!reportTemplate || sections.length === 0) && (
-                    <div className="bg-white border border-border-light rounded-2xl px-6 py-12 text-center">
+                    <div className="bg-white border border-border-light rounded-[12px] px-6 py-12 text-center">
                       <p className="text-[13px] text-text-muted">This template has no sections defined.</p>
                     </div>
                   )}
@@ -4867,7 +4866,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         ) : appliedTemplate ? (
           <>
             {/* Report Cover */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
+            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                 <FloatingLines
                   enabledWaves={['top', 'middle']}
@@ -4901,9 +4900,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       onClick={() => setActivityLogOpen(true)}
                       title="View this report's activity log"
                       aria-label="View report activity log"
-                      className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
                     >
-                      <History size={15} />
+                      <History size={16} />
                     </button>
                   </div>
                 </div>
@@ -4912,7 +4911,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
             {/* Contents — read-only list of template-defined sections */}
             {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
-              <div className="border border-border-light rounded-2xl bg-white p-6 mb-5">
+              <div className="border border-border-light rounded-[12px] bg-white p-6 mb-5">
                 <div className="flex items-center justify-between gap-3 mb-6">
                   <div className="flex items-center gap-2">
                     <List size={16} className="text-primary" />
@@ -4923,7 +4922,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       onClick={openAddObservation}
                       className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     >
-                      <Plus size={13} />
+                      <Plus size={14} />
                       Add Observation
                     </button>
                   )}
@@ -4936,9 +4935,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   className="list-none p-0 m-0 space-y-0.5"
                 >
                   {appliedTemplate.sections.map((s, i) => (
-                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[10.5px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[12.5px] text-text-secondary truncate">{s.name}</span>
+                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-primary-xlight/30 transition-colors">
+                      <span className="shrink-0 w-6 text-[10px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[12px] text-text-secondary truncate">{s.name}</span>
                     </li>
                   ))}
                   {appliedObservations.map((o, i) => {
@@ -4973,8 +4972,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             {/* Summary Stats Bar */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               {activeStats.map(stat => (
-                <div key={stat.label} className="glass-card rounded-xl p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                  <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
+                  <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                   <div>
                     <div className="text-xl font-bold text-text">{stat.value}</div>
                     <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
@@ -5062,9 +5061,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 })()}
                                 {report.tag && (
                                   <span
-                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap"
+                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
                                     style={{
-                                      borderRadius: '8px',
                                       background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
                                       color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
                                     }}
@@ -5078,9 +5076,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                   onClick={() => setActivityLogOpen(true)}
                                   title="View this report's activity log"
                                   aria-label="View report activity log"
-                                  className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                                  className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
                                 >
-                                  <History size={15} />
+                                  <History size={16} />
                                 </button>
                               </div>
                             </div>
@@ -5135,7 +5133,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
                                 className="flex items-center gap-3"
                               >
-                                <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                                <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                                 <div>
                                   <div className="text-xl font-bold text-text leading-none mb-1">
                                     <KpiCountUp value={stat.value} delay={120 + si * 80} />
@@ -5156,8 +5154,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       <Reorder.Item {...sectionProps}>
                         <div className="grid grid-cols-4 gap-3">
                           {activeStats.map(stat => (
-                            <div key={stat.label} className="glass-card rounded-xl p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                              <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                            <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
+                              <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                               <div>
                                 <div className="text-xl font-bold text-text">{stat.value}</div>
                                 <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
@@ -5568,14 +5566,13 @@ export default function ReportsView({
     <div className="relative">
       <button
         onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
-        style={{ borderRadius: '8px' }}
+        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer rounded-[8px]"
       >
         {tagFilter === 'All' ? 'All Tags' : tagFilter}
-        <ChevronDown size={10} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
       </button>
       {showTagDropdown && (
-        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1" style={{ borderRadius: '8px' }}>
+        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1 rounded-[8px]">
           {TAG_FILTER_OPTIONS.map(t => (
             <button
               key={t}
@@ -5595,7 +5592,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-[8px] whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -5639,7 +5636,7 @@ export default function ReportsView({
           aria-live="assertive"
           className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px]"
         >
-          <WifiOff size={13} aria-hidden="true" />
+          <WifiOff size={14} aria-hidden="true" />
           <span>You're offline — recent changes will sync once you reconnect.</span>
         </div>
       )}
@@ -5738,8 +5735,8 @@ export default function ReportsView({
             ) : (
               ({ search, clearSearch }) => (
                 <div className="flex flex-col items-center gap-2 py-2 text-center">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={18} className="text-ink-400" />
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
                   </div>
                   <div className="text-[13px] font-medium text-ink-700">
                     {tagFilter !== 'All' && search
@@ -5774,9 +5771,9 @@ export default function ReportsView({
             headerExtra={
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
+                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
                 </div>
               </div>
             }
@@ -5794,7 +5791,7 @@ export default function ReportsView({
                     if (report) setViewingReport(report);
                   }}>
                     {Boolean(item.tag) && (
-                      <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
+                      <div className={`text-[9px] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
                         {String(item.tag)}
                       </div>
                     )}
@@ -5806,7 +5803,7 @@ export default function ReportsView({
                           <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
                             <span className="text-[14px] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
-                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
+                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-[8px] max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
                               </span>
                             )}
@@ -5815,11 +5812,11 @@ export default function ReportsView({
                       })()}
                       {reportAppliedTemplates[String(item.id)] && (
                         <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
-                          <Layout size={9} /> {reportAppliedTemplates[String(item.id)].name}
+                          <Layout size={12} /> {reportAppliedTemplates[String(item.id)].name}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                    <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
                       {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
                     </div>
                   </div>
@@ -5830,9 +5827,9 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5843,12 +5840,12 @@ export default function ReportsView({
           <div className="w-full flex-1">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={gridSearch}
                   onChange={e => setGridSearch(e.target.value)}
                   placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {gridSearch && (
                   <button
@@ -5861,9 +5858,9 @@ export default function ReportsView({
               </div>
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
+                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
                 </div>
               </div>
             </div>
@@ -5878,8 +5875,8 @@ export default function ReportsView({
                 </div>
               ) : (
                 <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={18} className="text-ink-400" />
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
                   </div>
                   <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
                     {tagFilter !== 'All' && gridSearch
@@ -5920,23 +5917,23 @@ export default function ReportsView({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                    className="bg-white border border-border-light rounded-[12px] p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
                     onClick={() => setViewingReport(r)}
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       {r.tag ? (
-                        <div className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
+                        <div className={`text-[9px] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
                           {r.tag}
                         </div>
                       ) : <span />}
                       <div className="flex items-center gap-0.5 -mt-1 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={13} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" title="Delete"><Trash2 size={14} /></button>
                       </div>
                     </div>
                     <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                    <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                    <div className="text-[11px] text-text-muted font-mono tabular-nums">
                       {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
                     </div>
                     <div className="mt-auto pt-4 flex items-center justify-end">
@@ -5972,8 +5969,8 @@ export default function ReportsView({
             ) : (
               ({ search, clearSearch }) => (
                 <div className="flex flex-col items-center gap-2 py-2 text-center">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={18} className="text-ink-400" />
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
                   </div>
                   <div className="text-[13px] font-medium text-ink-700">
                     No shared reports match your search.
@@ -5991,9 +5988,9 @@ export default function ReportsView({
               )
             )}
             headerExtra={
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
+                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
               </div>
             }
             columns={[
@@ -6004,21 +6001,21 @@ export default function ReportsView({
               )},
               { key: 'name', label: 'Report', render: (item) => (
                 <div className="min-w-0">
-                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
                     Shared report
                   </div>
                   <div className="text-[14px] text-text font-medium truncate">{String(item.name)}</div>
-                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums mt-1">
+                  <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
                     {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'} · shared with {String(item.sharedWith)}
                   </div>
                 </div>
               )},
               { key: 'sharedBy', label: 'Shared by', render: (item) => (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9.5px] font-semibold flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-text-secondary text-[12.5px]">{String(item.sharedBy)}</span>
+                  <span className="text-text-secondary text-[12px]">{String(item.sharedBy)}</span>
                 </div>
               )},
               { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
@@ -6026,8 +6023,8 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -6047,12 +6044,12 @@ export default function ReportsView({
           <div className="w-full flex-1">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={sharedGridSearch}
                   onChange={e => setSharedGridSearch(e.target.value)}
                   placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {sharedGridSearch && (
                   <button
@@ -6063,9 +6060,9 @@ export default function ReportsView({
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
+                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
               </div>
             </div>
             {filteredSharedReports.length === 0 ? (
@@ -6079,8 +6076,8 @@ export default function ReportsView({
                 </div>
               ) : (
                 <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={18} className="text-ink-400" />
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
                   </div>
                   <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
                     No shared reports match your search.
@@ -6104,19 +6101,19 @@ export default function ReportsView({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                  className="bg-white border border-border-light rounded-[12px] p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-evidence-700">
+                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-evidence-700">
                       Shared with {r.sharedWith}
                     </div>
                     <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Download"><Download size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" title="Share"><Share2 size={14} /></button>
                     </div>
                   </div>
                   <div className="text-[14px] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                  <div className="text-[11.5px] text-text-muted font-mono tabular-nums">
+                  <div className="text-[11px] text-text-muted font-mono tabular-nums">
                     {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
                   </div>
                   <div className="mt-auto pt-4 flex items-center justify-between gap-2">
@@ -6124,7 +6121,7 @@ export default function ReportsView({
                       <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0">
                         {r.sharedBy.split(' ').map(n => n[0]).join('')}
                       </div>
-                      <span className="text-[11.5px] text-text-secondary truncate">{r.sharedBy}</span>
+                      <span className="text-[11px] text-text-secondary truncate">{r.sharedBy}</span>
                     </div>
                     <span className="font-mono text-[11px] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
                   </div>
@@ -6148,11 +6145,11 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className={`bg-white border border-border-light rounded-xl p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                className={`bg-white border border-border-light rounded-[12px] p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => setPreviewingTemplate(rt)}
               >
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-md ${tintBg}`}>
+                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[8px] ${tintBg}`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
                   <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
@@ -6160,7 +6157,7 @@ export default function ReportsView({
                   </div>
                 </div>
                 <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
-                <p className="text-[12.5px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
+                <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
                 <div className="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-border-light/60">
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }}
@@ -6193,7 +6190,7 @@ export default function ReportsView({
                         addToast({ type: 'success', message: 'Report generated.' });
                       }, 1200);
                     }}
-                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
+                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold rounded-[8px] cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
                   >
                     Generate
                     <ArrowRight size={12} className="transition-transform duration-200 group-hover/gen:translate-x-[1.5px]" />
@@ -6300,19 +6297,19 @@ export default function ReportsView({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               role="dialog" aria-modal="true" aria-label="New Report"
-              className="relative bg-white shadow-2xl w-[560px] overflow-hidden flex flex-col" style={{ borderRadius: '16px' }}
+              className="relative bg-white shadow-2xl w-[560px] overflow-hidden flex flex-col rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
               <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-primary/10 text-primary rounded-xl"><FileText size={16} /></div>
+                  <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><FileText size={16} /></div>
                   <div>
                     <h3 className="text-[15px] font-semibold text-text">New Report</h3>
                     <p className="text-[11px] text-text-muted">Set up your report</p>
                   </div>
                 </div>
-                <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+                <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
               </div>
 
               {/* Form */}
@@ -6323,7 +6320,7 @@ export default function ReportsView({
                     value={newReportName}
                     onChange={e => setNewReportName(e.target.value)}
                     placeholder="Report 01 — April 23, 2026"
-                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all rounded-[8px]"
                   />
                 </div>
                 <div>
@@ -6333,7 +6330,7 @@ export default function ReportsView({
                     onChange={e => setNewReportDesc(e.target.value)}
                     placeholder="Report Description goes here"
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none rounded-[8px]"
                   />
                 </div>
                 <div>
@@ -6341,17 +6338,17 @@ export default function ReportsView({
                     <label className="block text-[12px] font-semibold text-text">Template</label>
                     {newReportTemplatePrefilled && newReportTemplate && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
-                        <Sparkles size={10} /> Pre-filled from selection
+                        <Sparkles size={12} /> Pre-filled from selection
                       </span>
                     )}
                   </div>
                   <select
                     value={newReportTemplate}
                     onChange={e => { setNewReportTemplate(e.target.value); setNewReportTemplatePrefilled(false); }}
-                    className={`w-full px-3 py-2.5 border text-[13px] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white ${
+                    className={`w-full px-3 py-2.5 border text-[13px] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white rounded-[8px] ${
                       newReportTemplatePrefilled && newReportTemplate ? 'border-primary/50' : 'border-border-light'
                     }`}
-                    style={{ borderRadius: '8px', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
                   >
                     <option value="">Select a template</option>
                     {REPORT_TEMPLATES.map(rt => (
@@ -6397,7 +6394,7 @@ export default function ReportsView({
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
                 >
                   Continue <ArrowRight size={14} />
                 </button>
@@ -6421,7 +6418,7 @@ export default function ReportsView({
               initial={{ opacity: 0, scale: 0.97, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 16 }}
-              className="relative bg-white overflow-hidden shadow-2xl flex flex-col w-[560px] max-h-[80vh]" style={{ borderRadius: '16px' }}
+              className="relative bg-white overflow-hidden shadow-2xl flex flex-col w-[560px] max-h-[80vh] rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               <ReportBuilder

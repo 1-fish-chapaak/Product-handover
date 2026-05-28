@@ -311,7 +311,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-primary bg-primary-xlight/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
             >
               <div className="text-center">
-                <CloudUpload size={28} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
+                <CloudUpload size={32} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
                 <div className="text-[14px] font-semibold text-primary">Drop to attach files</div>
                 <div className="text-[11px] text-text-secondary mt-1">PNG, JPG, PDF up to {ATTACHMENT_MAX_LABEL}</div>
               </div>
@@ -320,7 +320,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
           <button
             onClick={handleBackdropClose}
             aria-label="Close"
-            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <X size={16} />
           </button>
@@ -331,7 +331,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
           {showErrors && missingFields.length > 0 && (
             <div
               role="alert"
-              className="mb-4 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12.5px] text-risk-800"
+              className="mb-4 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
             >
               <div className="font-semibold mb-0.5">
                 {missingFields.length === 1 ? 'One field needs attention' : `${missingFields.length} fields need attention`}
@@ -407,28 +407,28 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                       return (
                         <li
                           key={att.id}
-                          className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[6px]"
+                          className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[8px]"
                         >
                           {isImage ? (
-                            <div className="w-8 h-8 rounded-[4px] border border-border-light overflow-hidden bg-white shrink-0">
+                            <div className="w-8 h-8 rounded-[8px] border border-border-light overflow-hidden bg-white shrink-0">
                               <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
                             </div>
                           ) : (
-                            <div className={`w-8 h-8 rounded-[4px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
-                              <Icon size={15} />
+                            <div className={`w-8 h-8 rounded-[8px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
+                              <Icon size={16} />
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
                             <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                            <div className="text-[10.5px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                            <div className="text-[10px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
                           </div>
                           <button
                             type="button"
                             onClick={() => removeAttachment(att.id)}
                             aria-label={`Remove ${att.name}`}
-                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
+                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
                           >
-                            <X size={13} />
+                            <X size={14} />
                           </button>
                         </li>
                       );
@@ -438,9 +438,9 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                 <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
                   <label
                     title={`Attach files (PNG, JPG, PDF up to ${ATTACHMENT_MAX_LABEL})`}
-                    className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[11.5px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-1"
+                    className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px] text-[11px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-1"
                   >
-                    <Paperclip size={13} />
+                    <Paperclip size={14} />
                     <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
                     <input
                       type="file"
@@ -454,7 +454,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                     />
                   </label>
                   {obsForm.attachments.length > 0 && (
-                    <span className="text-[10.5px] text-text-muted tabular-nums pr-1">
+                    <span className="text-[10px] text-text-muted tabular-nums pr-1">
                       {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
                     </span>
                   )}
@@ -480,7 +480,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               aria-busy={isSaving || undefined}
               className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/60 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
-              {isSaving && <Loader2 size={13} className="animate-spin" />}
+              {isSaving && <Loader2 size={14} className="animate-spin" />}
               {isSaving
                 ? 'Saving…'
                 : editing

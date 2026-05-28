@@ -168,7 +168,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         <div className="border-b border-border-light bg-white flex items-center justify-between px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-primary/10 text-primary rounded-xl shrink-0"><FileText size={16} /></div>
+              <div className="p-2 bg-primary/10 text-primary rounded-[8px] shrink-0"><FileText size={16} /></div>
               <div>
                 <input
                   value={title}
@@ -181,11 +181,11 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
           </div>
           <button
             onClick={() => setShowPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors cursor-pointer ${
               showPreview ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-paper-50'
             }`}
           >
-            <Eye size={13} />
+            <Eye size={14} />
             Preview
           </button>
         </div>
@@ -193,7 +193,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         {/* Preview Mode */}
         {showPreview && (
           <div className="flex-1 overflow-y-auto py-5 px-6">
-            <div className="bg-white rounded-xl border border-border-light overflow-hidden shadow-sm">
+            <div className="bg-white rounded-[12px] border border-border-light overflow-hidden shadow-sm">
               {/* Report Header */}
               <div className="px-8 py-4 flex items-center justify-between" style={{ background: `${templateThemeColor}15` }}>
                 <div>
@@ -226,7 +226,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                       </div>
                     )}
                     {section.type === 'chart' && (
-                      <div className="pl-3 h-20 rounded-lg border border-dashed border-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
+                      <div className="pl-3 h-20 rounded-[12px] border border-dashed border-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
                         <PieChart size={16} style={{ color: templateThemeColor }} />
                         <span className="text-[11px] font-medium" style={{ color: templateThemeColor }}>Chart / Visualization</span>
                       </div>
@@ -271,7 +271,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               {showTemplateErrors && inlineMissing.length > 0 && (
                 <div
                   role="alert"
-                  className="mb-3 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12.5px] text-risk-800"
+                  className="mb-3 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
                 >
                   <div className="font-semibold mb-0.5">
                     {inlineMissing.length === 1 ? 'One field needs attention' : `${inlineMissing.length} fields need attention`}
@@ -306,7 +306,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showTemplateErrors && !title.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2 rounded-lg border text-[12px] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2 rounded-[8px] border text-[12px] focus:outline-none focus:ring-2 ${
                       showTemplateErrors && !title.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
                         : 'border-border-light focus:border-primary/40 focus:ring-primary/10'
@@ -318,7 +318,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <div className="relative">
                     <button
                       onClick={() => setShowCategoryDropdown(p => !p)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border-light text-[12px] text-text hover:border-primary/30 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-[8px] border border-border-light text-[12px] text-text hover:border-primary/30 transition-colors cursor-pointer"
                     >
                       {templateCategory}
                       <ChevronDown size={12} className={`text-text-muted transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
@@ -327,11 +327,11 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 </div>
                 <div>
                   <label className="text-[12px] font-semibold text-text block mb-1.5">Header Text</label>
-                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                 </div>
                 <div>
                   <label className="text-[12px] font-semibold text-text block mb-1.5">Footer Text</label>
-                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div className="mb-3">
@@ -341,15 +341,15 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     <button
                       key={c}
                       onClick={() => setTemplateThemeColor(c)}
-                      className={`w-8 h-8 border-2 transition-all cursor-pointer ${templateThemeColor === c ? 'border-text scale-110 shadow-md' : 'border-transparent'}`}
-                      style={{ background: c, borderRadius: '8px' }}
+                      className={`w-8 h-8 border-2 transition-all cursor-pointer rounded-[8px] ${templateThemeColor === c ? 'border-text scale-110 shadow-md' : 'border-transparent'}`}
+                      style={{ background: c }}
                     />
                   ))}
                 </div>
               </div>
               {/* Mini preview */}
-              <div className="border border-border-light rounded-lg p-3 bg-surface-2">
-                <div className="bg-white rounded-md shadow-sm border border-border-light overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
+              <div className="border border-border-light rounded-[12px] p-3 bg-surface-2">
+                <div className="bg-white rounded-[12px] shadow-sm border border-border-light overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
                   <div className="h-5 flex items-center justify-between px-3" style={{ background: `${templateThemeColor}10` }}>
                     <span className="text-[6px] font-bold" style={{ color: templateThemeColor }}>{title}</span>
                     <span className="text-[5px] text-text-muted">{templateHeader}</span>
@@ -369,17 +369,17 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
             {/* Add Report Sections */}
             <div>
               <h4 className="text-[12px] font-bold text-text-muted mb-3 flex items-center gap-2">
-                <Plus size={13} className="text-primary" /> Add Report Sections
+                <Plus size={14} className="text-primary" /> Add Report Sections
               </h4>
               <div className="flex flex-col gap-2">
                 {AVAILABLE_BLOCKS.filter(b => b.type !== 'action-taken' || context === 'action-report').map(block => (
                   <button
                     key={block.type}
                     onClick={() => addSection(block.type)}
-                    className="text-left p-3 rounded-xl border border-border-light hover:border-primary/30 hover:bg-primary-xlight/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
+                    className="text-left p-3 rounded-[8px] border border-border-light hover:border-primary/30 hover:bg-primary-xlight/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <div className={`p-1 rounded-md ${sectionColor(block.type)}`}>
+                      <div className={`p-1 rounded-[8px] ${sectionColor(block.type)}`}>
                         <block.icon size={12} />
                       </div>
                       <span className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors">{block.label}</span>
@@ -417,9 +417,9 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 }}
                 disabled={isSavingTemplate}
                 aria-busy={isSavingTemplate || undefined}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-border text-[12px] font-medium text-text-secondary hover:bg-paper-50 hover:border-primary/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] border border-dashed border-border text-[12px] font-medium text-text-secondary hover:bg-paper-50 hover:border-primary/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
-                {isSavingTemplate ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} />}
+                {isSavingTemplate ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
                 {isSavingTemplate ? 'Saving…' : 'Save as Template'}
               </button>
             </div>
@@ -437,7 +437,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   exit={{ opacity: 0, scale: 0.95 }}
                 >
                 <div
-                  className={`bg-white rounded-xl border shadow-sm hover:border-primary/20 transition-all duration-300 ${
+                  className={`bg-white rounded-[12px] border shadow-sm hover:border-primary/20 transition-all duration-300 ${
                     dragOverIndex === index ? 'border-primary border-2' : 'border-border-light'
                   }`}
                   draggable
@@ -450,7 +450,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     <div className="cursor-grab active:cursor-grabbing text-text-muted/40 hover:text-text-muted transition-colors">
                       <GripVertical size={14} />
                     </div>
-                    <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 rounded-[8px] bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">
                       {index + 1}
                     </div>
                     <input
@@ -459,13 +459,13 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                       className="flex-1 text-[13px] font-semibold text-text bg-transparent border-none outline-none"
                     />
                     <button onClick={() => removeSection(section.id)} className="p-1 hover:bg-risk-50 hover:text-risk-700 rounded text-text-muted transition-colors cursor-pointer">
-                      <X size={13} />
+                      <X size={14} />
                     </button>
                   </div>
 
                   <div className="px-4 py-3">
                     {section.type === 'text' ? (
-                      <div className="flex items-center gap-2 p-3 bg-surface-2 rounded-lg">
+                      <div className="flex items-center gap-2 p-3 bg-surface-2 rounded-[12px]">
                         <MessageSquare size={14} className="text-text-muted shrink-0" />
                         <div>
                           <div className="text-[12px] text-text-muted">Content added from /chat</div>
@@ -475,15 +475,15 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     ) : section.type === 'exception-summary' ? (
                       <div className="space-y-2">
                         <div className="flex gap-3">
-                          <div className="flex-1 p-2.5 bg-risk-50 rounded-lg text-center">
+                          <div className="flex-1 p-2.5 bg-risk-50 rounded-[12px] text-center">
                             <div className="text-[16px] font-bold text-risk-700">8</div>
                             <div className="text-[12px] text-risk-700 uppercase font-semibold">Flagged</div>
                           </div>
-                          <div className="flex-1 p-2.5 bg-high-50 rounded-lg text-center">
+                          <div className="flex-1 p-2.5 bg-high-50 rounded-[12px] text-center">
                             <div className="text-[16px] font-bold text-high-700">3</div>
                             <div className="text-[12px] text-high-700 uppercase font-semibold">Assigned</div>
                           </div>
-                          <div className="flex-1 p-2.5 bg-compliant-50 rounded-lg text-center">
+                          <div className="flex-1 p-2.5 bg-compliant-50 rounded-[12px] text-center">
                             <div className="text-[16px] font-bold text-compliant-700">1</div>
                             <div className="text-[12px] text-compliant-700 uppercase font-semibold">Resolved</div>
                           </div>
@@ -514,7 +514,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                         </table>
                       </div>
                     ) : section.type === 'chart' ? (
-                      <div className="flex items-center justify-center h-24 bg-surface-2 rounded-lg">
+                      <div className="flex items-center justify-center h-24 bg-surface-2 rounded-[12px]">
                         <div className="flex items-end gap-1 h-14">
                           {[40, 65, 25, 80, 55, 70].map((h, i) => (
                             <div key={i} className="w-6 rounded-t" style={{ height: `${h}%`, background: `rgba(106,18,205,${0.15 + (h / 200)})` }} />
@@ -536,20 +536,18 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
           <button
             onClick={onBack}
             disabled={isGenerating}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border text-[13px] font-semibold text-text-secondary hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-            style={{ borderRadius: '8px' }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] border border-border text-[13px] font-semibold text-text-secondary hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
-            <ArrowLeft size={13} />
+            <ArrowLeft size={14} />
             Back
           </button>
           <button
             onClick={handleGenerate}
             disabled={isGenerating}
             aria-busy={isGenerating || undefined}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-            style={{ borderRadius: '8px' }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
           >
-            {isGenerating && <Loader2 size={13} className="animate-spin" />}
+            {isGenerating && <Loader2 size={14} className="animate-spin" />}
             {isGenerating ? 'Generating…' : 'Generate Report'}
           </button>
         </div>
@@ -571,7 +569,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden"
+              className="relative bg-white rounded-[16px] shadow-2xl w-[420px] overflow-hidden"
               onClick={e => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -580,12 +578,12 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
             >
               <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-primary/10 text-primary rounded-lg"><BookOpen size={14} /></div>
+                  <div className="p-1.5 bg-primary/10 text-primary rounded-[8px]"><BookOpen size={14} /></div>
                   <h4 id="save-template-title" className="text-[14px] font-semibold text-text">Save as Template</h4>
                 </div>
                 <button
                   onClick={() => setShowSaveTemplate(false)}
-                  className="p-1 hover:bg-paper-50 rounded-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="p-1 hover:bg-paper-50 rounded-[8px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <X size={14} className="text-text-muted" />
                 </button>
@@ -594,7 +592,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 {showModalErrors && modalMissing.length > 0 && (
                   <div
                     role="alert"
-                    className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12.5px] text-risk-800"
+                    className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
                   >
                     <div className="font-semibold mb-0.5">
                       {modalMissing.length === 1 ? 'One field needs attention' : `${modalMissing.length} fields need attention`}
@@ -628,7 +626,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showModalErrors && !templateName.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2.5 rounded-[8px] border text-[13px] focus:outline-none focus:ring-2 ${
                       showModalErrors && !templateName.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
                         : 'border-border-light focus:border-primary/40 focus:ring-primary/10'
@@ -641,7 +639,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <textarea
                     value={templateDesc}
                     onChange={e => setTemplateDesc(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 resize-none min-h-[70px]"
+                    className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 resize-none min-h-[70px]"
                     placeholder="Describe what this template is for..."
                   />
                 </div>
@@ -649,7 +647,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   <label className="text-[12px] font-semibold text-text mb-1.5 block">Category</label>
                   <button
                     onClick={() => setShowCategoryDropdown(p => !p)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-border-light text-[13px] text-text hover:border-primary/30 transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] text-text hover:border-primary/30 transition-colors cursor-pointer"
                   >
                     {templateCategory}
                     <ChevronDown size={14} className={`text-text-muted transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
@@ -660,7 +658,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                         initial={{ opacity: 0, y: -5 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -5 }}
-                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-border-light z-10 overflow-hidden"
+                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-[8px] shadow-xl border border-border-light z-10 overflow-hidden"
                       >
                         {TEMPLATE_CATEGORIES.map(cat => (
                           <button
@@ -680,7 +678,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 <button
                   onClick={() => setShowSaveTemplate(false)}
                   disabled={isSavingTemplateModal}
-                  className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   Cancel
                 </button>
@@ -701,7 +699,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   }}
                   disabled={isSavingTemplateModal}
                   aria-busy={isSavingTemplateModal || undefined}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-[8px] text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   {isSavingTemplateModal && <Loader2 size={12} className="animate-spin" />}
                   {isSavingTemplateModal ? 'Saving…' : 'Save Template'}

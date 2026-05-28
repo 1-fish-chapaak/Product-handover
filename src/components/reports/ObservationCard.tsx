@@ -90,36 +90,36 @@ export function ObservationActionsMenu({
         aria-label="More options"
         className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
-        <MoreVertical size={15} />
+        <MoreVertical size={16} />
       </button>
       {open && createPortal(
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-border-light rounded-[10px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-border-light rounded-[8px] shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
           >
-            <Edit3 size={13} />
+            <Edit3 size={14} />
             Edit observation
           </button>
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
             >
-              {attachmentHidden ? <Eye size={13} /> : <EyeOff size={13} />}
+              {attachmentHidden ? <Eye size={14} /> : <EyeOff size={14} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
             </button>
           )}
           <div className="my-1 border-t border-border-light/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12.5px] text-risk-700 hover:bg-risk-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
             Delete observation
           </button>
         </div>,
@@ -199,7 +199,7 @@ export default function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-2xl'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         <motion.div
@@ -260,7 +260,7 @@ export default function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="block w-[88px] h-[88px] rounded-[12px] border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -276,11 +276,11 @@ export default function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-md hover:border-primary/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-[8px] hover:border-primary/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
                   <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
-                  <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[10px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -290,13 +290,13 @@ export default function ObservationCard({
                   type="button"
                   onClick={() => setOverflowOpen(o => !o)}
                   aria-label={`Show ${overflowItems.length} more attachments`}
-                  className="w-[88px] h-[88px] rounded-lg border border-border-light bg-paper-50 hover:border-primary/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="w-[88px] h-[88px] rounded-[12px] border border-border-light bg-paper-50 hover:border-primary/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <span className="font-display text-[18px] leading-none font-semibold text-ink-900 tabular-nums">+{overflowItems.length}</span>
                   <span className="text-[10px] text-ink-500 uppercase tracking-wider">more</span>
                 </button>
                 {overflowOpen && (
-                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-border-light rounded-[10px] shadow-xl py-1 max-h-[280px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-border-light rounded-[8px] shadow-xl py-1 max-h-[280px] overflow-y-auto">
                     <div className="px-3 py-2 text-[10px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light/60">
                       {overflowItems.length} more {overflowItems.length === 1 ? 'attachment' : 'attachments'}
                     </div>
@@ -336,7 +336,7 @@ export default function ObservationCard({
                               className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary-xlight/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
                             >
                               <div className={`w-7 h-7 rounded border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
-                                <Icon size={13} />
+                                <Icon size={14} />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
@@ -356,7 +356,7 @@ export default function ObservationCard({
 
         {attachments.length === 0 && (
           <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
-            <Paperclip size={11} strokeWidth={1.75} />
+            <Paperclip size={12} strokeWidth={1.75} />
             <span>No attachments</span>
           </div>
         )}
@@ -376,7 +376,7 @@ export default function ObservationCard({
             aria-label="Close preview"
             className="absolute top-5 right-5 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
           {imageAttachments.length > 1 && (
             <>
@@ -410,7 +410,7 @@ export default function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-2xl cursor-default"
           />
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
