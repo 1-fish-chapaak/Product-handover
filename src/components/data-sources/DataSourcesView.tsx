@@ -287,20 +287,19 @@ function SourceTile({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-start gap-3.5 px-5 py-5 rounded-2xl bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
+        className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-md bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
           selected
             ? 'border-brand-500 bg-brand-50/40 shadow-[0_2px_8px_rgb(106_18_205_/_0.10)]'
-            : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_4px_16px_rgb(15_8_30_/_0.06)]'
+            : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_2px_10px_rgb(15_8_30_/_0.05)]'
         }`}
       >
         {/* Icon tile + overlaid hover checkbox. The checkbox is absolute
             inside the icon container so layout never shifts between selecting
             and non-selecting states. Hover or `isSelecting` reveals it; the
-            icon stays visible underneath at reduced opacity so users still
-            see the file type at a glance. */}
-        <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
+            icon stays visible underneath at reduced opacity. */}
+        <div className={`relative w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
           <Icon
-            size={20}
+            size={16}
             className={`transition-opacity duration-150 ${
               selected ? 'opacity-0' : isSelecting ? 'opacity-30 group-hover:opacity-0' : 'opacity-100 group-hover:opacity-30'
             }`}
@@ -318,7 +317,7 @@ function SourceTile({
                 onToggleSelect(source.id, { shift: e.shiftKey });
               }
             }}
-            className={`absolute inset-0 m-auto w-5 h-5 rounded-md border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+            className={`absolute inset-0 m-auto w-4 h-4 rounded border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
               selected
                 ? 'bg-brand-600 border-brand-600 text-white opacity-100'
                 : isSelecting
@@ -326,18 +325,18 @@ function SourceTile({
                   : 'bg-paper-0 border-ink-300 opacity-0 group-hover:opacity-100 hover:border-brand-500'
             }`}
           >
-            {selected && <Check size={13} strokeWidth={3} />}
+            {selected && <Check size={11} strokeWidth={3} />}
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[0.9375rem] font-semibold text-ink-900 truncate leading-tight" title={source.name}>
+          <div className="text-[0.875rem] font-semibold text-ink-900 truncate leading-tight" title={source.name}>
             {source.name}
           </div>
           {/* Footer: FORMAT · size/count · date  OR  FORMAT · Connected.
               Uses inline display so the natural line-wrap kicks in only when
               the whole line genuinely overflows — flex containers were
               breaking after every span on narrow cards. */}
-          <div className="mt-2 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
+          <div className="mt-0.5 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
             <span className="font-semibold text-ink-700 uppercase tracking-wide text-[0.6875rem]">{formatLabel}</span>
             <span className="text-ink-300 mx-1.5" aria-hidden>·</span>
             {isIntegrated ? (
@@ -403,7 +402,7 @@ function SourceRow({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-center gap-3 px-3.5 h-12 rounded-lg border transition-colors cursor-pointer text-left ${
+        className={`group w-full flex items-center gap-3 px-3 h-10 rounded-md border transition-colors cursor-pointer text-left ${
           selected
             ? 'border-brand-600 bg-brand-50/30'
             : 'border-transparent hover:border-canvas-border hover:bg-canvas-elevated'
@@ -411,9 +410,9 @@ function SourceRow({
       >
         {/* Hover-revealed checkbox overlaying the type-icon tile. Same layout
             slot regardless of state so nothing shifts. */}
-        <div className={`relative w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
+        <div className={`relative w-6 h-6 rounded flex items-center justify-center shrink-0 ${tone}`}>
           <Icon
-            size={14}
+            size={13}
             className={`transition-opacity duration-150 ${
               selected ? 'opacity-0' : isSelecting ? 'opacity-40 group-hover:opacity-0' : 'opacity-100 group-hover:opacity-30'
             }`}
