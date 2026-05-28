@@ -61,6 +61,13 @@ const FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'docx', label: 'DOCX', ext: 'docx' },
 ];
 
+// Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
+function severityBadgeClass(severity: string): string {
+  if (severity === 'Medium') return 'bg-mitigated-50 text-mitigated-700';
+  if (severity === 'Low') return 'bg-compliant-50 text-compliant-700';
+  return 'bg-risk-50 text-risk-700';
+}
+
 export default function ReportDownloadModal({
   reportName,
   reportTag,
@@ -613,7 +620,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
         <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted mb-1">{section.queryId}</div>
         <h2 className="font-display text-[18px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">{section.queryTitle}</h2>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
             <AlertTriangle size={12} /> {section.severity}
           </span>
           <span className="text-text-muted">·</span>
@@ -763,7 +770,7 @@ function SectionContent({ section, typeface, compact = false }: {
         <div className={labelClass + ' mb-2'}>{section.queryId}</div>
         <h2 className={titleClass + ' mb-3'}>{section.queryTitle}</h2>
         <div className="flex items-center gap-2 mb-4 text-[10px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
             <AlertTriangle size={12} /> {section.severity}
           </span>
           <span className="text-text-muted">·</span>
@@ -859,7 +866,7 @@ function SectionContent({ section, typeface, compact = false }: {
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.workflowName}</h2>
         <div className="flex items-center gap-2 mb-4 text-[10px]">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk-700 font-semibold">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
             <AlertTriangle size={12} /> {section.severity}
           </span>
         </div>

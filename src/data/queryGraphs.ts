@@ -87,7 +87,7 @@ export const QUERY_TABLES: Record<string, QueryTable> = {
   RA01: {
     columns: ['Risk ID', 'Process Area', 'Region', 'Likelihood', 'Impact', 'Rating'],
     rows: [
-      ['RISK_A07', 'Procure-to-Pay', 'India', 'High', 'High', 'Critical'],
+      ['RISK_A07', 'Procure-to-Pay', 'India', 'High', 'High', 'High'],
       ['RISK_A12', 'Order-to-Cash', 'UAE', 'Medium', 'High', 'High'],
       ['RISK_A19', 'Record-to-Report', 'EMEA', 'Medium', 'Medium', 'Moderate'],
       ['RISK_A23', 'Procure-to-Pay', 'APAC', 'High', 'Medium', 'High'],

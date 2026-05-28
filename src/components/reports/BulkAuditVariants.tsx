@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
-import { ArrowLeft, Download, History, Sparkles, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
+import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import { useToast, type ToastType } from '../shared/Toast';
 import EmptyState from '../shared/EmptyState';
@@ -73,7 +73,7 @@ type Report = {
   tag?: string;
   pages?: number;
   workflowResults?: WorkflowResult[];
-  aestheticVariant?: 'editorial' | 'forensic' | 'minimal' | 'architectural';
+  aestheticVariant?: 'editorial';
 };
 
 export function BulkAuditVariantView({
@@ -85,7 +85,6 @@ export function BulkAuditVariantView({
   onBack: () => void;
   onShare?: () => void;
 }) {
-  const variant = report.aestheticVariant ?? 'editorial';
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
@@ -260,41 +259,34 @@ export function BulkAuditVariantView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className={`h-full overflow-y-auto ${backgroundClass(variant)}`}
+      className="h-full overflow-y-auto bg-surface-2"
     >
-      <BulkReportHeader onBack={onBack} onShare={onShare} reportName={report.name} variant={variant} />
+      <BulkReportHeader onBack={onBack} onShare={onShare} reportName={report.name} />
       {allFailed ? (
         <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} />
       ) : (
-        <>
-          {variant === 'editorial' && (
-            <EditorialLayout
-              report={report}
-              workflows={successfulWorkflows}
-              failedWorkflows={failedWorkflows}
-              totals={totals}
-              onOpenWorkflow={handleOpenWorkflow}
-              onRequestDelete={handleRequestDelete}
-              onReorderWorkflows={setWorkflows}
-              observations={observations}
-              onAddObservation={openAddObservation}
-              onEditObservation={openEditObservation}
-              onToggleObservationAttachment={toggleObservationAttachment}
-              onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
-              onReorderObservations={setObservations}
-              contentsEditingId={contentsEditingId}
-              contentsDraft={contentsDraft}
-              onDraftChange={setContentsDraft}
-              onStartContentsRename={handleStartContentsRename}
-              onSaveContentsRename={handleSaveContentsRename}
-              onCancelContentsRename={handleCancelContentsRename}
-              onScrollToContent={scrollToContent}
-            />
-          )}
-          {variant === 'forensic' && <ForensicLayout report={report} workflows={successfulWorkflows} totals={totals} />}
-          {variant === 'minimal' && <MinimalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
-          {variant === 'architectural' && <ArchitecturalLayout report={report} workflows={successfulWorkflows} totals={totals} />}
-        </>
+        <EditorialLayout
+          report={report}
+          workflows={successfulWorkflows}
+          failedWorkflows={failedWorkflows}
+          totals={totals}
+          onOpenWorkflow={handleOpenWorkflow}
+          onRequestDelete={handleRequestDelete}
+          onReorderWorkflows={setWorkflows}
+          observations={observations}
+          onAddObservation={openAddObservation}
+          onEditObservation={openEditObservation}
+          onToggleObservationAttachment={toggleObservationAttachment}
+          onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
+          onReorderObservations={setObservations}
+          contentsEditingId={contentsEditingId}
+          contentsDraft={contentsDraft}
+          onDraftChange={setContentsDraft}
+          onStartContentsRename={handleStartContentsRename}
+          onSaveContentsRename={handleSaveContentsRename}
+          onCancelContentsRename={handleCancelContentsRename}
+          onScrollToContent={scrollToContent}
+        />
       )}
 
       {pendingDelete && createPortal(
@@ -487,15 +479,6 @@ function computeTotals(workflows: WorkflowResult[]): Totals {
   return { workflows: workflows.length, records, high, medium, low, bps };
 }
 
-function backgroundClass(variant: NonNullable<Report['aestheticVariant']>) {
-  switch (variant) {
-    case 'editorial': return 'bg-surface-2';
-    case 'forensic': return 'bg-white';
-    case 'minimal': return 'bg-white';
-    case 'architectural': return 'bg-paper-50';
-  }
-}
-
 const ICON_MAP: Record<string, ElementType> = {
   shield: Shield,
   'alert-triangle': AlertTriangle,
@@ -573,18 +556,16 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
 // internal audit report header. Apply Template is a UX match here: a bulk audit
 // report has a fixed editorial layout, so applying a template animates + toasts
 // without swapping sections.
-function BulkReportHeader({ onBack, onShare, reportName, variant }: {
+function BulkReportHeader({ onBack, onShare, reportName }: {
   onBack: () => void;
   onShare?: () => void;
   reportName: string;
-  variant: NonNullable<Report['aestheticVariant']>;
 }) {
   const { addToast, updateToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
-  const isMono = variant === 'forensic';
 
   const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
     setApplyingTemplate(true);
@@ -597,7 +578,7 @@ function BulkReportHeader({ onBack, onShare, reportName, variant }: {
 
   return (
     <>
-      <div className={`mx-auto px-8 pt-6 pb-4 max-w-[1100px] ${isMono ? 'font-mono' : ''}`}>
+      <div className="mx-auto px-8 pt-6 pb-4 max-w-[1100px]">
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={onBack}
@@ -1273,8 +1254,8 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
   onOpenWorkflow: () => void;
   onRequestDelete: () => void;
 }) {
-  const sevDot = workflow.severity === 'High' ? 'bg-risk-500' : workflow.severity === 'Medium' ? 'bg-high-500' : 'bg-compliant-500';
-  const sevText = workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700';
+  const sevDot = workflow.severity === 'High' ? 'bg-risk-500' : workflow.severity === 'Medium' ? 'bg-mitigated-500' : 'bg-compliant-500';
+  const sevText = workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700';
   const [menuOpen, setMenuOpen] = useState(false);
   const [outputModalOpen, setOutputModalOpen] = useState(false);
   const [attached, setAttached] = useState<AttachedOutput[]>([]);
@@ -1878,521 +1859,6 @@ function AddOutputModal({
 }
 
 function SeverityWord({ severity }: { severity: 'High' | 'Medium' | 'Low' }) {
-  const color = severity === 'High' ? 'text-risk-700' : severity === 'Medium' ? 'text-high-700' : 'text-compliant-700';
+  const color = severity === 'High' ? 'text-risk-700' : severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700';
   return <span className={`font-semibold ${color}`}>{severity.toLowerCase()}</span>;
 }
-
-// ─────────────────────────────────────────────────────────────────────
-// FORENSIC — terminal-native density, mono IDs, severity-coded grid
-// ─────────────────────────────────────────────────────────────────────
-
-function ForensicLayout({ report, workflows, totals }: { report: Report; workflows: WorkflowResult[]; totals: Totals }) {
-  const hPct = totals.records > 0 ? Math.round((totals.high * 100) / Math.max(1, totals.high + totals.medium + totals.low)) : 0;
-  const mPct = totals.records > 0 ? Math.round((totals.medium * 100) / Math.max(1, totals.high + totals.medium + totals.low)) : 0;
-  const lPct = totals.records > 0 ? Math.max(0, 100 - hPct - mPct) : 0;
-
-  return (
-    <div className="max-w-[1100px] mx-auto px-8 pt-6 pb-24 font-mono">
-      <div className="flex items-baseline justify-between text-[11px] tracking-tight text-text-muted mb-3 uppercase">
-        <span>RUN_LOG · {report.generatedAt.replace(/, /g, '·').replace(/ /g, '_').toUpperCase()}</span>
-        <span>OPERATOR · {report.generatedBy.toUpperCase()}</span>
-      </div>
-
-      <h1 className="font-sans text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-[-0.015em] mb-4">
-        {report.name.replace(/ · Forensic$/, '')}
-      </h1>
-
-      <div className="flex flex-wrap items-center gap-2 mb-7 text-[11px]">
-        <Pill mono>{totals.workflows} workflows</Pill>
-        <Pill mono>{totals.records} records</Pill>
-        {totals.bps.map(bp => (
-          <Pill key={bp} mono>{bp}</Pill>
-        ))}
-      </div>
-
-      {/* Severity distribution as a stacked bar */}
-      <div className="border border-ink-900/15 rounded-sm p-4 mb-8">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-text-muted mb-2">
-          <span>Severity distribution</span>
-          <span>{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</span>
-        </div>
-        <div className="flex h-6 overflow-hidden rounded-sm">
-          <div className="bg-risk-500 flex items-center justify-center text-[10px] text-white font-semibold" style={{ width: `${hPct}%` }}>
-            {hPct > 8 ? `${totals.high} HIGH` : ''}
-          </div>
-          <div className="bg-high-500 flex items-center justify-center text-[10px] text-white font-semibold" style={{ width: `${mPct}%` }}>
-            {mPct > 8 ? `${totals.medium} MED` : ''}
-          </div>
-          <div className="bg-compliant-500 flex items-center justify-center text-[10px] text-white font-semibold" style={{ width: `${lPct}%` }}>
-            {lPct > 8 ? `${totals.low} LOW` : ''}
-          </div>
-        </div>
-      </div>
-
-      {/* Workflow strips */}
-      <div className="border-t border-ink-900/20">
-        {workflows.map((w, i) => (
-          <ForensicWorkflowStrip key={w.id} workflow={w} index={i} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Pill({ children, mono = false }: { children: React.ReactNode; mono?: boolean }) {
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-sm bg-ink-900/[0.04] border border-ink-900/15 text-text-secondary ${mono ? 'font-mono text-[10px] tracking-tight' : 'text-[11px]'}`}>
-      {children}
-    </span>
-  );
-}
-
-function ForensicWorkflowStrip({ workflow, index }: { workflow: WorkflowResult; index: number }) {
-  const sev = workflow.severity;
-  const sevBar = sev === 'High' ? 'bg-risk-500' : sev === 'Medium' ? 'bg-high-500' : 'bg-compliant-500';
-  const sevText = sev === 'High' ? 'text-risk-700' : sev === 'Medium' ? 'text-high-700' : 'text-compliant-700';
-
-  return (
-    <section className="border-b border-ink-900/20">
-      <header className="grid grid-cols-[64px_1fr_auto] items-center gap-4 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`block w-1 h-9 ${sevBar}`} />
-          <span className="font-mono text-[10px] tracking-tight text-text-muted tabular-nums">{String(index + 1).padStart(2, '0')}</span>
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-3">
-            <span className="font-mono text-[11px] tracking-tight text-primary font-semibold">{workflow.workflowId}</span>
-            <span className="font-sans text-[14px] font-semibold text-ink-900 truncate">{workflow.name}</span>
-          </div>
-          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
-            <span className="uppercase tracking-tight">{workflow.businessProcess ?? 'General'}</span>
-            <span className="text-text-muted/40">·</span>
-            <span className={`uppercase tracking-tight font-semibold ${sevText}`}>{sev}</span>
-            {workflow.riskOwner && (
-              <>
-                <span className="text-text-muted/40">·</span>
-                <span>{workflow.riskOwner}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="text-[10px] text-text-muted tabular-nums">
-          {(workflow.outputTable?.rows.length ?? 0).toString().padStart(3, '0')} rec
-        </div>
-      </header>
-
-      {/* Findings / observations as compact two-column block */}
-      <div className="grid grid-cols-2 gap-6 pb-4 text-[12px] text-text-secondary leading-relaxed">
-        <div>
-          <div className="text-[10px] tracking-[0.22em] uppercase text-text-muted mb-1.5">Findings</div>
-          <ul className="space-y-1">
-            {workflow.findings.map((f, i) => (<li key={i}>· {f}</li>))}
-          </ul>
-        </div>
-        <div>
-          <div className="text-[10px] tracking-[0.22em] uppercase text-text-muted mb-1.5">Observations</div>
-          <ul className="space-y-1">
-            {workflow.observations.map((o, i) => (<li key={i}>· {o}</li>))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Output table — the body */}
-      {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
-        <div className="pb-5">
-          <table className="w-full border-collapse text-[12px]">
-            <thead>
-              <tr className="bg-ink-900/[0.025]">
-                {workflow.outputTable.columns.map((col, ci) => (
-                  <th
-                    key={col}
-                    className={`px-2 py-1.5 text-[10px] uppercase tracking-[0.18em] text-text-muted font-semibold border-y border-ink-900/15 ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {workflow.outputTable.rows.map((row, ri) => (
-                <tr key={ri} className="border-b border-ink-900/10 hover:bg-primary-xlight/30 transition-colors">
-                  {row.map((cell, ci) => {
-                    const cellStr = String(cell);
-                    const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
-                    const isLast = ci === row.length - 1;
-                    const isId = ci === 0;
-                    return (
-                      <td
-                        key={ci}
-                        className={`px-2 py-1.5 text-ink-900 tabular-nums ${isLast ? 'text-right' : ''} ${isId ? 'text-primary font-semibold' : ''}`}
-                      >
-                        {isSeverity ? (
-                          <span className={`uppercase tracking-tight font-semibold ${cellStr === 'High' ? 'text-risk-700' : cellStr === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>
-                            {cellStr}
-                          </span>
-                        ) : cell}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// MINIMAL — whitespace-led, large display type, no borders
-// ─────────────────────────────────────────────────────────────────────
-
-function MinimalLayout({ report, workflows, totals }: { report: Report; workflows: WorkflowResult[]; totals: Totals }) {
-  return (
-    <div className="max-w-[760px] mx-auto px-10 pt-16 pb-32">
-      <p className="text-[10px] tracking-[0.3em] uppercase text-text-muted mb-10">Report</p>
-
-      <h1 className="font-display text-[clamp(48px,6.4vw,72px)] leading-[1.0] font-[300] text-ink-900 tracking-[-0.02em] mb-12">
-        {report.name.replace(/ · Minimal$/, '')}
-      </h1>
-
-      <div className="flex flex-wrap gap-x-10 gap-y-2 text-[12px] text-text-muted mb-24">
-        <div>
-          <div className="text-[10px] tracking-[0.22em] uppercase mb-0.5">Filed</div>
-          <div className="text-text">{report.generatedAt}</div>
-        </div>
-        <div>
-          <div className="text-[10px] tracking-[0.22em] uppercase mb-0.5">By</div>
-          <div className="text-text">{report.generatedBy}</div>
-        </div>
-        <div>
-          <div className="text-[10px] tracking-[0.22em] uppercase mb-0.5">Scope</div>
-          <div className="text-text">{totals.bps.length > 0 ? totals.bps.join(' · ') : 'All processes'}</div>
-        </div>
-      </div>
-
-      {/* Big numbers, tiny labels */}
-      <div className="grid grid-cols-4 gap-8 mb-32">
-        <MinimalStat label="Workflows" value={totals.workflows} />
-        <MinimalStat label="Records" value={totals.records} accent />
-        <MinimalStat label="High" value={totals.high} severity="High" />
-        <MinimalStat label="Medium" value={totals.medium} severity="Medium" />
-      </div>
-
-      {workflows.map((w, i) => (
-        <MinimalChapter key={w.id} workflow={w} index={i} />
-      ))}
-    </div>
-  );
-}
-
-function MinimalStat({ label, value, accent = false, severity }: { label: string; value: number; accent?: boolean; severity?: 'High' | 'Medium' | 'Low' }) {
-  const color = severity === 'High'
-    ? 'text-risk-700'
-    : severity === 'Medium'
-      ? 'text-high-700'
-      : severity === 'Low'
-        ? 'text-compliant-700'
-        : accent ? 'text-primary' : 'text-ink-900';
-  return (
-    <div>
-      <div className={`font-display text-[56px] leading-none font-[300] ${color} tabular-nums tracking-[-0.03em]`}>
-        {value}
-      </div>
-      <div className="mt-3 text-[10px] tracking-[0.3em] uppercase text-text-muted">{label}</div>
-    </div>
-  );
-}
-
-function MinimalChapter({ workflow, index }: { workflow: WorkflowResult; index: number }) {
-  const sevDot = workflow.severity === 'High' ? 'bg-risk-500' : workflow.severity === 'Medium' ? 'bg-high-500' : 'bg-compliant-500';
-
-  return (
-    <section className="mt-24 first:mt-0">
-      <div className="flex items-start gap-8">
-        <div className="shrink-0 pt-2">
-          <span className="font-display text-[20px] text-text-muted/60 tabular-nums">{String(index + 1).padStart(2, '0')}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-text-muted mb-3">
-            <span className={`w-1.5 h-1.5 rounded-full ${sevDot}`} />
-            <span>{workflow.businessProcess ?? 'General'}</span>
-            <span className="text-text-muted/40">·</span>
-            <span>{workflow.workflowId}</span>
-            <span className="text-text-muted/40">·</span>
-            <span>{workflow.severity}</span>
-          </div>
-
-          <h2 className="font-display text-[clamp(28px,3.5vw,40px)] leading-[1.1] font-[300] text-ink-900 tracking-[-0.015em] mb-6">
-            {workflow.name}
-          </h2>
-
-          {workflow.riskOwner && (
-            <p className="text-[12px] text-text-muted mb-8">Risk owner — {workflow.riskOwner}</p>
-          )}
-
-          <div className="space-y-10">
-            <MinimalProseBlock label="Findings" items={workflow.findings} />
-            <MinimalProseBlock label="Observations" items={workflow.observations} />
-
-            {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
-              <div>
-                <p className="text-[10px] tracking-[0.3em] uppercase text-text-muted mb-4">Output</p>
-                <table className="w-full border-collapse text-[13px]">
-                  <thead>
-                    <tr>
-                      {workflow.outputTable.columns.map((col, ci) => (
-                        <th
-                          key={col}
-                          className={`pb-3 text-[10px] tracking-[0.22em] uppercase font-semibold text-text-muted border-b border-ink-900/20 ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workflow.outputTable.rows.map((row, ri) => (
-                      <tr key={ri}>
-                        {row.map((cell, ci) => {
-                          const cellStr = String(cell);
-                          const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
-                          const isLast = ci === row.length - 1;
-                          return (
-                            <td
-                              key={ci}
-                              className={`py-3 align-baseline text-text ${isLast ? 'text-right' : ''}`}
-                            >
-                              {isSeverity ? <SeverityWord severity={cellStr as 'High' | 'Medium' | 'Low'} /> : cell}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MinimalProseBlock({ label, items }: { label: string; items: string[] }) {
-  if (items.length === 0) return null;
-  return (
-    <div>
-      <p className="text-[10px] tracking-[0.3em] uppercase text-text-muted mb-3">{label}</p>
-      <div className="space-y-2 text-[15px] leading-[1.7] text-text">
-        {items.map((it, i) => (<p key={i}>{it}</p>))}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// ARCHITECTURAL — rigid grid, numbered chapters, sparse color
-// ─────────────────────────────────────────────────────────────────────
-
-function ArchitecturalLayout({ report, workflows, totals }: { report: Report; workflows: WorkflowResult[]; totals: Totals }) {
-  return (
-    <div className="max-w-[1000px] mx-auto px-8 pt-8 pb-24">
-      {/* Cover — 8/4 split */}
-      <header className="grid grid-cols-12 gap-6 pb-6 border-b-2 border-ink-900">
-        <div className="col-span-12 md:col-span-8">
-          <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-text-muted mb-3">
-            Bulk Audit · 00
-          </p>
-          <h1 className="font-display text-[clamp(34px,4.2vw,48px)] leading-[1.05] font-[420] text-ink-900 tracking-[-0.015em]">
-            {report.name.replace(/ · Architectural$/, '')}
-          </h1>
-        </div>
-        <div className="col-span-12 md:col-span-4 grid grid-cols-2 gap-y-4 text-[11px] self-end">
-          <MetaCell label="Generated" value={report.generatedAt} />
-          <MetaCell label="Author" value={report.generatedBy} />
-          <MetaCell label="Workflows" value={String(totals.workflows)} />
-          <MetaCell label="Processes" value={totals.bps.length > 0 ? totals.bps.join(' / ') : '—'} />
-        </div>
-      </header>
-
-      {/* Overview section — keyed numbers in a tight row */}
-      <section className="grid grid-cols-12 gap-6 py-10 border-b border-ink-900/30">
-        <div className="col-span-12 md:col-span-3">
-          <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-text-muted mb-1">§ 00</p>
-          <h2 className="font-display text-[22px] leading-tight font-[420] text-ink-900">Overview</h2>
-        </div>
-        <div className="col-span-12 md:col-span-9 grid grid-cols-4 gap-6">
-          <BigNumber label="Records" value={totals.records} hint="flagged total" />
-          <BigNumber label="High" value={totals.high} severity="High" />
-          <BigNumber label="Medium" value={totals.medium} severity="Medium" />
-          <BigNumber label="Low" value={totals.low} severity="Low" />
-        </div>
-      </section>
-
-      {workflows.map((w, i) => (
-        <ArchitecturalChapter key={w.id} workflow={w} index={i} total={workflows.length} />
-      ))}
-    </div>
-  );
-}
-
-function MetaCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-text-muted">{label}</div>
-      <div className="text-[12px] text-ink-900 mt-0.5">{value}</div>
-    </div>
-  );
-}
-
-function BigNumber({ label, value, hint, severity }: { label: string; value: number; hint?: string; severity?: 'High' | 'Medium' | 'Low' }) {
-  const color = severity === 'High'
-    ? 'text-risk-700'
-    : severity === 'Medium'
-      ? 'text-high-700'
-      : severity === 'Low'
-        ? 'text-compliant-700'
-        : 'text-ink-900';
-  return (
-    <div>
-      <div className={`font-display text-[44px] leading-none font-[420] ${color} tabular-nums`}>
-        {value}
-      </div>
-      <div className="mt-2 font-mono text-[10px] tracking-[0.22em] uppercase text-text-muted">{label}</div>
-      {hint && <div className="text-[11px] text-text-muted mt-0.5">{hint}</div>}
-    </div>
-  );
-}
-
-function ArchitecturalChapter({ workflow, index, total }: { workflow: WorkflowResult; index: number; total: number }) {
-  const sevDot = workflow.severity === 'High' ? 'bg-risk-500' : workflow.severity === 'Medium' ? 'bg-high-500' : 'bg-compliant-500';
-  const sevText = workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700';
-
-  return (
-    <section className="grid grid-cols-12 gap-6 py-10 border-b border-ink-900/30 last:border-b-0">
-      <aside className="col-span-12 md:col-span-3">
-        <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-text-muted mb-1">
-          § {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
-        </div>
-        <h2 className="font-display text-[20px] leading-tight font-[420] text-ink-900">
-          {workflow.businessProcess ?? 'General'}
-        </h2>
-        <div className="mt-4 flex items-center gap-2 font-mono text-[11px] text-text-muted">
-          <span className={`w-2 h-2 rounded-full ${sevDot}`} />
-          <span className={`uppercase tracking-tight font-semibold ${sevText}`}>{workflow.severity}</span>
-        </div>
-        <div className="mt-1 font-mono text-[11px] text-primary tracking-tight">{workflow.workflowId}</div>
-        {workflow.riskOwner && (
-          <div className="mt-4 pt-4 border-t border-ink-900/20">
-            <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-text-muted mb-0.5">Owner</div>
-            <div className="text-[12px] text-ink-900">{workflow.riskOwner}</div>
-          </div>
-        )}
-      </aside>
-
-      <div className="col-span-12 md:col-span-9">
-        <h3 className="font-display text-[24px] leading-[1.15] font-[420] text-ink-900 tracking-[-0.01em] mb-5">
-          {workflow.name}
-        </h3>
-
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-text-muted mb-2">Findings</div>
-            <ul className="space-y-1.5 text-[13px] text-text leading-relaxed">
-              {workflow.findings.map((f, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="font-mono text-text-muted/60 tabular-nums shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span>{f}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-text-muted mb-2">Observations</div>
-            <ul className="space-y-1.5 text-[13px] text-text leading-relaxed">
-              {workflow.observations.map((o, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="font-mono text-text-muted/60 tabular-nums shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  <span>{o}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
-          <ArchitecturalTable table={workflow.outputTable} />
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ArchitecturalTable({ table }: { table: NonNullable<WorkflowResult['outputTable']> }) {
-  const [showAll, setShowAll] = useState(false);
-  const visibleRows = showAll ? table.rows : table.rows.slice(0, 5);
-
-  return (
-    <div className="border border-ink-900/30">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-ink-900/30">
-        <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-text-muted">
-          Output · {table.rows.length} {table.rows.length === 1 ? 'record' : 'records'}
-        </div>
-        <button className="font-mono text-[10px] tracking-[0.22em] uppercase text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
-          <Download size={12} />
-          CSV
-        </button>
-      </div>
-      <table className="w-full border-collapse text-[12px]">
-        <thead>
-          <tr className="bg-paper-50">
-            {table.columns.map((col, ci) => (
-              <th
-                key={col}
-                className={`px-3 py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted font-semibold border-b border-ink-900/30 ${ci === table.columns.length - 1 ? 'text-right' : 'text-left'}`}
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {visibleRows.map((row, ri) => (
-            <tr key={ri} className="border-b border-ink-900/15 last:border-b-0">
-              {row.map((cell, ci) => {
-                const cellStr = String(cell);
-                const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
-                const isLast = ci === row.length - 1;
-                const isId = ci === 0;
-                return (
-                  <td
-                    key={ci}
-                    className={`px-3 py-2 text-ink-900 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[11px] text-primary tabular-nums' : ''}`}
-                  >
-                    {isSeverity ? (
-                      <span className={`font-mono text-[10px] uppercase tracking-tight font-semibold ${cellStr === 'High' ? 'text-risk-700' : cellStr === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>
-                        {cellStr}
-                      </span>
-                    ) : cell}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {table.rows.length > 5 && (
-        <button
-          onClick={() => setShowAll(s => !s)}
-          className="w-full px-3 py-2 border-t border-ink-900/30 bg-paper-50/50 font-mono text-[10px] tracking-[0.22em] uppercase text-text-secondary hover:bg-paper-50 hover:text-primary cursor-pointer transition-colors"
-        >
-          {showAll ? `Show first 5` : `Show all ${table.rows.length} records`}
-        </button>
-      )}
-    </div>
-  );
-}
-

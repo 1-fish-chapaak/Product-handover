@@ -1096,9 +1096,9 @@ export const WORKFLOW_TYPE_CONFIGS: Record<WorkflowTypeId, WorkflowTypeConfig> =
       { label: 'Auto-Approved', value: '16', color: 'text-emerald-600' },
     ],
     previewRows: [
-      { cells: ['CHG-101', 'Acme Corp', 'Bank Account', 'HDFC-****1234', 'ICICI-****5678', 'admin_user', 'Unauthorized', 'Critical'], status: 'flagged' },
+      { cells: ['CHG-101', 'Acme Corp', 'Bank Account', 'HDFC-****1234', 'ICICI-****5678', 'admin_user', 'Unauthorized', 'High'], status: 'flagged' },
       { cells: ['CHG-102', 'Global Supplies', 'Payment Terms', 'Net 30', 'Net 60', 'ap_manager', 'Authorized', 'Low'], status: 'ok' },
-      { cells: ['CHG-103', 'TechVendor', 'Bank Account', 'SBI-****9012', 'BOB-****3456', 'unknown_user', 'Unauthorized', 'Critical'], status: 'flagged' },
+      { cells: ['CHG-103', 'TechVendor', 'Bank Account', 'SBI-****9012', 'BOB-****3456', 'unknown_user', 'Unauthorized', 'High'], status: 'flagged' },
       { cells: ['CHG-104', 'Pinnacle', 'Address', '123 Main St', '456 Oak Ave', 'procurement', 'Authorized', 'Low'], status: 'ok' },
       { cells: ['CHG-105', 'Atlas Mfg', 'Status', 'Active', 'Blocked', 'compliance', 'Authorized', 'Medium'], status: 'warning' },
     ],
@@ -1137,11 +1137,11 @@ export const WORKFLOW_TYPE_CONFIGS: Record<WorkflowTypeId, WorkflowTypeConfig> =
       { label: 'Mitigated', value: '8', color: 'text-emerald-600' },
     ],
     previewRows: [
-      { cells: ['USR-042', 'Create PO + Approve PO', 'Purchaser, Approver', 'Critical', 'P2P', 'None'], status: 'flagged' },
+      { cells: ['USR-042', 'Create PO + Approve PO', 'Purchaser, Approver', 'High', 'P2P', 'None'], status: 'flagged' },
       { cells: ['USR-078', 'Create Vendor + Pay Vendor', 'AP Clerk, AP Manager', 'High', 'P2P', 'Compensating'], status: 'warning' },
       { cells: ['USR-103', 'Post JE + Approve JE', 'Accountant, Supervisor', 'Medium', 'R2R', 'Dual Approval'], status: 'ok' },
       { cells: ['USR-156', 'Create PO + Receive Goods', 'Buyer, Warehouse', 'High', 'P2P', 'None'], status: 'flagged' },
-      { cells: ['USR-201', 'Edit Master + Pay Vendor', 'Admin, AP Clerk', 'Critical', 'P2P', 'None'], status: 'flagged' },
+      { cells: ['USR-201', 'Edit Master + Pay Vendor', 'Admin, AP Clerk', 'High', 'P2P', 'None'], status: 'flagged' },
     ],
     kpiOptions: [
       { id: 'users_scanned', label: 'Users Scanned', enabled: true },

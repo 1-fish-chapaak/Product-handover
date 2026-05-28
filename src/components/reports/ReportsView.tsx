@@ -8,7 +8,7 @@ import {
   Sparkles, Settings, Palette, Type,
   Image, Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
-  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink, Copy,
+  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
 } from 'lucide-react';
@@ -108,9 +108,8 @@ export type WorkflowResult = {
   failureReason?: 'errored' | 'skipped';
 };
 
-// Four design treatments for the bulk audit report detail page, exposed as
-// side-by-side demos in My Reports so we can compare against the default.
-export type BulkAuditAestheticVariant = 'editorial' | 'forensic' | 'minimal' | 'architectural';
+// The bulk audit report detail page renders in a single editorial treatment.
+export type BulkAuditAestheticVariant = 'editorial';
 
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isEmpty?: boolean;
@@ -1098,8 +1097,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
     const riskColor = (l: number, i: number) => {
       const score = l * i;
       if (score >= 12) return 'bg-risk';
-      if (score >= 8) return 'bg-high';
-      if (score >= 4) return 'bg-mitigated';
+      if (score >= 5) return 'bg-mitigated';
       return 'bg-compliant';
     };
     return (
@@ -1116,26 +1114,26 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
           <div className="flex gap-6">
             <div className="flex-1">
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
+              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
               <div className="grid grid-cols-5 gap-1">
                 {[5,4,3,2,1].map(likelihood => (
                   [1,2,3,4,5].map(impact => {
                     const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact);
                     return (
-                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-[8px] flex items-center justify-center text-[9px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
+                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-[8px] flex items-center justify-center text-[12px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
                         {risksInCell.length > 0 ? risksInCell.map(r => r.id.split('-')[1]).join(',') : ''}
                       </div>
                     );
                   })
                 ))}
               </div>
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
+              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
             </div>
             <div className="w-48">
-              <div className="text-[10px] font-semibold text-text mb-2">Legend</div>
+              <div className="text-[11px] font-semibold text-text mb-2">Legend</div>
               <div className="space-y-1.5">
-                {[{ c: 'bg-risk', l: 'Critical (12-25)' }, { c: 'bg-high', l: 'High (8-11)' }, { c: 'bg-mitigated', l: 'Medium (4-7)' }, { c: 'bg-compliant', l: 'Low (1-3)' }].map(item => (
-                  <div key={item.l} className="flex items-center gap-2 text-[10px] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
+                {[{ c: 'bg-risk', l: 'High (12-25)' }, { c: 'bg-mitigated', l: 'Medium (5-11)' }, { c: 'bg-compliant', l: 'Low (1-4)' }].map(item => (
+                  <div key={item.l} className="flex items-center gap-2 text-[11px] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
                 ))}
               </div>
             </div>
@@ -1729,7 +1727,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const { addToast } = useToast();
   const safeQuery = query ?? { id: '', status: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
@@ -1745,9 +1743,11 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
     ? { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' }
     : { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' };
 
-  const severityStyle = safeQuery.severity === 'Critical'
+  const severityStyle = safeQuery.severity === 'High'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
-    : { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' };
+    : safeQuery.severity === 'Medium'
+      ? { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' }
+      : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1785,7 +1785,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="flex items-center gap-1.5 shrink-0">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-                <span className={query.severity === 'Critical' ? 'text-risk-700' : 'text-high-700'}>{query.severity}</span>
+                <span className={query.severity === 'High' ? 'text-risk-700' : query.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}>{query.severity}</span>
               </span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="flex items-center gap-1.5 shrink-0">
@@ -1799,7 +1799,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 const myComments = comments.filter(c => c.queryId === query.id).length;
                 return (
                   <button
-                    onClick={() => setDrawerTab('comments')}
+                    onClick={() => setCommentsOpen(true)}
                     title="Comments on this query"
                     aria-label="Comments on this query"
                     className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-[8px] cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
@@ -1999,13 +1999,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         </motion.div>
       </div>
 
-      {drawerTab && createPortal(
+      {commentsOpen && createPortal(
         <CommentDrawer
           query={query}
           comments={comments}
           onAddComment={onAddComment}
-          initialTab={drawerTab}
-          onClose={() => setDrawerTab(null)}
+          onClose={() => setCommentsOpen(false)}
         />,
         document.body,
       )}
@@ -2314,21 +2313,18 @@ function QueryWidgetModal({
   );
 }
 
-// ─── Query side-sheet — tabs: Comments + Source Files ───
+// ─── Query side-sheet — Comments ───
 function CommentDrawer({
   query,
   comments,
   onAddComment,
   onClose,
-  initialTab = 'comments',
 }: {
   query: QueryShape;
   comments: QueryComment[];
   onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
   onClose: () => void;
-  initialTab?: 'comments' | 'source-files';
 }) {
-  const [activeTab, setActiveTab] = useState<'comments' | 'source-files'>(initialTab);
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
@@ -2336,14 +2332,6 @@ function CommentDrawer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
   useFocusTrap(containerRef, true, onClose);
-
-  const seed = query.id.charCodeAt(query.id.length - 1);
-  const sourceFiles = [
-    { name: `${query.id}_invoices_raw.xlsx`,    type: 'excel' as const, size: '2.4 MB',  rows: 12480, modified: 'Mar 18, 2026', source: 'SAP · AP Ledger' },
-    { name: `${query.id}_vendor_master.xlsx`,   type: 'excel' as const, size: '780 KB',  rows: 1843,  modified: 'Mar 12, 2026', source: 'Vendor Master · Oracle' },
-    { name: `${query.id}_controls_catalog.csv`, type: 'csv'   as const, size: '144 KB',  rows: 312,   modified: 'Feb 28, 2026', source: 'GRC · Control Library' },
-    { name: `${query.id}_po_grn_trail.xlsx`,    type: 'excel' as const, size: `${(1.2 + (seed % 5) * 0.3).toFixed(1)} MB`, rows: 5612, modified: 'Mar 20, 2026', source: 'Procurement · P2P' },
-  ];
 
   // Show only comments belonging to the query the user clicked from.
   const queryComments = comments.filter(c => c.queryId === query.id);
@@ -2387,66 +2375,38 @@ function CommentDrawer({
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-border-light flex flex-col z-[60]"
         role="dialog"
         aria-modal="true"
-        aria-label={activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
+        aria-label="Comments"
       >
-        {/* Tab strip + close */}
-        <div className="shrink-0 flex items-end justify-between gap-4 px-6 pt-4 border-b border-border-light bg-white">
-          <div role="tablist" aria-label="Query side-sheet tabs" className="flex items-center gap-1">
-            {[
-              { id: 'comments' as const, label: 'Comments', count: totalComments, icon: MessageSquare },
-            ].map(tab => {
-              const isActive = activeTab === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-medium cursor-pointer transition-colors ${
-                    isActive ? 'text-primary' : 'text-text-muted hover:text-text'
-                  }`}
-                >
-                  <Icon size={14} className="shrink-0" />
-                  {tab.label}
-                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full tabular-nums ${
-                    isActive ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-text-muted'
-                  }`}>
-                    {tab.count}
-                  </span>
-                  {isActive && (
-                    <motion.span
-                      layoutId="comment-drawer-tab-indicator"
-                      className="absolute left-0 right-0 -bottom-px h-[2px] bg-primary rounded-t"
-                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-                    />
-                  )}
-                </button>
-              );
-            })}
+        {/* Header strip + close */}
+        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-border-light bg-white">
+          <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary">
+            <MessageSquare size={14} className="shrink-0" />
+            Comments
+            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full tabular-nums bg-primary/10 text-primary">
+              {totalComments}
+            </span>
           </div>
           <button
             onClick={onClose}
-            className="mb-1 w-8 h-8 rounded-full text-text-muted hover:text-text hover:bg-primary-xlight flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full text-text-muted hover:text-text hover:bg-primary-xlight flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Tab header (title + sub-text) */}
+        {/* Header (title + sub-text) */}
         <header className="shrink-0 px-6 py-5 border-b border-border-light">
           <h2 className="text-[16px] font-semibold text-text leading-tight">
-            {activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
+            Comments
           </h2>
           <p className="text-[12px] text-text-muted mt-0.5 leading-snug">
-            {activeTab === 'comments' ? 'Commenting on ' : 'Files used to build '}
+            Commenting on{' '}
             <span className="font-mono font-semibold text-primary">{query.id}</span> — {query.title}
           </p>
         </header>
 
-        {activeTab === 'comments' ? (
-          <>
+        <>
             {/* Comment input */}
             <section className="shrink-0 px-6 py-4 border-b border-border-light">
               <div className="relative">
@@ -2582,61 +2542,6 @@ function CommentDrawer({
               )}
             </div>
           </>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              {sourceFiles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-3">
-                    <FileText size={20} className="text-text-muted/50" />
-                  </div>
-                  <p className="text-[13px] font-medium text-text-secondary">No source files attached to this query yet.</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border-light border border-border-light rounded-[12px] overflow-hidden">
-                  {sourceFiles.map(f => {
-                    const pillClass = f.type === 'excel'
-                      ? 'bg-compliant-50 text-compliant-700'
-                      : 'bg-brand-50 text-brand-700';
-                    return (
-                      <li key={f.name} className="flex items-center gap-3 px-4 py-3 hover:bg-paper-50 transition-colors">
-                        <div className="w-9 h-9 rounded-[8px] bg-paper-50 border border-border-light flex items-center justify-center shrink-0">
-                          <FileText size={16} className={f.type === 'excel' ? 'text-compliant-700' : 'text-brand-700'} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-mono text-[12px] font-semibold text-text truncate">{f.name}</span>
-                            <span className={`inline-flex items-center h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider rounded ${pillClass}`}>{f.type}</span>
-                          </div>
-                          <div className="text-[11px] text-text-muted tabular-nums">
-                            {f.size} · {f.rows.toLocaleString()} rows · {f.source} · {f.modified}
-                          </div>
-                        </div>
-                        <button
-                          className="inline-flex items-center justify-center w-8 h-8 text-text-secondary bg-white border border-border-light rounded-[8px] hover:border-primary/30 hover:text-primary cursor-pointer"
-                          title={`Preview ${f.name}`}
-                          aria-label={`Preview ${f.name}`}
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          className="inline-flex items-center justify-center w-8 h-8 text-text-secondary bg-white border border-border-light rounded-[8px] hover:border-primary/30 hover:text-primary cursor-pointer"
-                          title={`Download ${f.name}`}
-                          aria-label={`Download ${f.name}`}
-                        >
-                          <Download size={14} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[11px] text-text-muted tabular-nums">
-              {sourceFiles.length} files
-            </footer>
-          </>
-        )}
       </motion.aside>
     </>
   );
@@ -3269,7 +3174,7 @@ function WorkflowResultCard({
   const severityStyle = workflow.severity === 'High'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
     : workflow.severity === 'Medium'
-      ? { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' }
+      ? { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' }
       : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
 
   useEffect(() => {
@@ -3313,7 +3218,7 @@ function WorkflowResultCard({
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="flex items-center gap-1.5 shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
+              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
             </span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -3329,28 +3234,14 @@ function WorkflowResultCard({
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[8px] shadow-xl py-1">
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      navigator.clipboard?.writeText(workflow.workflowId);
-                      addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
-                    }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <Copy size={14} />
-                    Copy Workflow ID
-                  </button>
                   {onDelete && (
-                    <>
-                      <div className="my-1 border-t border-border-light" />
-                      <button
-                        onClick={() => { setMenuOpen(false); onDelete(); }}
-                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
-                    </>
+                    <button
+                      onClick={() => { setMenuOpen(false); onDelete(); }}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
                   )}
                 </div>
               )}
@@ -3487,7 +3378,7 @@ function WorkflowResultCard({
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
-                                        ? 'bg-high-50 text-high-700'
+                                        ? 'bg-mitigated-50 text-mitigated-700'
                                         : 'bg-compliant-50 text-compliant-700'
                                   }`}
                                 >
@@ -3496,7 +3387,7 @@ function WorkflowResultCard({
                                       cellStr === 'High'
                                         ? 'bg-risk-500'
                                         : cellStr === 'Medium'
-                                          ? 'bg-high-500'
+                                          ? 'bg-mitigated-500'
                                           : 'bg-compliant-500'
                                     }`}
                                   />
@@ -4072,6 +3963,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   // QueryCard "Generate Cases" phase, lifted up so it survives template
   // switches that re-mount QueryCards. Keyed by query.id.
@@ -4090,13 +3982,25 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     return () => window.removeEventListener('app:launch-pulse', handler);
   }, []);
 
-  const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
+  const applyTemplateNow = (template: typeof REPORT_TEMPLATES[0]) => {
     setApplyingTemplate(true);
     setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
       addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
+  };
+
+  const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
+    setShowApplyTemplate(false);
+    // Switching away from a template that's already applied replaces the
+    // current layout and its sections, so confirm first. The first-time
+    // apply (nothing applied yet, or re-picking the same one) is harmless.
+    if (appliedTemplate && appliedTemplate.id !== template.id) {
+      setPendingTemplate(template);
+      return;
+    }
+    applyTemplateNow(template);
   };
 
   const reportTemplate =
@@ -4188,7 +4092,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       chartData: [40, 55, 80, 65, 90, 75, 95, 70, 85, 100],
     },
     {
-      id: 'Q02', status: 'Completed', risk: 'Compliance Risk', severity: 'Critical',
+      id: 'Q02', status: 'Completed', risk: 'Compliance Risk', severity: 'High',
       ...REPORT_QUERIES_ATR.Q02,
       addedBy: 'AI Copilot',
       kpis: [
@@ -4210,14 +4114,13 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         addedBy: report.generatedBy,
         kpis: [
           { label: 'Total Risks', value: '12', color: 'text-primary' },
-          { label: 'Critical', value: '2', color: 'text-risk-700' },
-          { label: 'High', value: '5', color: 'text-high-700' },
+          { label: 'High', value: '7', color: 'text-risk-700' },
           { label: 'Mitigated', value: '5', color: 'text-compliant-700' },
         ],
         chartData: [12, 10, 11, 9, 12, 10, 8, 12, 11, 12],
       },
       {
-        id: 'RA02', status: 'In Review', risk: 'Mitigation Gap', severity: 'Critical',
+        id: 'RA02', status: 'In Review', risk: 'Mitigation Gap', severity: 'High',
         ...REPORT_QUERIES_ATR.RA02,
         addedBy: 'AI Copilot',
         kpis: [
@@ -4714,6 +4617,45 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               >
                 <Loader2 size={20} className="text-primary animate-spin" />
                 <span className="text-[14px] font-semibold text-text">Applying template...</span>
+              </motion.div>
+            </motion.div>
+          )}
+          {pendingTemplate && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ink-900/40 backdrop-blur-[2px]"
+              onClick={() => setPendingTemplate(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 12 }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="switch-template-title"
+                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[320px] p-6"
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 id="switch-template-title" className="text-[15px] font-semibold text-text mb-2">Switch template?</h3>
+                <p className="text-[13px] text-text-secondary leading-relaxed mb-5">
+                  Switching to “{pendingTemplate.name}” replaces the current layout and its sections. Some content may not carry over.
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setPendingTemplate(null)}
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { const t = pendingTemplate; setPendingTemplate(null); applyTemplateNow(t); }}
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    Switch
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}
