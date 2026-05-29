@@ -4,7 +4,7 @@ test('Workflow build: 5 stages → UI recs → freeze → save → redirect', as
   page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
 
   await page.goto('http://localhost:5173');
-  await page.waitForSelector('[class*="bg-[#1a0a2e]"]', { timeout: 10000 });
+  await page.waitForSelector('[class*="bg-sidebar-bg"]', { timeout: 10000 });
   await page.getByText('Start new Chat').click();
   await page.waitForTimeout(500);
 
