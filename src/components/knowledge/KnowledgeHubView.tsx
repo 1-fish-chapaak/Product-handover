@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Database, Brain, Sparkles } from 'lucide-react';
 import DataSourcesView, {
-  type DataSourcesViewHandle, type HubStats,
+  type DataSourcesViewHandle,
 } from '../data-sources/DataSourcesView';
 import FloatingLines from '../shared/FloatingLines';
 
@@ -135,13 +135,7 @@ function SmartLearnComingSoon() {
 export default function KnowledgeHubView() {
   const dataSourcesRef = useRef<DataSourcesViewHandle>(null);
   const [tab, setTab] = useState<TabId>('data');
-  // Stats come from DataSourcesView's onStatsChange — used solely to drive the
-  // Data Sources tab count badge (Reports' "My Reports 4" pattern).
-  const [stats, setStats] = useState<HubStats | null>(null);
   const activeTabLabel = TABS.find(t => t.id === tab)?.label ?? '';
-  const tabCounts: Partial<Record<TabId, number>> = {
-    data: stats?.total ?? 0,
-  };
 
   useEffect(() => {
     if (tab !== 'data') return;
@@ -215,7 +209,7 @@ export default function KnowledgeHubView() {
             transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
             className="-mb-px"
           >
-            <UnderlinedTabs active={tab} onChange={setTab} counts={tabCounts} />
+            <UnderlinedTabs active={tab} onChange={setTab} />
           </motion.div>
         </div>
 
@@ -230,7 +224,7 @@ export default function KnowledgeHubView() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
               >
-                <DataSourcesView ref={dataSourcesRef} onStatsChange={setStats} />
+                <DataSourcesView ref={dataSourcesRef} />
               </motion.div>
             ) : (
               <motion.div

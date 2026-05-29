@@ -21,7 +21,7 @@ import {
   type DataSource, type SourceType,
 } from './sources';
 import {
-  DATASET_FILES, setSourceFiles, removeSourceFiles, type FileFormat,
+  DATASET_FILES, setSourceFiles, removeSourceFiles, metaForFormat, registerFileBlob, countSheetRows, countPdfPages, type FileFormat,
 } from './datasetFiles';
 import { useKnowledgeSources } from '../../hooks/useKnowledgeSources';
 
@@ -190,7 +190,8 @@ interface SourceCardProps {
   /** Signal that the user clicked Remove/Disconnect in the menu. The parent
    *  shows a confirmation modal and only then performs the removal. */
   onRemove: (id: string) => void;
-  onRenameInDetail: () => void;
+  /** Persist an inline rename triggered from the card's 3-dot menu. */
+  onRename: (id: string, newName: string) => void;
   /** True whenever ANY source is currently selected — promotes the hover-only
    *  checkbox into a persistent visible one across all cards. */
   isSelecting: boolean;
@@ -243,16 +244,55 @@ function SourceCard(props: SourceCardProps) {
     : <SourceTile {...props} />;
 }
 
+// Inline rename editor — input + save/cancel. Shared by the grid tile and list
+// row. Auto-selects on mount; Enter/blur commits, Escape cancels. The save and
+// cancel buttons use onMouseDown-preventDefault so clicking them doesn't blur
+// the input first (which would fire a commit before the click registers).
+function InlineRename({ initial, onCommit, onCancel }: {
+  initial: string;
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.select(); }, []);
+  const commit = () => {
+    const n = draft.trim();
+    if (n && n !== initial) onCommit(n);
+    else onCancel();
+  };
+  return (
+    <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
+      <input
+        ref={ref}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') onCancel(); }}
+        onBlur={commit}
+        className="flex-1 min-w-0 h-8 px-2.5 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-lg focus:outline-none focus:ring-4 focus:ring-brand-600/15"
+      />
+      <button onMouseDown={e => e.preventDefault()} onClick={commit} className="p-1.5 text-brand-700 hover:bg-brand-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Save name">
+        <Check size={15} />
+      </button>
+      <button onMouseDown={e => e.preventDefault()} onClick={onCancel} className="p-1.5 text-ink-500 hover:bg-paper-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Cancel rename">
+        <X size={15} />
+      </button>
+    </div>
+  );
+}
+
 // Grid tile — primary card, slightly richer than the previous version. Folders
 // get a count chip; integrations get a health dot + last sync.
 function SourceTile({
-  source, onOpen, onRemove, onRenameInDetail,
+  source, onOpen, onRemove, onRename,
   isSelecting, selected, onToggleSelect,
 }: SourceCardProps) {
-  // One generic file glyph for every card — folders, files, and integrations
-  // all read the same. Type identity is carried by the uppercase FORMAT label
-  // in the footer ("FOLDER" / "SQL" / "PDF" / etc.), not by the icon.
-  const Icon: React.ElementType = FileText;
+  const [editing, setEditing] = useState(false);
+  // Icon reflects what the source is: a folder glyph for folders, the file
+  // glyph for files, and the per-type glyph (DB / API / cloud / session) for
+  // integrations. One calm brand tile tone for all so the grid stays quiet —
+  // the icon carries identity, the uppercase FORMAT label confirms it.
+  const Icon: React.ElementType = source.isFolder ? FolderOpen : TYPE_META[source.type].icon;
   const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
@@ -260,26 +300,31 @@ function SourceTile({
   );
   const health = isIntegrated ? integrationHealth(source) : null;
 
-  // Uppercase format label for the footer — extracted from the subtype's
-  // first token for files ("PDF · 2.4 MB" → "PDF"), or canonical name for
-  // folders/integrations.
-  const formatLabel = source.isFolder
-    ? 'FOLDER'
-    : source.type === 'file'
-      ? (source.subtype.split('·')[0] ?? 'FILE').trim().toUpperCase()
-      : source.type === 'database'
-        ? 'SQL'
-        : source.type === 'api'
-          ? 'API'
-          : source.type === 'cloud'
-            ? 'CLOUD'
-            : 'SESSION';
-
-  // For files/folders: pull the size/count tail (everything after the format)
-  // so the footer reads "PDF · 4.2 KB · May 28, 2026" cleanly.
+  // For files/folders: pull the size/count tail (everything after the format
+  // token) so the footer reads "4.2 KB · May 28, 2026" without repeating the
+  // type the icon and filename already convey.
   const sizeTail = !isIntegrated
     ? source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ')
     : '';
+
+  // Editing replaces the whole card with an inline rename row (icon + input +
+  // save/cancel) so the <input> never nests inside the card <button>.
+  if (editing) {
+    return (
+      <div className="relative">
+        <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border border-brand-500">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${tone}`}>
+            <Icon size={18} />
+          </div>
+          <InlineRename
+            initial={source.name}
+            onCommit={(n) => { onRename(source.id, n); setEditing(false); }}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -287,19 +332,19 @@ function SourceTile({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-md bg-canvas-elevated border transition-all duration-200 cursor-pointer text-left active:scale-[0.99] ${
+        className={`group w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border transition-colors duration-200 cursor-pointer text-left ${
           selected
-            ? 'border-brand-500 bg-brand-50/40 shadow-[0_2px_8px_rgb(106_18_205_/_0.10)]'
-            : 'border-canvas-border hover:border-brand-300 hover:-translate-y-[1px] hover:shadow-[0_2px_10px_rgb(15_8_30_/_0.05)]'
+            ? 'border-brand-500 bg-brand-50/50'
+            : 'border-canvas-border hover:border-brand-300'
         }`}
       >
         {/* Icon tile + overlaid hover checkbox. The checkbox is absolute
             inside the icon container so layout never shifts between selecting
             and non-selecting states. Hover or `isSelecting` reveals it; the
             icon stays visible underneath at reduced opacity. */}
-        <div className={`relative w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-[1.05] ${tone}`}>
+        <div className={`relative w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${tone}`}>
           <Icon
-            size={16}
+            size={18}
             className={`transition-opacity duration-150 ${
               selected ? 'opacity-0' : isSelecting ? 'opacity-30 group-hover:opacity-0' : 'opacity-100 group-hover:opacity-30'
             }`}
@@ -332,13 +377,11 @@ function SourceTile({
           <div className="text-[0.875rem] font-semibold text-ink-900 truncate leading-tight" title={source.name}>
             {source.name}
           </div>
-          {/* Footer: FORMAT · size/count · date  OR  FORMAT · Connected.
-              Uses inline display so the natural line-wrap kicks in only when
-              the whole line genuinely overflows — flex containers were
-              breaking after every span on narrow cards. */}
-          <div className="mt-0.5 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
-            <span className="font-semibold text-ink-700 uppercase tracking-wide text-[0.6875rem]">{formatLabel}</span>
-            <span className="text-ink-300 mx-1.5" aria-hidden>·</span>
+          {/* Footer: size/count · date  OR  Connected. The format (CSV / PDF /
+              FOLDER) is intentionally NOT repeated here — the icon already
+              names the type and the filename already carries the extension.
+              Inline display so wrap kicks in only on genuine overflow. */}
+          <div className="mt-1 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
             {isIntegrated ? (
               <span className={`font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-brand-700'}`}>
                 {health === 'degraded' ? 'Needs reconnection' : 'Connected'}
@@ -374,7 +417,7 @@ function SourceTile({
           source={source}
           onClose={() => setMenuOpen(false)}
           onRequestRemove={handleRemove}
-          onRename={onRenameInDetail}
+          onRename={() => { setMenuOpen(false); setEditing(true); }}
         />
       )}
     </div>
@@ -383,11 +426,12 @@ function SourceTile({
 
 // Dense list row — single line, scannable. Same affordances as the tile.
 function SourceRow({
-  source, onOpen, onRemove, onRenameInDetail,
+  source, onOpen, onRemove, onRename,
   isSelecting, selected, onToggleSelect,
 }: SourceCardProps) {
+  const [editing, setEditing] = useState(false);
   const { label: typeLabel } = TYPE_META[source.type];
-  const Icon: React.ElementType = FileText;
+  const Icon: React.ElementType = source.isFolder ? FolderOpen : TYPE_META[source.type].icon;
   const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
@@ -395,6 +439,30 @@ function SourceRow({
   );
   const health = isIntegrated ? integrationHealth(source) : null;
   const displayType = source.isFolder ? 'Folder' : typeLabel;
+  // Detail column: drop the leading format token for files/folders (it repeats
+  // the Type column, the icon, and the filename extension). Integrations keep
+  // their full subtype because the first token is the engine ("Oracle",
+  // "Snowflake"), which is real information shown nowhere else.
+  const detail = isIntegrated
+    ? source.subtype
+    : source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ');
+
+  if (editing) {
+    return (
+      <div className="relative">
+        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-lg border border-brand-500 bg-canvas-elevated">
+          <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${tone}`}>
+            <Icon size={13} />
+          </div>
+          <InlineRename
+            initial={source.name}
+            onCommit={(n) => { onRename(source.id, n); setEditing(false); }}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -402,7 +470,7 @@ function SourceRow({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-center gap-3 px-3 h-10 rounded-md border transition-colors cursor-pointer text-left ${
+        className={`group w-full flex items-center gap-3 px-3 h-10 rounded-lg border transition-colors cursor-pointer text-left ${
           selected
             ? 'border-brand-600 bg-brand-50/30'
             : 'border-transparent hover:border-canvas-border hover:bg-canvas-elevated'
@@ -448,7 +516,7 @@ function SourceRow({
           {displayType}
         </div>
         <div className="hidden md:block flex-1 max-w-[18rem] text-[0.75rem] text-ink-500 truncate tabular-nums">
-          {source.subtype}
+          {detail}
         </div>
         <div className="hidden md:flex items-center gap-2 shrink-0 w-32 justify-end">
           {health && <HealthDot health={health} />}
@@ -476,7 +544,7 @@ function SourceRow({
           source={source}
           onClose={() => setMenuOpen(false)}
           onRequestRemove={handleRemove}
-          onRename={onRenameInDetail}
+          onRename={() => { setMenuOpen(false); setEditing(true); }}
         />
       )}
     </div>
@@ -508,7 +576,7 @@ function SourceMenu({ source, onClose, onRequestRemove, onRename }: SourceMenuPr
       <div className="fixed inset-0 z-30" onClick={onClose} aria-hidden />
       <div
         role="menu"
-        className="absolute right-2 top-12 z-40 w-48 rounded-md border border-paper-200 bg-paper-0 shadow-md py-1"
+        className="absolute right-2 top-12 z-40 w-48 rounded-lg border border-paper-200 bg-paper-0 shadow-md py-1"
         onClick={(e) => e.stopPropagation()}
       >
         <MenuItem icon={Pencil} label="Rename" onClick={handle(onRename)} />
@@ -646,7 +714,7 @@ function PerTabEmptyState({
 
 function EmptyShell({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="text-center py-16 rounded-xl border border-dashed border-canvas-border bg-canvas-elevated">
+    <div className="text-center py-16 rounded-lg border border-dashed border-canvas-border bg-canvas-elevated">
       <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mx-auto mb-3">
         <Icon size={20} className="text-ink-400" />
       </div>
@@ -693,11 +761,11 @@ function CatalogLoadingSkeleton() {
       {bucketSizes.map((n, bi) => (
         <div key={bi}>
           <div className="h-3 w-32 rounded bg-paper-100 mb-3" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: n }).map((_, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-canvas-elevated border border-canvas-border"
+                className="flex items-start gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border border-canvas-border"
               >
                 <div className="w-10 h-10 rounded-lg bg-paper-100 shrink-0" />
                 <div className="flex-1 min-w-0 space-y-2">
@@ -745,7 +813,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const [activeSource, setActiveSource] = useState<DataSource | null>(null);
   // Side-panel a11y refs: container we focus on open, and the element to
   // restore focus to on close (typically the source row that was clicked).
-  const panelRef = useRef<HTMLElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   // When the menu's Rename is clicked, we set this so the detail view enters
   // rename mode immediately on mount. Cleared after the detail view consumes it.
@@ -793,65 +860,28 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     window.localStorage.setItem('kh:viewMode', viewMode);
   }, [viewMode]);
 
-  // ── Side-panel a11y ────────────────────────────────────────────────────────
-  // When the source detail drawer opens we (1) lock body scroll so the page
-  // behind doesn't scroll under the panel, (2) move keyboard focus onto the
-  // panel, (3) trap Tab inside the panel so users can't focus elements behind
-  // the backdrop, (4) close on Escape, (5) restore focus to the originating
-  // element on close. Standard modal-dialog expectations for any keyboard or
-  // screen-reader user.
+  // ── In-page detail a11y ─────────────────────────────────────────────────────
+  // The source detail is now a same-page view (not an overlay drawer), so there
+  // is no body-scroll lock or focus trap. We still (1) close on Escape and
+  // (2) restore focus to the row that opened it when returning to the list.
   useEffect(() => {
     if (!activeSource) return;
 
     returnFocusRef.current = document.activeElement as HTMLElement | null;
 
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    // Defer focus by one frame so motion.aside is mounted and visible.
-    const focusTimer = window.setTimeout(() => { panelRef.current?.focus(); }, 30);
-
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        e.stopPropagation();
         setActiveSource(null);
         setPendingRename(false);
-        return;
-      }
-      if (e.key !== 'Tab' || !panelRef.current) return;
-      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusables.length === 0) {
-        e.preventDefault();
-        panelRef.current.focus();
-        return;
-      }
-      const first = focusables[0];
-      const last  = focusables[focusables.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      const focusInside = active ? panelRef.current.contains(active) : false;
-      if (e.shiftKey) {
-        if (!focusInside || active === first || active === panelRef.current) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (!focusInside || active === last) {
-          e.preventDefault();
-          first.focus();
-        }
       }
     };
 
     document.addEventListener('keydown', onKeyDown);
 
     return () => {
-      window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = prevOverflow;
-      // Restore focus to the row that opened the panel (or wherever focus was).
+      // Restore focus to the row that opened the detail (or wherever focus was).
       returnFocusRef.current?.focus?.();
       returnFocusRef.current = null;
     };
@@ -1105,9 +1135,27 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources]);
 
-  const handlePickerConfirm = (selections: AttachmentSelection[]) => {
+  const handlePickerConfirm = async (selections: AttachmentSelection[]) => {
     const uploads   = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'upload' }>     => s.kind === 'upload');
     const dbConnect = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'connect-db' }> => s.kind === 'connect-db');
+
+    // Per-file row/page metadata. With real bytes we parse the true count —
+    // PDFs via pdf.js (page count), CSV/XLSX via SheetJS (data-row count) — so
+    // the header count matches the live preview. Byte-less files (or parse
+    // failures) fall back to the size-based estimate.
+    const fileMeta = async (name: string, sizeBytes: number, real?: File) => {
+      const fmt = fileFormat(name);
+      if (real) {
+        if (fmt === 'PDF') {
+          const pages = await countPdfPages(real);
+          if (pages != null) return { pages };
+        } else if (fmt === 'CSV' || fmt === 'XLSX') {
+          const rows = await countSheetRows(real);
+          if (rows != null) return { rows };
+        }
+      }
+      return metaForFormat(fmt, sizeBytes);
+    };
 
     // Split uploads into folder groups (one source per folder) vs loose files
     // (one source per file). Files in the same root folder become the contents
@@ -1130,25 +1178,37 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
     if (uploads.length > 0 || dbConnect.length > 0) {
       const taken = new Set(sources.map(s => s.name));
-      // Anchor newly-added sources to "now" so they land in the visible
-      // Today bucket and pass the default date filter.
-      const nowIso = new Date().toISOString();
+      // Anchor newly-added sources to the app's reference "today" (TODAY), not
+      // the machine clock — the whole view buckets and filters against TODAY,
+      // so a real-clock timestamp would land uploads in "Last 7 days". Use
+      // TODAY noon + 1min so they sit just above the seed's newest item and top
+      // the Today bucket.
+      const nowIso = new Date(TODAY.getTime() + 12 * 60 * 60 * 1000 + 60 * 1000).toISOString();
       const today  = nowIso.slice(0, 10);
 
       // ── Loose-file sources: one card per file ────────────────────────
-      const looseAdds: DataSource[] = loose.map(u => {
+      // Reserve deduped names synchronously first (keeps ordering stable), then
+      // parse counts in parallel.
+      const looseReserved = loose.map(u => {
         const finalName = dedupeName(u.name, taken);
         taken.add(finalName);
+        return { u, finalName };
+      });
+      const looseAdds: DataSource[] = await Promise.all(looseReserved.map(async ({ u, finalName }) => {
         const sourceId = `upl-${u.localId}`;
+        const fileId = `${sourceId}-1`;
         // Persist single-file content for the detail view.
         setSourceFiles(sourceId, [{
-          id:         `${sourceId}-1`,
+          id:         fileId,
           name:       u.name,
           format:     fileFormat(u.name),
           sizeBytes:  u.sizeBytes,
           uploadedAt: today,
           status:     'processed',
+          ...(await fileMeta(u.name, u.sizeBytes, u.file)),
         }]);
+        // Keep the real bytes for an in-session preview (PDF iframe, etc.).
+        if (u.file) registerFileBlob(fileId, u.file);
         return {
           id:        sourceId,
           name:      finalName,
@@ -1156,24 +1216,30 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           subtype:   `${formatExt(finalName)} · ${formatBytesShort(u.sizeBytes)}`,
           createdAt: nowIso,
         };
-      });
+      }));
 
       // ── Folder sources: one card per folder, files inside ────────────
       const folderAdds: DataSource[] = [];
-      folders.forEach((files, folderName) => {
+      for (const [folderName, files] of folders) {
         const finalName = dedupeName(folderName, taken);
         taken.add(finalName);
         const sourceId  = `upl-folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const totalSize = files.reduce((sum, f) => sum + f.sizeBytes, 0);
         // Persist folder contents — strip the root folder prefix so display is "Q1/sales.csv".
-        setSourceFiles(sourceId, files.map((f, i) => ({
-          id:         `${sourceId}-${i + 1}`,
-          name:       f.path ? f.path.replace(`${folderName}/`, '') : f.name,
-          format:     fileFormat(f.name),
-          sizeBytes:  f.sizeBytes,
-          uploadedAt: today,
-          status:     'processed',
-        })));
+        const fileEntries = await Promise.all(files.map(async (f, i) => {
+          const fileId = `${sourceId}-${i + 1}`;
+          if (f.file) registerFileBlob(fileId, f.file);
+          return {
+            id:         fileId,
+            name:       f.path ? f.path.replace(`${folderName}/`, '') : f.name,
+            format:     fileFormat(f.name),
+            sizeBytes:  f.sizeBytes,
+            uploadedAt: today,
+            status:     'processed' as const,
+            ...(await fileMeta(f.name, f.sizeBytes, f.file)),
+          };
+        }));
+        setSourceFiles(sourceId, fileEntries);
         folderAdds.push({
           id:        sourceId,
           name:      finalName,
@@ -1182,7 +1248,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           subtype:   `Folder · ${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytesShort(totalSize)}`,
           createdAt: nowIso,
         });
-      });
+      }
 
       // ── DB sources ───────────────────────────────────────────────────
       const dbAdds: DataSource[] = dbConnect.map(d => {
@@ -1231,9 +1297,9 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   if (displayMode === 'empty' || sources.length === 0) {
     return (
       <>
-        <div className="rounded-2xl border-2 border-dashed border-brand-100 bg-canvas-elevated/95 shadow-[0_1px_3px_rgb(15_8_30_/_0.03)]">
+        <div className="rounded-lg border-2 border-dashed border-brand-100 bg-canvas-elevated/95 shadow-[0_1px_3px_rgb(15_8_30_/_0.03)]">
           <div className="flex flex-col items-center justify-center text-center py-24 px-8">
-            <div className="w-14 h-14 rounded-2xl border border-paper-200 bg-paper-0 flex items-center justify-center mb-6">
+            <div className="w-14 h-14 rounded-lg border border-paper-200 bg-paper-0 flex items-center justify-center mb-6">
               <Layers size={24} className="text-ink-400" strokeWidth={1.4} />
             </div>
             <h2 className="font-display text-[1.375rem] font-[420] text-ink-900 leading-tight">
@@ -1271,6 +1337,21 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     );
   }
 
+  // ── Source detail — same-page view ──
+  // Clicking a source swaps the list for its detail on this page (no overlay
+  // drawer). The detail's own breadcrumb / back button returns to the list.
+  if (activeSource) {
+    return (
+      <DataSourceDetailView
+        source={activeSource}
+        onBack={() => { setActiveSource(null); setPendingRename(false); }}
+        onRename={(newName) => renameSource(activeSource.id, newName)}
+        startRenaming={pendingRename}
+        onStartRenamingConsumed={() => setPendingRename(false)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* ── Top row: filter pills LEFT + primary CTA RIGHT. Pill + CTA styles
@@ -1278,7 +1359,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           EngagementLibraryView) so the page reads as native rather than
           a one-off. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="inline-flex items-center gap-1 p-1.5 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map(t => {
             const Icon = t.icon;
             const isActive = tab === t.id;
@@ -1287,24 +1368,24 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`shrink-0 relative inline-flex items-center gap-2.5 px-3.5 h-9 rounded-xl text-[0.875rem] transition-colors cursor-pointer ${
+                className={`shrink-0 relative inline-flex items-center gap-2.5 px-3.5 h-9 rounded-lg text-[0.875rem] transition-colors cursor-pointer ${
                   isActive
                     ? 'text-brand-700 font-semibold'
-                    : 'text-ink-700 font-medium hover:text-ink-900'
+                    : 'text-ink-500 font-medium hover:text-ink-800'
                 }`}
               >
                 {isActive && (
                   <motion.div
                     layoutId="kh-filter-pill-bg"
-                    className="absolute inset-0 bg-canvas-elevated rounded-xl shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                    className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
                 <span className="relative z-10 flex items-center gap-2">
-                  <Icon size={15} className={isActive ? 'text-brand-700' : 'text-ink-600'} />
+                  <Icon size={15} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
                   <span>{t.label}</span>
                   <span className={`tabular-nums font-bold text-[0.8125rem] ${
-                    isActive ? 'text-ink-900' : 'text-ink-500'
+                    isActive ? 'text-brand-700' : 'text-ink-400'
                   }`}>
                     {count}
                   </span>
@@ -1337,7 +1418,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             placeholder={`Search ${tab === 'all' ? 'all sources' : TABS.find(t => t.id === tab)!.label.toLowerCase()}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-9 py-2 border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 transition-all"
+            className="w-full pl-9 pr-9 h-[38px] border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 transition-colors"
           />
           {search && (
             <button
@@ -1351,30 +1432,44 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           )}
         </div>
 
-        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
+        {/* View toggle — same sliding-white-pill segmented control as the
+            filter tabs above (motion layoutId), so the two segmented controls
+            on the page read as one family. The active icon carries the brand
+            colour; the pill itself stays neutral white. */}
+        <div className="inline-flex items-center gap-1 px-1 h-[38px] rounded-lg border border-canvas-border/60 bg-canvas-elevated/40">
           <button
             type="button"
             onClick={() => setViewMode('grid')}
-            className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer ${
-              viewMode === 'grid' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800 hover:bg-paper-50'
-            }`}
+            className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors cursor-pointer"
             aria-label="Grid view"
             aria-pressed={viewMode === 'grid'}
             title="Grid view"
           >
-            <LayoutGrid size={14} />
+            {viewMode === 'grid' && (
+              <motion.div
+                layoutId="kh-viewmode-pill"
+                className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <LayoutGrid size={15} className={`relative z-10 transition-colors ${viewMode === 'grid' ? 'text-brand-700' : 'text-ink-500'}`} />
           </button>
           <button
             type="button"
             onClick={() => setViewMode('list')}
-            className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer ${
-              viewMode === 'list' ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:text-ink-800 hover:bg-paper-50'
-            }`}
+            className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors cursor-pointer"
             aria-label="List view"
             aria-pressed={viewMode === 'list'}
             title="List view"
           >
-            <Rows3 size={14} />
+            {viewMode === 'list' && (
+              <motion.div
+                layoutId="kh-viewmode-pill"
+                className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <Rows3 size={15} className={`relative z-10 transition-colors ${viewMode === 'list' ? 'text-brand-700' : 'text-ink-500'}`} />
           </button>
         </div>
 
@@ -1385,6 +1480,8 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           onClose={() => setDateOpen(false)}
           onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
           today={TODAY}
+          triggerRounded="rounded-lg"
+          triggerHeight="h-[38px]"
         />
       </div>
 
@@ -1463,7 +1560,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                 </button>
               </div>
               {viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {b.items.map(d => (
                     <SourceCard
                       key={d.id}
@@ -1471,7 +1568,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       viewMode="grid"
                       onOpen={() => setActiveSource(d)}
                       onRemove={requestRemove}
-                      onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
+                      onRename={renameSource}
                       isSelecting={isSelecting}
                       selected={selectedIds.has(d.id)}
                       onToggleSelect={toggleSelect}
@@ -1479,7 +1576,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden divide-y divide-canvas-border">
+                <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden divide-y divide-canvas-border">
                   {b.items.map(d => (
                     <SourceCard
                       key={d.id}
@@ -1487,7 +1584,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                       viewMode="list"
                       onOpen={() => setActiveSource(d)}
                       onRemove={requestRemove}
-                      onRenameInDetail={() => { setPendingRename(true); setActiveSource(d); }}
+                      onRename={renameSource}
                       isSelecting={isSelecting}
                       selected={selectedIds.has(d.id)}
                       onToggleSelect={toggleSelect}
@@ -1513,7 +1610,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <button
               type="button"
               onClick={() => setVisibleLimit(l => l + PAGE_SIZE)}
-              className="inline-flex items-center px-6 h-11 rounded-2xl bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-paper-50 hover:border-ink-300 transition-colors cursor-pointer"
+              className="inline-flex items-center px-6 h-11 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-paper-50 hover:border-ink-300 transition-colors cursor-pointer"
             >
               Load more data
             </button>
@@ -1530,50 +1627,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         confirmLabel="Add"
         mode="kh-add"
       />
-
-      {/* ── Source detail — right-side panel ──
-          Replaces the old full-page replace. The grid stays mounted behind a
-          dim backdrop so users can scan multiple sources without losing the
-          list. Backdrop click and the detail's own onBack both close it. */}
-      <AnimatePresence>
-        {activeSource && (
-          <>
-            <motion.div
-              key="src-panel-backdrop"
-              className="fixed inset-0 z-40 bg-ink-900/25 backdrop-blur-[1px]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              onClick={() => { setActiveSource(null); setPendingRename(false); }}
-              aria-hidden
-            />
-            <motion.aside
-              key="src-panel"
-              ref={panelRef as React.RefObject<HTMLElement>}
-              role="dialog"
-              aria-modal="true"
-              aria-label={`Source detail: ${activeSource.name}`}
-              tabIndex={-1}
-              className="fixed top-0 right-0 bottom-0 w-[640px] max-w-[92vw] z-50 bg-canvas border-l border-canvas-border shadow-2xl overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40"
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', stiffness: 360, damping: 38 }}
-            >
-              <div className="p-6">
-                <DataSourceDetailView
-                  source={activeSource}
-                  onBack={() => { setActiveSource(null); setPendingRename(false); }}
-                  onRename={(newName) => renameSource(activeSource.id, newName)}
-                  startRenaming={pendingRename}
-                  onStartRenamingConsumed={() => setPendingRename(false)}
-                />
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* ── Sticky bulk action bar ──
           Surfaces whenever the user has anything selected. Three actions
@@ -1593,7 +1646,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
               role="toolbar"
               aria-label="Bulk actions for selected sources"
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-2xl bg-ink-900 text-paper-0 shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-ink-800/60"
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-lg bg-ink-900 text-paper-0 shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-ink-800/60"
             >
               <span className="text-[0.8125rem] font-semibold tabular-nums">
                 {selectedIds.size} selected

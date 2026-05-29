@@ -71,9 +71,15 @@ interface DateFilterPickerProps {
   onApply: (filter: DateFilter) => void;
   /** Anchor "today" used for date input ceiling. Lets callers control mock vs real time. */
   today: Date;
+  /** Trigger corner radius (Tailwind class). Defaults to the shared `rounded-md`;
+   *  callers can override (e.g. Knowledge Hub uses `rounded-lg` to match its toolbar). */
+  triggerRounded?: string;
+  /** Trigger height (Tailwind class). Defaults to `h-9`; callers can override
+   *  (e.g. Knowledge Hub uses `h-10` to match its toolbar). */
+  triggerHeight?: string;
 }
 
-export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today }: DateFilterPickerProps) {
+export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9' }: DateFilterPickerProps) {
   const active = isDateFilterActive(filter);
   const label = dateFilterLabel(filter);
   const todayIso = today.toISOString().slice(0, 10);
@@ -94,7 +100,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     <div className="relative">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-2 px-3 h-9 rounded-md border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+        className={`flex items-center gap-2 px-3 ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
             : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'

@@ -24,7 +24,7 @@ import {
 //  - connect-db: a fresh database connection from the kh-add Connect tab
 export type AttachmentSelection =
   | { kind: 'source'; sourceId: string; name: string; subtype: string; type: DataSource['type'] }
-  | { kind: 'upload'; localId: string; name: string; sizeBytes: number; path?: string }
+  | { kind: 'upload'; localId: string; name: string; sizeBytes: number; path?: string; file?: File }
   | { kind: 'connect-db'; dbType: string; name: string; database: string; host: string };
 
 interface Props {
@@ -74,7 +74,7 @@ export default function DataPickerModal({
   const [search, setSearch] = useState('');
   // Multi-select state — keyed by source id (for source rows) or local upload id.
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
-  const [pendingUploads, setPendingUploads] = useState<Array<{ localId: string; name: string; sizeBytes: number; progress: number; path?: string }>>([]);
+  const [pendingUploads, setPendingUploads] = useState<Array<{ localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File }>>([]);
   // Optional "combine" name (kh-add only). Visible in the pending list when
   // 2+ loose files (no folder) are queued. Filled → all loose files commit
   // as one source under this name. Empty → each loose file = its own source.
@@ -161,7 +161,7 @@ export default function DataPickerModal({
     const uploadSelections: AttachmentSelection[] = readyUploads.map(u => {
       const isLoose = !u.path || u.path === u.name;
       const path = combine && isLoose ? `${combinedRoot}/${u.name}` : u.path;
-      return { kind: 'upload' as const, localId: u.localId, name: u.name, sizeBytes: u.sizeBytes, path };
+      return { kind: 'upload' as const, localId: u.localId, name: u.name, sizeBytes: u.sizeBytes, path, file: u.file };
     });
 
     onConfirm([...sourceSelections, ...uploadSelections]);
@@ -445,7 +445,7 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
 
 // ─── Upload panel — drag/drop + native file picker ──────────────────────────
 
-type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string };
+type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File };
 
 interface UploadPanelProps {
   pendingUploads: PendingUpload[];
@@ -537,6 +537,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
       sizeBytes: b.file.size,
       progress: 0,
       path: b.path !== b.file.name ? b.path : undefined,
+      file: b.file,
     }));
 
     setPendingUploads(prev => [...incoming, ...prev]);

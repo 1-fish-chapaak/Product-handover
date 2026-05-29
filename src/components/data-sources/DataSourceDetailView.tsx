@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
-  ChevronLeft, Search, ChevronDown, ArrowDown, ArrowUp,
+  ChevronLeft, ChevronRight, Search, ChevronDown, ArrowDown, ArrowUp,
   FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
   CheckCircle, Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
-  Eye, EyeOff, Copy, Mail, Plus, RotateCcw,
+  Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import {
-  DATASET_FILES, FORMAT_TONES, INTEGRATION_CONFIGS, formatBytes,
+  filesForSource, getFileBlob, loadFileBlob, registerFileBlob, setSourceFiles, metaForFormat, countPdfPages, countSheetRows, getPdfjs,
+  INTEGRATION_CONFIGS, formatBytes,
   type DatasetFile, type FileStatus, type FileFormat, type IntegrationConfig,
 } from './datasetFiles';
+import { TODAY } from './sources';
 
 type SourceType = 'file' | 'database' | 'api' | 'cloud' | 'session';
 
@@ -63,6 +67,8 @@ interface UploadingFile {
   sizeBytes: number;
   /** 0–100. */
   progress: number;
+  /** Real bytes — kept for the in-session preview + true page/row count. */
+  file?: File;
 }
 
 export default function DataSourceDetailView({ source, onBack, onRename, startRenaming, onStartRenamingConsumed }: Props) {
@@ -73,6 +79,9 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   const [expandedFileId, setExpandedFileId] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [recentlyAdded, setRecentlyAdded] = useState<DatasetFile[]>([]);
+  // Guards against promoting the same upload twice — the progress updater is a
+  // setState callback, which React StrictMode double-invokes in dev.
+  const promotedRef = useRef<Set<string>>(new Set());
 
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
@@ -108,7 +117,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
 
   // Per-source content
   const isFileSource = source.type === 'file';
-  const baseFiles = isFileSource ? (DATASET_FILES[source.id] ?? []) : [];
+  const baseFiles = isFileSource ? filesForSource(source) : [];
   const allFiles = [...recentlyAdded, ...baseFiles];
   const integrationConfig = !isFileSource ? INTEGRATION_CONFIGS[source.id] : undefined;
 
@@ -129,19 +138,22 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       if (sortKey === 'size')   return b.sizeBytes - a.sizeBytes;
       return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
     };
-    return [...filtered].sort(cmp);
-  }, [allFiles, search, sortKey]);
+    // Pin just-uploaded files to the top (newest first) regardless of the sort
+    // key, so a fresh upload is always visible; everything else sorts normally.
+    const recentIds = new Set(recentlyAdded.map(f => f.id));
+    const recent = filtered.filter(f => recentIds.has(f.id)); // keeps insertion order (newest first)
+    const rest   = filtered.filter(f => !recentIds.has(f.id)).sort(cmp);
+    return [...recent, ...rest];
+  }, [allFiles, recentlyAdded, search, sortKey]);
 
   const totalSize = allFiles.reduce((acc, f) => acc + f.sizeBytes, 0);
   // Folders get the FolderOpen + evidence-tile treatment so the detail header
   // matches the card on DataSourcesView. File-source files stay brand-tiled.
   const SourceIcon = source.isFolder ? FolderOpen : TYPE_ICON[source.type];
-  const iconTileClass = source.isFolder
-    ? 'bg-evidence-50'
-    : 'bg-brand-50';
-  const iconColorClass = source.isFolder
-    ? 'text-evidence-700'
-    : 'text-brand-700';
+  // One calm brand tone for every source tile — matches the cards on the list
+  // page (the icon glyph carries type identity, not the tile colour).
+  const iconTileClass = 'bg-brand-50';
+  const iconColorClass = 'text-brand-700';
 
   // ─── Rename handlers ─────────────────────────────────────────────────────
   const startRename = () => { setDraftName(source.name); setEditingName(true); };
@@ -157,7 +169,56 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     addToast({ type: 'success', message: `Renamed to "${trimmed}".` });
   };
 
+  // Bump to force a re-read of DATASET_FILES (a module map, not React state)
+  // after an in-place file rename.
+  const [, bumpFiles] = useReducer((n: number) => n + 1, 0);
+
+  // Rename a single file inside this source. Session uploads live in
+  // recentlyAdded; everything else is persisted via setSourceFiles (which also
+  // materialises a synthesised listing into DATASET_FILES on first edit).
+  const renameFile = (fileId: string, newName: string) => {
+    const name = newName.trim();
+    if (!name) return;
+    if (recentlyAdded.some(f => f.id === fileId)) {
+      setRecentlyAdded(curr => curr.map(f => (f.id === fileId ? { ...f, name } : f)));
+    } else {
+      setSourceFiles(source.id, filesForSource(source).map(f => (f.id === fileId ? { ...f, name } : f)));
+      bumpFiles();
+    }
+    addToast({ type: 'success', message: `Renamed to "${name}".` });
+  };
+
   // ─── Upload handlers (simulated) ─────────────────────────────────────────
+
+  // Promote a finished upload to a processed file row. Registers the real bytes
+  // for the in-session preview and parses the true page/row count (pdf.js /
+  // SheetJS), falling back to the size estimate — same path as the page picker.
+  const promoteUpload = async (uf: UploadingFile) => {
+    setUploadingFiles(curr => curr.filter(p => p.id !== uf.id));
+    if (uf.file) registerFileBlob(uf.id, uf.file);
+    let meta: Pick<DatasetFile, 'pages' | 'rows'> = metaForFormat(uf.format, uf.sizeBytes);
+    if (uf.file) {
+      if (uf.format === 'PDF') {
+        const pages = await countPdfPages(uf.file);
+        if (pages != null) meta = { pages };
+      } else {
+        const rows = await countSheetRows(uf.file);
+        if (rows != null) meta = { rows };
+      }
+    }
+    const promoted: DatasetFile = {
+      id: uf.id,
+      name: uf.name,
+      format: uf.format,
+      sizeBytes: uf.sizeBytes,
+      uploadedAt: TODAY.toISOString().slice(0, 10),
+      status: 'processed',
+      ...meta,
+    };
+    setRecentlyAdded(curr => [promoted, ...curr]);
+    addToast({ type: 'success', message: `${uf.name} uploaded.` });
+  };
+
   const handleFiles = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const incoming: UploadingFile[] = Array.from(fileList).map((f, i) => {
@@ -171,6 +232,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
         format,
         sizeBytes: f.size,
         progress: 0,
+        file: f,
       };
     });
     setUploadingFiles(prev => [...incoming, ...prev]);
@@ -185,23 +247,12 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
           const updated = next.find(p => p.id === uf.id);
           if (updated && updated.progress >= 100) {
             clearInterval(t);
-            // Promote to processed file row, remove from uploading list
-            setTimeout(() => {
-              setUploadingFiles(curr => curr.filter(p => p.id !== uf.id));
-              const promoted: DatasetFile = {
-                id: uf.id,
-                name: uf.name,
-                format: uf.format,
-                sizeBytes: uf.sizeBytes,
-                uploadedAt: new Date().toISOString().slice(0, 10),
-                status: 'processed',
-                ...(uf.format === 'PDF'
-                  ? { pages: Math.max(1, Math.round(uf.sizeBytes / (60 * 1024))) }
-                  : { rows: Math.max(1, Math.round(uf.sizeBytes / 80)) }),
-              };
-              setRecentlyAdded(curr => [promoted, ...curr]);
-              addToast({ type: 'success', message: `${uf.name} uploaded.` });
-            }, 350);
+            // Idempotent: schedule the promote once even if this updater is
+            // double-invoked (StrictMode) or the tick fires again.
+            if (!promotedRef.current.has(uf.id)) {
+              promotedRef.current.add(uf.id);
+              setTimeout(() => { void promoteUpload(uf); }, 350);
+            }
           }
           return next;
         });
@@ -256,7 +307,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                       }
                       commitRename();
                     }}
-                    className="h-9 px-2 text-[1rem] font-semibold tracking-tight text-ink-900 bg-canvas-elevated border border-brand-600 rounded-md focus:outline-none focus:ring-4 focus:ring-brand-600/15 transition-all min-w-0 flex-1"
+                    className="h-9 px-2 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-md focus:outline-none focus:ring-4 focus:ring-brand-600/15 transition-all min-w-0 flex-1"
                   />
                   <button
                     onClick={commitRename}
@@ -276,7 +327,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                 </>
               ) : (
                 <>
-                  <h1 className="text-[1.25rem] font-semibold tracking-tight text-ink-900 truncate">{source.name}</h1>
+                  <h1 className="text-[0.875rem] font-semibold text-ink-900 truncate">{source.name}</h1>
                   <button
                     onClick={startRename}
                     className="p-1.5 text-ink-400 hover:text-brand-700 hover:bg-paper-50 rounded-md transition-colors cursor-pointer shrink-0"
@@ -314,6 +365,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
           expandedFileId={expandedFileId}
           setExpandedFileId={setExpandedFileId}
           onUpload={handleFiles}
+          onRenameFile={renameFile}
         />
       ) : (
         <IntegratedSourceBody
@@ -341,11 +393,12 @@ interface FileSourceBodyProps {
   expandedFileId: string | null;
   setExpandedFileId: (s: string | null) => void;
   onUpload: (files: FileList | null) => void;
+  onRenameFile: (id: string, newName: string) => void;
 }
 
 function FileSourceBody({
   files, visible, uploadingFiles, isFolder, search, setSearch, sortKey, setSortKey, sortOpen, setSortOpen,
-  expandedFileId, setExpandedFileId, onUpload,
+  expandedFileId, setExpandedFileId, onUpload, onRenameFile,
 }: FileSourceBodyProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -475,6 +528,7 @@ function FileSourceBody({
                   expanded={expandedFileId === f.id}
                   isSingle={!isFolder && files.length === 1}
                   onToggle={() => setExpandedFileId(expandedFileId === f.id ? null : f.id)}
+                  onRename={onRenameFile}
                 />
               ))
             )}
@@ -488,7 +542,6 @@ function FileSourceBody({
 // ─── Uploading row ───────────────────────────────────────────────────────────
 
 function UploadingRow({ file }: { file: UploadingFile }) {
-  const tone = FORMAT_TONES[file.format];
   return (
     <motion.li
       initial={{ opacity: 0, height: 0 }}
@@ -498,12 +551,12 @@ function UploadingRow({ file }: { file: UploadingFile }) {
       className="overflow-hidden"
     >
       <div className="flex items-center gap-3 px-6 py-3 bg-brand-50/30">
-        <div className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 ${tone.bg}`}>
-          <span className={`text-[0.75rem] font-bold tracking-wide ${tone.text}`}>{file.format}</span>
+        <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+          <FileText size={18} className="text-brand-700" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <div className="text-[0.875rem] font-medium text-ink-900 truncate">{file.name}</div>
+            <div className="text-[0.875rem] font-semibold text-ink-900 truncate">{file.name}</div>
             <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-evidence-700 bg-evidence-50">
               <Loader2 size={10} className="animate-spin motion-reduce:animate-none" />
               Uploading
@@ -528,6 +581,384 @@ function UploadingRow({ file }: { file: UploadingFile }) {
   );
 }
 
+// ─── Spreadsheet preview (real CSV / XLSX) ───────────────────────────────────
+// Parses the uploaded bytes with SheetJS and renders the first rows as a real
+// table. SheetJS reads both .csv and .xlsx, so one path covers both.
+
+// A value reads as numeric once currency/percent/thousands separators are
+// stripped — used to right-align number columns like a real spreadsheet.
+function looksNumeric(v: string): boolean {
+  if (v.trim() === '') return false;
+  const cleaned = v.replace(/[,$%\s]/g, '');
+  return cleaned !== '' && !Number.isNaN(Number(cleaned));
+}
+
+// Presentational spreadsheet — sheet bar + row-number gutter + sticky header +
+// numeric-aware alignment. Shared by the live (parsed bytes) and sample
+// (synthesised, for files with no real bytes) previews.
+function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet }: {
+  header: string[];
+  body: string[][];
+  totalRows: number;
+  totalCols: number;
+  live: boolean;
+  sheetNames: string[];
+  activeSheet?: number;
+  onSelectSheet?: (i: number) => void;
+}) {
+  const multi = sheetNames.length > 1;
+  const activeName = sheetNames[activeSheet] ?? sheetNames[0] ?? 'Sheet1';
+  const colCount = Math.max(header.length, ...body.map(r => r.length));
+  const colNumeric = Array.from({ length: colCount }, (_, ci) => {
+    const vals = body.map(r => r[ci] ?? '').filter(v => v.trim() !== '');
+    return vals.length > 0 && vals.filter(looksNumeric).length / vals.length >= 0.6;
+  });
+  const cellAlign = (ci: number) => (colNumeric[ci] ? 'text-right tabular-nums' : 'text-left');
+
+  return (
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-paper-50/60">
+        <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 truncate">
+          <Table2 size={13} className="text-compliant shrink-0" />
+          {activeName}
+        </span>
+        <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">
+          {multi && <>{sheetNames.length} sheets <span className="text-ink-300">·</span> </>}
+          {totalRows.toLocaleString()} rows × {totalCols.toLocaleString()} cols
+        </span>
+      </div>
+
+      <div className="overflow-auto max-h-[360px]">
+        <table className="border-collapse text-[0.75rem] w-full">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              <th className="sticky left-0 z-20 w-10 px-2 py-2.5 bg-paper-50 border-b border-canvas-border" aria-hidden />
+              {header.map((h, i) => (
+                <th
+                  key={i}
+                  className={`px-3.5 py-2.5 min-w-[7.5rem] bg-paper-50 border-b border-canvas-border font-semibold text-ink-700 whitespace-nowrap ${colNumeric[i] ? 'text-right' : 'text-left'}`}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((row, r) => (
+              <tr key={r} className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/40 transition-colors">
+                <td className="sticky left-0 z-10 w-10 px-2 text-right text-[0.6875rem] text-ink-300 tabular-nums bg-canvas-elevated select-none">
+                  {r + 1}
+                </td>
+                {header.map((_, ci) => {
+                  const v = row[ci] ?? '';
+                  return (
+                    <td
+                      key={ci}
+                      className={`px-3.5 py-2 min-w-[7.5rem] max-w-[240px] truncate text-ink-700 ${cellAlign(ci)}`}
+                      title={v}
+                    >
+                      {v === '' ? <span className="text-ink-300">—</span> : v}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Sheet tabs — only when the workbook has more than one sheet. */}
+      {multi && (
+        <div className="flex items-center gap-1 px-2 py-1.5 border-t border-canvas-border bg-paper-50/40 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {sheetNames.map((name, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelectSheet?.(i)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[0.75rem] transition-colors cursor-pointer ${
+                i === activeSheet
+                  ? 'bg-canvas-elevated text-brand-700 font-semibold border border-canvas-border shadow-[0_1px_2px_rgb(15_8_30_/_0.05)]'
+                  : 'text-ink-500 hover:text-ink-800 hover:bg-canvas-elevated/70'
+              }`}
+              aria-pressed={i === activeSheet}
+            >
+              <Table2 size={11} className={i === activeSheet ? 'text-compliant' : 'text-ink-400'} />
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="px-3 h-9 flex items-center border-t border-canvas-border text-[0.75rem] text-ink-500 tabular-nums">
+        Showing first {body.length} {body.length === 1 ? 'row' : 'rows'}
+        <span className="text-ink-400"> · {totalRows.toLocaleString()} total · {live ? 'live preview' : 'sample preview'}</span>
+      </div>
+    </div>
+  );
+}
+
+// Live preview — parses the uploaded bytes with SheetJS (reads CSV and XLSX).
+// Parses the workbook once, then lets the user switch between sheets via tabs.
+const SHEET_MAX_ROWS = 10;
+const SHEET_MAX_COLS = 12;
+
+function extractSheet(wb: XLSX.WorkBook, i: number): { rows: string[][]; total: number; cols: number } {
+  const sheet = wb.Sheets[wb.SheetNames[i]];
+  const all = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: '', raw: false });
+  const range = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']) : null;
+  const cols = range ? range.e.c - range.s.c + 1 : (all[0]?.length ?? 0);
+  const rows = all.slice(0, SHEET_MAX_ROWS).map(r => r.slice(0, SHEET_MAX_COLS).map(c => String(c ?? '')));
+  return { rows, total: Math.max(0, all.length - 1), cols };
+}
+
+function SpreadsheetPreview({ url, totalRows }: { url: string; totalRows?: number }) {
+  const wbRef = useRef<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [active, setActive] = useState(0);
+  const [data, setData] = useState<{ rows: string[][]; total: number; cols: number } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const buf = await (await fetch(url)).arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        if (cancelled) return;
+        wbRef.current = wb;
+        setSheetNames(wb.SheetNames);
+        setActive(0);
+        setData(extractSheet(wb, 0));
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  const selectSheet = (i: number) => {
+    if (!wbRef.current || i === active) return;
+    setActive(i);
+    setData(extractSheet(wbRef.current, i));
+  };
+
+  if (failed || (data && data.rows.length === 0)) {
+    return (
+      <div className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+        <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Preview</div>
+        <p className="text-[0.75rem] text-ink-700 tabular-nums">
+          {totalRows != null ? `${totalRows.toLocaleString()} total rows` : 'Preview unavailable'}
+        </p>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center gap-2 text-[0.75rem] text-ink-500">
+        <Loader2 size={13} className="animate-spin motion-reduce:animate-none" />
+        Reading file…
+      </div>
+    );
+  }
+  const [header, ...rest] = data.rows;
+  return (
+    <SpreadsheetTable
+      header={header}
+      body={rest}
+      totalRows={data.total}
+      totalCols={data.cols}
+      sheetNames={sheetNames}
+      activeSheet={active}
+      onSelectSheet={selectSheet}
+      live
+    />
+  );
+}
+
+// Bundled real sample files (in /public/samples). Demo/seed sources — which
+// have no uploaded bytes — render these ACTUAL files through the real renderers,
+// so the preview shows real document/spreadsheet data, not generated content.
+const SAMPLE_ASSETS = {
+  pdf: '/samples/audit-report.pdf',
+  csv: '/samples/dataset.csv',
+  xlsx: '/samples/workbook.xlsx',
+} as const;
+
+// CSV/XLSX demo files → parse and render the real bundled sample spreadsheet.
+function SampleSheetPreview({ file }: { file: DatasetFile }) {
+  const url = file.format === 'CSV' ? SAMPLE_ASSETS.csv : SAMPLE_ASSETS.xlsx;
+  return <SpreadsheetPreview url={url} />;
+}
+
+// Renders one real PDF page to a canvas via pdf.js, scaled to targetWidth.
+function PdfCanvas({ doc, pageNumber, targetWidth }: { doc: PDFDocumentProxy; pageNumber: number; targetWidth: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let task: { cancel: () => void; promise: Promise<void> } | null = null;
+    (async () => {
+      const pageObj = await doc.getPage(pageNumber);
+      if (cancelled || !ref.current) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const base = pageObj.getViewport({ scale: 1 });
+      const viewport = pageObj.getViewport({ scale: (targetWidth / base.width) * dpr });
+      const canvas = ref.current;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = `${targetWidth}px`;
+      canvas.style.height = `${viewport.height / dpr}px`;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      task = pageObj.render({ canvas, canvasContext: ctx, viewport });
+      try { await task.promise; } catch { /* cancelled */ }
+    })();
+    return () => { cancelled = true; try { task?.cancel(); } catch { /* noop */ } };
+  }, [doc, pageNumber, targetWidth]);
+  return <canvas ref={ref} className="block" />;
+}
+
+// The page-by-page PDF viewer: a thumbnail rail + the active page, both rendered
+// as REAL PDF pages (pdf.js → canvas). Used for uploaded files (their bytes) and
+// for demo files (a generated PDF) alike — so it's always a real PDF render.
+function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName: string }) {
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [page, setPage] = useState(1);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loaded: PDFDocumentProxy | null = null;
+    (async () => {
+      try {
+        const pdfjs = await getPdfjs();
+        const buf = source instanceof Blob ? await source.arrayBuffer() : await (await fetch(source)).arrayBuffer();
+        const d = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+        if (cancelled) { d.destroy(); return; }
+        loaded = d;
+        setDoc(d);
+        setNumPages(d.numPages);
+        setPage(1);
+      } catch { if (!cancelled) setFailed(true); }
+    })();
+    return () => { cancelled = true; loaded?.destroy(); };
+  }, [source]);
+
+  const openFull = () => {
+    const u = typeof source === 'string' ? source : URL.createObjectURL(source);
+    window.open(u, '_blank', 'noopener,noreferrer');
+  };
+
+  if (failed) {
+    return (
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center text-[0.75rem] text-ink-500">
+        Preview unavailable.
+      </div>
+    );
+  }
+  if (!doc) {
+    return (
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center gap-2 text-[0.75rem] text-ink-500">
+        <Loader2 size={13} className="animate-spin motion-reduce:animate-none" />
+        Rendering pages…
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-paper-50/60">
+        <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 truncate">
+          <FileText size={13} className="text-risk shrink-0" />
+          Document
+        </span>
+        <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{numPages} {numPages === 1 ? 'page' : 'pages'}</span>
+      </div>
+
+      <div className="flex h-[440px] bg-paper-100/50">
+        {/* Thumbnail rail — real rendered page images. */}
+        <div className="w-[116px] shrink-0 border-r border-canvas-border bg-paper-50/40 overflow-y-auto p-2.5 space-y-2.5">
+          {Array.from({ length: numPages }, (_, idx) => idx + 1).map(i => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setPage(i)}
+              className="block w-full group cursor-pointer"
+              aria-label={`Page ${i}`}
+              aria-current={i === page}
+            >
+              <div className={`rounded-[2px] border bg-white overflow-hidden transition-shadow ${i === page ? 'border-brand-400 ring-2 ring-brand-200 shadow-sm' : 'border-canvas-border group-hover:border-brand-300'}`}>
+                <PdfCanvas doc={doc} pageNumber={i} targetWidth={92} />
+              </div>
+              <div className={`mt-1 text-center text-[0.625rem] tabular-nums ${i === page ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>{i}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Active page — larger real render. */}
+        <div className="flex-1 overflow-auto flex justify-center px-6 py-6">
+          <div className="self-start rounded-[2px] border border-canvas-border/70 shadow-[0_8px_28px_rgb(15_8_30_/_0.12)] overflow-hidden bg-white">
+            <PdfCanvas doc={doc} pageNumber={page} targetWidth={360} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 px-3 h-11 border-t border-canvas-border">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={page === 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === 1 ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-paper-50 cursor-pointer'}`}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="text-[0.75rem] text-ink-600 tabular-nums">Page <span className="font-semibold text-ink-800">{page}</span> of {numPages}</span>
+          <button
+            type="button"
+            disabled={page === numPages}
+            onClick={() => setPage(p => Math.min(numPages, p + 1))}
+            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === numPages ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-paper-50 cursor-pointer'}`}
+            aria-label="Next page"
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={openFull}
+          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+        >
+          <Eye size={13} /> Open full preview
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Demo PDF (no uploaded bytes): render the real bundled sample PDF, page-by-page,
+// through the same canvas viewer as uploaded files.
+function SamplePdfPreview({ file }: { file: DatasetFile }) {
+  return <PdfCanvasViewer source={SAMPLE_ASSETS.pdf} fileName={file.name} />;
+}
+
+// Resolves a file's real bytes for preview: instant for files uploaded this
+// session (in-memory), or rehydrated from IndexedDB after a reload. Returns
+// undefined until/unless real bytes exist (seed files stay undefined → mock).
+function useFileBlob(fileId: string) {
+  const [blob, setBlob] = useState(() => getFileBlob(fileId));
+  useEffect(() => {
+    const mem = getFileBlob(fileId);
+    if (mem) { setBlob(mem); return; }
+    setBlob(undefined);
+    let cancelled = false;
+    loadFileBlob(fileId).then(b => { if (!cancelled && b) setBlob(b); });
+    return () => { cancelled = true; };
+  }, [fileId]);
+  return blob;
+}
+
 // ─── File row ────────────────────────────────────────────────────────────────
 
 interface FileRowProps {
@@ -535,11 +966,42 @@ interface FileRowProps {
   expanded: boolean;
   isSingle: boolean;
   onToggle: () => void;
+  onRename?: (id: string, newName: string) => void;
 }
 
-function FileRow({ file, expanded, isSingle, onToggle }: FileRowProps) {
+function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps) {
   const { addToast } = useToast();
-  const tone = FORMAT_TONES[file.format];
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(file.name);
+  const renameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing) renameRef.current?.select(); }, [editing]);
+
+  const startRename = () => { setDraft(file.name); setEditing(true); };
+  const commitRename = () => {
+    const n = draft.trim();
+    if (n && n !== file.name) onRename?.(file.id, n);
+    setEditing(false);
+  };
+  const cancelRename = () => { setDraft(file.name); setEditing(false); };
+
+  // Download — demo build has no real bytes, so we export a small placeholder
+  // carrying the file's metadata, named after the file. A real backend swaps
+  // the Blob for the actual file stream; the trigger logic stays identical.
+  const handleDownload = () => {
+    const content = file.format === 'CSV'
+      ? `# ${file.name}\n# Demo export from Knowledge Hub — ${(file.rows ?? 0).toLocaleString()} rows\ncolumn_a,column_b,column_c\n`
+      : `${file.name}\nDemo export from Knowledge Hub.\nFormat: ${file.format} · ${formatBytes(file.sizeBytes)}\n`;
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    addToast({ type: 'success', message: `Downloading ${file.name}…` });
+  };
+
   const status = STATUS_META[file.status];
   const StatusIcon = status.icon;
   const isFailed = file.status === 'failed';
@@ -549,76 +1011,116 @@ function FileRow({ file, expanded, isSingle, onToggle }: FileRowProps) {
       ? `${file.rows.toLocaleString()} ${file.rows === 1 ? 'row' : 'rows'}`
       : null;
 
-  // Shared title + meta block. In single-file mode it's a plain <div>; in
-  // folder/multi-file mode it's a <button> that toggles the preview.
-  const titleBlock = (
-    <>
-      <div className="flex items-center gap-2">
-        <div className={`text-[0.875rem] font-medium text-ink-900 truncate ${isSingle ? '' : 'group-hover:text-brand-700 transition-colors'}`}>{file.name}</div>
-        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${status.tone}`}>
-          <StatusIcon size={10} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />
-          {status.label}
-        </span>
-      </div>
-      <div className="text-[0.75rem] text-ink-500 mt-0.5 tabular-nums">
-        {formatBytes(file.sizeBytes)}
-        {countLabel && <> · {countLabel}</>}
-        <> · uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
-      </div>
-      {isFailed && (
-        <div className="text-[0.75rem] text-risk-700 mt-0.5">
-          Processing failed. Format may not be supported.
-        </div>
-      )}
-    </>
-  );
-
-  // The preview block content — same shape in both modes.
-  const previewBlock = (
-    <div className="px-6 pb-3 pt-0">
-      <div className="rounded-md border border-canvas-border bg-paper-50/40">
-        {file.pages != null ? (
-          <div className="px-3 py-2.5">
-            <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Pages</div>
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: file.pages }, (_, i) => i + 1).map(p => (
-                <span
-                  key={p}
-                  className="w-9 h-11 rounded border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 flex items-center justify-center tabular-nums"
-                  aria-hidden
-                >
-                  {p}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="px-3 py-2.5">
-            <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Preview</div>
-            <p className="text-[0.75rem] text-ink-700 tabular-nums">
-              First 100 rows available · {(file.rows ?? 0).toLocaleString()} total rows
-            </p>
-          </div>
-        )}
-      </div>
+  const metaLine = (
+    <div className="text-[0.75rem] text-ink-500 mt-0.5 tabular-nums">
+      {formatBytes(file.sizeBytes)}
+      {countLabel && <> · {countLabel}</>}
+      <> · uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
     </div>
   );
 
+  // The preview block. PDFs always render as a real PDF, page-by-page, in the
+  // canvas viewer — uploaded files use their own bytes; demo files use a
+  // generated PDF. CSV/XLSX render as a real table (uploaded bytes) or a
+  // synthesised sample table (demo files).
+  const isPdf = file.pages != null;
+  const blob = useFileBlob(file.id);
+  const realPdf = isPdf && !!blob && (blob.mime === 'application/pdf' || file.format === 'PDF');
+  const realSheet = !isPdf && !!blob;
+
+  const previewBlock = (
+    <div className="px-6 pb-3 pt-0">
+      {realSheet ? (
+        <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} />
+      ) : realPdf ? (
+        <PdfCanvasViewer source={blob!.url} fileName={file.name} />
+      ) : isPdf ? (
+        <SamplePdfPreview file={file} />
+      ) : (
+        <SampleSheetPreview file={file} />
+      )}
+    </div>
+  );
+
+  // Single-file source: the page header already carries the icon, name, and
+  // "FORMAT · size", so the row would just repeat them. Show only the bits the
+  // header lacks — status, row/page count, upload date, download — then the
+  // always-open preview.
+  if (isSingle) {
+    return (
+      <li>
+        <div className="flex items-center gap-3 px-6 pt-1 pb-3">
+          <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${status.tone}`}>
+            <StatusIcon size={10} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />
+            {status.label}
+          </span>
+          <span className="text-[0.75rem] text-ink-500 tabular-nums">
+            {countLabel && <>{countLabel} · </>}uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+          {!isFailed && (
+            <button
+              onClick={handleDownload}
+              className="ml-auto flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer"
+              aria-label={`Download ${file.name}`}
+              title="Download"
+            >
+              <Download size={15} />
+            </button>
+          )}
+        </div>
+        {isFailed && (
+          <div className="px-6 pb-2 text-[0.75rem] text-risk-700">Processing failed. Format may not be supported.</div>
+        )}
+        {previewBlock}
+      </li>
+    );
+  }
+
   return (
     <li className="group">
-      <div className={`flex items-center gap-3 px-6 py-3 transition-colors ${isSingle ? 'cursor-default' : 'hover:bg-paper-50'}`}>
-        <div className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 ${tone.bg}`}>
-          <span className={`text-[0.75rem] font-bold tracking-wide ${tone.text}`}>{file.format}</span>
+      <div className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-paper-50">
+        <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+          <FileText size={18} className="text-brand-700" />
         </div>
-        {isSingle ? (
-          <div className="flex-1 min-w-0">
-            {titleBlock}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {editing ? (
+              <input
+                ref={renameRef}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitRename();
+                  else if (e.key === 'Escape') cancelRename();
+                }}
+                onBlur={commitRename}
+                className="flex-1 min-w-0 h-7 px-2 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-md focus:outline-none focus:ring-4 focus:ring-brand-600/15"
+              />
+            ) : (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={onToggle}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+                className="text-[0.875rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors cursor-pointer"
+                title={file.name}
+              >
+                {file.name}
+              </span>
+            )}
+            {!editing && (
+              <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${status.tone}`}>
+                <StatusIcon size={10} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />
+                {status.label}
+              </span>
+            )}
           </div>
-        ) : (
-          <button onClick={onToggle} className="flex-1 min-w-0 text-left cursor-pointer">
-            {titleBlock}
-          </button>
-        )}
+          {metaLine}
+          {isFailed && (
+            <div className="text-[0.75rem] text-risk-700 mt-0.5">Processing failed. Format may not be supported.</div>
+          )}
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           {isFailed && (
             <Button
@@ -630,36 +1132,50 @@ function FileRow({ file, expanded, isSingle, onToggle }: FileRowProps) {
               Retry
             </Button>
           )}
-          {!isSingle && (
+          {onRename && !editing && (
             <button
-              onClick={onToggle}
-              className="flex items-center gap-1 px-2 py-1.5 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer"
-              aria-expanded={expanded}
+              onClick={startRename}
+              className="flex items-center justify-center w-8 h-8 text-ink-400 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-opacity cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+              aria-label={`Rename ${file.name}`}
+              title="Rename"
             >
-              View {file.pages != null ? 'pages' : 'preview'}
-              <ChevronDown size={12} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+              <Pencil size={14} />
             </button>
           )}
+          {!isFailed && (
+            <button
+              onClick={handleDownload}
+              className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer"
+              aria-label={`Download ${file.name}`}
+              title="Download"
+            >
+              <Download size={15} />
+            </button>
+          )}
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-1 px-2 py-1.5 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer"
+            aria-expanded={expanded}
+          >
+            View preview
+            <ChevronDown size={12} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
         </div>
       </div>
 
-      {isSingle ? (
-        <div>{previewBlock}</div>
-      ) : (
-        <AnimatePresence initial={false}>
-          {expanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              className="overflow-hidden"
-            >
-              {previewBlock}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            className="overflow-hidden"
+          >
+            {previewBlock}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </li>
   );
 }
