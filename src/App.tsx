@@ -118,6 +118,7 @@ function AppInner() {
     toggleChatHistory,
     setSelectedWorkflow,
     setSelectedBP,
+    addUserProcess,
     openAuditExecution,
     openEngagement,
     openCaseManagement,
@@ -564,6 +565,8 @@ function AppInner() {
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
+            addUserProcess={addUserProcess}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
@@ -578,6 +581,7 @@ function AppInner() {
           <BusinessProcesses
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
             onOpenEngagement={(engId) => {
               setEngagementBackView('business-processes');
               openAuditExecution(engId);

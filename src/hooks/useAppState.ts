@@ -82,6 +82,26 @@ export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'pre
 export type ArtifactMode = 'query' | 'workflow';
 export type ExecutionPanel = 'working-paper' | 'workflow-execution' | 'traceability' | null;
 
+/** A business process the user created in Process Hub. Superset of the seed
+ *  BUSINESS_PROCESSES shape, so the same detail page renders both. */
+export interface UserProcess {
+  id: string;
+  name: string;
+  abbr: string;
+  color: string;
+  risks: number;
+  controls: number;
+  coverage: number;
+  sops: number;
+  workflows: number;
+  status?: 'Draft' | 'Active' | 'Archived';
+  department?: string;
+  owner?: string;
+  fy?: string;
+  description?: string;
+  subProcesses?: { name: string; description: string }[];
+}
+
 export interface AppState {
   view: View;
   sidebarExpanded: boolean;
@@ -94,6 +114,8 @@ export interface AppState {
   /** Which tab WorkflowDetail should open on (e.g. 'runs' when drilled in from an engagement). */
   workflowDetailInitialTab: 'overview' | 'runs' | 'config';
   selectedBPId: string | null;
+  /** Business processes created by the user in Process Hub (persisted across navigation). */
+  userProcesses: UserProcess[];
   selectedEngagementId: string | null;
   selectedRiskId: string | null;
   // Modal states
@@ -191,6 +213,7 @@ const INITIAL_STATE: AppState = {
   selectedWorkflowId: null,
   workflowDetailInitialTab: 'overview',
   selectedBPId: null,
+  userProcesses: [],
   selectedEngagementId: getInitialEngagementId(),
   selectedRiskId: null,
   showExceptionModal: false,
@@ -279,6 +302,10 @@ export function useAppState() {
 
   const setSelectedBP = useCallback((id: string | null) => {
     setState(prev => ({ ...prev, selectedBPId: id, view: id ? 'bp-detail' : 'programs' }));
+  }, []);
+
+  const addUserProcess = useCallback((process: UserProcess) => {
+    setState(prev => ({ ...prev, userProcesses: [...prev.userProcesses, process] }));
   }, []);
 
   const setSelectedEngagement = useCallback((id: string | null) => {
@@ -540,6 +567,7 @@ export function useAppState() {
     toggleChatHistory,
     setSelectedWorkflow,
     setSelectedBP,
+    addUserProcess,
     setShowExceptionModal,
     setShowEmailPreviewModal,
     setShowShareModal,
