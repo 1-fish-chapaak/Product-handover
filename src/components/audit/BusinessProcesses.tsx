@@ -34,11 +34,11 @@ type SOPStatus = 'Draft' | 'Processing' | 'Processed' | 'Linked' | 'Archived';
 // ─── SOP Status Display ───────────────────────────────────────────────────
 
 const SOP_STATUS_STYLES: Record<SOPStatus, string> = {
-  'Draft': 'bg-gray-100 text-gray-500',
-  'Processing': 'bg-blue-50 text-blue-600',
-  'Processed': 'bg-emerald-50/80 text-emerald-600',
-  'Linked': 'bg-purple-50 text-purple-700',
-  'Archived': 'bg-gray-50 text-gray-400',
+  'Draft': 'bg-paper-100 text-ink-500',
+  'Processing': 'bg-evidence-50 text-evidence-700',
+  'Processed': 'bg-compliant-50 text-compliant-700',
+  'Linked': 'bg-brand-50 text-brand-700',
+  'Archived': 'bg-paper-50 text-ink-400',
 };
 
 interface SOPAction {
@@ -53,10 +53,10 @@ function getSOPAction(status: SOPStatus, hasRacm: boolean, racmFrozen?: boolean)
   }
   switch (status) {
     case 'Draft':      return { label: 'Start Processing',  cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
-    case 'Processing': return { label: 'View Progress',     cls: 'bg-gray-100 text-gray-500 hover:bg-gray-200/70' };
+    case 'Processing': return { label: 'View Progress',     cls: 'bg-paper-100 text-ink-500 hover:bg-paper-50' };
     case 'Processed':  return { label: 'Create RACM',       cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Linked':     return { label: 'Edit RACM Draft',   cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
-    case 'Archived':   return { label: 'View SOP',          cls: 'bg-gray-50 text-gray-400 hover:bg-gray-100' };
+    case 'Archived':   return { label: 'View SOP',          cls: 'bg-paper-50 text-ink-400 hover:bg-paper-100' };
   }
 }
 
@@ -160,10 +160,10 @@ function getStepState(stepIndex: number, currentStep: number, failed: boolean): 
 }
 
 const STEP_STATE_STYLES: Record<StepState, { dot: string; text: string; line: string }> = {
-  'completed':   { dot: 'bg-gray-400 text-white', text: 'text-gray-500', line: 'bg-gray-300' },
-  'in-progress': { dot: 'bg-gray-600 text-white ring-2 ring-gray-200', text: 'text-gray-700 font-semibold', line: 'bg-gray-200' },
-  'pending':     { dot: 'bg-gray-200 text-gray-400', text: 'text-gray-400', line: 'bg-gray-200' },
-  'failed':      { dot: 'bg-red-400 text-white', text: 'text-red-500', line: 'bg-gray-200' },
+  'completed':   { dot: 'bg-compliant text-white', text: 'text-ink-500', line: 'bg-compliant' },
+  'in-progress': { dot: 'bg-brand-600 text-white ring-2 ring-brand-200', text: 'text-ink-800 font-semibold', line: 'bg-paper-100' },
+  'pending':     { dot: 'bg-paper-100 text-ink-400', text: 'text-ink-400', line: 'bg-paper-100' },
+  'failed':      { dot: 'bg-risk text-white', text: 'text-risk-700', line: 'bg-paper-100' },
 };
 
 function ProcessingStepperPanel({ sop }: { sop: LocalSOP }) {
@@ -190,13 +190,13 @@ function ProcessingStepperPanel({ sop }: { sop: LocalSOP }) {
                     {state === 'completed' && <CheckCircle2 size={10} />}
                     {state === 'in-progress' && <Loader2 size={10} className="animate-spin" />}
                     {state === 'failed' && <X size={10} />}
-                    {state === 'pending' && <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />}
+                    {state === 'pending' && <span className="w-1.5 h-1.5 rounded-full bg-paper-300" />}
                   </div>
                   {!isLast && <div className={`w-0.5 h-5 ${styles.line}`} />}
                 </div>
                 <div className={`pt-0.5 pb-3 ${styles.text}`}>
                   <div className="text-[11px] leading-tight">{step.label}</div>
-                  {state === 'in-progress' && <div className="text-[10px] text-gray-400 mt-0.5">{step.description}</div>}
+                  {state === 'in-progress' && <div className="text-[10px] text-ink-400 mt-0.5">{step.description}</div>}
                 </div>
               </div>
             );
@@ -236,9 +236,9 @@ function buildPartialExtractions(): { risks: ExtractedRisk[]; controls: Extracte
 }
 
 const CONFIDENCE_STYLES: Record<string, string> = {
-  high: 'bg-emerald-50 text-emerald-700',
-  medium: 'bg-amber-50 text-amber-600',
-  low: 'bg-gray-100 text-gray-500',
+  high: 'bg-compliant-50 text-compliant-700',
+  medium: 'bg-mitigated-50 text-mitigated-700',
+  low: 'bg-paper-100 text-ink-500',
 };
 
 // ─── SOP Extraction Review Workspace (inline, replaces SOP table) ─────────
@@ -341,12 +341,12 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-text">{sop.name}</h2>
-                <span className="text-[11px] font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{sop.version}</span>
+                <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded">{sop.version}</span>
                 <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
               </div>
-              <div className="flex items-center gap-4 mt-1.5 text-[11px] text-gray-500">
+              <div className="flex items-center gap-4 mt-1.5 text-[11px] text-ink-500">
                 <span>Uploaded by {sop.uploadedBy} · {sop.uploadedAt}</span>
-                <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-paper-100 text-ink-600 border border-canvas-border/60">{sop.businessProcess}</span>
               </div>
             </div>
             <button onClick={() => setShowConfirmModal(true)} disabled={activeRisks.length === 0 || (isPartial && !partialConfirmed)}
@@ -357,23 +357,23 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
 
           {/* Partial extraction warning */}
           {isPartial && partialWarnings.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 px-4 py-3 mt-3">
+            <div className="rounded-lg border border-mitigated bg-mitigated-50/50 px-4 py-3 mt-3">
               <div className="flex items-start gap-2.5">
-                <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                <AlertTriangle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <div className="text-[12px] font-semibold text-amber-800">Incomplete extraction — review required</div>
-                  <p className="text-[11px] text-amber-700/80 mt-0.5">Some information could not be extracted confidently. Review and complete missing items before creating RACM.</p>
+                  <div className="text-[12px] font-semibold text-mitigated-700">Incomplete extraction — review required</div>
+                  <p className="text-[11px] text-mitigated-700/80 mt-0.5">Some information could not be extracted confidently. Review and complete missing items before creating RACM.</p>
                   <ul className="mt-2 space-y-0.5">
                     {partialWarnings.map((w, i) => (
-                      <li key={i} className="text-[11px] text-amber-700/70 flex items-center gap-1.5">
-                        <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />{w}
+                      <li key={i} className="text-[11px] text-mitigated-700/70 flex items-center gap-1.5">
+                        <span className="w-1 h-1 rounded-full bg-mitigated shrink-0" />{w}
                       </li>
                     ))}
                   </ul>
                   <label className="flex items-center gap-2 mt-3 cursor-pointer">
                     <input type="checkbox" checked={partialConfirmed} onChange={e => setPartialConfirmed(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 accent-amber-600 cursor-pointer" />
-                    <span className="text-[11px] font-medium text-amber-800">I have reviewed the gaps and want to proceed</span>
+                      className="w-3.5 h-3.5 rounded border-mitigated text-mitigated-700 accent-mitigated cursor-pointer" />
+                    <span className="text-[11px] font-medium text-mitigated-700">I have reviewed the gaps and want to proceed</span>
                   </label>
                 </div>
               </div>
@@ -391,32 +391,32 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               <div className="text-[10px] text-text-muted">Control References</div>
             </div>
             <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50">
-              <div className="text-lg font-bold text-gray-400">{risks.length - activeRisks.length + controls.length - controls.filter(c => c.accepted).length}</div>
+              <div className="text-lg font-bold text-ink-400">{risks.length - activeRisks.length + controls.length - controls.filter(c => c.accepted).length}</div>
               <div className="text-[10px] text-text-muted">Removed</div>
             </div>
           </div>
 
           {/* Linked RACM traceability (SOP → RACM) */}
           {sop.racmId && (
-            <div className="rounded-lg border border-emerald-200/50 bg-emerald-50/20 px-4 py-3 mt-3">
+            <div className="rounded-lg border border-compliant/50 bg-compliant-50/20 px-4 py-3 mt-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                    <FileText size={12} className="text-emerald-600" />
+                  <div className="w-7 h-7 rounded-lg bg-compliant-50 flex items-center justify-center shrink-0">
+                    <FileText size={12} className="text-compliant-700" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-semibold text-text">{sop.racmName || sop.racmId}</span>
-                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-gray-100 text-gray-600">Draft</span>
-                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-amber-50 text-amber-600">Mapping Incomplete</span>
+                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-paper-100 text-ink-600">Draft</span>
+                      <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-mitigated-50 text-mitigated-700">Mapping Incomplete</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
+                    <div className="text-[10px] text-ink-500 mt-0.5">
                       {sop.risks} risks · {sop.controls} control references · Created from this SOP
                     </div>
                   </div>
                 </div>
                 <button onClick={onBack}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer transition-colors inline-flex items-center gap-1">
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-paper-100 text-ink-600 hover:bg-paper-200/70 cursor-pointer transition-colors inline-flex items-center gap-1">
                   View RACM<ChevronRight size={8} />
                 </button>
               </div>
@@ -463,7 +463,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               </thead>
               <tbody>
                 {risks.map(risk => (
-                  <tr key={risk.id} className={`border-b border-border/50 transition-colors ${risk.accepted ? 'hover:bg-gray-50/60' : 'bg-gray-50/30 opacity-50'}`}>
+                  <tr key={risk.id} className={`border-b border-border/50 transition-colors ${risk.accepted ? 'hover:bg-paper-50/60' : 'bg-paper-50/30 opacity-50'}`}>
                     <td className="px-3 py-2.5">
                       {editingRiskId === risk.id ? (
                         <input value={risk.name} onChange={e => handleEditRisk(risk.id, 'name', e.target.value)} className={fieldCls} autoFocus />
@@ -475,14 +475,14 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                       {editingRiskId === risk.id ? (
                         <input value={risk.description} onChange={e => handleEditRisk(risk.id, 'description', e.target.value)} className={fieldCls} />
                       ) : (
-                        <span className="text-[11px] text-gray-500 line-clamp-2">{risk.description}</span>
+                        <span className="text-[11px] text-ink-500 line-clamp-2">{risk.description}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-paper-100 text-ink-600 border border-canvas-border/60">{sop.businessProcess}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[10px] text-gray-400 font-mono">{risk.section}</span>
+                      <span className="text-[10px] text-ink-400 font-mono">{risk.section}</span>
                     </td>
                     <td className="px-3 py-2.5">
                       <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${CONFIDENCE_STYLES[risk.confidence]}`}>{risk.confidence}</span>
@@ -490,11 +490,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setEditingRiskId(editingRiskId === risk.id ? null : risk.id)}
-                          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary cursor-pointer" title="Edit">
+                          className="p-1 rounded hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title="Edit">
                           <Eye size={11} />
                         </button>
                         <button onClick={() => handleRemoveRisk(risk.id)}
-                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 cursor-pointer" title="Remove">
+                          className="p-1 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer" title="Remove">
                           <X size={11} />
                         </button>
                       </div>
@@ -506,13 +506,13 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   <tr className="border-b border-border/50 bg-primary/5">
                     <td className="px-3 py-2"><input value={newRiskName} onChange={e => setNewRiskName(e.target.value)} placeholder="Risk name" className={fieldCls} autoFocus /></td>
                     <td className="px-3 py-2"><input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} placeholder="Description" className={fieldCls} /></td>
-                    <td className="px-3 py-2"><span className="text-[10px] text-gray-400">{sop.businessProcess}</span></td>
+                    <td className="px-3 py-2"><span className="text-[10px] text-ink-400">{sop.businessProcess}</span></td>
                     <td className="px-3 py-2"><input value={newRiskSection} onChange={e => setNewRiskSection(e.target.value)} placeholder="Section" className={fieldCls} /></td>
-                    <td className="px-3 py-2"><span className="text-[9px] text-gray-400">Manual</span></td>
+                    <td className="px-3 py-2"><span className="text-[9px] text-ink-400">Manual</span></td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <button onClick={handleAddRisk} disabled={!newRiskName.trim()} className="p-1 rounded bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
-                        <button onClick={() => { setShowAddRisk(false); setNewRiskName(''); setNewRiskDesc(''); }} className="p-1 rounded hover:bg-gray-100 text-gray-400 cursor-pointer"><X size={11} /></button>
+                        <button onClick={() => { setShowAddRisk(false); setNewRiskName(''); setNewRiskDesc(''); }} className="p-1 rounded hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -528,7 +528,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
         <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="text-[13px] font-semibold text-text">Extracted Control References ({controls.length})</h3>
-            <p className="text-[10px] text-gray-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
+            <p className="text-[10px] text-ink-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
           </div>
           <button onClick={() => setShowAddCtrl(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
             <Plus size={11} />Add Missing Reference
@@ -548,7 +548,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                 {controls.map(ctrl => {
                   const linkedRisk = risks.find(r => r.id === ctrl.linkedRiskId);
                   return (
-                    <tr key={ctrl.id} className={`border-b border-border/50 transition-colors ${ctrl.accepted ? 'hover:bg-gray-50/60' : 'bg-gray-50/30 opacity-50'}`}>
+                    <tr key={ctrl.id} className={`border-b border-border/50 transition-colors ${ctrl.accepted ? 'hover:bg-paper-50/60' : 'bg-paper-50/30 opacity-50'}`}>
                       <td className="px-3 py-2.5 max-w-[180px]">
                         {editingCtrlId === ctrl.id ? (
                           <input value={ctrl.name} onChange={e => handleEditControl(ctrl.id, 'name', e.target.value)} className={fieldCls} autoFocus />
@@ -557,16 +557,16 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[11px] text-gray-500">{linkedRisk?.name || '—'}</span>
+                        <span className="text-[11px] text-ink-500">{linkedRisk?.name || '—'}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{sop.businessProcess}</span>
+                        <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-paper-100 text-ink-600 border border-canvas-border/60">{sop.businessProcess}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[10px] text-gray-400 font-mono">{ctrl.section || '—'}</span>
+                        <span className="text-[10px] text-ink-400 font-mono">{ctrl.section || '—'}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-gray-100 text-gray-500 inline-flex items-center">{ctrl.type}</span>
+                        <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-paper-100 text-ink-500 inline-flex items-center">{ctrl.type}</span>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${CONFIDENCE_STYLES[ctrl.confidence]}`}>{ctrl.confidence}</span>
@@ -574,11 +574,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
                           <button onClick={() => setEditingCtrlId(editingCtrlId === ctrl.id ? null : ctrl.id)}
-                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary cursor-pointer" title="Edit">
+                            className="p-1 rounded hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title="Edit">
                             <Eye size={11} />
                           </button>
                           <button onClick={() => handleRemoveControl(ctrl.id)}
-                            className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 cursor-pointer" title="Remove">
+                            className="p-1 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer" title="Remove">
                             <X size={11} />
                           </button>
                         </div>
@@ -596,7 +596,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         {activeRisks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-2"><span className="text-[10px] text-gray-400">{sop.businessProcess}</span></td>
+                    <td className="px-3 py-2"><span className="text-[10px] text-ink-400">{sop.businessProcess}</span></td>
                     <td className="px-3 py-2"><input value={newCtrlSection} onChange={e => setNewCtrlSection(e.target.value)} placeholder="Section" className={fieldCls} /></td>
                     <td className="px-3 py-2">
                       <select value={newCtrlType} onChange={e => setNewCtrlType(e.target.value as any)} className={fieldCls + ' cursor-pointer appearance-none'}>
@@ -605,11 +605,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         <option value="Corrective">Corrective</option>
                       </select>
                     </td>
-                    <td className="px-3 py-2"><span className="text-[9px] text-gray-400">Manual</span></td>
+                    <td className="px-3 py-2"><span className="text-[9px] text-ink-400">Manual</span></td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <button onClick={handleAddControl} disabled={!newCtrlName.trim()} className="p-1 rounded bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
-                        <button onClick={() => { setShowAddCtrl(false); setNewCtrlName(''); setNewCtrlDesc(''); }} className="p-1 rounded hover:bg-gray-100 text-gray-400 cursor-pointer"><X size={11} /></button>
+                        <button onClick={() => { setShowAddCtrl(false); setNewCtrlName(''); setNewCtrlDesc(''); }} className="p-1 rounded hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -643,19 +643,19 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                   {/* Source SOP */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Source SOP</span>
+                      <span className="text-[10px] text-ink-400 uppercase block">Source SOP</span>
                       <span className="text-[13px] text-text font-medium mt-0.5 block">{sop.name}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Business Process</span>
+                      <span className="text-[10px] text-ink-400 uppercase block">Business Process</span>
                       <span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Risks to create</span>
+                      <span className="text-[10px] text-ink-400 uppercase block">Risks to create</span>
                       <span className="text-[13px] text-text font-semibold mt-0.5 block">{activeRisks.length}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-gray-400 uppercase block">Control references</span>
+                      <span className="text-[10px] text-ink-400 uppercase block">Control references</span>
                       <span className="text-[13px] text-text font-semibold mt-0.5 block">{controls.filter(c => c.accepted).length}</span>
                     </div>
                   </div>
@@ -680,23 +680,23 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         'SOP linked to the created RACM',
                       ].map((item, i) => (
                         <li key={i} className="text-[11px] text-text-secondary flex items-start gap-1.5">
-                          <CheckCircle2 size={10} className="text-emerald-500 shrink-0 mt-0.5" />{item}
+                          <CheckCircle2 size={10} className="text-compliant-700 shrink-0 mt-0.5" />{item}
                         </li>
                       ))}
                     </ul>
                   </div>
 
                   {/* What will NOT happen */}
-                  <div className="rounded-lg bg-gray-50 border border-border/30 px-4 py-3 space-y-1.5">
-                    <div className="text-[11px] font-semibold text-gray-500">What will NOT happen:</div>
+                  <div className="rounded-lg bg-paper-50 border border-border/30 px-4 py-3 space-y-1.5">
+                    <div className="text-[11px] font-semibold text-ink-500">What will NOT happen:</div>
                     <ul className="space-y-1">
                       {[
                         'Controls will not be created in Control Library',
                         'Workflows will not be linked',
                         'RACM will not be validated or activated',
                       ].map((item, i) => (
-                        <li key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
-                          <X size={10} className="text-gray-300 shrink-0 mt-0.5" />{item}
+                        <li key={i} className="text-[11px] text-ink-400 flex items-start gap-1.5">
+                          <X size={10} className="text-ink-300 shrink-0 mt-0.5" />{item}
                         </li>
                       ))}
                     </ul>
@@ -777,7 +777,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* File Upload */}
           <div>
-            <label className={labelCls}>Document <span className="text-red-400">*</span></label>
+            <label className={labelCls}>Document <span className="text-risk">*</span></label>
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -790,20 +790,20 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
                 input.click();
               }}
               className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
-                dragOver ? 'border-primary bg-primary/5' : fileName ? 'border-emerald-300 bg-emerald-50/30' : 'border-border hover:border-gray-300'
+                dragOver ? 'border-primary bg-primary/5' : fileName ? 'border-compliant bg-compliant-50/30' : 'border-border hover:border-canvas-border'
               }`}
             >
               {fileName ? (
                 <div className="flex items-center justify-center gap-2">
-                  <FileText size={16} className="text-emerald-600" />
-                  <span className="text-[12px] font-medium text-emerald-700">{fileName}</span>
-                  <button onClick={e => { e.stopPropagation(); setFileName(''); }} className="text-gray-400 hover:text-red-500"><X size={12} /></button>
+                  <FileText size={16} className="text-compliant-700" />
+                  <span className="text-[12px] font-medium text-compliant-700">{fileName}</span>
+                  <button onClick={e => { e.stopPropagation(); setFileName(''); }} className="text-ink-400 hover:text-risk-700"><X size={12} /></button>
                 </div>
               ) : (
                 <>
-                  <Upload size={18} className={`mx-auto mb-1.5 ${dragOver ? 'text-primary' : 'text-gray-300'}`} />
+                  <Upload size={18} className={`mx-auto mb-1.5 ${dragOver ? 'text-primary' : 'text-ink-300'}`} />
                   <div className="text-[12px] text-text-muted">Drag & drop or click to browse</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">PDF, DOCX, XLSX, CSV</div>
+                  <div className="text-[10px] text-ink-400 mt-0.5">PDF, DOCX, XLSX, CSV</div>
                 </>
               )}
             </div>
@@ -811,21 +811,21 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
           {/* SOP Name */}
           <div>
-            <label className={labelCls}>SOP Name <span className="text-red-400">*</span></label>
+            <label className={labelCls}>SOP Name <span className="text-risk">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Auto-filled from file name" className={fieldCls} />
           </div>
 
           {/* Business Process (read-only) */}
           <div>
             <label className={labelCls}>Business Process</label>
-            <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50 cursor-not-allowed">{bpAbbr}</div>
+            <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-paper-50 cursor-not-allowed">{bpAbbr}</div>
           </div>
 
 
 
           {/* Description */}
           <div>
-            <label className={labelCls}>Description <span className="font-normal text-gray-400">(optional)</span></label>
+            <label className={labelCls}>Description <span className="font-normal text-ink-400">(optional)</span></label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Brief description of the SOP scope..." className={fieldCls + ' resize-none'} />
           </div>
 
@@ -863,33 +863,33 @@ function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Metadata */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <div><span className="text-[10px] text-gray-400 uppercase block">Uploaded By</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedBy}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Upload Date</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedAt}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Business Process</span><span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Version</span><span className="text-[13px] text-text mt-0.5 font-mono block">{sop.version}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">Status</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span></div>
-            <div><span className="text-[10px] text-gray-400 uppercase block">File</span><span className="text-[13px] text-text mt-0.5 block">{sop.fileName}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">Uploaded By</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedBy}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">Upload Date</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedAt}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">Business Process</span><span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">Version</span><span className="text-[13px] text-text mt-0.5 font-mono block">{sop.version}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">Status</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span></div>
+            <div><span className="text-[10px] text-ink-400 uppercase block">File</span><span className="text-[13px] text-text mt-0.5 block">{sop.fileName}</span></div>
           </div>
           {/* Description */}
           {sop.description && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-1">Description</span>
+              <span className="text-[10px] text-ink-400 uppercase block mb-1">Description</span>
               <p className="text-[13px] text-text-secondary leading-relaxed">{sop.description}</p>
             </div>
           )}
           {/* Source file placeholder */}
           <div>
-            <span className="text-[10px] text-gray-400 uppercase block mb-2">Document Preview</span>
-            <div className="rounded-lg border border-border bg-gray-50 p-8 text-center">
-              <FileText size={24} className="mx-auto text-gray-300 mb-2" />
-              <div className="text-[12px] text-gray-400">Document preview not available in prototype</div>
-              <div className="text-[10px] text-gray-300 mt-1">{sop.fileName}</div>
+            <span className="text-[10px] text-ink-400 uppercase block mb-2">Document Preview</span>
+            <div className="rounded-lg border border-border bg-paper-50 p-8 text-center">
+              <FileText size={24} className="mx-auto text-ink-300 mb-2" />
+              <div className="text-[12px] text-ink-400">Document preview not available in prototype</div>
+              <div className="text-[10px] text-ink-300 mt-1">{sop.fileName}</div>
             </div>
           </div>
           {/* Extraction summary */}
           {(sop.risks > 0 || sop.controls > 0) && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-2">Extraction Summary</span>
+              <span className="text-[10px] text-ink-400 uppercase block mb-2">Extraction Summary</span>
               <div className="flex gap-4">
                 <div className="text-center p-3 rounded-lg bg-surface-2/50 border border-border/50 flex-1">
                   <div className="text-lg font-bold text-text">{sop.risks}</div>
@@ -905,11 +905,11 @@ function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose
           {/* Linked RACM */}
           {sop.racmId && (
             <div>
-              <span className="text-[10px] text-gray-400 uppercase block mb-2">Linked RACM</span>
+              <span className="text-[10px] text-ink-400 uppercase block mb-2">Linked RACM</span>
               <div className="rounded-lg border border-border p-3 flex items-center justify-between">
                 <div>
                   <span className="text-[12px] font-medium text-text">{sop.racmName || sop.racmId}</span>
-                  <span className="text-[10px] text-gray-400 block mt-0.5">{sop.risks} risks · {sop.controls} control references</span>
+                  <span className="text-[10px] text-ink-400 block mt-0.5">{sop.risks} risks · {sop.controls} control references</span>
                 </div>
                 {onGoToRacm && (
                   <button onClick={() => { onClose(); onGoToRacm(); }}
@@ -1007,9 +1007,9 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
 
           {/* ─── Form Fields (always visible once source chosen or immediately) ─── */}
           <div className="space-y-3">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
+            <h3 className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Basic Info</h3>
             <div>
-              <label className={labelCls}>RACM Name <span className="text-red-400">*</span></label>
+              <label className={labelCls}>RACM Name <span className="text-risk">*</span></label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P — Vendor Payment" className={fieldCls} autoFocus />
             </div>
             <div>
@@ -1020,7 +1020,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
               </select>
             </div>
             <div>
-              <label className={labelCls}>Owner <span className="text-red-400">*</span></label>
+              <label className={labelCls}>Owner <span className="text-risk">*</span></label>
               <input value={owner} onChange={e => setOwner(e.target.value)} className={fieldCls} />
             </div>
             <div>
@@ -1030,17 +1030,17 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
             {/* Business Process — auto-filled, read-only */}
             <div>
               <label className={labelCls}>Business Process</label>
-              <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2">
-                <Building2 size={13} className="text-gray-400 shrink-0" />
+              <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-paper-50/80 cursor-not-allowed flex items-center gap-2">
+                <Building2 size={13} className="text-ink-400 shrink-0" />
                 <span>{bpAbbr}</span>
-                <span className="ml-auto text-[10px] text-gray-400">Auto-filled</span>
+                <span className="ml-auto text-[10px] text-ink-400">Auto-filled</span>
               </div>
             </div>
           </div>
 
           {/* ─── Source Type Selection ─── */}
           <div className="space-y-3">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Source Type</h3>
+            <h3 className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Source Type</h3>
             <div className="grid grid-cols-3 gap-2">
               {([
                 { id: 'blank' as const, label: 'Start Blank', desc: 'Add risks & controls manually', icon: Plus, disabled: false },
@@ -1053,10 +1053,10 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                     source === opt.id
                       ? 'border-primary bg-primary/5'
                       : opt.disabled
-                        ? 'border-border-light bg-gray-50/50 opacity-50 cursor-not-allowed'
+                        ? 'border-border-light bg-paper-50/50 opacity-50 cursor-not-allowed'
                         : 'border-border-light hover:border-primary/30 hover:bg-primary/5 cursor-pointer'
                   }`}>
-                  <opt.icon size={16} className={`mb-1.5 ${source === opt.id ? 'text-primary' : 'text-gray-400'}`} />
+                  <opt.icon size={16} className={`mb-1.5 ${source === opt.id ? 'text-primary' : 'text-ink-400'}`} />
                   <div className={`text-[12px] font-semibold ${source === opt.id ? 'text-primary' : 'text-text'}`}>{opt.label}</div>
                   <div className="text-[10px] text-text-muted mt-0.5 leading-snug">{opt.desc}</div>
                 </button>
@@ -1067,15 +1067,15 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
           {/* ─── Upload Section (only when source is upload) ─── */}
           {source === 'upload' && (
             <div className="space-y-3">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Upload File</h3>
+              <h3 className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Upload File</h3>
               {!uploadedFile ? (
                 <div onClick={() => {
                     const input = document.createElement('input'); input.type = 'file'; input.accept = '.xlsx,.xls,.csv,.pdf';
                     input.onchange = (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (f) handleFileUpload(f.name); };
                     input.click();
                   }}
-                  className="border-2 border-dashed border-border-light rounded-xl p-6 text-center cursor-pointer hover:border-primary/30 hover:bg-gray-50/50 transition-all">
-                  <Upload size={22} className="mx-auto text-gray-300 mb-2" />
+                  className="border-2 border-dashed border-border-light rounded-xl p-6 text-center cursor-pointer hover:border-primary/30 hover:bg-paper-50/50 transition-all">
+                  <Upload size={22} className="mx-auto text-ink-300 mb-2" />
                   <div className="text-[13px] font-semibold text-text">Drop file here or click to browse</div>
                   <div className="text-[11px] text-text-muted mt-1">Supported: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf)</div>
                 </div>
@@ -1095,15 +1095,15 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                     {uploadParsing ? (
                       <Loader2 size={16} className="text-primary animate-spin shrink-0" />
                     ) : (
-                      <button onClick={handleRemoveFile} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors" title="Remove file"><X size={14} /></button>
+                      <button onClick={handleRemoveFile} className="p-1.5 rounded-lg text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors" title="Remove file"><X size={14} /></button>
                     )}
                   </div>
 
                   {/* Extracted summary */}
                   {uploadParsed && extractedStats && (
-                    <div className="flex items-center gap-2 p-2.5 bg-emerald-50/40 rounded-lg border border-emerald-100/60">
-                      <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                      <span className="text-[11px] text-emerald-700">File parsed successfully. Review the imported structure in the next step to validate and finalize.</span>
+                    <div className="flex items-center gap-2 p-2.5 bg-compliant-50/40 rounded-lg border border-compliant/60">
+                      <CheckCircle2 size={12} className="text-compliant-700 shrink-0" />
+                      <span className="text-[11px] text-compliant-700">File parsed successfully. Review the imported structure in the next step to validate and finalize.</span>
                     </div>
                   )}
                 </div>
@@ -1378,11 +1378,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       {/* Empty state */}
       {sortedSops.length === 0 ? (
         <div className="bg-white rounded-xl border border-border-light p-12 text-center">
-          <FileText size={32} className="mx-auto text-gray-200 mb-3" />
+          <FileText size={32} className="mx-auto text-ink-300 mb-3" />
           <div className="text-[14px] font-semibold text-text mb-1">No SOPs uploaded yet</div>
-          <p className="text-[12px] text-gray-400 max-w-sm mx-auto mb-4">Upload a Standard Operating Procedure to extract risks and control references.</p>
+          <p className="text-[12px] text-ink-400 max-w-sm mx-auto mb-4">Upload a Standard Operating Procedure to extract risks and control references.</p>
           <button onClick={() => setShowUploadDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
             <Upload size={14} />Upload SOP
           </button>
         </div>
@@ -1390,21 +1390,21 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         <>
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <span className="text-[12px] text-gray-500">{sortedSops.length} SOP{sortedSops.length !== 1 ? 's' : ''}</span>
+            <span className="text-[12px] text-ink-500">{sortedSops.length} SOP{sortedSops.length !== 1 ? 's' : ''}</span>
             <button onClick={() => setShowUploadDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
               <Upload size={13} />Upload SOP
             </button>
           </div>
 
           {/* SOP Table */}
-          <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+          <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead>
-                  <tr className="border-b border-border bg-gray-50/50">
-                    {['SOP Name', 'Status', 'Draft', 'Actions'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  <tr className="border-b border-canvas-border bg-paper-50">
+                    {['SOP Name', 'Status', 'Actions'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1415,19 +1415,16 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     const showCounts = sop.status !== 'Draft' && sop.status !== 'Processing';
                     return (<React.Fragment key={sop.id}>
                       <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                        className={`border-b border-border/40 transition-colors ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-gray-50/50'}`}>
+                        className={`border-b border-canvas-border transition-colors ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-paper-50'}`}>
                         <td className="px-3 py-3">
                           <span className="text-[12px] font-medium text-text">{sop.name}</span>
-                          <span className="text-[10px] text-gray-400 block mt-0.5">{sop.uploadedBy} · {sop.uploadedAt}</span>
+                          <span className="text-[10px] text-ink-400 block mt-0.5">{sop.uploadedBy} · {sop.uploadedAt}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
+                          <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
                             {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
                             {sop.status}
                           </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="text-[11px] text-gray-400">{sop.uploadedAt}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
@@ -1437,7 +1434,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                             </button>
                             {(sop.status === 'Processed' || sop.status === 'Linked') && (
                               <button onClick={() => setPreviewingSopId(sop.id)}
-                                className="px-2 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:bg-gray-100 cursor-pointer transition-colors">
+                                className="px-2 py-1 rounded-lg text-[10px] font-medium text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors">
                                 View SOP
                               </button>
                             )}
@@ -1447,21 +1444,21 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       {/* Processing stepper */}
                       <AnimatePresence>
                         {isProcessing && (
-                          <tr><td colSpan={4} className="p-0"><ProcessingStepperPanel sop={sop} /></td></tr>
+                          <tr><td colSpan={3} className="p-0"><ProcessingStepperPanel sop={sop} /></td></tr>
                         )}
                       </AnimatePresence>
                       {/* Failed state */}
                       {sop.status === 'Draft' && (
                         <tr>
-                          <td colSpan={4} className="p-0">
-                            <div className="px-4 py-3 bg-gray-50/50 border-t border-border/30">
+                          <td colSpan={3} className="p-0">
+                            <div className="px-4 py-3 bg-paper-50 border-t border-canvas-border">
                               <div className="flex items-center gap-3">
-                                <span className="text-[11px] text-red-500/80 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
+                                <span className="text-[11px] text-risk-700 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   <button onClick={() => handleStartProcessing(sop.id)} className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">Retry</button>
-                                  <button onClick={() => setShowUploadDrawer(true)} className="px-2.5 py-1 rounded-lg text-[10px] font-medium border border-border text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors">Re-upload</button>
+                                  <button onClick={() => setShowUploadDrawer(true)} className="px-2.5 py-1 rounded-lg text-[10px] font-medium border border-canvas-border text-ink-500 hover:bg-paper-50 cursor-pointer transition-colors">Re-upload</button>
                                   <button onClick={() => { setLocalSops(prev => prev.map(s => s.id === sop.id ? { ...s, status: 'Archived' as SOPStatus } : s)); addToast({ message: `"${sop.name}" archived`, type: 'info' }); }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors">Archive</button>
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-ink-400 hover:bg-paper-100 cursor-pointer transition-colors">Archive</button>
                                 </div>
                               </div>
                             </div>
@@ -1530,11 +1527,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
                 className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm" onClick={() => setVersionConflict(null)}>
                 <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  transition={{ duration: 0.2 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[440px]" onClick={e => e.stopPropagation()}>
+                  transition={{ duration: 0.2 }} className="bg-white rounded-xl shadow-xl border border-canvas-border w-full max-w-[440px]" onClick={e => e.stopPropagation()}>
 
                   <div className="px-6 pt-5 pb-4 border-b border-canvas-border">
                     <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle size={16} className="text-amber-500" />
+                      <AlertTriangle size={16} className="text-mitigated-700" />
                       <h2 className="text-[16px] font-bold text-text">SOP already exists</h2>
                     </div>
                     <p className="text-[12px] text-text-muted">An SOP with this name already exists for this process.</p>
@@ -1542,13 +1539,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
                   <div className="px-6 py-5 space-y-4">
                     {/* Existing SOP info */}
-                    <div className="rounded-lg border border-border bg-surface-2/30 px-4 py-3">
+                    <div className="rounded-lg border border-canvas-border bg-surface-2/30 px-4 py-3">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[12px] font-semibold text-text">{existing.name}</span>
-                        <span className="text-[10px] font-mono text-gray-500 bg-gray-50 px-1 py-0.5 rounded">{existing.version}</span>
-                        <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${SOP_STATUS_STYLES[existing.status]}`}>{existing.status}</span>
+                        <span className="text-[10px] font-mono text-ink-500 bg-paper-50 px-1 py-0.5 rounded">{existing.version}</span>
+                        <span className={`px-1.5 h-4 rounded text-[10px] font-bold inline-flex items-center ${SOP_STATUS_STYLES[existing.status]}`}>{existing.status}</span>
                       </div>
-                      <div className="text-[11px] text-gray-500">
+                      <div className="text-[11px] text-ink-500">
                         {existing.uploadedBy} · {existing.uploadedAt}
                         {isLinked && <span className="ml-2 text-primary">Linked to {existing.racmId}</span>}
                       </div>
@@ -1557,27 +1554,27 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     {/* Options */}
                     <div className="space-y-2">
                       <button onClick={() => handleVersionConflictResolve('new-version')}
-                        className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer">
+                        className="w-full text-left px-4 py-3 rounded-lg border border-canvas-border hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer">
                         <div className="text-[12px] font-semibold text-text">Upload as new version</div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))} — keeps existing SOP and linked RACM intact.</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))} — keeps existing SOP and linked RACM intact.</div>
                       </button>
 
                       {canReplace ? (
                         <button onClick={() => handleVersionConflictResolve('replace')}
-                          className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-amber-300 hover:bg-amber-50/30 transition-all cursor-pointer">
+                          className="w-full text-left px-4 py-3 rounded-lg border border-canvas-border hover:border-mitigated hover:bg-mitigated-50/30 transition-all cursor-pointer">
                           <div className="text-[12px] font-semibold text-text">Replace existing draft</div>
-                          <div className="text-[11px] text-gray-500 mt-0.5">Removes the {existing.status.toLowerCase()} SOP and uploads the new file in its place.</div>
+                          <div className="text-[11px] text-ink-500 mt-0.5">Removes the {existing.status.toLowerCase()} SOP and uploads the new file in its place.</div>
                         </button>
                       ) : (
-                        <div className="px-4 py-3 rounded-lg border border-border/50 bg-gray-50/50 opacity-60">
-                          <div className="text-[12px] font-medium text-gray-400">Replace existing</div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">Cannot replace — SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
+                        <div className="px-4 py-3 rounded-lg border border-canvas-border bg-paper-50 opacity-60">
+                          <div className="text-[12px] font-medium text-ink-400">Replace existing</div>
+                          <div className="text-[11px] text-ink-400 mt-0.5">Cannot replace — SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
                         </div>
                       )}
 
                       <button onClick={() => handleVersionConflictResolve('cancel')}
-                        className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-gray-50 transition-all cursor-pointer">
-                        <div className="text-[12px] font-medium text-gray-500">Cancel</div>
+                        className="w-full text-left px-4 py-3 rounded-lg border border-canvas-border hover:bg-paper-50 transition-all cursor-pointer">
+                        <div className="text-[12px] font-medium text-ink-500">Cancel</div>
                       </button>
                     </div>
                   </div>
@@ -1620,9 +1617,9 @@ const SEED_DESIGN_CONTROLS: DesignControl[] = [
   { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'] },
 ];
 
-function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
+function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean }) {
   const { addToast } = useToast();
-  const [controls, setControls] = useState<DesignControl[]>(SEED_DESIGN_CONTROLS);
+  const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleCreateWorkflow = (ctrl: DesignControl) => {
@@ -1633,18 +1630,28 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
     return ctrl.workflows.length > 0 && ctrl.mappedRisks.length > 0 ? 'Complete' : 'Incomplete';
   };
 
+  if (controls.length === 0) {
+    return (
+      <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-10 text-center">
+        <ShieldCheck size={32} className="mx-auto text-ink-300 mb-3" />
+        <div className="text-[14px] font-semibold text-ink-600 mb-1">No controls yet</div>
+        <p className="text-[12.5px] text-ink-400">Controls appear here once you map them from a RACM.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-gray-500">{controls.length} control{controls.length !== 1 ? 's' : ''}</span>
+        <span className="text-[12px] text-ink-500">{controls.length} control{controls.length !== 1 ? 's' : ''}</span>
       </div>
 
-      <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+      <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
         <table className="w-full text-[12px]">
           <thead>
-            <tr className="border-b border-border bg-gray-50/50">
+            <tr className="border-b border-canvas-border bg-paper-50">
               {['Control', 'Classification', 'Nature', 'Workflows', 'Mapped Risks', 'RACMs', 'Design Status', ''].map(h => (
-                <th key={h || 'act'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                <th key={h || 'act'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -1655,42 +1662,42 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
               return (
                 <React.Fragment key={ctrl.id}>
                   <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                    className="border-b border-border/40 hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
+                    className="border-b border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-gray-400">{ctrl.id}</span>
+                        <span className="font-mono text-[10px] text-ink-400">{ctrl.id}</span>
                         <span className="text-[12px] font-medium text-text">{ctrl.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{ctrl.classification}</span>
+                      <span className={`px-1.5 h-4 rounded text-[10px] font-bold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-gray-500">{ctrl.nature}</span></td>
+                    <td className="px-3 py-3"><span className="text-[11px] text-ink-500">{ctrl.nature}</span></td>
                     <td className="px-3 py-3">
                       {ctrl.workflows.length === 0 ? (
-                        <span className="text-[11px] text-amber-600 font-medium">No workflow mapped</span>
+                        <span className="text-[11px] text-mitigated-700 font-medium">No workflow mapped</span>
                       ) : ctrl.workflows.length === 1 ? (
-                        <span className="text-[11px] text-emerald-700 font-medium">{ctrl.workflows[0].name}</span>
+                        <span className="text-[11px] text-compliant-700 font-medium">{ctrl.workflows[0].name}</span>
                       ) : ctrl.workflows.length <= 2 ? (
                         <div className="flex flex-wrap gap-1">
-                          {ctrl.workflows.map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[8px] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 15 ? w.name.slice(0, 14) + '…' : w.name}</span>))}
+                          {ctrl.workflows.map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[10px] font-medium bg-compliant-50 text-compliant-700">{w.name.length > 15 ? w.name.slice(0, 14) + '…' : w.name}</span>))}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          {ctrl.workflows.slice(0, 2).map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[8px] font-medium bg-emerald-50 text-emerald-700">{w.name.length > 12 ? w.name.slice(0, 11) + '…' : w.name}</span>))}
-                          <span className="px-1.5 h-4 rounded text-[8px] font-medium bg-gray-100 text-gray-500">+{ctrl.workflows.length - 2}</span>
+                          {ctrl.workflows.slice(0, 2).map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded text-[10px] font-medium bg-compliant-50 text-compliant-700">{w.name.length > 12 ? w.name.slice(0, 11) + '…' : w.name}</span>))}
+                          <span className="px-1.5 h-4 rounded text-[10px] font-medium bg-paper-100 text-ink-500">+{ctrl.workflows.length - 2}</span>
                         </div>
                       )}
                     </td>
                     <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{ctrl.mappedRisks.length}</span></td>
                     <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{ctrl.usedInRACMs}</span></td>
                     <td className="px-3 py-3">
-                      {(() => { const ds = getDesignStatus(ctrl); return <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${ds === 'Complete' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'}`}>{ds}</span>; })()}
+                      {(() => { const ds = getDesignStatus(ctrl); return <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ds === 'Complete' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{ds}</span>; })()}
                     </td>
                     <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        {ctrl.workflows.length === 0 && <button onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded text-[9px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">Create Workflow</button>}
-                        <button onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-gray-100 text-gray-600 hover:bg-gray-200/70 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
+                        {ctrl.workflows.length === 0 && <button onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">Create Workflow</button>}
+                        <button onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-100 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
                       </div>
                     </td>
                   </motion.tr>
@@ -1698,24 +1705,24 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
                   {isExpanded && (
                     <tr>
                       <td colSpan={8} className="p-0">
-                        <div className="px-5 py-4 bg-surface-2/20 border-t border-border/30 space-y-3">
+                        <div className="px-5 py-4 bg-surface-2/20 border-t border-canvas-border space-y-3">
                           <div className="grid grid-cols-2 gap-4">
-                            <div><span className="text-[9px] text-gray-400 uppercase block">Description</span><p className="text-[11px] text-text mt-0.5">{ctrl.description}</p></div>
+                            <div><span className="text-[10px] text-ink-400 uppercase block">Description</span><p className="text-[11px] text-text mt-0.5">{ctrl.description}</p></div>
                             <div className="grid grid-cols-2 gap-2">
-                              <div><span className="text-[9px] text-gray-400 uppercase block">Automation</span><p className="text-[11px] text-text">{ctrl.automation}</p></div>
-                              <div><span className="text-[9px] text-gray-400 uppercase block">Frequency</span><p className="text-[11px] text-text">{ctrl.frequency}</p></div>
+                              <div><span className="text-[10px] text-ink-400 uppercase block">Automation</span><p className="text-[11px] text-text">{ctrl.automation}</p></div>
+                              <div><span className="text-[10px] text-ink-400 uppercase block">Frequency</span><p className="text-[11px] text-text">{ctrl.frequency}</p></div>
                             </div>
                           </div>
                           {ctrl.assertions.length > 0 && (
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Assertions</span>
-                              <div className="flex flex-wrap gap-1">{ctrl.assertions.map(a => (<span key={a} className="px-2 py-0.5 rounded text-[9px] font-medium bg-gray-50 text-gray-600 border border-gray-200/60">{a}</span>))}</div>
+                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Assertions</span>
+                              <div className="flex flex-wrap gap-1">{ctrl.assertions.map(a => (<span key={a} className="px-2 py-0.5 rounded text-[10px] font-medium bg-paper-50 text-ink-600 border border-canvas-border">{a}</span>))}</div>
                             </div>
                           )}
                           <div className="grid grid-cols-2 gap-3">
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Linked Risks</span>
-                              {ctrl.mappedRisks.length > 0 ? ctrl.mappedRisks.map(r => (<div key={r} className="text-[10px] font-mono text-gray-500">{r}</div>)) : <span className="text-[10px] text-gray-300">None</span>}
+                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Linked Risks</span>
+                              {ctrl.mappedRisks.length > 0 ? ctrl.mappedRisks.map(r => (<div key={r} className="text-[10px] font-mono text-ink-500">{r}</div>)) : <span className="text-[10px] text-ink-300">None</span>}
                             </div>
-                            <div><span className="text-[9px] text-gray-400 uppercase block mb-1">Used in RACMs</span>
+                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Used in RACMs</span>
                               <span className="text-[10px] text-text">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
                             </div>
                           </div>
@@ -1723,33 +1730,33 @@ function ControlDesignTab({ bpAbbr }: { bpAbbr: string }) {
                           {/* Workflow bindings detail */}
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[9px] text-gray-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
-                              <button onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[9px] font-semibold text-primary hover:underline cursor-pointer">+ Create Workflow</button>
+                              <span className="text-[10px] text-ink-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
+                              <button onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">+ Create Workflow</button>
                             </div>
                             {ctrl.workflows.length === 0 ? (
-                              <div className="text-[10px] text-amber-600 py-2">No workflows mapped. Create a workflow to enable testing.</div>
+                              <div className="text-[10px] text-mitigated-700 py-2">No workflows mapped. Create a workflow to enable testing.</div>
                             ) : (
-                              <div className="bg-white rounded-lg border border-border/50 overflow-hidden">
+                              <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
                                 <table className="w-full text-[11px]">
-                                  <thead><tr className="border-b border-border/30 bg-gray-50/30">
-                                    <th className="px-3 py-1.5 text-left text-[9px] font-semibold text-gray-400 uppercase">Workflow</th>
-                                    <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-gray-400 uppercase">Type</th>
-                                    <th className="px-3 py-1.5 text-center text-[9px] font-semibold text-gray-400 uppercase">Status</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Runs</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Last Run</th>
-                                    <th className="px-3 py-1.5 text-right text-[9px] font-semibold text-gray-400 uppercase">Actions</th>
+                                  <thead><tr className="border-b border-canvas-border bg-paper-50">
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-ink-400 uppercase">Workflow</th>
+                                    <th className="px-3 py-1.5 text-center text-[10px] font-semibold text-ink-400 uppercase">Type</th>
+                                    <th className="px-3 py-1.5 text-center text-[10px] font-semibold text-ink-400 uppercase">Status</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Runs</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Last Run</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Actions</th>
                                   </tr></thead>
                                   <tbody>{ctrl.workflows.map((w, wi) => (
-                                    <tr key={wi} className="border-b border-border/20">
+                                    <tr key={wi} className="border-b border-canvas-border">
                                       <td className="px-3 py-1.5 text-text font-medium">{w.name}</td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${w.type === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{w.type}</span></td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${w.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' : w.status === 'Ready' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>{w.status}</span></td>
-                                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{w.runs}</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-400">{w.lastRun}</td>
+                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[10px] font-bold inline-flex items-center ${w.type === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-paper-100 text-ink-600'}`}>{w.type}</span></td>
+                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded text-[10px] font-bold inline-flex items-center ${w.status === 'Completed' ? 'bg-compliant-50 text-compliant-700' : w.status === 'Ready' ? 'bg-compliant-50 text-compliant-700' : 'bg-paper-100 text-ink-500'}`}>{w.status}</span></td>
+                                      <td className="px-3 py-1.5 text-right tabular-nums text-ink-500">{w.runs}</td>
+                                      <td className="px-3 py-1.5 text-right text-ink-400">{w.lastRun}</td>
                                       <td className="px-3 py-1.5 text-right">
                                         <div className="flex items-center gap-1 justify-end">
-                                          <button onClick={e => { e.stopPropagation(); addToast({ message: `Viewing "${w.name}"`, type: 'info' }); }} className="text-[9px] font-medium text-primary hover:underline cursor-pointer">View</button>
-                                          {w.type === 'Automated' && <button onClick={e => { e.stopPropagation(); addToast({ message: `Running "${w.name}"...`, type: 'info' }); }} className="text-[9px] font-medium text-primary hover:underline cursor-pointer">Run</button>}
+                                          <button onClick={e => { e.stopPropagation(); addToast({ message: `Viewing "${w.name}"`, type: 'info' }); }} className="text-[10px] font-medium text-primary hover:underline cursor-pointer">View</button>
+                                          {w.type === 'Automated' && <button onClick={e => { e.stopPropagation(); addToast({ message: `Running "${w.name}"...`, type: 'info' }); }} className="text-[10px] font-medium text-primary hover:underline cursor-pointer">Run</button>}
                                         </div>
                                       </td>
                                     </tr>
@@ -1791,9 +1798,9 @@ const SEED_BP_WF: BPWorkflow[] = [
   { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [] },
 ];
 
-function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: string; onOpenWorkflowDetail?: (workflowId: string) => void }) {
+function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void }) {
   const { addToast } = useToast();
-  const [workflows, setWorkflows] = useState<BPWorkflow[]>(SEED_BP_WF);
+  const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [usageFilter, setUsageFilter] = useState<'All' | 'Used' | 'Unused'>('All');
   const [showLinkedControls, setShowLinkedControls] = useState<string | null>(null);
@@ -1810,9 +1817,22 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
   const unusedCount = workflows.filter(w => w.linkedControls.length === 0).length;
 
   const handleDelete = (id: string) => {
-    const wf = workflows.find(w => w.id === id);
+    const idx = workflows.findIndex(w => w.id === id);
+    if (idx === -1) return;
+    const wf = workflows[idx];
     setWorkflows(prev => prev.filter(w => w.id !== id));
-    if (wf) addToast({ message: `Workflow "${wf.name}" deleted.`, type: 'info' });
+    addToast({
+      message: `Workflow "${wf.name}" deleted.`,
+      type: 'info',
+      action: {
+        label: 'Undo',
+        onClick: () => setWorkflows(prev => {
+          const next = [...prev];
+          next.splice(Math.min(idx, next.length), 0, wf);
+          return next;
+        }),
+      },
+    });
   };
 
   const handleCreate = (data: { name: string; type: 'Automated' | 'Manual'; nature: 'Preventive' | 'Detective'; desc: string }) => {
@@ -1838,6 +1858,16 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
     if (skipped > 0) addToast({ message: `${skipped} workflow${skipped !== 1 ? 's' : ''} skipped (manual or draft).`, type: 'info' });
     setBulkMode(false); setSelectedIds(new Set());
   };
+
+  if (workflows.length === 0) {
+    return (
+      <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-10 text-center">
+        <Play size={32} className="mx-auto text-ink-300 mb-3" />
+        <div className="text-[14px] font-semibold text-ink-600 mb-1">No workflows yet</div>
+        <p className="text-[12.5px] text-ink-400">Link a workflow to define how controls get tested.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1897,7 +1927,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-border-light p-14 text-center">
-          <FileText size={32} className="mx-auto text-gray-200 mb-3" />
+          <FileText size={32} className="mx-auto text-ink-300 mb-3" />
           <p className="text-[14px] font-semibold text-text-muted mb-1">
             {workflows.length === 0 ? 'No workflows created for this process yet' : `No workflows match "${search || usageFilter}"`}
           </p>
@@ -1913,7 +1943,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                 {bulkMode && (
                   <th className="pl-4 pr-2 py-3 w-[44px]">
                     <input type="checkbox" checked={allVisibleSelected} ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
-                      onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" aria-label="Select all" />
+                      onChange={toggleSelectAll} className="w-4 h-4 rounded border-canvas-border accent-primary cursor-pointer" aria-label="Select all" />
                   </th>
                 )}
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[280px]">Workflow Name</th>
@@ -1933,7 +1963,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                   {bulkMode && (
                     <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(wf.id)}
-                        className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" />
+                        className="w-4 h-4 rounded border-canvas-border accent-primary cursor-pointer" />
                     </td>
                   )}
                   {/* Workflow Name + Live/Draft badge + ID */}
@@ -1947,9 +1977,9 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                           <span className="text-[13px] text-text font-medium leading-snug">{wf.name}</span>
                         )}
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 mt-0.5 ${
-                          wf.status === 'Active' ? '' : wf.status === 'Ready' ? 'bg-blue-50 text-blue-700' : wf.status === 'Archived' ? 'bg-gray-50 text-gray-400' : 'bg-gray-100 text-gray-500'
-                        }`} style={wf.status === 'Active' ? { backgroundColor: '#ECFEF3', color: '#047A48' } : undefined}>
-                          {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#047A48' }} />}
+                          wf.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : wf.status === 'Ready' ? 'bg-evidence-50 text-evidence-700' : wf.status === 'Archived' ? 'bg-paper-50 text-ink-400' : 'bg-paper-100 text-ink-500'
+                        }`}>
+                          {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-compliant" />}
                           {wf.status}
                         </span>
                       </div>
@@ -1963,8 +1993,8 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                   {/* Type — tags */}
                   <td className="px-4 py-4 align-top">
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[11px] font-medium">{wf.nature}</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[11px] font-medium">{wf.type}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-paper-50 border border-canvas-border text-ink-700 text-[11px] font-medium">{wf.nature}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-paper-50 border border-canvas-border text-ink-700 text-[11px] font-medium">{wf.type}</span>
                     </div>
                   </td>
                   {/* Usage */}
@@ -1975,7 +2005,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                         Used in {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}
                       </button>
                     ) : (
-                      <span className="text-[12px] text-gray-400">Not used</span>
+                      <span className="text-[12px] text-ink-400">Not used</span>
                     )}
                   </td>
                   {/* Actions */}
@@ -1992,7 +2022,7 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                         <Pencil size={14} />
                       </button>
                       <button onClick={() => handleDelete(wf.id)}
-                        className="w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors" title="Delete">
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors" title="Delete">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -2025,12 +2055,12 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                     <h3 className="text-[14px] font-bold text-text">Linked Controls</h3>
                     <p className="text-[11px] text-text-muted mt-0.5">{wf.name}</p>
                   </div>
-                  <button onClick={() => setShowLinkedControls(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={14} /></button>
+                  <button onClick={() => setShowLinkedControls(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={14} /></button>
                 </div>
                 <div className="px-5 py-3 space-y-2">
                   {wf.linkedControls.map(cId => (
                     <div key={cId} className="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2/40 border border-border-light">
-                      <span className="text-[11px] font-mono text-gray-500">{cId}</span>
+                      <span className="text-[11px] font-mono text-ink-500">{cId}</span>
                       <span className="text-[12px] text-text">{CONTROLS.find(c => c.id === cId)?.name || `Control ${cId}`}</span>
                     </div>
                   ))}
@@ -2056,9 +2086,9 @@ function WorkflowGovernanceTab({ bpAbbr, onOpenWorkflowDetail }: { bpAbbr: strin
                   <button onClick={() => setShowCreateDrawer(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Name <span className="text-red-400">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
+                  <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Name <span className="text-risk">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Business Process</label>
-                    <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-gray-50/80 cursor-not-allowed flex items-center gap-2"><Building2 size={13} className="text-gray-400 shrink-0" />{bpAbbr}<span className="ml-auto text-[10px] text-gray-400">Auto-filled</span></div>
+                    <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-paper-50 cursor-not-allowed flex items-center gap-2"><Building2 size={13} className="text-ink-400 shrink-0" />{bpAbbr}<span className="ml-auto text-[10px] text-ink-400">Auto-filled</span></div>
                   </div>
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Automation Type</label>
                     <div className="flex gap-2">{(['Automated', 'Manual'] as const).map(v => (<button key={v} onClick={() => setT(v)} className={`px-3 py-2 rounded-lg text-[12px] font-medium border cursor-pointer transition-all ${t === v ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted'}`}>{v}</button>))}</div>
@@ -2229,9 +2259,23 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
     addToast({ message: 'All rows marked as reviewed.', type: 'success' });
   };
   const handleDeleteRow = (id: string) => {
+    const idx = rows.findIndex(r => r.id === id);
+    if (idx === -1) return;
+    const row = rows[idx];
     setRows(prev => revalidate(prev.filter(r => r.id !== id)));
     if (selectedRowId === id) setSelectedRowId(null);
-    addToast({ message: 'Row removed.', type: 'info' });
+    addToast({
+      message: 'Row removed.',
+      type: 'info',
+      action: {
+        label: 'Undo',
+        onClick: () => setRows(prev => {
+          const next = [...prev];
+          next.splice(Math.min(idx, next.length), 0, row);
+          return revalidate(next);
+        }),
+      },
+    });
   };
   const handleAddRow = () => {
     const newRow: ImportedRow = {
@@ -2290,11 +2334,11 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
   // ─── Risk Rating badge colors ────────────────────────────────────────────
   const ratingColor = (r: string) => {
     switch (r) {
-      case 'Critical': return 'bg-red-50 text-red-700';
+      case 'Critical': return 'bg-risk-50 text-risk-700';
       case 'High':     return 'bg-orange-50 text-orange-700';
-      case 'Medium':   return 'bg-amber-50 text-amber-700';
-      case 'Low':      return 'bg-emerald-50 text-emerald-700';
-      default:         return 'bg-gray-50 text-gray-500';
+      case 'Medium':   return 'bg-mitigated-50 text-mitigated-700';
+      case 'Low':      return 'bg-compliant-50 text-compliant-700';
+      default:         return 'bg-paper-50 text-ink-500';
     }
   };
 
@@ -2310,18 +2354,18 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-text">{racmName}</h2>
-                <span className="px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center bg-amber-50 text-amber-600">Draft Review</span>
+                <span className="px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center bg-mitigated-50 text-mitigated-700">Draft Review</span>
               </div>
-              <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-500">
+              <div className="flex items-center gap-3 mt-1 text-[11px] text-ink-500">
                 <span>{bpAbbr}</span>
                 <span>Source: {fileName}</span>
                 <span>{reviewedCount}/{rows.length} reviewed</span>
-                {issueCount > 0 && <span className="text-amber-600 font-medium">{issueCount} with issues</span>}
+                {issueCount > 0 && <span className="text-mitigated-700 font-medium">{issueCount} with issues</span>}
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => addToast({ message: 'Draft saved.', type: 'success' })}
-                className="px-3 py-2 rounded-lg border border-border text-[12px] font-medium text-text-secondary hover:bg-gray-50 cursor-pointer">Save Draft</button>
+                className="px-3 py-2 rounded-lg border border-border text-[12px] font-medium text-text-secondary hover:bg-paper-50 cursor-pointer">Save Draft</button>
               <button onClick={() => { setFreezeConfirmed(false); setShowFreezeModal(true); }}
                 disabled={reviewedCount < rows.length}
                 title={reviewedCount < rows.length ? `Review all rows before freezing (${reviewedCount}/${rows.length} reviewed)` : ''}
@@ -2341,7 +2385,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleBulkMarkReviewed} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-border text-text-muted hover:bg-gray-50 cursor-pointer">Mark All Reviewed</button>
+          <button onClick={handleBulkMarkReviewed} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-border text-text-muted hover:bg-paper-50 cursor-pointer">Mark All Reviewed</button>
           <button onClick={handleAddRow} className="px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer flex items-center gap-1"><Plus size={9} />Add Row</button>
         </div>
       </div>
@@ -2353,15 +2397,15 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
           <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 520 }}>
             <table className="w-full text-[11px] border-collapse" style={{ minWidth: totalMinW }}>
               <thead className="sticky top-0 z-10">
-                <tr className="border-b border-border bg-gray-50/80">
+                <tr className="border-b border-border bg-paper-50/80">
                   {GRID_COLUMNS.map(c => (
-                    <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap"
+                    <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap"
                       style={{ minWidth: c.minW }}>
                       {c.label}
-                      {c.required && <span className="text-red-400 ml-0.5">*</span>}
+                      {c.required && <span className="text-risk-700 ml-0.5">*</span>}
                     </th>
                   ))}
-                  <th className="px-1.5 py-2 w-14 sticky right-0 bg-gray-50/80"></th>
+                  <th className="px-1.5 py-2 w-14 sticky right-0 bg-paper-50/80"></th>
                 </tr>
               </thead>
               <tbody>
@@ -2370,7 +2414,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                   return (
                   <tr key={row.id}
                     onClick={() => setSelectedRowId(row.id)}
-                    className={`border-b border-border/30 transition-colors cursor-pointer ${selectedRowId === row.id ? 'bg-primary/5' : row.validationIssues.length > 0 ? 'bg-amber-50/20 hover:bg-amber-50/40' : 'hover:bg-gray-50/50'}`}>
+                    className={`border-b border-border/30 transition-colors cursor-pointer ${selectedRowId === row.id ? 'bg-primary/5' : row.validationIssues.length > 0 ? 'bg-mitigated-50/20 hover:bg-mitigated-50/40' : 'hover:bg-paper-50/50'}`}>
                     {GRID_COLUMNS.map(col => {
                       const rawVal = row[col.key];
                       const val = rawVal === undefined || rawVal === null ? '' : String(rawVal);
@@ -2381,7 +2425,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       // ── Read-only Row # ──
                       if (col.type === 'readonly') {
                         return (
-                          <td key={col.key} className="px-1.5 py-1 text-[10px] text-gray-400 font-mono" style={{ minWidth: col.minW }}>
+                          <td key={col.key} className="px-1.5 py-1 text-[10px] text-ink-400 font-mono" style={{ minWidth: col.minW }}>
                             {val}
                           </td>
                         );
@@ -2391,7 +2435,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       if (col.type === 'status') {
                         return (
                           <td key={col.key} className="px-1.5 py-1" style={{ minWidth: col.minW }}>
-                            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${row.reviewStatus === 'Reviewed' ? 'bg-emerald-50 text-emerald-700' : row.reviewStatus === 'Flagged' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                            <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${row.reviewStatus === 'Reviewed' ? 'bg-compliant-50 text-compliant-700' : row.reviewStatus === 'Flagged' ? 'bg-risk-50 text-risk-700' : 'bg-mitigated-50 text-mitigated-700'}`}>
                               {row.reviewStatus}
                             </span>
                           </td>
@@ -2404,7 +2448,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                           <td key={col.key} className="px-1.5 py-1 text-center" style={{ minWidth: col.minW }}
                             onClick={e => { e.stopPropagation(); toggleKeyControl(row.id); }}>
                             <input type="checkbox" checked={row.keyControl} readOnly
-                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary accent-primary cursor-pointer" />
+                              className="w-3.5 h-3.5 rounded border-canvas-border text-primary accent-primary cursor-pointer" />
                           </td>
                         );
                       }
@@ -2437,13 +2481,13 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                             {col.key === 'riskRating' && val && val !== 'undefined' ? (
                               <span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${ratingColor(val)}`}>{val}</span>
                             ) : (
-                              <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}>
+                              <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-mitigated-700' : isEmpty ? 'text-ink-300' : 'text-text'} truncate block`}>
                                 {hasIssue && isEmpty ? (
                                   <span className="inline-flex items-center gap-0.5"><AlertTriangle size={9} className="shrink-0" />Required</span>
                                 ) : val && val !== 'undefined' ? val : '—'}
                               </span>
                             )}
-                            {hasIssue && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-amber-400 rounded-full" />}
+                            {hasIssue && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-mitigated rounded-full" />}
                           </td>
                         );
                       }
@@ -2469,13 +2513,13 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                           className={`px-1.5 py-1 ${hasIssue ? 'relative' : ''}`}
                           style={{ minWidth: col.minW }}
                           onClick={e => { e.stopPropagation(); setSelectedRowId(row.id); startEdit(row.id, col.key, val === 'undefined' ? '' : val); }}>
-                          <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-amber-500' : isEmpty ? 'text-gray-300' : 'text-text'} truncate block`}
+                          <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-mitigated-700' : isEmpty ? 'text-ink-300' : 'text-text'} truncate block`}
                             title={hasIssue && isEmpty ? 'Required field' : val}>
                             {hasIssue && isEmpty ? (
                               <span className="inline-flex items-center gap-0.5"><AlertTriangle size={9} className="shrink-0" />Required</span>
                             ) : val && val !== 'undefined' ? val : '—'}
                           </span>
-                          {hasIssue && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-amber-400 rounded-full" />}
+                          {hasIssue && <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-mitigated rounded-full" />}
                         </td>
                       );
                     })}
@@ -2483,9 +2527,9 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                     <td className="px-1.5 py-1 text-right sticky right-0 bg-inherit" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5 justify-end">
                         {row.reviewStatus !== 'Reviewed' && (
-                          <button onClick={() => handleMarkReviewed(row.id)} className="p-1 rounded hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 cursor-pointer" title="Mark Reviewed"><CheckCircle2 size={11} /></button>
+                          <button onClick={() => handleMarkReviewed(row.id)} className="p-1 rounded hover:bg-compliant-50 text-ink-400 hover:text-compliant-700 cursor-pointer" title="Mark Reviewed"><CheckCircle2 size={11} /></button>
                         )}
-                        <button onClick={() => handleDeleteRow(row.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 cursor-pointer" title="Delete"><X size={11} /></button>
+                        <button onClick={() => handleDeleteRow(row.id)} className="p-1 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer" title="Delete"><X size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -2504,23 +2548,23 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
           <div className="w-[280px] shrink-0 bg-white rounded-xl border border-border-light p-4 space-y-3.5 overflow-y-auto" style={{ maxHeight: 560 }}>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-text-muted uppercase">Row {selectedRow.sourceRow}</span>
-              <button onClick={() => setSelectedRowId(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer"><X size={12} /></button>
+              <button onClick={() => setSelectedRowId(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={12} /></button>
             </div>
 
             {/* Process */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Process</span>
+              <span className="text-[9px] text-ink-400 uppercase block">Process</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.process || '—'}</p>
-              {selectedRow.subProcess && <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.subProcess}</p>}
+              {selectedRow.subProcess && <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.subProcess}</p>}
             </div>
 
             {/* Risk */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Risk</span>
+              <span className="text-[9px] text-ink-400 uppercase block">Risk</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.riskName || '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.riskDesc || '—'}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.riskDesc || '—'}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-[9px] font-mono text-gray-400">{selectedRow.riskId || '—'}</span>
+                <span className="text-[9px] font-mono text-ink-400">{selectedRow.riskId || '—'}</span>
                 {selectedRow.riskRating && (
                   <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${ratingColor(selectedRow.riskRating)}`}>{selectedRow.riskRating}</span>
                 )}
@@ -2529,37 +2573,37 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             {/* Control */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Control</span>
+              <span className="text-[9px] text-ink-400 uppercase block">Control</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.controlName || '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{selectedRow.controlDesc || '—'}</p>
+              <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.controlDesc || '—'}</p>
               <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px]">
-                <div><span className="text-gray-400">ID:</span> <span className="text-text font-mono">{selectedRow.controlId || '���'}</span></div>
-                <div><span className="text-gray-400">Owner:</span> <span className="text-text">{selectedRow.controlOwner || '—'}</span></div>
-                <div><span className="text-gray-400">Type:</span> <span className="text-text">{selectedRow.controlType || '—'}</span></div>
-                <div><span className="text-gray-400">Frequency:</span> <span className="text-text">{selectedRow.frequency || '—'}</span></div>
-                <div><span className="text-gray-400">Key:</span> <span className="text-text">{selectedRow.keyControl ? 'Yes' : 'No'}</span></div>
+                <div><span className="text-ink-400">ID:</span> <span className="text-text font-mono">{selectedRow.controlId || '���'}</span></div>
+                <div><span className="text-ink-400">Owner:</span> <span className="text-text">{selectedRow.controlOwner || '—'}</span></div>
+                <div><span className="text-ink-400">Type:</span> <span className="text-text">{selectedRow.controlType || '—'}</span></div>
+                <div><span className="text-ink-400">Frequency:</span> <span className="text-text">{selectedRow.frequency || '—'}</span></div>
+                <div><span className="text-ink-400">Key:</span> <span className="text-text">{selectedRow.keyControl ? 'Yes' : 'No'}</span></div>
               </div>
             </div>
 
             {/* Assertion / Attribute */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Assertion / Attribute</span>
+              <span className="text-[9px] text-ink-400 uppercase block">Assertion / Attribute</span>
               <p className="text-[11px] text-text">{selectedRow.assertion || '—'} / {selectedRow.attribute || '—'}</p>
             </div>
 
             {/* Source */}
             <div>
-              <span className="text-[9px] text-gray-400 uppercase block">Source</span>
-              <p className="text-[10px] text-gray-500">Row {selectedRow.sourceRow} · {selectedRow.framework || '—'}</p>
+              <span className="text-[9px] text-ink-400 uppercase block">Source</span>
+              <p className="text-[10px] text-ink-500">Row {selectedRow.sourceRow} · {selectedRow.framework || '—'}</p>
             </div>
 
             {/* Validation Issues */}
             {selectedRow.validationIssues.length > 0 && (
-              <div className="bg-amber-50/60 rounded-lg p-2.5 space-y-1">
-                <span className="text-[9px] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
+              <div className="bg-mitigated-50/60 rounded-lg p-2.5 space-y-1">
+                <span className="text-[9px] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
                 {selectedRow.validationIssues.map((issue, i) => (
-                  <p key={i} className="text-[10px] text-amber-700 flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />{issue}
+                  <p key={i} className="text-[10px] text-mitigated-700 flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-mitigated shrink-0" />{issue}
                   </p>
                 ))}
               </div>
@@ -2567,10 +2611,10 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             <div className="flex gap-1.5 pt-2">
               {selectedRow.reviewStatus !== 'Reviewed' && (
-                <button onClick={() => handleMarkReviewed(selectedRow.id)} className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer text-center">Mark Reviewed</button>
+                <button onClick={() => handleMarkReviewed(selectedRow.id)} className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-compliant-50 text-compliant-700 hover:bg-compliant-50 cursor-pointer text-center">Mark Reviewed</button>
               )}
               <button onClick={() => { setRows(prev => prev.map(r => r.id === selectedRow.id ? { ...r, reviewStatus: 'Flagged' as const } : r)); }}
-                className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-red-50 text-red-600 hover:bg-red-100 cursor-pointer text-center">Flag</button>
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold bg-risk-50 text-risk-700 hover:bg-risk-50 cursor-pointer text-center">Flag</button>
             </div>
           </div>
         )}
@@ -2613,12 +2657,12 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                       { label: 'Unique Risks', value: stats.uniqueRisks, color: 'text-primary' },
                       { label: 'Unique Controls', value: stats.uniqueControls, color: 'text-primary' },
                       { label: 'Risk-Control Mappings', value: stats.riskControlMappings, color: 'text-text' },
-                      { label: 'Needs Review', value: stats.needsReview, color: stats.needsReview > 0 ? 'text-amber-600' : 'text-emerald-600' },
-                      { label: 'Validation Warnings', value: stats.validationWarnings, color: stats.validationWarnings > 0 ? 'text-amber-600' : 'text-emerald-600' },
+                      { label: 'Needs Review', value: stats.needsReview, color: stats.needsReview > 0 ? 'text-mitigated-700' : 'text-compliant-700' },
+                      { label: 'Validation Warnings', value: stats.validationWarnings, color: stats.validationWarnings > 0 ? 'text-mitigated-700' : 'text-compliant-700' },
                     ].map(s => (
                       <div key={s.label} className="bg-white rounded-lg px-3 py-2 border border-border-light">
                         <span className={`text-[18px] font-bold ${s.color} block`}>{s.value}</span>
-                        <span className="text-[9px] text-gray-400 font-medium">{s.label}</span>
+                        <span className="text-[9px] text-ink-400 font-medium">{s.label}</span>
                       </div>
                     ))}
                   </div>
@@ -2626,39 +2670,39 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
                 {/* Validation warnings detail */}
                 {stats.validationWarnings > 0 && (
-                  <div className="bg-amber-50/60 rounded-lg p-3 mb-4 space-y-1">
-                    <span className="text-[9px] font-bold text-amber-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
+                  <div className="bg-mitigated-50/60 rounded-lg p-3 mb-4 space-y-1">
+                    <span className="text-[9px] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
                     {rows.filter(r => r.validationIssues.length > 0).slice(0, 3).map(r => (
                       <div key={r.id} className="flex items-start gap-2 text-[10px]">
-                        <span className="text-amber-700 font-semibold shrink-0">Row {r.sourceRow}:</span>
-                        <span className="text-amber-600">{r.validationIssues.join(', ')}</span>
+                        <span className="text-mitigated-700 font-semibold shrink-0">Row {r.sourceRow}:</span>
+                        <span className="text-mitigated-700">{r.validationIssues.join(', ')}</span>
                       </div>
                     ))}
                     {stats.validationWarnings > 3 && (
-                      <p className="text-[10px] text-amber-500 font-medium">+{stats.validationWarnings - 3} more…</p>
+                      <p className="text-[10px] text-mitigated-700 font-medium">+{stats.validationWarnings - 3} more…</p>
                     )}
-                    <p className="text-[10px] text-amber-600/70 mt-1">These rows will be imported as-is. You can fix them in the RACM mapping workspace after freeze.</p>
+                    <p className="text-[10px] text-mitigated-700/70 mt-1">These rows will be imported as-is. You can fix them in the RACM mapping workspace after freeze.</p>
                   </div>
                 )}
 
                 {/* Needs review warning */}
                 {stats.needsReview > 0 && (
-                  <div className="bg-blue-50/60 rounded-lg p-3 mb-4">
-                    <p className="text-[10px] text-blue-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze — unreviewed rows will be imported.</p>
+                  <div className="bg-evidence-50/60 rounded-lg p-3 mb-4">
+                    <p className="text-[10px] text-evidence-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze — unreviewed rows will be imported.</p>
                   </div>
                 )}
 
                 {/* Confirmation checkbox */}
                 <label className="flex items-start gap-2.5 p-3 rounded-lg bg-surface-2/40 border border-border-light mb-5 cursor-pointer select-none hover:bg-surface-2/70 transition-colors">
                   <input type="checkbox" checked={freezeConfirmed} onChange={e => setFreezeConfirmed(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 accent-primary cursor-pointer" />
+                    className="mt-0.5 w-4 h-4 rounded border-canvas-border text-primary focus:ring-primary/30 accent-primary cursor-pointer" />
                   <span className="text-[12px] text-text leading-snug">I confirm this RACM structure has been reviewed and is correct.</span>
                 </label>
 
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button onClick={() => setShowFreezeModal(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-border text-[12px] font-semibold text-text-secondary hover:bg-gray-50 cursor-pointer">Cancel</button>
+                    className="flex-1 py-2.5 rounded-xl border border-border text-[12px] font-semibold text-text-secondary hover:bg-paper-50 cursor-pointer">Cancel</button>
                   <button onClick={() => { setShowFreezeModal(false); onFreeze(rows); }}
                     disabled={!freezeConfirmed}
                     className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -2699,16 +2743,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   const coveredRiskIds = new Set(bpControls.map(c => c.riskId));
   const coverage = bpRisks.length ? Math.round((bpRisks.filter(r => coveredRiskIds.has(r.id)).length / bpRisks.length) * 100) : 0;
 
+  // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
+  const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
+
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
-
-  const tabs = [
-    { id: 'sop' as const,       label: 'SOP',             count: bpSops.length },
-    { id: 'racm' as const,      label: 'RACM',            count: bpRacms.length },
-    { id: 'risks' as const,     label: 'Risk Register',   count: bpRisks.length },
-    { id: 'controls' as const,  label: 'Control Library', count: bpControls.length },
-    { id: 'workflows' as const, label: 'Workflows',       count: bpWfs.length },
-  ];
 
   return (
     <div className="h-full overflow-y-auto bg-canvas">
@@ -2750,24 +2789,27 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           )}
         </div>
 
-        {/* KPI Tiles */}
+        {/* Section nav */}
         <div className="grid grid-cols-5 gap-3 mb-6">
           {[
-            { label: 'SOPs', value: bpSops.length, target: 'sop' as const },
-            { label: 'RACMs', value: bpRacms.length + createdRacms.length, target: 'racm' as const },
-            { label: 'Risks', value: bpRisks.length, target: 'risks' as const },
-            { label: 'Controls', value: bpControls.length, target: 'controls' as const },
-            { label: 'Workflows', value: bpWfs.length, target: 'workflows' as const },
-          ].map(tile => (
-            <button
-              key={tile.label}
-              onClick={() => setTab(tile.target)}
-              className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 text-center cursor-pointer hover:border-brand-200 transition-colors"
-            >
-              <div className="text-lg font-semibold text-ink-800 tabular-nums">{tile.value}</div>
-              <div className="text-[11px] text-ink-500">{tile.label}</div>
-            </button>
-          ))}
+            { label: 'SOPs', target: 'sop' as const },
+            { label: 'RACMs', target: 'racm' as const },
+            { label: 'Risks', target: 'risks' as const },
+            { label: 'Controls', target: 'controls' as const },
+            { label: 'Workflows', target: 'workflows' as const },
+          ].map(tile => {
+            const active = tab === tile.target;
+            return (
+              <button
+                key={tile.label}
+                onClick={() => setTab(tile.target)}
+                aria-pressed={active}
+                className={`border rounded-lg py-2.5 px-3 text-center text-[13px] font-medium cursor-pointer transition-colors ${active ? 'border-brand-600 bg-brand-50 text-brand-700' : 'bg-canvas-elevated border-canvas-border text-ink-600 hover:border-brand-200'}`}
+              >
+                {tile.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Setup Checklist */}
@@ -2780,6 +2822,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             { label: 'Link Workflows', desc: 'Connect the operational workflows.', done: bpWfs.length > 0, target: 'workflows' as const },
           ];
           const doneCount = steps.filter(s => s.done).length;
+          if (doneCount === steps.length) return null;
           return (
             <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
@@ -2817,30 +2860,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             </div>
           );
         })()}
-
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-x-0 gap-y-2 mb-6">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
-                tab === t.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-text-muted hover:text-text-secondary'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                {t.label}
-                {t.count != null && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    tab === t.id ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'
-                  }`}>{t.count}</span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
 
         {/* SOP Tab — full journey: Upload → Process → Review → Draft RACM */}
         {tab === 'sop' && (
@@ -2913,9 +2932,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         {tab === 'racm' && !reviewingRacm && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] text-gray-500">{bpRacms.length + createdRacms.length} RACM{bpRacms.length + createdRacms.length !== 1 ? 's' : ''}</span>
+              <span className="text-[12px] text-ink-500">{bpRacms.length + createdRacms.length} RACM{bpRacms.length + createdRacms.length !== 1 ? 's' : ''}</span>
               <button onClick={() => setShowCreateRacm(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
                 <Plus size={13} />Create RACM
               </button>
             </div>
@@ -2976,12 +2995,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
 
         {/* Control Library Tab — inline design + readiness view */}
         {tab === 'controls' && (
-          <ControlDesignTab bpAbbr={bp.abbr} />
+          <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} />
         )}
 
         {/* Workflows Tab — governance view */}
         {tab === 'workflows' && (
-          <WorkflowGovernanceTab bpAbbr={bp.abbr} onOpenWorkflowDetail={onOpenWorkflowDetail} />
+          <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />
         )}
 
       </div>
