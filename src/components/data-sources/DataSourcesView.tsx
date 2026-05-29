@@ -690,8 +690,8 @@ function PerTabEmptyState({
       <EmptyShell icon={Database}>
         <p className="text-[0.875rem] text-ink-700 font-medium">No integrations connected yet.</p>
         <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          Connect Snowflake, Postgres, Oracle, BigQuery, Workday, NetSuite, JIRA, S3,
-          SharePoint and more from the Add source picker.
+          Connect PostgreSQL, MySQL, Snowflake, Oracle, SQL Server and BigQuery
+          from the Add source picker.
         </p>
         <div className="mt-4">
           <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Connect a source</Button>
@@ -1601,10 +1601,10 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
       {/* ── Result count + "Load more data". Centered below the grid. The
           count reflects what's actually rendered ("9 of 1602") so users know
           there's more to fetch — and the button reveals the next page. */}
-      {sources.length > 0 && (
+      {visible.length > 0 && (
         <div className="flex flex-col items-center gap-4 pt-2">
           <div className="text-[0.8125rem] text-ink-500 tabular-nums">
-            Showing <span className="font-semibold text-ink-700">{paginatedVisible.length}</span> of <span className="font-semibold text-ink-700">{sources.length}</span> {sources.length === 1 ? 'source' : 'sources'}
+            Showing <span className="font-semibold text-ink-700">{paginatedVisible.length}</span> of <span className="font-semibold text-ink-700">{visible.length}</span> {visible.length === 1 ? 'source' : 'sources'}
           </div>
           {hasMore && (
             <button

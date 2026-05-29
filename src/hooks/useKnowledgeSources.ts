@@ -108,7 +108,7 @@ function makeSeedSources(): DataSource[] {
     { id: 'seed-pdf-1',   name: 'Employee_Audit_Details.pdf', type: 'file',                  subtype: 'PDF · 4.2 KB',        createdAt: new Date(ref -  20 * MIN).toISOString() },
     { id: 'seed-xlsx',    name: 'drill-test (1).xlsx',        type: 'file',                  subtype: 'XLSX · 77.1 KB',      createdAt: new Date(ref -  30 * MIN).toISOString() },
     { id: 'seed-pdf-2',   name: '1900035291 (1).pdf',         type: 'file',                  subtype: 'PDF · 305.7 KB',      createdAt: new Date(ref -  40 * MIN).toISOString() },
-    { id: 'seed-folder',  name: 'Internal_Audit_Archive',     type: 'file', isFolder: true,  subtype: 'Folder · 12 Files',   createdAt: new Date(ref -  50 * MIN).toISOString(), displayDate: '2026-06-12T12:00:00.000Z' },
+    { id: 'seed-folder',  name: 'Internal_Audit_Archive',     type: 'file', isFolder: true,  subtype: 'Folder · 12 Files',   createdAt: new Date(ref -  50 * MIN).toISOString() },
     { id: 'seed-db',      name: 'Enterprise_Main_DB',         type: 'database',              subtype: 'SQL · production',    createdAt: new Date(ref -  60 * MIN).toISOString(), health: 'healthy' },
 
     // ── LAST 7 DAYS (10) — mixed formats, sizes, and source types ────────
