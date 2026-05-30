@@ -4,7 +4,7 @@ import {
   Database, FileText, Layers, FolderOpen,
   Search, Upload, MoreHorizontal, Plus, X,
   Pencil, Trash2, Unplug, Check,
-  MessageSquare,
+  MessageSquare, AlertTriangle,
   LayoutGrid, Rows3,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
@@ -1358,6 +1358,18 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
 
   return (
     <div className="space-y-5">
+      {/* Storage-failure banner — surfaced when the localStorage mirror fails
+          (typically quota exceeded). The error clears automatically on the
+          next successful save, so the banner is self-dismissing. */}
+      {knowledge.error && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-risk-200 bg-risk-50 px-3.5 py-3 text-risk-700">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <div className="min-w-0 text-[0.8125rem] leading-relaxed">
+            <span className="font-semibold">Couldn’t save to this browser.</span>{' '}
+            Storage may be full — recent changes won’t persist after a reload. Remove some sources to free space.
+          </div>
+        </div>
+      )}
       {/* ── Top row: filter pills LEFT + primary CTA RIGHT. Pill + CTA styles
           mirror the platform pattern (see AutomationPortfolioView /
           EngagementLibraryView) so the page reads as native rather than

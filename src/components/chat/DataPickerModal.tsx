@@ -85,6 +85,9 @@ export default function DataPickerModal({
   const [combinedName, setCombinedName] = useState('');
   // Guards a close while uploads are still in flight — shows a confirm first.
   const [confirmClose, setConfirmClose] = useState(false);
+  // Guards Attach while uploads are still in flight (in-flight files won't be
+  // added) — shows a confirm first.
+  const [confirmAttach, setConfirmAttach] = useState(false);
 
   // Reset transient state when the modal opens fresh. The starting tab is
   // caller-controlled (defaults to Upload, which is the chat default).
@@ -96,6 +99,7 @@ export default function DataPickerModal({
       setPendingUploads([]);
       setCombinedName('');
       setConfirmClose(false);
+      setConfirmAttach(false);
     }
   }, [open, defaultTab]);
 
@@ -178,6 +182,13 @@ export default function DataPickerModal({
     });
 
     onConfirm([...sourceSelections, ...uploadSelections]);
+  };
+
+  // Attaching while files are still in flight would drop them silently (only
+  // ready uploads are attached) — confirm first.
+  const requestConfirm = () => {
+    if (inFlightCount > 0) setConfirmAttach(true);
+    else handleConfirm();
   };
 
   return (
@@ -326,7 +337,7 @@ export default function DataPickerModal({
                   Cancel
                 </button>
                 <button
-                  onClick={handleConfirm}
+                  onClick={requestConfirm}
                   disabled={totalSelected === 0}
                   className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
@@ -353,6 +364,21 @@ export default function DataPickerModal({
             tone="destructive"
             onConfirm={() => { setConfirmClose(false); onClose(); }}
             onClose={() => setConfirmClose(false)}
+          />
+
+          {/* Confirm before attaching while uploads are still finishing. */}
+          <ConfirmationModal
+            open={confirmAttach}
+            title="Uploads still in progress"
+            description={
+              <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading and won{'’'}t be included.
+              {' '}Continue without {inFlightCount === 1 ? 'it' : 'them'}?</>
+            }
+            confirmLabel="Continue"
+            cancelLabel="Wait"
+            tone="primary"
+            onConfirm={() => { setConfirmAttach(false); handleConfirm(); }}
+            onClose={() => setConfirmAttach(false)}
           />
         </div>
       )}

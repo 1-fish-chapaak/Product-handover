@@ -248,3 +248,20 @@ test('E17 — Smart Learn tab disables "n" shortcut', async ({ page }) => {
   // picker must NOT open on the Smart Learn tab
   await expect(page.getByText('Add data source')).toHaveCount(0);
 });
+
+test('E18: storage-failure banner appears when the localStorage write is rejected', async ({ page }) => {
+  // Make only the Knowledge Hub key's writes fail (quota-exceeded), leaving the
+  // rest of the app's storage untouched.
+  await page.addInitScript(() => {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k: string, v: string) {
+      if (typeof k === 'string' && k.startsWith('kh:sources')) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      return orig.call(this, k, v);
+    };
+  });
+  await gotoKH(page);
+  await expect(page.getByText(/Couldn.t save to this browser/)).toBeVisible();
+  await shot(page, 'storage-error-banner');
+});

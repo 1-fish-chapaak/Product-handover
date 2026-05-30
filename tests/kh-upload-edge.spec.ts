@@ -123,6 +123,33 @@ test('U6: removing a file mid-upload stops cleanly (no leaked timer / errors)', 
   await expect(dlg.getByText(/^Uploads ·/)).toHaveCount(0);
 });
 
+test('U7: attaching while a file is still uploading confirms first, Continue proceeds', async ({ page }) => {
+  const input = await openUploadPicker(page);
+  await input.setInputFiles([{ name: 'ready.csv', mimeType: 'text/csv', buffer: Buffer.from('a\n1\n') }]);
+  const dlg = page.getByRole('dialog');
+  await expect(dlg.getByText(/^Ready$/)).toBeVisible({ timeout: 10000 });
+  // Queue a second file that's still uploading, then click Add.
+  await input.setInputFiles([{ name: 'slow.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(1500)) }]);
+  await dlg.getByRole('button', { name: /^Add \d+$/ }).click();
+  await expect(page.getByText('Uploads still in progress')).toBeVisible();
+  // Continue proceeds (attaches the ready file, closes the picker).
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Add data source')).toHaveCount(0);
+});
+
+test('U8: attaching mid-upload — Wait keeps the picker open', async ({ page }) => {
+  const input = await openUploadPicker(page);
+  await input.setInputFiles([{ name: 'ready.csv', mimeType: 'text/csv', buffer: Buffer.from('a\n1\n') }]);
+  const dlg = page.getByRole('dialog');
+  await expect(dlg.getByText(/^Ready$/)).toBeVisible({ timeout: 10000 });
+  await input.setInputFiles([{ name: 'slow.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(1500)) }]);
+  await dlg.getByRole('button', { name: /^Add \d+$/ }).click();
+  await expect(page.getByText('Uploads still in progress')).toBeVisible();
+  await page.getByRole('button', { name: 'Wait' }).click();
+  await expect(page.getByText('Uploads still in progress')).toHaveCount(0);
+  await expect(page.getByText('Add data source')).toBeVisible();
+});
+
 test('U5: "Keep uploading" dismisses the confirm and leaves the modal open', async ({ page }) => {
   const input = await openUploadPicker(page);
   await input.setInputFiles([{ name: 'keep.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(800)) }]);
