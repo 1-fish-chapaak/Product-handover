@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Database, FileText, Layers, FolderOpen,
   Search, Upload, MoreHorizontal, Plus, X,
@@ -295,6 +295,7 @@ function SourceTile({
   const Icon: React.ElementType = source.isFolder ? FolderOpen : TYPE_META[source.type].icon;
   const tone = 'text-brand-700 bg-brand-50';
   const [menuOpen, setMenuOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
   const { handleRemove, handleCardClick, isIntegrated } = useCardActions(
     source, onOpen, onRemove, isSelecting, onToggleSelect,
   );
@@ -328,10 +329,13 @@ function SourceTile({
 
   return (
     <div className="relative">
-      <button
+      <motion.button
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
+        whileHover={prefersReducedMotion ? undefined : { y: -3, boxShadow: '0 8px 24px -10px rgb(15 8 30 / 0.16)' }}
+        whileTap={prefersReducedMotion ? undefined : { scale: 0.99 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         className={`group w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border transition-colors duration-200 cursor-pointer text-left ${
           selected
             ? 'border-brand-500 bg-brand-50/50'
@@ -411,7 +415,7 @@ function SourceTile({
         >
           <MoreHorizontal size={16} />
         </span>
-      </button>
+      </motion.button>
       {menuOpen && (
         <SourceMenu
           source={source}
@@ -806,6 +810,7 @@ interface DataSourcesViewProps {
 
 const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded' }, ref) {
   const { addToast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const [tab, setTab] = useState<TabId>('all');
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
@@ -1561,34 +1566,46 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               </div>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {b.items.map(d => (
-                    <SourceCard
+                  {b.items.map((d, idx) => (
+                    <motion.div
                       key={d.id}
-                      source={d}
-                      viewMode="grid"
-                      onOpen={() => setActiveSource(d)}
-                      onRemove={requestRemove}
-                      onRename={renameSource}
-                      isSelecting={isSelecting}
-                      selected={selectedIds.has(d.id)}
-                      onToggleSelect={toggleSelect}
-                    />
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: Math.min(idx, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <SourceCard
+                        source={d}
+                        viewMode="grid"
+                        onOpen={() => setActiveSource(d)}
+                        onRemove={requestRemove}
+                        onRename={renameSource}
+                        isSelecting={isSelecting}
+                        selected={selectedIds.has(d.id)}
+                        onToggleSelect={toggleSelect}
+                      />
+                    </motion.div>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden divide-y divide-canvas-border">
-                  {b.items.map(d => (
-                    <SourceCard
+                  {b.items.map((d, idx) => (
+                    <motion.div
                       key={d.id}
-                      source={d}
-                      viewMode="list"
-                      onOpen={() => setActiveSource(d)}
-                      onRemove={requestRemove}
-                      onRename={renameSource}
-                      isSelecting={isSelecting}
-                      selected={selectedIds.has(d.id)}
-                      onToggleSelect={toggleSelect}
-                    />
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, delay: Math.min(idx, 8) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <SourceCard
+                        source={d}
+                        viewMode="list"
+                        onOpen={() => setActiveSource(d)}
+                        onRemove={requestRemove}
+                        onRename={renameSource}
+                        isSelecting={isSelecting}
+                        selected={selectedIds.has(d.id)}
+                        onToggleSelect={toggleSelect}
+                      />
+                    </motion.div>
                   ))}
                 </div>
               )}
