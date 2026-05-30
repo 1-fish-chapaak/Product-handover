@@ -85,7 +85,7 @@ test('U4: big files upload without error (no size limit)', async ({ page }) => {
   await expect(dlg.getByText(/Too large|Could not read/)).toHaveCount(0);
 });
 
-test('U3: closing the modal mid-upload does not error (timers cleaned up)', async ({ page }) => {
+test('U3: closing mid-upload confirms, then cancels cleanly (no errors)', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   const input = await openUploadPicker(page);
@@ -93,8 +93,10 @@ test('U3: closing the modal mid-upload does not error (timers cleaned up)', asyn
     { name: 'inflight.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(500)) },
     { name: 'doc.pdf', mimeType: 'application/pdf', buffer: Buffer.from(VALID_PDF, 'latin1') },
   ]);
-  // Close while still validating/uploading, via the picker's Close button.
+  // Closing while in-flight prompts to confirm instead of silently discarding.
   await page.getByRole('button', { name: 'Close picker' }).click();
+  await expect(page.getByText('Uploads still in progress')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel uploads' }).click();
   await expect(page.getByText('Add data source')).toHaveCount(0);
   await page.waitForTimeout(2000); // let any leaked interval fire
   expect(errors, errors.join('\n')).toHaveLength(0);
@@ -102,4 +104,17 @@ test('U3: closing the modal mid-upload does not error (timers cleaned up)', asyn
   await page.getByRole('button', { name: 'Add source' }).first().click();
   await expect(page.getByText('Add data source')).toBeVisible();
   await expect(page.getByRole('dialog').getByText('inflight.csv')).toHaveCount(0);
+});
+
+test('U5: "Keep uploading" dismisses the confirm and leaves the modal open', async ({ page }) => {
+  const input = await openUploadPicker(page);
+  await input.setInputFiles([{ name: 'keep.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(800)) }]);
+  // Footer Cancel while in-flight → confirm appears.
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByText('Uploads still in progress')).toBeVisible();
+  // Keep uploading → confirm dismisses, modal stays open with the file.
+  await page.getByRole('button', { name: 'Keep uploading' }).click();
+  await expect(page.getByText('Uploads still in progress')).toHaveCount(0);
+  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('keep.csv')).toBeVisible();
 });

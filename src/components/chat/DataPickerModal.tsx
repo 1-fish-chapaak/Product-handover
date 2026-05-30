@@ -11,6 +11,7 @@ import {
   AlertTriangle, Lock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import { validateUploadFile } from '../data-sources/datasetFiles';
 import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
@@ -82,6 +83,8 @@ export default function DataPickerModal({
   // as one source under this name. Empty → each loose file = its own source.
   // Folder uploads are unaffected and always commit per-folder.
   const [combinedName, setCombinedName] = useState('');
+  // Guards a close while uploads are still in flight — shows a confirm first.
+  const [confirmClose, setConfirmClose] = useState(false);
 
   // Reset transient state when the modal opens fresh. The starting tab is
   // caller-controlled (defaults to Upload, which is the chat default).
@@ -92,6 +95,7 @@ export default function DataPickerModal({
       setSelectedSourceIds(new Set());
       setPendingUploads([]);
       setCombinedName('');
+      setConfirmClose(false);
     }
   }, [open, defaultTab]);
 
@@ -120,6 +124,13 @@ export default function DataPickerModal({
   const readyUploads = pendingUploads.filter(u => u.status === 'ready');
   const totalSelected = selectedSourceIds.size + readyUploads.length;
   const inFlightCount = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+
+  // Closing while uploads are still running would silently discard them, so
+  // intercept every dismiss path (backdrop, ✕, Cancel) and confirm first.
+  const requestClose = () => {
+    if (inFlightCount > 0) setConfirmClose(true);
+    else onClose();
+  };
 
   // Loose pending uploads (no folder path). Used to decide whether to show
   // the "Combine into one source" name input — only meaningful for 2+ loose.
@@ -180,7 +191,7 @@ export default function DataPickerModal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-text/30 backdrop-blur-[3px]"
-            onClick={onClose}
+            onClick={requestClose}
           />
           <motion.div
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -209,7 +220,7 @@ export default function DataPickerModal({
               )}
               <div className="ml-auto flex items-center gap-1">
                 <button
-                  onClick={onClose}
+                  onClick={requestClose}
                   className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-paper-50 transition-colors cursor-pointer"
                   aria-label="Close picker"
                 >
@@ -253,7 +264,7 @@ export default function DataPickerModal({
             {/* Body — tab-aware. The Connect tab renders its own panel + footer. */}
             {tab === 'connect' ? (
               <ConnectDbPanel
-                onCancel={onClose}
+                onCancel={requestClose}
                 onConnect={(sel) => onConfirm([sel])}
               />
             ) : (
@@ -309,7 +320,7 @@ export default function DataPickerModal({
               )}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={onClose}
+                  onClick={requestClose}
                   className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
                 >
                   Cancel
@@ -328,6 +339,21 @@ export default function DataPickerModal({
             )}
 
           </motion.div>
+
+          {/* Confirm before discarding in-flight uploads. */}
+          <ConfirmationModal
+            open={confirmClose}
+            title="Uploads still in progress"
+            description={
+              <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading.
+              {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}.</>
+            }
+            confirmLabel="Cancel uploads"
+            cancelLabel="Keep uploading"
+            tone="destructive"
+            onConfirm={() => { setConfirmClose(false); onClose(); }}
+            onClose={() => setConfirmClose(false)}
+          />
         </div>
       )}
     </AnimatePresence>
