@@ -106,6 +106,23 @@ test('U3: closing mid-upload confirms, then cancels cleanly (no errors)', async 
   await expect(page.getByRole('dialog').getByText('inflight.csv')).toHaveCount(0);
 });
 
+test('U6: removing a file mid-upload stops cleanly (no leaked timer / errors)', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const input = await openUploadPicker(page);
+  await input.setInputFiles([{ name: 'midcancel.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(1000)) }]);
+  const dlg = page.getByRole('dialog');
+  await expect(dlg.getByText('midcancel.csv')).toBeVisible();
+  // Cancel the row while it's still in flight (row remove button).
+  await dlg.getByRole('button', { name: /Cancel midcancel\.csv/ }).click();
+  await expect(dlg.getByText('midcancel.csv')).toHaveCount(0);
+  // The uploads list is gone and the (now-removed) progress timer fires no
+  // further errors.
+  await page.waitForTimeout(2500);
+  expect(errors, errors.join('\n')).toHaveLength(0);
+  await expect(dlg.getByText(/^Uploads ·/)).toHaveCount(0);
+});
+
 test('U5: "Keep uploading" dismisses the confirm and leaves the modal open', async ({ page }) => {
   const input = await openUploadPicker(page);
   await input.setInputFiles([{ name: 'keep.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(800)) }]);

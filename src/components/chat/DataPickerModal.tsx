@@ -501,30 +501,39 @@ type Entry = {
   createReader?: () => { readEntries: (cb: (entries: Entry[]) => void, err?: () => void) => void };
 };
 
-async function walkItems(items: DataTransferItemList, mode: 'chat' | 'kh-add'): Promise<Array<{ file: File; path: string }>> {
+// Accumulates files dropped that were filtered out by type, so the drop path
+// can give the same "N skipped" feedback the file/folder pickers do.
+type WalkAcc = { skipped: number };
+
+async function walkItems(items: DataTransferItemList, mode: 'chat' | 'kh-add'): Promise<{ files: Array<{ file: File; path: string }>; skipped: number }> {
   const out: Array<{ file: File; path: string }> = [];
+  const acc: WalkAcc = { skipped: 0 };
   const walks: Promise<void>[] = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     // webkitGetAsEntry isn't on the standard typings.
     const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => Entry | null }).webkitGetAsEntry?.();
     if (entry) {
-      walks.push(walkEntry(entry, '', out, mode));
+      walks.push(walkEntry(entry, '', out, mode, acc));
     } else {
       const f = item.getAsFile();
-      if (f && isAllowedForMode(f.name, mode)) out.push({ file: f, path: f.name });
+      if (f) {
+        if (isAllowedForMode(f.name, mode)) out.push({ file: f, path: f.name });
+        else acc.skipped++;
+      }
     }
   }
   await Promise.all(walks);
-  return out;
+  return { files: out, skipped: acc.skipped };
 }
 
-function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: string }>, mode: 'chat' | 'kh-add'): Promise<void> {
+function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: string }>, mode: 'chat' | 'kh-add', acc: WalkAcc): Promise<void> {
   if (entry.isFile && entry.file) {
     return new Promise<void>(resolve => {
       entry.file!(
         f => {
           if (isAllowedForMode(f.name, mode)) out.push({ file: f, path: prefix ? `${prefix}/${f.name}` : f.name });
+          else acc.skipped++;
           resolve();
         },
         () => resolve(),
@@ -539,7 +548,7 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
         reader.readEntries(
           async entries => {
             if (entries.length === 0) return resolve();
-            await Promise.all(entries.map(e => walkEntry(e, newPrefix, out, mode)));
+            await Promise.all(entries.map(e => walkEntry(e, newPrefix, out, mode, acc)));
             readBatch(); // readEntries returns batches; keep reading until empty
           },
           () => resolve(),
@@ -585,10 +594,18 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     const step = 5 + Math.round(Math.random() * 7); // ~1.5s total
     const t = window.setInterval(() => {
       setPendingUploads(prev => {
+        const current = prev.find(p => p.localId === localId);
+        // Row was removed (user clicked Cancel mid-upload) — stop the timer so
+        // it doesn't fire setState forever.
+        if (!current) {
+          clearInterval(t);
+          intervalsRef.current = intervalsRef.current.filter(id => id !== t);
+          return prev;
+        }
         const next = prev.map(p => p.localId === localId
           ? { ...p, progress: Math.min(100, p.progress + step) } : p);
-        const updated = next.find(p => p.localId === localId);
-        if (updated && updated.progress >= 100) {
+        const updated = next.find(p => p.localId === localId)!;
+        if (updated.progress >= 100) {
           clearInterval(t);
           intervalsRef.current = intervalsRef.current.filter(id => id !== t);
           return next.map(p => p.localId === localId ? { ...p, status: 'ready' as const } : p);
@@ -599,12 +616,19 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     intervalsRef.current.push(t);
   };
 
-  // Add a batch of {file, path}. Dedupes against what's already queued (by
-  // name+size), then validates + uploads each fresh file.
+  // Add a batch of {file, path}. Dedupes against what's already queued AND
+  // within the batch itself (a dropped folder can contain repeats). Keyed by
+  // path+size, not name+size, so two same-named files in different folders are
+  // both kept. Then validates + uploads each fresh file.
   const addFiles = (batch: Array<{ file: File; path: string }>) => {
     if (batch.length === 0) return;
-    const existing = new Set(pendingUploads.map(p => `${p.name}:${p.sizeBytes}`));
-    const fresh = batch.filter(b => !existing.has(`${b.file.name}:${b.file.size}`));
+    const seen = new Set(pendingUploads.map(p => `${p.path ?? p.name}:${p.sizeBytes}`));
+    const fresh = batch.filter(b => {
+      const key = `${b.path}:${b.file.size}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const dupes = batch.length - fresh.length;
     if (dupes > 0) addToast({ type: 'info', message: `${dupes} duplicate file${dupes > 1 ? 's' : ''} skipped.` });
     if (fresh.length === 0) return;
@@ -650,8 +674,9 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      const batch = await walkItems(e.dataTransfer.items, mode);
-      addFiles(batch);
+      const { files, skipped } = await walkItems(e.dataTransfer.items, mode);
+      noteSkipped(skipped);
+      addFiles(files);
     } else if (e.dataTransfer.files) {
       handleFileInput(e.dataTransfer.files);
     }
