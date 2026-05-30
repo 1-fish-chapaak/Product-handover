@@ -174,7 +174,7 @@ test('E10 — single remove confirm modal (singular copy)', async ({ page }) => 
 test('E11 — detail view opens', async ({ page }) => {
   await seedDefault(page);
   await gotoKH(page);
-  await page.getByText('Department_Audit.csv').first().click();
+  await page.getByText('GL_Journal_Entries_May.csv').first().click();
   await page.waitForTimeout(700);
   await shot(page, 'detail-view');
 });
@@ -223,8 +223,8 @@ test('E15 — edge rows (0 B / 1.5 GB / long name) render', async ({ page }) => 
     await btn.click();
     await page.waitForTimeout(250);
   }
-  await expect(page.getByText('0 B')).toBeVisible();
-  await expect(page.getByText('1.5 GB')).toBeVisible();
+  await expect(page.getByText('0 B', { exact: true })).toBeVisible();
+  await expect(page.getByText('1.5 GB', { exact: true })).toBeVisible();
   await shot(page, 'edge-rows-grid');
   await page.getByRole('button', { name: 'List view' }).click();
   await page.waitForTimeout(400);
