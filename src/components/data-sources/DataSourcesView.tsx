@@ -1325,7 +1325,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             </div>
             <p className="text-[0.75rem] text-ink-400 mt-7">
               Supports PDF <span className="text-ink-300">·</span> CSV <span className="text-ink-300">·</span> XLSX.
-              {' '}Connect PostgreSQL <span className="text-ink-300">·</span> MySQL <span className="text-ink-300">·</span> Snowflake <span className="text-ink-300">·</span> Oracle <span className="text-ink-300">·</span> SQL Server <span className="text-ink-300">·</span> BigQuery.
             </p>
           </div>
         </div>
