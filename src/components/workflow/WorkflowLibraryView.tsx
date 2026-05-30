@@ -24,6 +24,8 @@ import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 interface Props {
   onCreateWorkflow?: () => void;
   onSelectWorkflow?: (id: string) => void;
+  /** Optional: skip the detail page and open the executor directly. */
+  onRunWorkflow?: (id: string) => void;
   /** When set, filters workflows by tag matching this process abbreviation */
   processFilter?: string;
 }
@@ -39,6 +41,15 @@ export type LibraryWorkflow = {
 };
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
+  {
+    id: 'lw-pdf-tester',
+    name: 'PDF tester',
+    description: 'Sandbox workflow whose required inputs are all PDFs. Use this to exercise the unstructured-document mapping journey end-to-end.',
+    tags: ['PDF', 'manual mapping'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-PDF',
+    live: true,
+  },
   {
     id: 'lw-001',
     name: 'Identify Higher Share of Business Awarded to Higher Price Vendors (Monthly Analysis)',
@@ -127,7 +138,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
 
 const TOTAL_PAGES = 144;
 
-export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, processFilter }: Props) {
+export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -476,7 +487,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                           <ActionIconButton
                             label="Run workflow"
                             disabled={bulkMode}
-                            onClick={() => addToast({ message: `Running "${wf.name}"…`, type: 'success' })}
+                            onClick={() => {
+                              if (onRunWorkflow) {
+                                onRunWorkflow(wf.id);
+                              } else {
+                                addToast({ message: `Running "${wf.name}"…`, type: 'success' });
+                              }
+                            }}
                           >
                             <Play size={14} />
                           </ActionIconButton>
