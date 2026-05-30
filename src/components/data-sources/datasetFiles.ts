@@ -286,6 +286,67 @@ export async function countSheetRows(file: File): Promise<number | null> {
   }
 }
 
+// ─── Upload validation ──────────────────────────────────────────────────────
+// What a real ingest pipeline must reject before a file enters the catalog.
+// Runs client-side here (no backend yet) but uses the same parsers the rest of
+// the app relies on: pdf.js for PDF (its PasswordException flags encryption)
+// and SheetJS for XLSX. CSV can't be encrypted, so we only sniff for binary
+// garbage that signals a mislabeled/corrupt file.
+
+/** Hard cap on a single upload. Files larger than this are rejected up front
+ *  rather than pretending to "upload" something the browser can't hold. */
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+
+export type UploadValidation = { ok: true } | { ok: false; reason: string };
+
+export async function validateUploadFile(file: File): Promise<UploadValidation> {
+  // ── Cheap, synchronous gates first ──────────────────────────────────────
+  if (file.size === 0) return { ok: false, reason: 'File is empty' };
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { ok: false, reason: `Too large — max ${Math.round(MAX_UPLOAD_BYTES / MB)} MB` };
+  }
+
+  const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase();
+  try {
+    const buf = await file.arrayBuffer();
+
+    if (ext === 'pdf') {
+      try {
+        const pdfjs = await getPdfjs();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+        await doc.destroy();
+      } catch (e) {
+        // pdf.js raises a PasswordException for encrypted PDFs.
+        const name = (e as { name?: string } | null | undefined)?.name;
+        if (name === 'PasswordException') {
+          return { ok: false, reason: 'Password-protected — unlock it first' };
+        }
+        return { ok: false, reason: 'File appears corrupted' };
+      }
+    } else if (ext === 'xlsx') {
+      try {
+        const wb = XLSX.read(buf, { type: 'array' });
+        if (!wb.SheetNames.length) return { ok: false, reason: 'File appears corrupted' };
+      } catch (e) {
+        const msg = String((e as Error | undefined)?.message ?? '').toLowerCase();
+        if (msg.includes('password') || msg.includes('encrypt')) {
+          return { ok: false, reason: 'Password-protected — unlock it first' };
+        }
+        return { ok: false, reason: 'File appears corrupted' };
+      }
+    } else if (ext === 'csv') {
+      // A real CSV is text; a NUL byte in the first chunk means it's binary
+      // (renamed/corrupt), not a spreadsheet export.
+      const head = new Uint8Array(buf.slice(0, 8192));
+      if (head.includes(0)) return { ok: false, reason: 'File appears corrupted' };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'Could not read file' };
+  }
+}
+
 // Per-format Editorial GRC tone token. Used by the file-row icon tile.
 export const FORMAT_TONES: Record<FileFormat, { bg: string; text: string }> = {
   PDF:  { bg: 'bg-risk-50',      text: 'text-risk' },

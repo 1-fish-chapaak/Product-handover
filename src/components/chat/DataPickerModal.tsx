@@ -8,8 +8,10 @@ function defaultGroupName(): string {
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Search, Layers, FileText, Database, Upload, Check, Mail, Plus, Loader2, Folder,
+  AlertTriangle, Lock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { validateUploadFile } from '../data-sources/datasetFiles';
 import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource,
@@ -74,7 +76,7 @@ export default function DataPickerModal({
   const [search, setSearch] = useState('');
   // Multi-select state — keyed by source id (for source rows) or local upload id.
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
-  const [pendingUploads, setPendingUploads] = useState<Array<{ localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File }>>([]);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   // Optional "combine" name (kh-add only). Visible in the pending list when
   // 2+ loose files (no folder) are queued. Filled → all loose files commit
   // as one source under this name. Empty → each loose file = its own source.
@@ -113,15 +115,15 @@ export default function DataPickerModal({
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tab, search]);
 
-  // Only fully-uploaded files count toward the Attach total — in-flight files
-  // shouldn't be attachable until they finish.
-  const readyUploads = pendingUploads.filter(u => u.progress >= 100);
+  // Only fully-validated, fully-uploaded files count toward the Attach total —
+  // in-flight files aren't attachable yet, and errored files never are.
+  const readyUploads = pendingUploads.filter(u => u.status === 'ready');
   const totalSelected = selectedSourceIds.size + readyUploads.length;
-  const inFlightCount = pendingUploads.length - readyUploads.length;
+  const inFlightCount = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
 
   // Loose pending uploads (no folder path). Used to decide whether to show
   // the "Combine into one source" name input — only meaningful for 2+ loose.
-  const loosePendingCount = pendingUploads.filter(u => !u.path || u.path === u.name).length;
+  const loosePendingCount = pendingUploads.filter(u => (!u.path || u.path === u.name) && u.status !== 'error').length;
 
   // Auto-fill the combine name with a sensible default the first time 2+
   // loose files appear in this modal session. User can edit or clear; if
@@ -445,7 +447,8 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
 
 // ─── Upload panel — drag/drop + native file picker ──────────────────────────
 
-type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File };
+type UploadStatus = 'validating' | 'uploading' | 'ready' | 'error';
+type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File; status: UploadStatus; error?: string };
 
 interface UploadPanelProps {
   pendingUploads: PendingUpload[];
@@ -523,58 +526,97 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
 }
 
 function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelProps) {
+  const { addToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Add a batch of {file, path} to pending list and start progress simulators.
+  // Track every progress-simulator interval so they can be stopped if the user
+  // closes the modal (or switches away) mid-upload. Without this the timers
+  // leak and keep calling setState after unmount.
+  const intervalsRef = useRef<number[]>([]);
+  useEffect(() => () => { intervalsRef.current.forEach(clearInterval); intervalsRef.current = []; }, []);
+
+  // Wrong-extension files are filtered before they ever queue — tell the user
+  // rather than dropping them silently.
+  const noteSkipped = (n: number) => {
+    if (n > 0 && mode === 'kh-add') {
+      addToast({ type: 'info', message: `${n} file${n > 1 ? 's' : ''} skipped — only PDF, CSV, XLSX are supported.` });
+    }
+  };
+
+  // Validate a queued file, then either flip it to an error row (with a reason)
+  // or run the upload simulation through to "ready". Catches the edge cases a
+  // real ingest must reject: empty, oversized, password-protected, corrupt.
+  const runUpload = async (localId: string, file: File) => {
+    const res = await validateUploadFile(file);
+    if (!res.ok) {
+      setPendingUploads(prev => prev.map(p => p.localId === localId
+        ? { ...p, status: 'error' as const, error: res.reason } : p));
+      return;
+    }
+    setPendingUploads(prev => prev.map(p => p.localId === localId ? { ...p, status: 'uploading' as const } : p));
+    const step = 5 + Math.round(Math.random() * 7); // ~1.5s total
+    const t = window.setInterval(() => {
+      setPendingUploads(prev => {
+        const next = prev.map(p => p.localId === localId
+          ? { ...p, progress: Math.min(100, p.progress + step) } : p);
+        const updated = next.find(p => p.localId === localId);
+        if (updated && updated.progress >= 100) {
+          clearInterval(t);
+          intervalsRef.current = intervalsRef.current.filter(id => id !== t);
+          return next.map(p => p.localId === localId ? { ...p, status: 'ready' as const } : p);
+        }
+        return next;
+      });
+    }, 100);
+    intervalsRef.current.push(t);
+  };
+
+  // Add a batch of {file, path}. Dedupes against what's already queued (by
+  // name+size), then validates + uploads each fresh file.
   const addFiles = (batch: Array<{ file: File; path: string }>) => {
     if (batch.length === 0) return;
+    const existing = new Set(pendingUploads.map(p => `${p.name}:${p.sizeBytes}`));
+    const fresh = batch.filter(b => !existing.has(`${b.file.name}:${b.file.size}`));
+    const dupes = batch.length - fresh.length;
+    if (dupes > 0) addToast({ type: 'info', message: `${dupes} duplicate file${dupes > 1 ? 's' : ''} skipped.` });
+    if (fresh.length === 0) return;
+
     const ts = Date.now();
-    const incoming: PendingUpload[] = batch.map((b, i) => ({
+    const incoming: PendingUpload[] = fresh.map((b, i) => ({
       localId: `up-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
       name: b.file.name,
       sizeBytes: b.file.size,
       progress: 0,
       path: b.path !== b.file.name ? b.path : undefined,
       file: b.file,
+      status: 'validating',
     }));
 
     setPendingUploads(prev => [...incoming, ...prev]);
-    incoming.forEach(uf => {
-      const step = 5 + Math.round(Math.random() * 7); // ~1.5s total
-      const t = setInterval(() => {
-        setPendingUploads(prev => {
-          const next = prev.map(p => p.localId === uf.localId
-            ? { ...p, progress: Math.min(100, p.progress + step) }
-            : p);
-          const updated = next.find(p => p.localId === uf.localId);
-          if (updated && updated.progress >= 100) clearInterval(t);
-          return next;
-        });
-      }, 100);
-    });
+    incoming.forEach((uf, i) => { void runUpload(uf.localId, fresh[i].file); });
   };
 
   // File-input handler — flat list of files, no folder structure.
   const handleFileInput = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const batch = Array.from(fileList)
-      .filter(f => isAllowedForMode(f.name, mode))
-      .map(f => ({ file: f, path: f.name }));
-    addFiles(batch);
+    const all = Array.from(fileList);
+    const accepted = all.filter(f => isAllowedForMode(f.name, mode));
+    noteSkipped(all.length - accepted.length);
+    addFiles(accepted.map(f => ({ file: f, path: f.name })));
   };
 
   // Folder-input handler — files have webkitRelativePath set to "Folder/sub/file.ext".
   const handleFolderInput = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const batch = Array.from(fileList)
-      .filter(f => isAllowedForMode(f.name, mode))
-      .map(f => {
-        const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
-        return { file: f, path: rel || f.name };
-      });
-    addFiles(batch);
+    const all = Array.from(fileList);
+    const accepted = all.filter(f => isAllowedForMode(f.name, mode));
+    noteSkipped(all.length - accepted.length);
+    addFiles(accepted.map(f => {
+      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
+      return { file: f, path: rel || f.name };
+    }));
   };
 
   // Drop handler — uses entry walker so dropped folders work.
@@ -653,12 +695,23 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">
               Uploads · {pendingUploads.length}
             </span>
-            {pendingUploads.some(u => u.progress < 100) && (
-              <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-primary">
-                <Loader2 size={10} className="animate-spin" />
-                Uploading {pendingUploads.filter(u => u.progress < 100).length}…
-              </span>
-            )}
+            {(() => {
+              const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+              const failed = pendingUploads.filter(u => u.status === 'error').length;
+              if (inFlight > 0) return (
+                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-primary">
+                  <Loader2 size={10} className="animate-spin" />
+                  Uploading {inFlight}…
+                </span>
+              );
+              if (failed > 0) return (
+                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk">
+                  <AlertTriangle size={10} />
+                  {failed} failed
+                </span>
+              );
+              return null;
+            })()}
           </div>
 
           <ul className="divide-y divide-border-light">
@@ -882,22 +935,24 @@ function Field({
 function PendingFileRow({
   upload, onRemove, indent,
 }: { upload: PendingUpload; onRemove: (id: string) => void; indent: boolean }) {
-  const isDone = upload.progress >= 100;
+  const isReady = upload.status === 'ready';
+  const isError = upload.status === 'error';
+  const isValidating = upload.status === 'validating';
+  const isUploading = upload.status === 'uploading';
+  const isPasswordErr = isError && /password|unlock/i.test(upload.error ?? '');
   // Path tag = the directory portion of the path (everything except the
   // file name itself). Empty when file is loose.
   const pathTag = upload.path && upload.path !== upload.name
     ? upload.path.replace(`/${upload.name}`, '') || upload.path
     : '';
+  const LeadIcon = isError ? (isPasswordErr ? Lock : AlertTriangle) : (pathTag ? Folder : FileText);
+  const leadTone = isError ? 'text-risk' : isReady ? 'text-primary' : 'text-text-muted/60';
   return (
     <li className={`flex items-center gap-3 py-3 ${indent ? 'pl-10 pr-4' : 'px-4'}`}>
-      {pathTag ? (
-        <Folder size={14} className={`shrink-0 ${isDone ? 'text-primary' : 'text-text-muted/60'}`} />
-      ) : (
-        <FileText size={14} className={`shrink-0 ${isDone ? 'text-primary' : 'text-text-muted/60'}`} />
-      )}
+      <LeadIcon size={14} className={`shrink-0 ${leadTone}`} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <div className="text-[0.8125rem] text-text truncate flex-1 min-w-0">
+          <div className={`text-[0.8125rem] truncate flex-1 min-w-0 ${isError ? 'text-text-secondary' : 'text-text'}`}>
             {upload.name}
             {pathTag && (
               <span className="ml-1.5 text-[0.6875rem] text-ink-400 font-normal" title={upload.path}>
@@ -905,19 +960,32 @@ function PendingFileRow({
               </span>
             )}
           </div>
-          {isDone ? (
+          {isReady && (
             <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-compliant bg-compliant-50">
               <Check size={10} />
               Ready
             </span>
-          ) : (
+          )}
+          {isError && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-risk bg-risk-50">
+              <AlertTriangle size={10} />
+              Failed
+            </span>
+          )}
+          {isValidating && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
+              <Loader2 size={10} className="animate-spin" />
+              Checking…
+            </span>
+          )}
+          {isUploading && (
             <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-primary bg-primary-xlight">
               <Loader2 size={10} className="animate-spin" />
               {upload.progress}%
             </span>
           )}
         </div>
-        {!isDone && (
+        {isUploading && (
           <div className="mt-1.5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
             <motion.div
               className="h-full bg-primary"
@@ -927,14 +995,14 @@ function PendingFileRow({
             />
           </div>
         )}
-        <div className={`text-[0.6875rem] tabular-nums mt-${isDone ? '0.5' : '1'} text-text-muted`}>
-          {formatBytesShort(upload.sizeBytes)}
+        <div className={`text-[0.6875rem] tabular-nums mt-1 ${isError ? 'text-risk font-medium' : 'text-text-muted'}`}>
+          {isError ? upload.error : formatBytesShort(upload.sizeBytes)}
         </div>
       </div>
       <button
         onClick={() => onRemove(upload.localId)}
         className="p-1.5 text-text-muted hover:text-risk hover:bg-surface-2 rounded-md transition-colors cursor-pointer shrink-0"
-        aria-label={`${isDone ? 'Remove' : 'Cancel'} ${upload.name}`}
+        aria-label={`${isReady || isError ? 'Remove' : 'Cancel'} ${upload.name}`}
       >
         <X size={13} />
       </button>
