@@ -296,49 +296,63 @@ export async function countSheetRows(file: File): Promise<number | null> {
 
 export type UploadValidation = { ok: true } | { ok: false; reason: string };
 
+// Deep content parsing (pdf.js / SheetJS) needs the whole file in memory.
+// Above this size we skip the parse and accept the file rather than risk an
+// out-of-memory read error blocking a legitimate big upload — it is NOT a size
+// limit (the file still uploads), just a cap on how much we validate in-browser.
+const DEEP_VALIDATE_MAX_BYTES = 30 * 1024 * 1024; // 30 MB
+
 export async function validateUploadFile(file: File): Promise<UploadValidation> {
   // Empty files carry nothing to index — the only size gate we keep.
   if (file.size === 0) return { ok: false, reason: 'File is empty' };
 
   const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase();
-  try {
-    const buf = await file.arrayBuffer();
 
-    if (ext === 'pdf') {
-      try {
-        const pdfjs = await getPdfjs();
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
-        await doc.destroy();
-      } catch (e) {
-        // pdf.js raises a PasswordException for encrypted PDFs.
-        const name = (e as { name?: string } | null | undefined)?.name;
-        if (name === 'PasswordException') {
-          return { ok: false, reason: 'Password-protected — unlock it first' };
-        }
-        return { ok: false, reason: 'File appears corrupted' };
-      }
-    } else if (ext === 'xlsx') {
-      try {
-        const wb = XLSX.read(buf, { type: 'array' });
-        if (!wb.SheetNames.length) return { ok: false, reason: 'File appears corrupted' };
-      } catch (e) {
-        const msg = String((e as Error | undefined)?.message ?? '').toLowerCase();
-        if (msg.includes('password') || msg.includes('encrypt')) {
-          return { ok: false, reason: 'Password-protected — unlock it first' };
-        }
-        return { ok: false, reason: 'File appears corrupted' };
-      }
-    } else if (ext === 'csv') {
-      // A real CSV is text; a NUL byte in the first chunk means it's binary
-      // (renamed/corrupt), not a spreadsheet export.
-      const head = new Uint8Array(buf.slice(0, 8192));
+  // CSVs can't be encrypted — only sniff the first chunk for binary/NUL bytes.
+  // Crucially we read ONLY the head slice, never the whole (possibly huge) file.
+  if (ext === 'csv') {
+    try {
+      const head = new Uint8Array(await file.slice(0, 8192).arrayBuffer());
       if (head.includes(0)) return { ok: false, reason: 'File appears corrupted' };
+    } catch {
+      // Couldn't even read the head — don't block it; backend will validate.
     }
-
     return { ok: true };
-  } catch {
-    return { ok: false, reason: 'Could not read file' };
   }
+
+  // Big PDF/XLSX: skip the in-browser parse and let them through.
+  if (file.size > DEEP_VALIDATE_MAX_BYTES) return { ok: true };
+
+  let buf: ArrayBuffer;
+  try {
+    buf = await file.arrayBuffer();
+  } catch {
+    // Read failed (e.g. memory pressure) — accept rather than reject.
+    return { ok: true };
+  }
+
+  if (ext === 'pdf') {
+    try {
+      const pdfjs = await getPdfjs();
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+      await doc.destroy();
+    } catch (e) {
+      const name = (e as { name?: string } | null | undefined)?.name;
+      if (name === 'PasswordException') return { ok: false, reason: 'Password-protected — unlock it first' };
+      return { ok: false, reason: 'File appears corrupted' };
+    }
+  } else if (ext === 'xlsx') {
+    try {
+      const wb = XLSX.read(buf, { type: 'array' });
+      if (!wb.SheetNames.length) return { ok: false, reason: 'File appears corrupted' };
+    } catch (e) {
+      const msg = String((e as Error | undefined)?.message ?? '').toLowerCase();
+      if (msg.includes('password') || msg.includes('encrypt')) return { ok: false, reason: 'Password-protected — unlock it first' };
+      return { ok: false, reason: 'File appears corrupted' };
+    }
+  }
+
+  return { ok: true };
 }
 
 // Per-format Editorial GRC tone token. Used by the file-row icon tile.

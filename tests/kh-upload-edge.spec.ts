@@ -37,6 +37,10 @@ const EMPTY    = fixture('empty.csv', Buffer.alloc(0));
 const CORRUPT_CSV = fixture('corrupt.csv', Buffer.from([0x48, 0x00, 0x49, 0x00])); // NUL bytes
 const CORRUPT_PDF = fixture('corrupt.pdf', 'not really a pdf at all');
 const CLEAN    = fixture('clean.csv', 'id,amount\n1,100\n2,250\n');
+// Big files must upload, not error. ~80 MB CSV + ~35 MB "PDF" (above the deep-
+// validate threshold, so the parse is skipped and the file is accepted).
+const BIG_CSV  = fixture('big_ledger.csv', Buffer.concat([Buffer.from('id,amount\n'), Buffer.alloc(80 * 1024 * 1024, 0x41)]));
+const BIG_PDF  = fixture('big_scan.pdf', Buffer.alloc(35 * 1024 * 1024, 0x42));
 
 test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1440, height: 900 }); });
 
@@ -67,6 +71,18 @@ test('U2: unsupported type is skipped with feedback; duplicate is skipped', asyn
   await input.setInputFiles([{ name: 'report.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n') }]);
   await expect(page.getByText(/duplicate file.*skipped/)).toBeVisible({ timeout: 5000 });
   await expect(dlg.getByText('report.csv')).toHaveCount(1);
+});
+
+test('U4: big files upload without error (no size limit)', async ({ page }) => {
+  const input = await openUploadPicker(page);
+  await input.setInputFiles([BIG_CSV, BIG_PDF]);
+  const dlg = page.getByRole('dialog');
+  await expect(dlg.getByText('big_ledger.csv')).toBeVisible();
+  await expect(dlg.getByText('big_scan.pdf')).toBeVisible();
+  // Both reach Ready; neither shows a failure.
+  await expect(dlg.getByText(/^Ready$/)).toHaveCount(2, { timeout: 15000 });
+  await expect(dlg.getByText(/^Failed$/)).toHaveCount(0);
+  await expect(dlg.getByText(/Too large|Could not read/)).toHaveCount(0);
 });
 
 test('U3: closing the modal mid-upload does not error (timers cleaned up)', async ({ page }) => {
