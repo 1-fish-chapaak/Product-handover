@@ -131,7 +131,7 @@ function makeSeedSources(): DataSource[] {
     // ── EARLIER (8) — older, plus the edge-case rows ──────────────────────
     { id: 'seed-e-1',     name: 'PCI_DSS_Attestation.pdf',     type: 'file',                  subtype: 'PDF · 4.0 MB',        createdAt: new Date(ref - 10 * DAY).toISOString() },
     { id: 'seed-e-2',     name: 'MySQL_BillingDB',             type: 'database',              subtype: 'MySQL · billing',     createdAt: new Date(ref - 14 * DAY).toISOString(), health: 'healthy' },
-    { id: 'seed-e-3',     name: 'Audit_Charter_FY26.docx',     type: 'file',                  subtype: 'DOC · 310 KB',        createdAt: new Date(ref - 18 * DAY).toISOString() },
+    { id: 'seed-e-3',     name: 'Audit_Charter_FY26.pdf',      type: 'file',                  subtype: 'PDF · 310 KB',        createdAt: new Date(ref - 18 * DAY).toISOString() },
     { id: 'seed-e-4',     name: 'Box_Compliance_Archive',      type: 'cloud',                 subtype: 'Box · /compliance',   createdAt: new Date(ref - 22 * DAY).toISOString(), health: 'healthy' },
     { id: 'seed-e-5',     name: 'Prior_Year_Workpapers',       type: 'file', isFolder: true,  subtype: 'Folder · 31 Files',   createdAt: new Date(ref - 28 * DAY).toISOString() },
     // ── Edge cases ───────────────────────────────────────────────────────

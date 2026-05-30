@@ -455,7 +455,7 @@ interface UploadPanelProps {
   mode: 'chat' | 'kh-add';
 }
 
-const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx', '.doc', '.docx'];
+const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx'];
 function isAllowedForMode(name: string, mode: 'chat' | 'kh-add'): boolean {
   if (mode === 'chat') return true;
   const lower = name.toLowerCase();
@@ -611,7 +611,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           ref={fileInputRef}
           type="file"
           multiple
-          {...(mode === 'kh-add' ? { accept: '.pdf,.csv,.xlsx,.doc,.docx' } : {})}
+          {...(mode === 'kh-add' ? { accept: '.pdf,.csv,.xlsx' } : {})}
           className="hidden"
           onChange={(e) => { handleFileInput(e.target.files); e.target.value = ''; }}
         />

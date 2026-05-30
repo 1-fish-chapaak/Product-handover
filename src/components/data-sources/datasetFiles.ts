@@ -319,7 +319,7 @@ function formatFromName(name: string): FileFormat {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
   if (ext === 'csv') return 'CSV';
   if (ext === 'xlsx' || ext === 'xls') return 'XLSX';
-  return 'PDF'; // pdf, doc/docx, and anything else preview as PDF
+  return 'PDF'; // pdf and anything else preview as PDF
 }
 
 function parseFolderCount(subtype: string): number {
