@@ -25,8 +25,8 @@ const VALID_PDF =
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n' +
   'trailer<</Root 1 0 R>>\n%%EOF';
 
-// Playwright won't accept inline buffers >50 MB, and we need a real >50 MB file
-// to trip the size cap — so write all fixtures to a temp dir and pass paths.
+// Write fixtures to a temp dir and pass paths (the empty file can't be an
+// inline 0-byte buffer reliably across runners).
 const dir = mkdtempSync(join(tmpdir(), 'kh-upload-'));
 function fixture(name: string, data: Buffer | string): string {
   const p = join(dir, name);
@@ -36,18 +36,16 @@ function fixture(name: string, data: Buffer | string): string {
 const EMPTY    = fixture('empty.csv', Buffer.alloc(0));
 const CORRUPT_CSV = fixture('corrupt.csv', Buffer.from([0x48, 0x00, 0x49, 0x00])); // NUL bytes
 const CORRUPT_PDF = fixture('corrupt.pdf', 'not really a pdf at all');
-const HUGE     = fixture('huge.csv', Buffer.alloc(51 * 1024 * 1024, 65)); // 51 MB
 const CLEAN    = fixture('clean.csv', 'id,amount\n1,100\n2,250\n');
 
 test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1440, height: 900 }); });
 
-test('U1: validation matrix — empty / oversized / corrupt rejected, good file goes Ready', async ({ page }) => {
+test('U1: validation matrix — empty / corrupt rejected, good file goes Ready', async ({ page }) => {
   const input = await openUploadPicker(page);
-  await input.setInputFiles([EMPTY, CORRUPT_CSV, CORRUPT_PDF, HUGE, CLEAN]);
+  await input.setInputFiles([EMPTY, CORRUPT_CSV, CORRUPT_PDF, CLEAN]);
 
   const dlg = page.getByRole('dialog');
   await expect(dlg.getByText('File is empty')).toBeVisible({ timeout: 10000 });
-  await expect(dlg.getByText('Too large — max 50 MB')).toBeVisible();
   await expect(dlg.getByText('File appears corrupted')).toHaveCount(2); // corrupt.csv + corrupt.pdf
   await expect(dlg.getByText(/^Failed$/).first()).toBeVisible();
   await expect(dlg.getByText('clean.csv')).toBeVisible();

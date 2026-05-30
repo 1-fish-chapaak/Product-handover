@@ -291,20 +291,14 @@ export async function countSheetRows(file: File): Promise<number | null> {
 // Runs client-side here (no backend yet) but uses the same parsers the rest of
 // the app relies on: pdf.js for PDF (its PasswordException flags encryption)
 // and SheetJS for XLSX. CSV can't be encrypted, so we only sniff for binary
-// garbage that signals a mislabeled/corrupt file.
-
-/** Hard cap on a single upload. Files larger than this are rejected up front
- *  rather than pretending to "upload" something the browser can't hold. */
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+// garbage that signals a mislabeled/corrupt file. No upper size limit — large
+// files are allowed.
 
 export type UploadValidation = { ok: true } | { ok: false; reason: string };
 
 export async function validateUploadFile(file: File): Promise<UploadValidation> {
-  // ── Cheap, synchronous gates first ──────────────────────────────────────
+  // Empty files carry nothing to index — the only size gate we keep.
   if (file.size === 0) return { ok: false, reason: 'File is empty' };
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, reason: `Too large — max ${Math.round(MAX_UPLOAD_BYTES / MB)} MB` };
-  }
 
   const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase();
   try {
