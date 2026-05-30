@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import type { JourneyFiles, UploadedFile, WorkflowDraft } from './types';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
+import { cn } from '../../lib/cn';
 
 interface Props {
   open: boolean;
@@ -191,6 +194,20 @@ export default function UploadDataModal({
     setDragOver(false);
   }, [open]);
 
+  // Dismiss the modal on Escape — matches the wider app's keybinding
+  // convention (Esc cancels overlays and clears in-flight intent).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   const filesCount = useMemo(
     () => ALL_ASSETS.filter((a) => a.kind === 'file' || a.kind === 'session').length,
     [],
@@ -306,7 +323,8 @@ export default function UploadDataModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-ink-900/40 z-40"
+            className="fixed inset-0 z-[190]"
+            style={{ background: 'rgba(15, 8, 30, 0.5)' }}
             onClick={onClose}
           />
           <motion.div
@@ -314,9 +332,9 @@ export default function UploadDataModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+            className="fixed inset-0 z-[200] flex items-center justify-center p-6 pointer-events-none"
           >
-            <div className="pointer-events-auto w-full max-w-[840px] h-[680px] max-h-[86vh] rounded-2xl bg-canvas-elevated border border-canvas-border shadow-2xl flex flex-col overflow-hidden">
+            <div className="pointer-events-auto w-full max-w-[840px] h-[680px] max-h-[86vh] rounded-xl bg-canvas-elevated border border-canvas-border shadow-[0_18px_48px_-18px_rgba(15,8,30,0.25)] flex flex-col overflow-hidden">
               {/* Header — title + inline search */}
               <div className="flex items-center gap-4 px-5 py-3 border-b border-canvas-border">
                 <h2 className="text-[15px] font-semibold text-ink-800 shrink-0">
@@ -325,9 +343,10 @@ export default function UploadDataModal({
                 <div className="relative flex-1 max-w-[560px]">
                   <Search
                     size={13}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 z-10"
                   />
-                  <input
+                  <Input
+                    sizeVariant="sm"
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -337,18 +356,13 @@ export default function UploadDataModal({
                         : 'Search sources…'
                     }
                     disabled={tab === 'upload'}
-                    className={[
-                      'w-full rounded-full border px-9 py-1.5 text-[13px] focus:outline-none transition-all',
-                      tab === 'upload'
-                        ? 'border-canvas-border bg-paper-50 text-ink-400 placeholder:text-ink-400 cursor-default'
-                        : 'border-canvas-border bg-canvas text-ink-800 placeholder:text-ink-400 focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30',
-                    ].join(' ')}
+                    className="rounded-full pl-8"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="ml-auto w-8 h-8 rounded-lg text-ink-500 hover:bg-canvas flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                  className="ml-auto w-8 h-8 rounded-md text-ink-500 hover:bg-canvas flex items-center justify-center transition-colors cursor-pointer shrink-0"
                   aria-label="Close"
                 >
                   <X size={16} />
@@ -365,21 +379,19 @@ export default function UploadDataModal({
                       key={t.id}
                       type="button"
                       onClick={() => setTab(t.id)}
-                      className={[
+                      className={cn(
                         'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer',
-                        active
-                          ? 'text-brand-700'
-                          : 'text-ink-500 hover:text-ink-800',
-                      ].join(' ')}
+                        active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800',
+                      )}
                     >
                       <Icon size={14} />
                       {t.label}
                       {typeof t.count === 'number' && (
                         <span
-                          className={[
-                            'text-[11px] font-semibold tabular-nums',
+                          className={cn(
+                            'text-[12px] font-semibold tabular-nums',
                             active ? 'text-brand-600' : 'text-ink-400',
-                          ].join(' ')}
+                          )}
                         >
                           {t.count}
                         </span>
@@ -417,13 +429,13 @@ export default function UploadDataModal({
                         setDragOver(false);
                         handlePickFiles(e.dataTransfer.files);
                       }}
-                      className={[
-                        'rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center px-6 transition-colors',
+                      className={cn(
+                        'rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center px-6 transition-colors',
                         'min-h-[320px]',
                         dragOver
                           ? 'border-brand-400 bg-brand-50/60'
                           : 'border-canvas-border bg-canvas',
-                      ].join(' ')}
+                      )}
                     >
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 text-ink-400">
                         <UploadCloud size={32} strokeWidth={1.5} />
@@ -431,18 +443,19 @@ export default function UploadDataModal({
                       <div className="text-[15px] font-semibold text-ink-800">
                         Drop files here
                       </div>
-                      <div className="text-[12.5px] text-ink-500 mt-1">
+                      <div className="text-[13px] text-ink-500 mt-1">
                         or pick from your computer
                       </div>
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        size="md"
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer"
+                        className="mt-4"
+                        leadingIcon={<UploadCloud size={13} />}
                       >
-                        <UploadCloud size={13} />
                         Choose files
-                      </button>
-                      <div className="text-[11.5px] text-ink-400 mt-3">
+                      </Button>
+                      <div className="text-[12px] text-ink-400 mt-3 tabular-nums">
                         CSV · Excel · PDF · ≤ 50 MB each
                       </div>
                     </div>
@@ -458,10 +471,10 @@ export default function UploadDataModal({
                               <FileText size={13} />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="text-[12.5px] font-semibold text-ink-800 truncate">
+                              <div className="text-[13px] font-semibold text-ink-800 truncate">
                                 {f.name}
                               </div>
-                              <div className="text-[11px] text-ink-400">
+                              <div className="text-[12px] text-ink-400 tabular-nums">
                                 {f.size > 1024 * 1024
                                   ? `${(f.size / (1024 * 1024)).toFixed(1)} MB`
                                   : f.size > 1024
@@ -488,9 +501,9 @@ export default function UploadDataModal({
                   visibleAssets.length === 0 ? (
                     <div className="flex flex-col items-center justify-center text-center py-16">
                       <div className="text-[13px] font-semibold text-ink-700">
-                        {search ? `No matches for “${search}”.` : 'No sources available'}
+                        {search ? `No matches for "${search}".` : 'No sources available'}
                       </div>
-                      <div className="text-[11.5px] text-ink-400 mt-1">
+                      <div className="text-[12px] text-ink-400 mt-1">
                         {search
                           ? 'Try a different keyword.'
                           : 'Connect a data source to see it listed here.'}
@@ -508,11 +521,11 @@ export default function UploadDataModal({
                               type="button"
                               onClick={() => toggleAsset(a.id)}
                               aria-pressed={selected}
-                              className={[
+                              className={cn(
                                 'w-full flex items-center gap-3 px-2 py-2.5 transition-colors text-left cursor-pointer',
                                 i === 0 ? '' : 'border-t border-canvas-border',
                                 selected ? 'bg-brand-50/40' : 'hover:bg-canvas',
-                              ].join(' ')}
+                              )}
                             >
                               {selected ? (
                                 <CheckCircle2
@@ -535,11 +548,11 @@ export default function UploadDataModal({
                                 <div className="text-[13px] font-semibold text-ink-800 truncate">
                                   {a.name}
                                 </div>
-                                <div className="text-[11.5px] text-ink-400 truncate mt-0.5">
+                                <div className="text-[12px] text-ink-400 truncate mt-0.5 tabular-nums">
                                   {a.meta}
                                 </div>
                               </div>
-                              <span className="text-[11px] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
+                              <span className="text-[12px] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
                                 {kindBadgeLabel(a.kind)}
                               </span>
                             </button>
@@ -553,26 +566,22 @@ export default function UploadDataModal({
 
               {/* Footer */}
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border bg-canvas">
-                <p className="text-[12px] text-ink-500">
+                <p className="text-[13px] text-ink-500">
                   Pick sources or files to attach to your message.
                 </p>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="inline-flex items-center justify-center rounded-lg text-[12.5px] font-semibold px-4 py-2 text-ink-600 hover:bg-canvas-elevated transition-colors cursor-pointer"
-                  >
+                  <Button variant="ghost" size="md" onClick={onClose}>
                     Cancel
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
                     disabled={!canAttach}
                     onClick={handleAttach}
-                    className="inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold px-4 py-2 bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                    leadingIcon={<Check size={13} />}
                   >
-                    <Check size={13} />
                     Attach
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

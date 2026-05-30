@@ -8,7 +8,6 @@ import { GENERATED_REPORTS } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
-import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
@@ -44,6 +43,7 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/admin/PlatformUsageView';
@@ -369,6 +369,7 @@ function AppInner() {
             setSelectedWorkflow={setSelectedWorkflow}
             openAuditExecution={openAuditExecution}
             setSelectedBP={setSelectedBP}
+            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
 
@@ -416,6 +417,8 @@ function AppInner() {
               }}
               onDismissPendingDashboard={() => setPendingDashboard(null)}
               onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+              workflowBuilderSeedPrompt={state.workflowBuilderSeedPrompt}
+              onWorkflowBuilderSeedConsumed={() => setWorkflowBuilderSeedPrompt(null)}
               availableDashboards={[
                 ...state.createdDashboards.map(d => ({ id: d.id, name: d.name, description: d.description, accent: d.accent })),
                 ...BUILTIN_DASHBOARDS,
@@ -814,7 +817,7 @@ function AppInner() {
       case 'ai-concierge':
       case 'ai-concierge-forensics':
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} />;
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
 
       case 'ai-concierge-workflow-builder':
         return (

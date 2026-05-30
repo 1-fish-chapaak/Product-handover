@@ -8,6 +8,7 @@ interface Toast {
   id: string;
   message: string;
   type: ToastType;
+  title?: string;
   action?: { label: string; onClick: () => void };
   /** Secondary action (e.g. Undo) shown to the left of the primary action */
   secondaryAction?: { label: string; onClick: () => void };
@@ -30,6 +31,14 @@ const DISMISS_MS: Record<ToastType, number | null> = {
   success: 5000,
   warning: 8000,
   error: null,
+};
+
+const DEFAULT_TITLES: Record<ToastType, string | null> = {
+  loading: null,
+  success: 'Success',
+  info: 'Info',
+  warning: 'Warning',
+  error: 'Error',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -92,33 +101,44 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     error: <AlertOctagon size={16} className="text-risk-700" />,
   };
 
+  const title = toast.title ?? DEFAULT_TITLES[toast.type];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 60 }}
       transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-      className="bg-canvas-elevated border border-canvas-border rounded-xl px-4 py-3 flex items-center gap-3 w-[380px] shadow-md"
+      className="bg-canvas-elevated border border-canvas-border rounded-xl px-4 py-3 flex items-start gap-3 w-[400px] shadow-md"
     >
-      {icons[toast.type]}
-      <span className="text-[13px] text-ink-800 flex-1">{toast.message}</span>
-      {toast.secondaryAction && (
-        <button
-          onClick={() => { toast.secondaryAction!.onClick(); onRemove(toast.id); }}
-          className="text-[12px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer whitespace-nowrap"
-        >
-          {toast.secondaryAction.label}
-        </button>
-      )}
-      {toast.action && (
-        <button
-          onClick={toast.action.onClick}
-          className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 transition-colors cursor-pointer whitespace-nowrap"
-        >
-          {toast.action.label}
-        </button>
-      )}
-      <button onClick={() => onRemove(toast.id)} className="text-ink-500 hover:text-ink-700 p-0.5 cursor-pointer">
+      <div className="shrink-0 mt-0.5">{icons[toast.type]}</div>
+      <div className="flex-1 min-w-0">
+        {title && (
+          <div className="text-[13px] font-semibold text-ink-900 leading-tight mb-0.5">{title}</div>
+        )}
+        <div className="text-[13px] text-ink-800 leading-snug">{toast.message}</div>
+        {(toast.action || toast.secondaryAction) && (
+          <div className="flex items-center gap-3 mt-2">
+            {toast.secondaryAction && (
+              <button
+                onClick={() => { toast.secondaryAction!.onClick(); onRemove(toast.id); }}
+                className="text-[12px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {toast.secondaryAction.label}
+              </button>
+            )}
+            {toast.action && (
+              <button
+                onClick={toast.action.onClick}
+                className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {toast.action.label}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <button onClick={() => onRemove(toast.id)} className="text-ink-500 hover:text-ink-700 p-0.5 cursor-pointer shrink-0" aria-label="Dismiss">
         <X size={14} />
       </button>
     </motion.div>

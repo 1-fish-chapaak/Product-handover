@@ -26,6 +26,11 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   expandable?: (item: T) => ReactNode;
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
+  /** Fully custom empty-state body. When provided, replaces the default
+   *  icon + message + clear-search chrome with this node. Caller owns layout.
+   *  Can be a function that receives the table's internal search state so the
+   *  caller can render a Clear-search affordance alongside other filter clears. */
+  emptyContent?: ReactNode | ((ctx: { search: string; clearSearch: () => void }) => ReactNode);
   className?: string;
   headerExtra?: ReactNode;
   animateRows?: boolean;
@@ -33,6 +38,13 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
+  hideResultCount?: boolean;
+  /** Background utility class for the search input. Defaults to 'bg-white';
+   *  pass e.g. 'bg-paper-50' to match an adjacent filter control. */
+  searchBg?: string;
+  /** Show the resting sort-hint icon on sortable column headers even in the
+   *  'modern' variant (which otherwise hides it until a column is active). */
+  showSortHint?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -62,10 +74,14 @@ export default function SmartTable<T extends Record<string, unknown>>({
   expandable,
   onRowClick,
   emptyMessage = 'No results found',
+  emptyContent,
   className = '',
   headerExtra,
   animateRows = true,
   variant = 'default',
+  hideResultCount = false,
+  searchBg = 'bg-white',
+  showSortHint = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -145,7 +161,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                className={`w-full pl-8 pr-8 py-1.5 border border-border ${searchBg} text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all`} style={{ borderRadius: '8px' }}
               />
               {search && (
                 <button
@@ -158,7 +174,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
             </div>
           )}
           {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
-          {paginated && (
+          {paginated && !hideResultCount && (
             <div className="text-[12px] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
             </div>
@@ -188,7 +204,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   <span className="inline-flex items-center gap-1.5">
                     {col.label}
                     {col.sortable !== false && (
-                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern} />
+                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
                     )}
                   </span>
                 </th>
@@ -199,17 +215,23 @@ export default function SmartTable<T extends Record<string, unknown>>({
             <tbody>
               <tr>
                 <td colSpan={columns.length + (expandable ? 1 : 0)} className="px-4 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
-                      <Search size={18} className="text-text-muted/50" />
+                  {emptyContent ? (
+                    typeof emptyContent === 'function'
+                      ? emptyContent({ search, clearSearch: () => setSearch('') })
+                      : emptyContent
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
+                        <Search size={18} className="text-text-muted/50" />
+                      </div>
+                      <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
+                      {search && (
+                        <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
+                          Clear search
+                        </button>
+                      )}
                     </div>
-                    <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
-                    {search && (
-                      <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
-                        Clear search
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </td>
               </tr>
             </tbody>

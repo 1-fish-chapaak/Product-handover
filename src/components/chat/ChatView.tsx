@@ -1,17 +1,19 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
   Send, Paperclip, Sparkles, History, X, FileText, FileSpreadsheet, PanelRightOpen, PanelRightClose,
+  PanelLeftClose, PanelLeftOpen,
   Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
-  Save, CheckCircle, Maximize2, Lock, Calendar,
+  Save, CheckCircle, Maximize2, Minimize2, Lock, Calendar,
   ExternalLink, Download, MoreHorizontal, Pencil, CornerDownLeft, ArrowUpRight,
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
+  LayoutDashboard,
 } from 'lucide-react';
-import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
+import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
@@ -30,6 +32,30 @@ import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { useDialogA11y } from './useModalA11y';
+// Workflow build runs inline inside this chat thread via rich-type messages.
+import StepUploadFiles from '../concierge-workflow-builder/StepUploadFiles';
+import StepMapData from '../concierge-workflow-builder/StepMapData';
+import StepReviewRun from '../concierge-workflow-builder/StepReviewRun';
+import StepOutputView from '../concierge-workflow-builder/StepOutputView';
+import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
+import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
+import { ToleranceAdjustCard, ViewPreviewCard, type ToleranceCardState } from '../concierge-workflow-builder/AIAssistantPanel';
+import {
+  generateWorkflow as wfGenerate,
+  getClarifyQuestions as wfGetClarify,
+  runWorkflow as wfRun,
+  seedAlignments as wfSeedAlignments,
+  tolerancePctFromAnswer,
+} from '../concierge-workflow-builder/mockApi';
+import type {
+  WorkflowDraft,
+  JourneyFiles,
+  JourneyMappings,
+  JourneyAlignments,
+  RunResult,
+  ClarifyQuestion,
+  UploadedFile,
+} from '../concierge-workflow-builder/types';
 
 interface ChatMessage {
   id: string;
@@ -41,7 +67,23 @@ interface ChatMessage {
   followUps?: string[];
   timestamp: Date;
   // Rich inline components
-  richType?: 'summary-kpi' | 'audit-result' | 'audit-loading' | 'clarification' | 'save-workflow-prompt' | 'workflow-checkpoint' | 'qna-plan' | 'error';
+  richType?:
+    | 'summary-kpi'
+    | 'audit-result'
+    | 'audit-loading'
+    | 'clarification'
+    | 'save-workflow-prompt'
+    | 'workflow-checkpoint'
+    | 'error'
+    // Workflow-build rich types — render inside this same chat thread,
+    // not in a separate journey body. Driven by ChatView state.
+    | 'workflow-clarify'
+    | 'workflow-upload'
+    | 'workflow-map'
+    | 'workflow-review'
+    | 'workflow-tolerance'
+    | 'workflow-view-preview'
+    | 'workflow-output';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
   addedTo?: {
@@ -236,8 +278,22 @@ interface ChatViewProps {
    * Hand the typed prompt to the AI Concierge workflow builder. Invoked from
    * the empty-state Submit when the "Build a workflow" toggle is on — the
    * builder opens directly on the clarification screen.
+   *
+   * After the ChatView convergence this still exists but is wired to
+   * `launchWorkflowBuilderWithPrompt`, which now routes to `view='chat'` +
+   * `workflowBuilderSeedPrompt`. The journey renders embedded inside this
+   * ChatView instance.
    */
   onLaunchWorkflowBuilder?: (prompt: string) => void;
+  /**
+   * Seed prompt for an inline workflow build. When non-null, ChatView
+   * boots into workflow mode on first render and (if the seed is
+   * non-empty) auto-starts a workflow-build thread with that prompt.
+   * Empty string just pre-toggles Workflow mode on the empty-state pill.
+   */
+  workflowBuilderSeedPrompt?: string | null;
+  /** Called once the seed prompt has been consumed; clears global state. */
+  onWorkflowBuilderSeedConsumed?: () => void;
   /** Available dashboards for "Add to Dashboard" modal */
   availableDashboards?: import('./AddToDashboardModal').DashboardOption[];
   /** Available reports for "Add to Report" modal */
@@ -591,7 +647,7 @@ function FullscreenChartModal({
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
-              <X size={16} />
+              <Minimize2 size={16} />
             </button>
           </div>
         </div>
@@ -1026,7 +1082,7 @@ function FullscreenTableModal({
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Close fullscreen"
             >
-              <X size={16} />
+              <Minimize2 size={16} />
             </button>
           </div>
         </div>
@@ -1246,7 +1302,7 @@ function ClarificationBlock({
             title="Close — skip the rest"
             className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
           >
-            <X size={14} />
+            <Minimize2 size={14} />
           </button>
         </div>
 
@@ -1359,6 +1415,78 @@ function ClarificationBlock({
           handles navigation hints (Claude pattern). Submission is
           handled by the parent: once all questions are answered it
           fires onSubmit automatically. */}
+    </div>
+  );
+}
+
+// ─── Workflow output preview card ─────────────────────────────────────────
+// Replaces the StepMapData column-mapping card at the Map step with a
+// polished "what you'll see when this workflow runs" preview — KPIs,
+// Charts, Tables — matching the query Output description style.
+function WorkflowOutputPreviewCard({
+  onConfirm,
+  onViewWorkspace,
+}: {
+  workflow: WorkflowDraft;
+  onConfirm: () => void;
+  onViewWorkspace: () => void;
+}) {
+  // Full reconciliation spec — exact KPI / Chart / Table content the
+  // user supplied, rendered through the platform's audit-result prose
+  // pipeline (ReactMarkdown via renderAssistantText) so the typography,
+  // bullet style, emphasis, and inline-code chips match the rest of
+  // the chat surface.
+  const summary = `## Output
+
+### KPIs you will see
+
+- **"Total EDC Aggregated Amount"** — Total summed "Submission Calculated Gross Amount" after filtering for \`SOC\` and \`Chargebacks\`.
+- **"Total Statement Gross Amount Matched"** — Total AMEX statement "GROSS" amount matched to EDC records through primary or secondary matching.
+- **"Total Variance"** — Difference between aggregated EDC amount and matched statement gross amount.
+- **"Primary Matched Count"** — Number of EDC aggregated records matched using payment date plus concat key.
+- **"Secondary Matched Count"** — Number of EDC aggregated records matched using concat key only after primary match failed.
+- **"Unmatched EDC Count"** — Number of EDC aggregated records not found in AMEX statement.
+- **"Unmatched Statement Count"** — Number of AMEX statement rows not found in EDC.
+
+### Charts you will see
+
+- **"Reconciliation Status by Amount"** (bar) — Total amount split by primary matched, secondary matched, mismatched, EDC-only, and statement-only categories.
+- **"Reconciliation Status by Count"** (bar) — Count of records by reconciliation remark.
+- **"Top Variances by Concat Key"** (bar) — Largest absolute variances by concat key.
+
+### Tables you will see
+
+- **"Detailed Reco Report"** — Full reconciliation output showing concat key, EDC transaction timestamp, EDC payment date, statement date, EDC amount, statement gross, variance, match basis, and remarks.
+- **"Unmatched EDC Transactions"** — Aggregated EDC records where no AMEX statement match was found.
+- **"Unmatched Statement Transactions"** — AMEX statement rows where no EDC concat key match was found.
+- **"Variance Exceptions"** — Matched records where aggregated EDC amount and statement gross amount differ.`;
+
+  return (
+    <div className="space-y-4 w-full">
+      <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[72ch]">
+        {renderAssistantText(summary)}
+      </div>
+
+      {/* Action bar — outline secondary on the left, primary "Approve &
+          Run" on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-canvas-border">
+        <button
+          type="button"
+          onClick={onViewWorkspace}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
+        >
+          <PanelRightOpen size={13} />
+          View Workspace
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
+        >
+          <CheckCircle size={13} />
+          Approve &amp; Run
+        </button>
+      </div>
     </div>
   );
 }
@@ -1600,7 +1728,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
             aria-label="Close"
             className="inline-flex items-center justify-center size-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <X size={16} />
+            <Minimize2 size={16} />
           </button>
         </div>
 
@@ -2429,9 +2557,23 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
+  // Workflow-build seed handoff. Non-empty string = the chat starts in
+  // workflow mode and auto-pushes the prompt as a user message (kicking
+  // off the in-thread workflow build). Empty string = chat starts with
+  // the Workflow pill pre-toggled but no auto-build. Null = query default.
+  const [journeySeed, setJourneySeed] = useState<string | null>(
+    workflowBuilderSeedPrompt ?? null,
+  );
+  useEffect(() => {
+    if (workflowBuilderSeedPrompt != null) {
+      setJourneySeed(workflowBuilderSeedPrompt);
+      onWorkflowBuilderSeedConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowBuilderSeedPrompt]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
@@ -2457,6 +2599,35 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [workflowBuildPhase, setWorkflowBuildPhase] = useState(0); // 0=idle, 1=asking-files, 2=asking-logic, 3=confirming, 4=input-config, 5=freeze-confirm, 6=output-config, 7=save
   const [currentWorkflowType, setCurrentWorkflowType] = useState<WorkflowTypeId | null>(null);
 
+  // ── Converged workflow-build state ──
+  // The standalone WorkflowBuilderJourney is gone; its state lives here so
+  // workflow-build cards can render inside this chat thread.
+  const [wfWorkflow, setWfWorkflow] = useState<WorkflowDraft | null>(null);
+  const [wfFiles, setWfFiles] = useState<JourneyFiles>({});
+  const [wfMappings, setWfMappings] = useState<JourneyMappings>({});
+  const [wfAlignments, setWfAlignments] = useState<JourneyAlignments>({});
+  const [wfRunning, setWfRunning] = useState(false);
+  const [wfResult, setWfResult] = useState<RunResult | null>(null);
+  const [wfSaved, setWfSaved] = useState(false);
+  const [wfMapExpanded, setWfMapExpanded] = useState<string | null>(null);
+  const [wfSaveModalOpen, setWfSaveModalOpen] = useState(false);
+  const [wfUploadModalOpen, setWfUploadModalOpen] = useState(false);
+  const [wfDraftAttachments, setWfDraftAttachments] = useState<UploadedFile[]>([]);
+  // Amount tolerance used by the run — populated by the validate-phase
+  // clarify, then surfaced as an inline ToleranceAdjustCard. Mirrors the
+  // original WorkflowBuilderJourney's tolerance state.
+  const [wfTolerance, setWfTolerance] = useState<ToleranceCardState>({
+    mode: 'percentage', percentage: 5, absolute: 100, enabled: true,
+  });
+  // Tracks the latest workflow-clarify card id so we can advance it from
+  // user keyboard input (option submit / skip).
+  const wfClarifyMsgIdRef = useRef<string | null>(null);
+  // Guards the once-per-workflow effects (validate clarify finish, view-preview
+  // push, upload-modal auto-open) so they don't re-fire when messages mutate.
+  const wfValidateCompleteRef = useRef<string | null>(null);
+  const wfUploadModalSeededFor = useRef<string | null>(null);
+  const wfViewPreviewRevealedRef = useRef<string | null>(null);
+
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
   // When opened from an engagement's "Create new workflow" flow, start in workflow mode.
@@ -2466,6 +2637,101 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   useEffect(() => {
     if (workflowEngagementContext) setBuildWorkflowMode(true);
   }, [workflowEngagementContext]);
+
+  // ───────── Rotating placeholder (hero empty-state composer) ─────────
+  // Typewriter effect: types each prompt character-by-character, holds
+  // for a beat, erases, pauses, then types the next. No fade or blur —
+  // the deliberate keystrokes are the animation. Reads as "AI is
+  // composing a thought." Pauses while the user is typing in the
+  // textarea. Resets when mode toggles.
+  const queryPlaceholders = [
+    'Ask Ira about your audit data…',
+    'Find unusual journal entries in Q1…',
+    'Show me top vendor risk hotspots…',
+    'Investigate a P2P payment anomaly…',
+    'Summarize last quarter\'s findings…',
+    'Approvals above ₹1L without backup…',
+  ];
+  const workflowPlaceholders = [
+    'Ask Ira to build a workflow…',
+    'Design a duplicate-invoice detector…',
+    'Create a vendor master change monitor…',
+    'Build a three-way PO match flow…',
+    'Set up a SOX compliance checker…',
+  ];
+  const placeholderPool = buildWorkflowMode ? workflowPlaceholders : queryPlaceholders;
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [typedText, setTypedText] = useState('');
+  type TypingPhase = 'typing' | 'holding' | 'erasing' | 'pausing';
+  const [typingPhase, setTypingPhase] = useState<TypingPhase>('typing');
+
+  // Reset to start of the first prompt whenever the user flips Query ↔
+  // Workflow so the typewriter restarts cleanly with the new pool.
+  useEffect(() => {
+    setPlaceholderIdx(0);
+    setTypedText('');
+    setTypingPhase('typing');
+  }, [buildWorkflowMode]);
+
+  // Drives the typewriter state machine. Each tick advances one step
+  // (one char typed/erased or a phase change). Cancellation via the
+  // return cleanup means stopping/restarting is jank-free.
+  useEffect(() => {
+    // Pause completely while the user is typing in the textarea.
+    if (input.trim().length > 0) return;
+    // Reduced-motion users get the full text instantly, no animation.
+    if (prefersReducedMotion) {
+      setTypedText(placeholderPool[placeholderIdx]);
+      return;
+    }
+
+    const target = placeholderPool[placeholderIdx];
+    let delay = 0;
+
+    if (typingPhase === 'typing') {
+      if (typedText.length < target.length) {
+        // 38–62ms per char with jitter — feels like real typing, not
+        // a metronome. Slight slow-down on spaces for natural cadence.
+        const nextChar = target[typedText.length];
+        const base = nextChar === ' ' ? 65 : 38;
+        delay = base + Math.random() * 24;
+        const id = window.setTimeout(() => {
+          setTypedText(target.slice(0, typedText.length + 1));
+        }, delay);
+        return () => window.clearTimeout(id);
+      }
+      setTypingPhase('holding');
+      return;
+    }
+
+    if (typingPhase === 'holding') {
+      // 1.6s to read the full prompt before erasing.
+      const id = window.setTimeout(() => setTypingPhase('erasing'), 1600);
+      return () => window.clearTimeout(id);
+    }
+
+    if (typingPhase === 'erasing') {
+      if (typedText.length > 0) {
+        // Erase ~2× faster than typing — feels intentional, not slow.
+        const id = window.setTimeout(() => {
+          setTypedText(prev => prev.slice(0, -1));
+        }, 18);
+        return () => window.clearTimeout(id);
+      }
+      setTypingPhase('pausing');
+      return;
+    }
+
+    if (typingPhase === 'pausing') {
+      // Brief pause before the next prompt starts typing — gives the
+      // reader a beat to register that one prompt finished.
+      const id = window.setTimeout(() => {
+        setPlaceholderIdx(i => (i + 1) % placeholderPool.length);
+        setTypingPhase('typing');
+      }, 350);
+      return () => window.clearTimeout(id);
+    }
+  }, [input, prefersReducedMotion, placeholderPool, placeholderIdx, typedText, typingPhase]);
 
   // Save-as-workflow flow state (Path 3 — query → workflow flip)
   const [showSaveAsWfModal, setShowSaveAsWfModal] = useState(false);
@@ -2938,43 +3204,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       return;
     }
 
-    schedule(() => {
-      if (buildWorkflowMode) {
-        // Workflow-mode plan-approve gate (ported from auditify-app aa19493).
-        // In workflow mode, surface the plan and wait for explicit Approve / Revise
-        // before kicking off the audit run. Query mode auto-approves below.
-        setMessages(prev => [...prev, {
-          id: `msg-qna-plan-${Date.now()}`,
-          role: 'assistant',
-          text: '',
-          timestamp: new Date(),
-          richType: 'qna-plan',
-          richData: {
-            planText: 'Plan ready. Review the steps in the Workspace, then approve to run the audit or revise to adjust your inputs.',
-          },
-        }]);
-      } else {
-        startAuditQueryRun();
-      }
-    }, 240);
-  };
-
-  // ─── Approve / Revise the workflow-mode plan-gate (qna-plan messages) ───
-  const handleApprovePlan = (msgId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== msgId));
-    startAuditQueryRun();
-  };
-
-  const handleRevisePlan = (msgId: string) => {
-    setMessages(prev => [
-      ...prev.filter(m => m.id !== msgId),
-      {
-        id: `msg-plan-revise-${Date.now()}`,
-        role: 'assistant',
-        text: 'Got it. Revise your inputs in the message box and re-send.',
-        timestamp: new Date(),
-      },
-    ]);
+    // Clarification submitted — run the audit query directly. The legacy
+    // workflow-mode qna-plan gate ("Approve & run / Revise") is dropped:
+    // workflow builds now have their own Approve & Run on the Output
+    // Preview card, so a separate plan gate after a follow-up query is
+    // redundant.
+    schedule(() => startAuditQueryRun(), 240);
   };
 
   // ─── Workflow Clarification Complete Handler ───
@@ -3399,6 +3634,278 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     });
   }, []);
 
+  // ─── Workflow build orchestration (in-thread) ───────────────────────────
+  // Push helpers + step-card pushers. Replaces the standalone journey's
+  // applyWorkflow/pushStepCardOnce/finishClarifying machinery, scoped to
+  // ChatView's own messages array.
+  const wfMakeId = () => `msg-wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const wfPushAssistant = useCallback((text: string) => {
+    setMessages(m => [...m, { id: wfMakeId(), role: 'assistant', text, timestamp: new Date() }]);
+  }, []);
+  const wfPushClarify = useCallback((questions: ClarifyQuestion[], phase: 'initial' | 'validate', stepLabel?: string) => {
+    const id = wfMakeId();
+    wfClarifyMsgIdRef.current = id;
+    setMessages(m => [...m, {
+      id,
+      role: 'assistant',
+      text: '',
+      timestamp: new Date(),
+      richType: 'workflow-clarify',
+      richData: { questions, phase, stepLabel, index: 0, answers: {} as Record<string, string> },
+    }]);
+  }, []);
+  const wfPushCard = useCallback((cardType: 'workflow-upload' | 'workflow-map' | 'workflow-review' | 'workflow-tolerance' | 'workflow-view-preview' | 'workflow-output') => {
+    // Phase-aware quick-reply chips that surface beneath the card.
+    // Routed through wfQuickReplies so the click pushes a canned assistant
+    // reply rather than starting a brand-new build via simulateResponse.
+    // workflow-upload deliberately has NO chips — there's no data context
+    // to ground their answers in until files are attached.
+    const phaseFollowUps: Record<string, string[]> = {
+      'workflow-map': ['Recommend columns', 'Explain a column', 'Preview sample rows'],
+      'workflow-review': ['Check data quality', 'Preview schema', 'Explain extraction logic'],
+    };
+    setMessages(m => {
+      if (m.length > 0 && m[m.length - 1].richType === cardType) return m;
+      return [...m, {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: cardType,
+        followUps: phaseFollowUps[cardType],
+      }];
+    });
+  }, []);
+
+  // Canned assistant replies for workflow quick-reply chips. Mirrors the
+  // original AIAssistantPanel's quickReply onClick payloads.
+  const WF_QUICK_REPLIES: Record<string, string> = {
+    'What columns do I need?': 'For most inputs you\'ll want the join keys (PO #, Invoice #, Vendor ID), the amount column, and a date column to anchor the period. I\'ll flag any column whose type or distribution looks off.',
+    'Link a data source': 'Use the **+ Attach** button in the upload modal — you can pick from existing files, databases, APIs, cloud connectors, or last session\'s artefacts.',
+    'Show a sample format': 'Each required input has a sample row strip on the upload card. Hover the input name to see the expected column types and a 5-row preview from the most recent run.',
+    'Recommend columns': 'Keep all join keys, amount, and date by default. Toggle off only optional columns that aren\'t referenced by downstream steps — I\'ve marked those with a dim badge.',
+    'Explain a column': 'Pick any column in the mapping card and I\'ll describe what it holds, its inferred type, and how confidently it aligns with the target field.',
+    'Preview sample rows': 'Click **Preview** on a mapped input to inspect the first few rows alongside the alignment confidence.',
+    'Check data quality': 'I\'ll surface null ratios, duplicate rates, and out-of-range outliers per source — anything above 5% triggers a warning badge on the review card.',
+    'Preview schema': 'The review card lists every data source with its column roles (join key / amount / date / dimension). Expand a source to see the column-by-column type and example value.',
+    'Explain extraction logic': 'Each step on the review card shows the extraction it runs (type, description, dependencies). Expand a step to see the SQL-equivalent pseudocode I\'ll execute.',
+  };
+
+  // Kick off a workflow build from a typed prompt. Mirrors the journey's
+  // applyWorkflow but pushes everything into ChatView's messages array.
+  const startWorkflowBuild = useCallback(async (prompt: string, attachments: UploadedFile[] = []) => {
+    // Push the user's prompt as the opening message of the thread.
+    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    // Generate the workflow draft (mock). Keep a brief "thinking" beat
+    // so the assistant turn has shape.
+    await new Promise(r => setTimeout(r, 600));
+    const draft = wfGenerate(prompt);
+    setWfWorkflow(draft);
+
+    // Carry-forward Step 1 attachments into required inputs.
+    const seededFiles: JourneyFiles = {};
+    if (attachments.length > 0) {
+      const reqInputs = draft.inputs.filter(i => i.required);
+      const fallback = draft.inputs[0]?.id ?? '';
+      for (const f of attachments) {
+        let target = '';
+        for (const inp of reqInputs) {
+          if ((seededFiles[inp.id] ?? []).length === 0) { target = inp.id; break; }
+        }
+        if (!target) target = fallback;
+        if (target) seededFiles[target] = [...(seededFiles[target] ?? []), f];
+      }
+    }
+    setWfFiles(seededFiles);
+    setWfMappings({});
+    setWfAlignments(wfSeedAlignments(draft));
+    setWfResult(null);
+    setWfSaved(false);
+    setWfDraftAttachments([]);
+
+    // Upload-first flow: introduce the workflow, push the Upload card,
+    // and auto-open the data picker — but ONLY if no files came in with
+    // the prompt. When the user attached files/sources via the composer
+    // + button before sending, those land in seededFiles and the
+    // Upload → Clarify effect picks up from there immediately.
+    const hasPreAttachedFiles = Object.values(seededFiles).some(arr => arr.length > 0);
+    const intro = hasPreAttachedFiles
+      ? `I've analyzed your prompt and built the **${draft.name}** workflow with the **${attachments.length} source${attachments.length === 1 ? '' : 's'}** you attached. Verifying and asking a few quick clarifications now.`
+      : `I've analyzed your prompt and built the **${draft.name}** workflow. To begin, drop the required data files in the upload window — I'll ask a few quick clarifications right after.`;
+    setIsTyping(false);
+    wfPushAssistant(intro);
+    wfPushCard('workflow-upload');
+    // Lock the artifact panel into workflow mode the moment a build
+    // starts — even if files aren't attached yet — so any subsequent
+    // open call (e.g. View Workspace on a card) can't render the query
+    // panel. Doesn't auto-OPEN the panel, just sets the mode.
+    setArtifactMode('workflow');
+    setWorkflowType?.(detectWorkflowType(draft.name));
+    if (!hasPreAttachedFiles && wfUploadModalSeededFor.current !== draft.id) {
+      wfUploadModalSeededFor.current = draft.id;
+      window.setTimeout(() => setWfUploadModalOpen(true), 400);
+    } else if (hasPreAttachedFiles) {
+      // Mark the modal as already-seen for this workflow so the
+      // Upload → Clarify effect's nudge logic doesn't pop the modal
+      // open after the processing trail completes.
+      wfUploadModalSeededFor.current = draft.id;
+    }
+  }, [wfPushAssistant, wfPushCard, setArtifactMode, setWorkflowType]);
+
+  // Upload → Clarify advance — fires as soon as the user attaches at
+  // least one source for any required input. Shows a brief file-
+  // processing experience in the chat (thinking trail) so the user
+  // sees that the assistant is reading their data before clarify
+  // questions appear.
+  const wfHasPushedClarifyRef = useRef(false);
+  useEffect(() => {
+    if (!wfWorkflow) { wfHasPushedClarifyRef.current = false; return; }
+    if (wfHasPushedClarifyRef.current) return;
+    const hasUploadCard = messages.some(m => m.richType === 'workflow-upload');
+    if (!hasUploadCard) return;
+    const required = wfWorkflow.inputs.filter(i => i.required);
+    const someFilled = required.some(i => (wfFiles[i.id] ?? []).length > 0);
+    if (!someFilled) return;
+    wfHasPushedClarifyRef.current = true;
+
+    // Step 1: surface a processing experience — thinking trail showing
+    // what the assistant is doing with the attached files.
+    const sourceNames = required
+      .filter(i => (wfFiles[i.id] ?? []).length > 0)
+      .map(i => i.name);
+    const processingSteps = [
+      `Reading ${sourceNames.length} data source${sourceNames.length === 1 ? '' : 's'}: ${sourceNames.join(', ')}`,
+      'Inferring column types and ranges',
+      'Profiling row counts and null ratios',
+      `Aligning to ${wfWorkflow.name} schema`,
+    ];
+    const processingId = wfMakeId();
+    setIsTyping(true);
+    setMessages(m => [...m, {
+      id: processingId,
+      role: 'assistant',
+      text: 'Verifying your data sources…',
+      thinking: processingSteps,
+      timestamp: new Date(),
+    }]);
+
+    // Open the side panel here, decoupled from the clarify push. The
+    // user sees schema land alongside the processing trail and the
+    // panel stays open whether or not they answer / skip the clarify.
+    setArtifactMode('workflow');
+    setWorkflowType?.(detectWorkflowType(wfWorkflow.name));
+    setShowArtifacts(true);
+
+    // Step 2: after a brief delay, swap the processing message for a
+    // confirmation and push the clarify card. NOTE: no cleanup return
+    // here — the messages-change re-fire would cancel the schedule.
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => m.map(msg =>
+        msg.id === processingId
+          ? { ...msg, text: 'Files verified — schema profiled and aligned. Now a few quick clarifications before I map and run.' }
+          : msg,
+      ));
+      const questions = wfGetClarify(wfWorkflow);
+      wfPushClarify(questions, 'initial', 'Asking a few clarifying questions');
+    }, 2400);
+  }, [wfWorkflow, wfFiles, messages, wfPushClarify, setArtifactMode, setWorkflowType, setShowArtifacts]);
+
+  // If the user closes the upload modal without filling every required
+  // input, push a clear nudge naming what's still missing. Without this
+  // hint the chat silently waits for the Upload→Clarify gate and the
+  // user thinks the flow stalled. Re-fires every modal close until
+  // everything is filled.
+  const wfPrevModalOpenRef = useRef(false);
+  useEffect(() => {
+    const wasOpen = wfPrevModalOpenRef.current;
+    wfPrevModalOpenRef.current = wfUploadModalOpen;
+    if (!wfWorkflow) return;
+    if (!wasOpen || wfUploadModalOpen) return; // only on open → closed transition
+    if (wfHasPushedClarifyRef.current) return; // already past Upload step
+    const required = wfWorkflow.inputs.filter(i => i.required);
+    const missing = required.filter(i => (wfFiles[i.id] ?? []).length === 0);
+    if (missing.length === 0) return; // all filled — the clarify effect will fire
+    if (missing.length === required.length) {
+      wfPushAssistant("Looks like nothing was attached — pick at least one source per required input via **Open upload window** so I can move to the next step.");
+    } else {
+      const names = missing.map(i => `**${i.name}**`).join(', ');
+      wfPushAssistant(`Still need a source for ${names} before I can move on. Re-open the upload window from the card above.`);
+    }
+  }, [wfUploadModalOpen, wfWorkflow, wfFiles, wfPushAssistant]);
+
+  // Clarify → Map advance — fires once the initial clarify card has
+  // been fully answered/skipped (index >= questions.length). Pushes the
+  // Map card + opens the workspace artifact panel.
+  const wfHasPushedMapRef = useRef(false);
+  useEffect(() => {
+    if (!wfWorkflow) { wfHasPushedMapRef.current = false; return; }
+    if (wfHasPushedMapRef.current) return;
+    const clarifyMsg = [...messages].reverse().find(m => {
+      if (m.richType !== 'workflow-clarify') return false;
+      const d = m.richData as { phase?: string; questions?: ClarifyQuestion[]; index?: number };
+      return d.phase === 'initial' && (d.questions?.length ?? 0) > 0 && (d.index ?? 0) >= (d.questions?.length ?? 0);
+    });
+    if (!clarifyMsg) return;
+    wfHasPushedMapRef.current = true;
+    wfPushAssistant('Clarifications locked in — moving to data mapping.');
+    wfPushCard('workflow-map');
+  }, [wfWorkflow, messages, wfPushAssistant, wfPushCard]);
+
+  // Validate-phase completion — fires after the user finishes the
+  // matching-logic + tolerance clarify cards pushed from StepReviewRun.
+  // Derives a percentage from the tolerance-preset answer, narrates the
+  // run, and pushes the interactive ToleranceAdjustCard. The card's
+  // onRun handler executes runWorkflow + cascades to view-preview/output.
+  useEffect(() => {
+    if (!wfWorkflow) return;
+    const validateMsg = [...messages].reverse().find(m => {
+      if (m.richType !== 'workflow-clarify') return false;
+      const d = m.richData as { phase?: string; questions?: ClarifyQuestion[]; index?: number };
+      return d.phase === 'validate' && (d.questions?.length ?? 0) > 0 && (d.index ?? 0) >= (d.questions?.length ?? 0);
+    });
+    if (!validateMsg) return;
+    if (wfValidateCompleteRef.current === validateMsg.id) return;
+    wfValidateCompleteRef.current = validateMsg.id;
+    const data = validateMsg.richData as { answers: Record<string, string> };
+    const pct = tolerancePctFromAnswer(data.answers?.['tolerance-preset']);
+    setWfTolerance(prev => ({ ...prev, mode: 'percentage', percentage: pct, enabled: true }));
+    wfPushAssistant(`Got it — running with **±${pct}%** amount tolerance.`);
+    wfPushCard('workflow-tolerance');
+    // Auto-fire the run after a short beat so the user sees the card
+    // settle before the run kicks off. The card's onRun handler also
+    // works manually for re-runs at different tolerances. NOTE: do NOT
+    // return a cleanup that clearTimeout's this — pushing the tolerance
+    // card above triggers a messages-change re-render, and the cleanup
+    // would cancel the run before it ever fires. The ref guard handles
+    // dedup.
+    window.setTimeout(async () => {
+      if (!wfWorkflow) return;
+      setWfRunning(true);
+      const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
+      setWfRunning(false);
+      setWfResult(res);
+      wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows, ${res.stats.find(s => s.label === 'Records Scanned')?.value ?? '—'} records scanned.`);
+      wfPushCard('workflow-view-preview');
+    }, 700);
+  }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
+
+  const wfAnswerClarify = useCallback((msgId: string, answerOrSkip: string | null) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msgId || m.richType !== 'workflow-clarify') return m;
+      const data = m.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
+      const q = data.questions[data.index];
+      if (!q) return m;
+      const nextAnswers = { ...data.answers };
+      if (answerOrSkip != null) nextAnswers[q.id] = answerOrSkip;
+      return { ...m, richData: { ...data, answers: nextAnswers, index: data.index + 1 } };
+    }));
+    if (answerOrSkip != null) {
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}-ans`, role: 'user', text: answerOrSkip, timestamp: new Date() }]);
+    }
+  }, []);
+
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
@@ -3444,16 +3951,42 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     ].filter(Boolean);
     if (attachmentLabels.length > 0) text += `\n[Attached: ${attachmentLabels.join(', ')}]`;
 
-    // Empty-state Submit with the "Build a workflow" toggle on hands the
-    // typed prompt off to the AI Concierge workflow builder, which opens on
-    // the clarification screen. The chat thread isn't started — the user
-    // continues the conversation inside the journey.
-    if (buildWorkflowMode && messages.length === 0 && trimmed && onLaunchWorkflowBuilder) {
-      onLaunchWorkflowBuilder(trimmed);
+    // Workflow mode pill is on → ALWAYS start a workflow build. If a
+    // previous workflow build is still hanging around (wfWorkflow set
+    // from an earlier prompt in this thread), we reset its state first
+    // so the new prompt gets a clean run. This guarantees the Workflow
+    // toggle never silently downgrades to the query path.
+    if (buildWorkflowMode && trimmed) {
+      // Include BOTH fresh uploads (composer + button → file picker) AND
+      // linked sources (composer + button → All Data / DB picks) as
+      // pre-attached seeds for the workflow build. Linked sources carry
+      // a flag so the upload card can render them with a "linked"
+      // affordance instead of a file size.
+      const attachmentsForWorkflow: UploadedFile[] = [
+        ...files.map(f => ({ name: f.name, size: f.size })),
+        ...attachedSources
+          .filter((s): s is Extract<AttachmentSelection, { kind: 'source' }> => s.kind === 'source')
+          .map(s => ({ name: s.name, size: 0, linkedSource: true })),
+      ];
       setInput('');
       setFiles([]);
       setAttachedSources([]);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      // Reset any in-flight workflow state from a prior build in this
+      // thread so the new prompt isn't blocked by stale refs.
+      if (wfWorkflow) {
+        setWfWorkflow(null);
+        setWfFiles({});
+        setWfMappings({});
+        setWfAlignments({});
+        setWfResult(null);
+        setWfSaved(false);
+        wfHasPushedClarifyRef.current = false;
+        wfHasPushedMapRef.current = false;
+        wfValidateCompleteRef.current = null;
+        wfUploadModalSeededFor.current = null;
+      }
+      startWorkflowBuild(trimmed, attachmentsForWorkflow);
       return;
     }
 
@@ -3489,16 +4022,28 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         textareaRef.current.focus();
       }
     }
-    // Workflow mode: don't force 'workflow' explicit (which routes straight to
-    // the canvas builder); fall through to the keyword router so non-workflow
-    // queries reach clarification → the qna-plan approve/revise gate.
-    simulateResponse(text, buildWorkflowMode ? undefined : 'query');
+    // Anything that gets here is the query path. Workflow-mode messages
+    // were handled above; this fallthrough should only fire for query-
+    // mode submissions. Force 'query' explicit so the keyword auto-
+    // detect can't spin off a workflow build by accident.
+    simulateResponse(text, 'query');
   };
 
   const handleFollowUpClick = (question: string) => {
     if (processingRef.current) return;
     processingRef.current = true;
     setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: question, timestamp: new Date() }]);
+    // Workflow quick-reply chips short-circuit the standard simulateResponse
+    // path — they just push a canned assistant reply so the in-thread build
+    // doesn't get reset by keyword-detection on the chip text.
+    const cannedReply = WF_QUICK_REPLIES[question];
+    if (cannedReply) {
+      setTimeout(() => {
+        wfPushAssistant(cannedReply);
+        processingRef.current = false;
+      }, 300);
+      return;
+    }
     simulateResponse(question);
     setTimeout(() => { processingRef.current = false; }, 2000);
   };
@@ -3908,6 +4453,28 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   const isEmpty = messages.length === 0;
 
+  // Memoize the FloatingLines element so its canvas animation doesn't
+  // re-init on every parent re-render. Without this, the typewriter
+  // placeholder's ~50ms state updates trigger ChatView re-renders, and
+  // FloatingLines re-receives a new `enabledWaves` array reference each
+  // time — which bubbles through its internal initLines useCallback and
+  // re-randomizes all wave positions. Memoizing the element once means
+  // React reuses the same instance and skips the child reconciliation
+  // entirely, so the canvas animation runs continuously and undisturbed.
+  const floatingLinesBg = useMemo(() => (
+    <FloatingLines
+      enabledWaves={['top', 'middle', 'bottom']}
+      lineCount={5}
+      lineDistance={5}
+      bendRadius={5}
+      bendStrength={-0.5}
+      interactive={true}
+      parallax={true}
+      color="#6a12cd"
+      opacity={0.06}
+    />
+  ), []);
+
   // Workspace panel is contextual to a query — it shows the plan, sources,
   // code, and output of an in-flight or completed run. On an empty chat
   // there's nothing meaningful to display, so force-close any panel state
@@ -3958,6 +4525,29 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     m => m.richType === 'clarification' && (m.richData as unknown as ClarificationData)?.status === 'open'
   );
 
+  // Most-recent open workflow clarify (initial + validate phases) — same docked
+  // pattern as the query clarification, so the UI/placement matches.
+  const openWorkflowClarify = [...messages].reverse().find(m => {
+    if (m.richType !== 'workflow-clarify') return false;
+    const d = m.richData as { questions?: ClarifyQuestion[]; index?: number };
+    return (d.questions?.length ?? 0) > 0 && (d.index ?? 0) < (d.questions?.length ?? 0);
+  });
+  const openWorkflowClarifyData: ClarificationData | null = openWorkflowClarify ? (() => {
+    const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; answers: Record<string, string>; index: number; stepLabel?: string; phase?: string };
+    const numericAnswers: Record<number, string> = {};
+    d.questions.forEach((q, i) => {
+      const a = d.answers?.[q.id];
+      if (a) numericAnswers[i] = a;
+    });
+    return {
+      intro: d.stepLabel ?? 'Asking a few clarifying questions',
+      questions: d.questions.map(q => ({ question: q.title, options: q.options })),
+      answers: numericAnswers,
+      status: 'open',
+      purpose: 'workflow-build',
+    } as unknown as ClarificationData;
+  })() : null;
+
   /* ────────────────────── CHAT HISTORY SIDEBAR ────────────────────── */
   // Outer motion.div animates the column width; inner content stays pinned
   // at 280px so rows don't squish during open/close.
@@ -3987,7 +4577,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="Close (⌘.)"
                 className="size-7 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <X size={15} />
+                <PanelLeftClose size={15} />
               </button>
             </div>
 
@@ -4062,6 +4652,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     </AnimatePresence>
   );
 
+  // When a workflow build is kicked off via a non-empty seed from Path 1
+  // (Home / AI Concierge → Build a workflow), bootstrap the workflow build
+  // in this thread on first render. Empty seed = open chat in workflow
+  // mode but don't auto-build; user types their prompt and we start.
+  useEffect(() => {
+    if (journeySeed == null) return;
+    if (journeySeed.trim().length > 0 && messages.length === 0) {
+      const seed = journeySeed;
+      setJourneySeed(null);
+      setBuildWorkflowMode(true);
+      // defer so the state flush has settled before pushing messages
+      queueMicrotask(() => startWorkflowBuild(seed));
+    } else {
+      // Empty seed: just preset workflow mode and clear.
+      setBuildWorkflowMode(true);
+      setJourneySeed(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journeySeed]);
+
   /* ────────────────────── EMPTY STATE ────────────────────── */
   if (isEmpty) {
     return (
@@ -4070,21 +4680,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         {chatHistoryPanel}
 
         <div className="flex-1 min-w-0 h-full flex flex-col chat-canvas-mesh relative">
-          <FloatingLines
-            enabledWaves={['top', 'middle', 'bottom']}
-            lineCount={5}
-            lineDistance={5}
-            bendRadius={5}
-            bendStrength={-0.5}
-            interactive={true}
-            parallax={true}
-            color="#6a12cd"
-            opacity={0.06}
-          />
+          {floatingLinesBg}
 
-          <div className="relative z-10 flex justify-between px-5 py-3">
+          <div className="absolute top-0 left-0 right-0 z-20 flex justify-between px-5 py-3">
             <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
-              <History size={18} />
+              <PanelLeftOpen size={18} />
             </button>
             <button onClick={() => requestNewChat()} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="New chat" title="New chat (⌘⇧O)">
               <Plus size={18} />
@@ -4117,52 +4717,88 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   onClick={onDismissPendingDashboard}
                   className="p-1 rounded-md text-brand-400 hover:text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
                 >
-                  <X size={14} />
+                  <Minimize2 size={14} />
                 </button>
               </div>
             </div>
           )}
 
-          <div className="flex-1 flex justify-center items-center overflow-auto px-6 pb-[60px]">
+          <div className="flex-1 flex justify-center overflow-auto px-6">
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className="w-[52.5rem] max-w-full text-center"
+              className="w-[52.5rem] max-w-full text-center grid grid-rows-[1fr_auto_1fr] h-full"
             >
-              <div className="mb-4">
-                <AuditifyHelloEffect
-                  className="text-primary h-14 mx-auto"
-                  speed={0.7}
-                />
+              {/* Row 1 — heading group, anchored to the bottom of its row
+                  so it sits just above the centered input. pb-8 gives the
+                  subtitle a comfortable gap to the shadowed composer below
+                  (the composer's shadow adds its own visual cushion). */}
+              <div className="flex flex-col justify-end pb-8">
+                {/* Hello mark — draws itself in on mount (SVG path stroke
+                    animation inside AuditifyHelloEffect), then continues
+                    with a gentle breathing motion: subtle y-bob + tiny
+                    scale pulse on a 5s loop. Starts after the initial
+                    draw-in finishes (~3.5s) so the two animations don't
+                    compete. Disabled for reduced-motion users. */}
+                <motion.div
+                  className="mb-5"
+                  animate={prefersReducedMotion ? undefined : { y: [0, -4, 0], scale: [1, 1.015, 1] }}
+                  transition={prefersReducedMotion ? undefined : {
+                    duration: 5,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: 3.5,
+                  }}
+                  style={{ transformOrigin: 'center' }}
+                >
+                  <AuditifyHelloEffect
+                    className="text-primary h-14 mx-auto"
+                    speed={0.7}
+                  />
+                </motion.div>
+
+                <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-3 text-ink-900/85">
+                  Audit smarter.{' '}
+                  <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
+                    Not harder.
+                  </TextShimmer>
+                </h1>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 2.5, duration: 0.6 }}
+                  className="text-[15px] text-ink-500"
+                >
+                  Your AI copilot <span className="font-semibold text-[17px] text-ink-700 tracking-[-0.01em]">Ira</span> already knows what to look for. Just ask.
+                </motion.p>
               </div>
 
-              <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
-                Audit smarter.{' '}
-                <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
-                  Not harder.
-                </TextShimmer>
-              </h1>
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 2.5, duration: 0.6 }}
-                className="text-[15px] text-ink-500 mb-10"
-              >
-                Your AI copilot already knows what to look for. Just ask.
-              </motion.p>
-
-              {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
-              {workflowEngagementContext && (
-                <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
-                  <Workflow size={15} className="text-primary shrink-0" />
-                  <span className="text-[13px] text-text-secondary">
-                    Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
-                  </span>
-                </div>
-              )}
+              {/* Row 2 — input composer, the vertical centerpiece. */}
+              <div>
+                {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
+                {workflowEngagementContext && (
+                  <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
+                    <Workflow size={15} className="text-primary shrink-0" />
+                    <span className="text-[13px] text-text-secondary">
+                      Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
+                    </span>
+                  </div>
+                )}
+              {/* Hero composer elevation — Stripe-tight ink-only stack.
+                  Three close layers: hairline contact, close ambient,
+                  soft contained drop. No brand color at rest.
+                  Active ring uses :has(textarea:focus) — NOT focus-within —
+                  so clicking the +/mode-toggle buttons inside doesn't
+                  trigger the ring (which previously made it look like
+                  hover triggered it). Ring shows only while typing.
+                  '!' overrides .ai-border's baked-in box-shadow:none.
+                  In-chat composer (line ~6101) stays flat by design. */}
               <div
-                className="ai-border relative mb-6"
+                className="ai-border relative transition-shadow duration-200 ease-out
+                           !shadow-[0_1px_1px_rgba(15,8,30,0.04),0_2px_8px_-2px_rgba(15,8,30,0.06),0_12px_28px_-12px_rgba(15,8,30,0.10)]
+                           hover:!shadow-[0_1px_2px_rgba(15,8,30,0.05),0_3px_10px_-2px_rgba(15,8,30,0.07),0_16px_32px_-12px_rgba(15,8,30,0.12)]
+                           [&:has(textarea:focus)]:!shadow-[0_0_0_2px_rgba(106,18,205,0.10),0_1px_2px_rgba(15,8,30,0.05),0_3px_10px_-2px_rgba(15,8,30,0.07),0_16px_32px_-12px_rgba(15,8,30,0.12)]"
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -4233,53 +4869,103 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     composer because this is the hero entry point and the
                     surface should feel inviting. Claude-aligned 15px body,
                     1.55 line-height; padding tighter than before to match
-                    Claude's compact composer (px-3.5 / pt-3.5 / pb-1). */}
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handleComposerPaste}
-                  placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Message Ira…'}
-                  aria-label="Message IRA"
-                  className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[88px] max-h-[260px] text-left"
-                  rows={1}
-                />
+                    Claude's compact composer (px-3.5 / pt-3.5 / pb-1).
+                    Placeholder is rendered as an animated overlay (below)
+                    instead of the native attribute — rotates through
+                    mode-aware example prompts every 2.8s when empty. */}
+                <div className="relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handleComposerPaste}
+                    aria-label="Message IRA"
+                    autoFocus
+                    className="no-focus-ring relative z-10 w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-800 min-h-[88px] max-h-[260px] text-left"
+                    rows={1}
+                  />
+                  {/* Typewriter placeholder overlay — renders typedText
+                      (driven by the state machine above). Each keystroke
+                      is a real React render — GPU-cheap, no transforms,
+                      no filters, no blur, no cross-fade muddy middle.
+                      text-left overrides the motion.div's inherited
+                      text-center so the placeholder aligns with the
+                      textarea caret. */}
+                  {input.length === 0 && (
+                    <div className="absolute top-4 left-4 right-4 h-[1.55em] pointer-events-none text-left">
+                      <span className="block text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-400/85 truncate">
+                        {typedText}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-                {/* Action row — matches the in-thread composer exactly:
-                    single + attach on the left, quiet Query/Workflow picker
-                    + dark Send disc on the right (only renders when there
-                    is input or attachments). */}
+                {/* Action row — attach on the LEFT (input affordance),
+                    mode picker + Send on the RIGHT. Putting the Query/
+                    Workflow toggle next to Send keeps the user's eye
+                    near where the action happens. */}
                 <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-                  <div className="flex items-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowDataPicker(true)}
-                      aria-label="Attach data sources or files"
-                      title="Attach data or files"
-                      className="inline-flex items-center justify-center size-8 rounded-full text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      <Plus size={18} strokeWidth={2} />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDataPicker(true)}
+                    aria-label="Attach data sources or files"
+                    title="Attach data or files"
+                    className="inline-flex items-center justify-center size-8 rounded-full text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <Plus size={18} strokeWidth={2} />
+                  </button>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={buildWorkflowMode}
-                      aria-label="Build a workflow"
-                      title={buildWorkflowMode ? 'Workflow mode (click for query)' : 'Query mode (click for workflow)'}
-                      onClick={() => setBuildWorkflowMode(v => !v)}
-                      className={`inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                        buildWorkflowMode
-                          ? 'text-brand-700 hover:bg-brand-50'
-                          : 'text-ink-500 hover:bg-brand-50 hover:text-ink-800'
-                      }`}
+                  <div className="flex items-center gap-2">
+                    {/* Mode segmented control — soft selected-chip treatment
+                        so it doesn't compete with the Send CTA. */}
+                    <div
+                      role="radiogroup"
+                      aria-label="Composer mode"
+                      className="relative inline-flex items-center rounded-full bg-paper-100/90 p-1 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.035)]"
                     >
-                      {buildWorkflowMode ? 'Workflow' : 'Query'}
-                      <ChevronDown size={14} className="opacity-70" />
-                    </button>
+                      {/* Single shared highlight — slides between positions on toggle.
+                          Width matches a single button exactly so the slide is
+                          symmetric and the cream gaps on either side stay equal. */}
+                      <motion.span
+                        aria-hidden
+                        initial={false}
+                        animate={{ x: buildWorkflowMode ? 88 : 0 }}
+                        transition={prefersReducedMotion
+                          ? { duration: 0 }
+                          : { type: 'spring', stiffness: 480, damping: 40, mass: 0.55 }
+                        }
+                        className="absolute top-1 left-1 h-[28px] w-[88px] rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.05),0_2px_6px_rgba(15,8,30,0.06)] pointer-events-none"
+                      />
+                      <motion.button
+                        type="button"
+                        role="radio"
+                        aria-checked={!buildWorkflowMode}
+                        onClick={() => setBuildWorkflowMode(false)}
+                        title="Ask Ira a one-off question"
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
+                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                          !buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
+                        }`}
+                      >
+                        Query
+                      </motion.button>
+                      <motion.button
+                        type="button"
+                        role="radio"
+                        aria-checked={buildWorkflowMode}
+                        onClick={() => setBuildWorkflowMode(true)}
+                        title="Build a re-runnable audit workflow"
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
+                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                          buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
+                        }`}
+                      >
+                        Workflow
+                      </motion.button>
+                    </div>
 
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
@@ -4287,7 +4973,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         onClick={handleSend}
                         aria-label="Send message"
                         title="Send · Enter to send, Shift+Enter for new line"
-                        className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="inline-flex items-center justify-center size-8 rounded-full bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
                         <ArrowUp size={16} strokeWidth={2.25} />
                       </button>
@@ -4295,11 +4981,75 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </div>
                 </div>
               </div>
+              </div>
 
-              {/* Disclaimer — quiet trust line: 10px, very muted, mt-1, no own bottom margin. */}
-              <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
-                Irame.ai may display inaccurate info, including about people, so double-check its responses.
-              </p>
+              {/* Row 3 — starter prompts, anchored to the top of the row
+                  so they sit just below the centered input.
+                  Mode-aware AND user-aware:
+                  • If the user has prior chats, surface the 4 most-recent
+                    titles as 'pick up where you left off' chips.
+                  • If the user is fresh (no history yet), fall back to
+                    mode-specific sample prompts so the empty state is
+                    never blank.
+                  Click fills the composer (no auto-send) so the user
+                  can edit before sending. */}
+              {(() => {
+                // 5 content-sized chips in a centered 3+2 layout, each with a
+                // contextual icon derived from its label keywords.
+                const workflowSuggestions: string[] = WORKFLOWS.slice(0, 5).map(w => w.name);
+                const queryFallback: string[] = [
+                  'Duplicate Invoice Check',
+                  'Vendor Spend Analysis',
+                  'After-Hours GL Postings',
+                  'Unbacked Approval Review',
+                  'Vendor Master Changes',
+                ];
+                const recentChats: string[] | null = CHAT_HISTORY.length > 0
+                  ? [...CHAT_HISTORY.slice(0, 5).map(c => c.title), ...queryFallback].slice(0, 5)
+                  : null;
+                const suggestions = buildWorkflowMode
+                  ? workflowSuggestions
+                  : (recentChats ?? queryFallback);
+                const ModeIcon: LucideIcon = buildWorkflowMode ? Workflow : MessageSquare;
+                return (
+                  // Match workflow-mode treatment in both modes:
+                  // content-sized chips, centered container + rows.
+                  // No w-[...] lock, no items-start (per the empty-state
+                  // chip layout feedback memory).
+                  <div className="pt-7 mx-auto flex flex-col items-center content-start gap-2.5">
+                    {[suggestions.slice(0, 3), suggestions.slice(3, 5)].map((row, rowIdx) => (
+                      <div key={rowIdx} className="flex items-center justify-center gap-2.5">
+                        {row.map((label, i) => {
+                          const globalI = rowIdx * 3 + i;
+                          return (
+                            <motion.button
+                              key={`empty-starter-${globalI}-${label}`}
+                              type="button"
+                              title={label}
+                              initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={prefersReducedMotion
+                                ? { duration: 0 }
+                                : { type: 'spring', stiffness: 520, damping: 26, mass: 0.6, delay: 0.06 + globalI * 0.05 }
+                              }
+                              onClick={() => {
+                                setInput(label);
+                                textareaRef.current?.focus();
+                                requestAnimationFrame(() => handleTextareaInput());
+                              }}
+                              className="group inline-flex items-center gap-2 h-10 px-5 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium tracking-[-0.005em] text-ink-800 shadow-[0_1px_2px_rgba(15,8,30,0.025)] hover:border-brand-300/60 hover:text-brand-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(106,18,205,0.07)] transition-all duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            >
+                              <ModeIcon size={14} strokeWidth={1.75} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-200" />
+                              <span className="whitespace-nowrap">{label}</span>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
             </motion.div>
           </div>
         </div>
@@ -4385,32 +5135,30 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               size="sm"
               iconOnly
               shape="md"
+              onClick={() => requestNewChat()}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus size={14} />
+            </Button>
+            {/* Workspace toggle — always visible. Renders in its
+                pressed/active state when the panel is open so the chat
+                header reflects "workspace is the active section." Icon
+                stays as PanelRightOpen in both states so it doesn't
+                visually duplicate the PanelRightClose inside the panel
+                header (which is the actual close affordance). */}
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              shape="md"
               pressed={showArtifacts}
               onClick={() => setShowArtifacts(!showArtifacts)}
               title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
               aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
               aria-expanded={showArtifacts}
             >
-              <motion.span
-                key={showArtifacts ? 'open' : 'closed'}
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-                className="inline-flex"
-              >
-                {showArtifacts ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-              </motion.span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              shape="md"
-              onClick={() => requestNewChat()}
-              title="New chat"
-              aria-label="New chat"
-            >
-              <Plus size={14} />
+              <PanelRightOpen size={14} />
             </Button>
           </div>
         </header>
@@ -4446,7 +5194,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 onClick={onDismissPendingDashboard}
                 aria-label="Dismiss"
               >
-                <X size={14} />
+                <Minimize2 size={14} />
               </Button>
             </div>
           </div>
@@ -4517,30 +5265,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             {(msg.richData as unknown as ClarificationData).intro}
                           </div>
                         )}
-                      </div>
-                    ) : msg.richType === 'qna-plan' ? (
-                      // Workflow-mode plan-approve gate — Approve runs the audit,
-                      // Revise drops the plan and returns control to the composer.
-                      <div className="space-y-3 w-full">
-                        {(msg.richData as { planText?: string })?.planText && (
-                          <div className="text-[14px] leading-[1.6] text-ink-700">
-                            {(msg.richData as { planText?: string }).planText}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            onClick={() => handleApprovePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
-                          >
-                            <CheckCircle size={13} /> Approve & run
-                          </button>
-                          <button
-                            onClick={() => handleRevisePlan(msg.id)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[12px] font-semibold text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
-                          >
-                            <Pencil size={12} /> Revise
-                          </button>
-                        </div>
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
                       // ~40px of breathing room directly below the loader.
@@ -4827,6 +5551,152 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           </div>
                         </div>
                       </div>
+                    ) : msg.richType === 'workflow-clarify' ? (
+                      (() => {
+                        const data = msg.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
+                        const done = data.index >= data.questions.length;
+                        // Active state: card is docked above the composer
+                        // (matches query clarification placement) — render
+                        // nothing inline. Once all answered, leave a quiet
+                        // recap so the thread has a trace.
+                        if (!done) return null;
+                        return (
+                          <div className="text-[13px] text-ink-500 leading-relaxed max-w-[66ch]">
+                            {data.phase === 'validate' ? 'Validation answers locked in.' : 'Clarifications locked in.'}
+                          </div>
+                        );
+                      })()
+                    ) : msg.richType === 'workflow-upload' ? (
+                      wfWorkflow ? (
+                        <StepUploadFiles
+                          workflow={wfWorkflow}
+                          files={wfFiles}
+                          setFiles={setWfFiles}
+                          view="list-only"
+                          onOpenUploadModal={() => setWfUploadModalOpen(true)}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-map' ? (
+                      wfWorkflow ? (
+                        <WorkflowOutputPreviewCard
+                          workflow={wfWorkflow}
+                          onConfirm={() => {
+                            // Approve & Run: push a brief running trail
+                            // then materialise the audit-result message
+                            // (KPI grid + chart + table) directly. Skips
+                            // the validate / tolerance steps — the user
+                            // already approved the preview spec.
+                            if (!wfWorkflow) return;
+                            const runningId = wfMakeId();
+                            setIsTyping(true);
+                            setMessages(m => [...m, {
+                              id: runningId,
+                              role: 'assistant',
+                              text: 'Running the workflow…',
+                              thinking: [
+                                `Aggregating EDC records across ${wfWorkflow.inputs.length} source${wfWorkflow.inputs.length === 1 ? '' : 's'}`,
+                                'Joining on payment date + concat key',
+                                'Computing variance and matching counts',
+                                'Building dashboard KPIs, charts, and tables',
+                              ],
+                              timestamp: new Date(),
+                            }]);
+                            window.setTimeout(() => {
+                              setIsTyping(false);
+                              setMessages(m => m.map(msg =>
+                                msg.id === runningId
+                                  ? {
+                                      ...msg,
+                                      text: `**${wfWorkflow.name}** finished — surfaced **8 high-confidence findings** across the reconciliation. Headline KPIs, charts, and the row-level table are below; the full plan, SQL, and sources are in the Workspace on the right.`,
+                                      thinking: undefined,
+                                      richType: 'audit-result',
+                                      richData: AUDIT_RESULT,
+                                    }
+                                  : msg,
+                              ));
+                            }, 2200);
+                          }}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-review' ? (
+                      wfWorkflow ? (
+                        <StepReviewRun
+                          workflow={wfWorkflow}
+                          running={wfRunning}
+                          result={wfResult}
+                          mappings={wfMappings}
+                          setMappings={setWfMappings}
+                          onValidate={() => {
+                            // Mirror the original journey: clicking Validate
+                            // opens a brief inline clarify (matching logic +
+                            // tolerance) BEFORE the run kicks off. The
+                            // validate-phase effect picks up the answers and
+                            // pushes the tolerance card + run.
+                            if (!wfWorkflow) return;
+                            wfPushAssistant("Before I kick off the run, I've spotted a couple of ambiguities — pick what fits below.");
+                            wfPushClarify([
+                              {
+                                id: 'matching-logic',
+                                title: 'What matching logic should I use?',
+                                options: [
+                                  'Exact field matching',
+                                  'Fuzzy match with tolerance',
+                                  'AI-powered pattern detection',
+                                  "Custom rules (I'll define)",
+                                ],
+                              },
+                              {
+                                id: 'tolerance-preset',
+                                title: 'What tolerance should I apply for amount comparisons?',
+                                options: ['Strict (±1%)', 'Moderate (±5%)', 'Relaxed (±10%)', 'Custom'],
+                              },
+                            ], 'validate', 'Step 4 · Validate Workflow');
+                          }}
+                          validateDisabled={wfRunning || !!wfResult}
+                          onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
+                        />
+                      ) : null
+                    ) : msg.richType === 'workflow-tolerance' ? (
+                      <ToleranceAdjustCard
+                        state={wfTolerance}
+                        onChange={setWfTolerance}
+                        onRun={async (next) => {
+                          if (!wfWorkflow) return;
+                          setWfTolerance(next);
+                          setWfRunning(true);
+                          const res = await wfRun(wfWorkflow, wfFiles, wfMappings);
+                          setWfRunning(false);
+                          setWfResult(res);
+                          wfPushAssistant(`Finished. The **${res.title}** is ready — ${res.rows.length} rows, ${res.stats.find(s => s.label === 'Records Scanned')?.value ?? '—'} records scanned.`);
+                          wfPushCard('workflow-view-preview');
+                        }}
+                        onReset={() => setWfTolerance({ mode: 'percentage', percentage: 5, absolute: 100, enabled: true })}
+                        running={wfRunning}
+                        locked={!!wfResult}
+                      />
+                    ) : msg.richType === 'workflow-view-preview' ? (
+                      <ViewPreviewCard
+                        revealed={wfViewPreviewRevealedRef.current === msg.id}
+                        onClick={() => {
+                          wfViewPreviewRevealedRef.current = msg.id;
+                          // Force a re-render so revealed=true sticks; flip the
+                          // id ref via setMessages no-op (cheap nudge).
+                          setMessages(prev => [...prev]);
+                          wfPushCard('workflow-output');
+                        }}
+                      />
+                    ) : msg.richType === 'workflow-output' ? (
+                      wfWorkflow ? (
+                        <StepOutputView
+                          workflow={wfWorkflow}
+                          running={wfRunning}
+                          result={wfResult}
+                          onSave={() => setWfSaveModalOpen(true)}
+                          saved={wfSaved}
+                        />
+                      ) : null
                     ) : msg.richType === 'error' ? (
                       // Terminal error state. Single icon + label (no side-stripe) per
                       // DESIGN.md alert-card scoping; the risk token names the kind,
@@ -5311,6 +6181,25 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               />
             </div>
           )}
+          {openWorkflowClarify && openWorkflowClarifyData && (
+            // Workflow clarify — same docked treatment as the query
+            // clarification above. Mirrors UI + placement so the user
+            // doesn't see two different patterns in the same surface.
+            <div className="mb-2">
+              <ClarificationBlock
+                data={openWorkflowClarifyData}
+                onAnswer={(_qi, ans) => wfAnswerClarify(openWorkflowClarify.id, ans)}
+                onSubmit={() => { /* advancement is driven by wfAnswerClarify; no submit step */ }}
+                onSkipAll={() => {
+                  // Skip every remaining question by passing null until exhausted.
+                  const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; index: number };
+                  const remaining = (d.questions?.length ?? 0) - (d.index ?? 0);
+                  for (let i = 0; i < remaining; i++) wfAnswerClarify(openWorkflowClarify.id, null);
+                }}
+                onSkipCurrent={() => wfAnswerClarify(openWorkflowClarify.id, null)}
+              />
+            </div>
+          )}
           {(
             <>
               {/* Engagement context banner — shown when the workflow builder was
@@ -5351,6 +6240,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </motion.div>
                 )}
               </AnimatePresence>
+
               <div
                 className="ai-border relative"
                 onDragEnter={handleDragEnter}
@@ -5469,6 +6359,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           (empty state) stays toggleable. */}
                       {(() => {
                         const modeLocked = true;
+                        const isWorkflow = buildWorkflowMode;
                         return (
                           <button
                             type="button"
@@ -5482,10 +6373,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 : 'Query mode — locked. Use Save as workflow to convert this chat.'
                             }
                             onClick={() => { /* locked; no-op */ }}
-                            className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] font-medium text-ink-400 cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[13px] cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              isWorkflow
+                                ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
+                                : 'bg-paper-100 text-ink-500 font-medium'
+                            }`}
                           >
-                            <Lock size={11} strokeWidth={2.25} className="shrink-0" />
-                            {buildWorkflowMode ? 'Workflow' : 'Query'}
+                            <Lock size={11} strokeWidth={2.5} className="shrink-0" />
+                            {isWorkflow ? 'Workflow' : 'Query'}
                           </button>
                         );
                       })()}
@@ -5496,7 +6391,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           onClick={stopGenerating}
                           aria-label="Stop generating"
                           title="Stop generating (Esc)"
-                          className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-canvas-elevated hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-brand-700 text-white hover:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           <Square size={11} fill="currentColor" />
                         </button>
@@ -5860,6 +6755,43 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         onClose={() => setShowDataPicker(false)}
         onConfirm={handleDataPickerConfirm}
       />
+
+      {/* Workflow build — upload modal (auto-opens once at Step 2 / Upload) */}
+      <UploadDataModal
+        open={wfUploadModalOpen}
+        onClose={() => {
+          setWfUploadModalOpen(false);
+          // If all required inputs are now filled, advance to map step.
+          if (wfWorkflow) {
+            const required = wfWorkflow.inputs.filter(i => i.required);
+            const allFilled = required.every(i => (wfFiles[i.id] ?? []).length > 0);
+            if (allFilled) {
+              wfPushAssistant('Files verified — moving to data mapping.');
+              wfPushCard('workflow-map');
+            }
+          }
+        }}
+        workflow={wfWorkflow ?? null}
+        files={wfFiles}
+        setFiles={setWfFiles}
+        onAttachDraft={({ files: pickedFiles }) => {
+          setWfDraftAttachments(prev => [...prev, ...pickedFiles]);
+        }}
+      />
+
+      {/* Workflow build — save modal (terminal step) */}
+      {wfWorkflow && (
+        <SaveWorkflowModal
+          open={wfSaveModalOpen}
+          onClose={() => setWfSaveModalOpen(false)}
+          workflow={wfWorkflow}
+          onConfirm={(payload) => {
+            setWfSaveModalOpen(false);
+            setWfSaved(true);
+            wfPushAssistant(`**${payload.name}** saved to **${payload.businessProcess} · ${payload.racm}**.`);
+          }}
+        />
+      )}
 
       {/* Add to Dashboard modal */}
       <AddToDashboardModal

@@ -455,11 +455,12 @@ export function useAppState() {
     setState(prev => ({ ...prev, exceptionRole: role }));
   }, []);
 
-  // Hand off a prompt typed in chat (with the "Build a workflow" toggle on)
-  // to the AI Concierge workflow builder. Sets the seed and routes to the
-  // builder view in a single transition; the journey consumes the seed on
-  // mount, generates the workflow, and lands the user on the clarification
-  // screen — skipping the prompt page entirely.
+  // Hand off a prompt with the "Build a workflow" intent. Routes to the
+  // dedicated WorkflowBuilderJourney view (Stepper + StepWritePrompt +
+  // AIAssistantPanel + ClarificationPanel etc.) and seeds the initial
+  // prompt so the journey can skip Step 1 and land on clarification when
+  // a non-empty prompt is provided. Empty string opens the journey at
+  // Step 1.
   const launchWorkflowBuilderWithPrompt = useCallback((prompt: string) => {
     setState(prev => ({
       ...prev,
