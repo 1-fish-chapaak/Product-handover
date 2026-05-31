@@ -135,6 +135,10 @@ function SmartLearnComingSoon() {
 export default function KnowledgeHubView() {
   const dataSourcesRef = useRef<DataSourcesViewHandle>(null);
   const [tab, setTab] = useState<TabId>('data');
+  // When a source detail is open it takes over the page from the top, so the
+  // title / subhead / tabs header is hidden (the detail's own breadcrumb leads
+  // back).
+  const [detailOpen, setDetailOpen] = useState(false);
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // stays in the future tense so the header never promises a feature that
   // isn't shipped yet (the tab is Coming Soon).
@@ -163,6 +167,7 @@ export default function KnowledgeHubView() {
   // sits on the canvas below. Side padding (px-[124px]) matches Reports.
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
+      {!detailOpen && (
       <div className="px-[124px] pt-8 shrink-0">
         {/* Header + tabs share a single full-bleed white strip — bg-canvas-
             elevated extends past the outer px-[124px] / pt-8 insets via
@@ -215,10 +220,13 @@ export default function KnowledgeHubView() {
           </motion.div>
         </div>
       </div>
+      )}
 
       {/* Content area — fills the remaining viewport height. The data tab's
-          inner view scrolls within (list) or fills (folder detail split). */}
-      <div className="px-[124px] pt-4 pb-8 flex-1 min-h-0 flex flex-col overflow-hidden">
+          inner view scrolls within (list) or fills (folder detail split).
+          When a detail is open the header is hidden, so it starts from the top
+          with the page's standard top inset. */}
+      <div className={`px-[124px] ${detailOpen ? 'pt-8' : 'pt-4'} pb-8 flex-1 min-h-0 flex flex-col overflow-hidden`}>
         <AnimatePresence mode="wait">
           {tab === 'data' ? (
             <motion.div
@@ -229,7 +237,7 @@ export default function KnowledgeHubView() {
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
               className="flex-1 min-h-0 overflow-y-auto"
             >
-              <DataSourcesView ref={dataSourcesRef} />
+              <DataSourcesView ref={dataSourcesRef} onDetailChange={setDetailOpen} />
             </motion.div>
           ) : (
             <motion.div

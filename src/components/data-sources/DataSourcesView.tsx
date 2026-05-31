@@ -806,9 +806,12 @@ interface DataSourcesViewProps {
   /** Demo-state override. 'empty' forces the welcome card, 'loading' renders
    *  the skeleton, 'loaded' (default) uses the real source list. */
   displayMode?: DisplayMode;
+  /** Fired when a source detail opens/closes so the parent can hide its header
+   *  and let the detail take over the page from the top. */
+  onDetailChange?: (open: boolean) => void;
 }
 
-const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded' }, ref) {
+const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded', onDetailChange }, ref) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const [tab, setTab] = useState<TabId>('all');
@@ -816,6 +819,8 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
   const [dateOpen, setDateOpen] = useState(false);
   const [activeSource, setActiveSource] = useState<DataSource | null>(null);
+  // Let the parent hide its header so an open detail takes over from the top.
+  useEffect(() => { onDetailChange?.(activeSource !== null); }, [activeSource, onDetailChange]);
   // Side-panel a11y refs: container we focus on open, and the element to
   // restore focus to on close (typically the source row that was clicked).
   const returnFocusRef = useRef<HTMLElement | null>(null);
