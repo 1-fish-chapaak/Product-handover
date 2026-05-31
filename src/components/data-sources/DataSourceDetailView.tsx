@@ -433,10 +433,40 @@ function FileSourceBody({
   // Selection follows the visible set: keep the chosen file if it's still
   // visible, otherwise fall back to the first one.
   const selected = visible.find(f => f.id === selectedId) ?? visible[0] ?? null;
+  const railRef = useRef<HTMLUListElement>(null);
 
   // Folder sources fill the available height (toolbar fixed, split fills);
   // single-file sources keep their natural inline layout.
   const fill = isFolder && (files.length > 0 || uploadingFiles.length > 0);
+
+  // Keyboard navigation for the split: ↑/↓ moves the selection, Enter opens
+  // full screen. Skipped while typing in a field or while full screen is open
+  // (that has its own ←/→/Esc handling).
+  useEffect(() => {
+    if (!fill) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (fullscreen) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
+      const idx = visible.findIndex(f => f.id === selected?.id);
+      if (e.key === 'Enter') { if (selected) { e.preventDefault(); setFullscreen(true); } return; }
+      e.preventDefault();
+      const next = e.key === 'ArrowDown' ? visible[Math.min(idx + 1, visible.length - 1)] : visible[Math.max(idx - 1, 0)];
+      if (next) setSelectedId(next.id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fill, fullscreen, visible, selected?.id]);
+
+  // Keep the selected rail item in view when moving by keyboard.
+  useEffect(() => {
+    if (!fill || !selected) return;
+    const el = railRef.current?.querySelector(`[data-file-id="${CSS.escape(selected.id)}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [fill, selected?.id]);
+
   return (
     <div className={fill ? 'flex flex-col gap-4 h-full min-h-0' : 'space-y-4'}>
       {/* Toolbar — search + sort + upload. Single-file sources skip the
@@ -548,8 +578,15 @@ function FileSourceBody({
              list stays put while you switch files, and the preview gets a
              large, fixed area instead of being crammed between rows. */
           <div className="flex flex-1 min-h-0">
-            <div className="w-[288px] shrink-0 border-r border-canvas-border flex flex-col overflow-hidden">
-              <ul className="flex-1 overflow-y-auto divide-y divide-canvas-border">
+            <div className="w-[272px] shrink-0 border-r border-canvas-border flex flex-col overflow-hidden">
+              {/* Rail header — file count + use ↑/↓ hint. */}
+              <div className="shrink-0 flex items-center justify-between gap-2 px-3.5 h-9 border-b border-canvas-border bg-canvas">
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 tabular-nums">
+                  {visible.length} {visible.length === 1 ? 'file' : 'files'}
+                </span>
+                <span className="text-[0.625rem] text-ink-400">↑↓ to move</span>
+              </div>
+              <ul ref={railRef} className="flex-1 overflow-y-auto py-1">
                 <AnimatePresence initial={false}>
                   {uploadingFiles.map(uf => (
                     <UploadingRow key={uf.id} file={uf} />
@@ -1091,26 +1128,33 @@ function fileCountLabel(file: DatasetFile): string | null {
 
 // ─── Split view: left-rail list item ─────────────────────────────────────────
 function FileListItem({ file, selected, onSelect }: { file: DatasetFile; selected: boolean; onSelect: () => void }) {
-  const status = STATUS_META[file.status];
-  const StatusIcon = status.icon;
   const count = fileCountLabel(file);
+  const isFailed = file.status === 'failed';
+  const isProcessing = file.status === 'processing';
   return (
     <button
       type="button"
+      data-file-id={file.id}
       onClick={onSelect}
       aria-pressed={selected}
-      className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 transition-colors cursor-pointer ${selected ? 'bg-brand-50' : 'hover:bg-canvas'}`}
+      title={file.name}
+      className={`group/item relative w-full text-left flex items-center gap-2 pl-3.5 pr-3 h-10 transition-colors cursor-pointer ${selected ? 'bg-brand-50' : 'hover:bg-canvas'}`}
     >
-      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${selected ? 'bg-brand-100' : 'bg-brand-50'}`}>
-        <FileText size={15} className="text-brand-700" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className={`text-[0.8125rem] truncate ${selected ? 'font-semibold text-brand-700' : 'font-medium text-ink-800'}`} title={file.name}>{file.name}</div>
-        <div className="text-[0.6875rem] text-ink-400 tabular-nums truncate">
-          {formatBytes(file.sizeBytes)}{count && <> · {count}</>}
-        </div>
-      </div>
-      <StatusIcon size={13} className={`shrink-0 ${file.status === 'failed' ? 'text-risk' : file.status === 'processing' ? 'text-ink-400 animate-spin motion-reduce:animate-none' : 'text-compliant'}`} />
+      {selected && <span aria-hidden className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-brand-600" />}
+      <FileText size={14} className={`shrink-0 ${selected ? 'text-brand-700' : 'text-ink-400'}`} />
+      <span className={`flex-1 min-w-0 truncate text-[0.8125rem] ${selected ? 'font-semibold text-brand-700' : 'text-ink-800'}`}>{file.name}</span>
+      {/* Size/rows are identical across most files, so only surface them on the
+          active or hovered row to keep the list quiet. */}
+      <span className={`shrink-0 text-[0.6875rem] text-ink-400 tabular-nums ${selected ? 'inline' : 'hidden group-hover/item:inline'}`}>
+        {formatBytes(file.sizeBytes)}{count && ` · ${count}`}
+      </span>
+      {isFailed ? (
+        <AlertCircle size={12} className="shrink-0 text-risk" aria-label="Failed" />
+      ) : isProcessing ? (
+        <Loader2 size={12} className="shrink-0 text-ink-400 animate-spin motion-reduce:animate-none" aria-label="Processing" />
+      ) : (
+        <span aria-hidden className="shrink-0 w-1.5 h-1.5 rounded-full bg-compliant" title="Processed" />
+      )}
     </button>
   );
 }
@@ -1120,27 +1164,27 @@ function PreviewPane({ file, onFullscreen }: { file: DatasetFile; onFullscreen: 
   const { addToast } = useToast();
   const status = STATUS_META[file.status];
   const StatusIcon = status.icon;
-  const count = fileCountLabel(file);
   const isFailed = file.status === 'failed';
+  // Slim, single-line header — name + status + actions. Size/rows live in the
+  // rail and the table caption, so they aren't repeated here; just the upload
+  // date, which isn't shown elsewhere.
   return (
     <>
-      <div className="flex items-center gap-3 px-4 h-14 border-b border-canvas-border bg-canvas shrink-0">
-        <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0"><FileText size={15} className="text-brand-700" /></div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[0.8125rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
-            <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
-              <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
-            </span>
-          </div>
-          <div className="text-[0.6875rem] text-ink-400 tabular-nums truncate">
-            {formatBytes(file.sizeBytes)}{count && <> · {count}</>} · uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </div>
-        </div>
+      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-canvas-border bg-canvas shrink-0">
+        <FileText size={15} className="text-brand-700 shrink-0" />
+        <span className="text-[0.8125rem] font-semibold text-ink-900 truncate min-w-0" title={file.name}>{file.name}</span>
+        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
+          <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
+        </span>
+        <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums hidden sm:inline">
+          uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </span>
+        <div className="ml-auto flex items-center gap-1 shrink-0">
         {!isFailed && (
           <button onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label={`Download ${file.name}`} title="Download"><Download size={15} /></button>
         )}
         <button onClick={onFullscreen} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label="Full screen" title="Full screen"><Maximize2 size={15} /></button>
+        </div>
       </div>
       {isFailed ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">

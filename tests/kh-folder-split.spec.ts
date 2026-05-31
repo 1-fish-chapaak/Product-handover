@@ -28,6 +28,17 @@ test('S1: split shows the file list + a preview, and selecting a file updates th
   await expect(page.getByText(/Showing first/)).toBeVisible({ timeout: 8000 });
 });
 
+test('S3: keyboard ↑/↓ moves the selection and Enter opens full screen', async ({ page }) => {
+  await openFolder(page);
+  const sel = () => page.locator('button[aria-pressed="true"][data-file-id]');
+  const first = await sel().getAttribute('data-file-id');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(200);
+  await expect(sel()).not.toHaveAttribute('data-file-id', first ?? '');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: /preview/ })).toBeVisible();
+});
+
 test('S2: full-screen opens with prev/next nav and Exit closes it', async ({ page }) => {
   await openFolder(page);
   await page.getByRole('button', { name: 'Full screen' }).first().click();
