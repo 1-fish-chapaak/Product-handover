@@ -1434,7 +1434,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             placeholder={`Search ${tab === 'all' ? 'all sources' : TABS.find(t => t.id === tab)!.label.toLowerCase()}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-9 h-[38px] border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 transition-colors"
+            className="no-focus-ring w-full pl-9 pr-9 h-[38px] border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 transition-colors"
           />
           {search && (
             <button

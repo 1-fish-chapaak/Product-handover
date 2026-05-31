@@ -438,7 +438,7 @@ function FileSourceBody({
               placeholder="Search files…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors"
+              className="no-focus-ring w-full pl-9 pr-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors"
             />
           </div>
           <div className="relative">
