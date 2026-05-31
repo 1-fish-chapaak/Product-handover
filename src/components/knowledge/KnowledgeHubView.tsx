@@ -163,13 +163,13 @@ export default function KnowledgeHubView() {
   // sits on the canvas below. Side padding (px-[124px]) matches Reports.
   return (
     <div className="h-full overflow-y-auto bg-canvas">
-      <div className="px-[124px] py-8">
+      <div className="px-[124px] py-6">
         {/* Header + tabs share a single full-bleed white strip — bg-canvas-
-            elevated extends past the outer px-[124px] / py-8 insets via
+            elevated extends past the outer px-[124px] / py-6 insets via
             negative margins. Border-b separates strip from content.
             FloatingLines canvas paints across the strip behind the type so
             the header reads as a brand surface, not a flat panel. */}
-        <div className="bg-canvas-elevated -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-canvas-border relative overflow-hidden">
+        <div className="bg-canvas-elevated -mx-[124px] px-[124px] -mt-6 pt-6 mb-5 border-b border-canvas-border relative overflow-hidden">
           {/* Ambient FloatingLines — confined to top and bottom waves only.
               No middle wave (where the H1 sits). Low opacity keeps the lines
               as texture, never a competing visual element. Content sits in
@@ -189,15 +189,15 @@ export default function KnowledgeHubView() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-6"
+            className="mb-4"
           >
             {/* Header — title · subhead. Add source CTA lives on the filter
                 row inside DataSourcesView (matches reference). */}
             <div className="min-w-0">
-              <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+              <h1 className="font-display text-[1.75rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
                 Knowledge Hub
               </h1>
-              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+              <p className="mt-1 text-[0.875rem] text-ink-500 leading-relaxed max-w-2xl">
                 {subhead}
               </p>
             </div>
