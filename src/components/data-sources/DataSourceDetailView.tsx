@@ -643,7 +643,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
 
   return (
     <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-paper-50/60">
+      <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-canvas">
         <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 truncate">
           <Table2 size={13} className="text-compliant shrink-0" />
           {activeName}
@@ -658,11 +658,11 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
         <table className="border-collapse text-[0.75rem] w-full">
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="sticky left-0 z-20 w-10 px-2 py-2.5 bg-paper-50 border-b border-canvas-border" aria-hidden />
+              <th className="sticky left-0 z-20 w-10 px-2 py-2.5 bg-canvas border-b border-canvas-border" aria-hidden />
               {header.map((h, i) => (
                 <th
                   key={i}
-                  className={`px-3.5 py-2.5 min-w-[7.5rem] bg-paper-50 border-b border-canvas-border font-semibold text-ink-700 whitespace-nowrap ${colNumeric[i] ? 'text-right' : 'text-left'}`}
+                  className={`px-3.5 py-2.5 min-w-[7.5rem] bg-canvas border-b border-canvas-border font-semibold text-ink-700 whitespace-nowrap ${colNumeric[i] ? 'text-right' : 'text-left'}`}
                 >
                   {h}
                 </th>
@@ -695,7 +695,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
 
       {/* Sheet tabs — only when the workbook has more than one sheet. */}
       {multi && (
-        <div className="flex items-center gap-1 px-2 py-1.5 border-t border-canvas-border bg-paper-50/40 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-1 px-2 py-1.5 border-t border-canvas-border bg-canvas overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sheetNames.map((name, i) => (
             <button
               key={i}
@@ -1104,7 +1104,7 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
 
   return (
     <li className="group">
-      <div className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-paper-50">
+      <div className={`flex items-center gap-3 px-6 py-3 transition-colors ${expanded ? 'bg-canvas' : 'hover:bg-canvas'}`}>
         <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
           <FileText size={18} className="text-brand-700" />
         </div>
