@@ -162,14 +162,14 @@ export default function KnowledgeHubView() {
   // extends full-bleed via negative margins, border-b separator, content
   // sits on the canvas below. Side padding (px-[124px]) matches Reports.
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
-      <div className="px-[124px] py-8">
+    <div className="h-full flex flex-col overflow-hidden bg-canvas">
+      <div className="px-[124px] pt-8 shrink-0">
         {/* Header + tabs share a single full-bleed white strip — bg-canvas-
-            elevated extends past the outer px-[124px] / py-8 insets via
+            elevated extends past the outer px-[124px] / pt-8 insets via
             negative margins. Border-b separates strip from content.
             FloatingLines canvas paints across the strip behind the type so
             the header reads as a brand surface, not a flat panel. */}
-        <div className="bg-canvas-elevated -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-canvas-border relative overflow-hidden">
+        <div className="bg-canvas-elevated -mx-[124px] px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
           {/* Ambient FloatingLines — confined to top and bottom waves only.
               No middle wave (where the H1 sits). Low opacity keeps the lines
               as texture, never a competing visual element. Content sits in
@@ -214,34 +214,36 @@ export default function KnowledgeHubView() {
             <UnderlinedTabs active={tab} onChange={setTab} />
           </motion.div>
         </div>
+      </div>
 
-        {/* Content area — sits on bg-canvas with xl gap from the strip. */}
-        <div>
-          <AnimatePresence mode="wait">
-            {tab === 'data' ? (
-              <motion.div
-                key="data"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              >
-                <DataSourcesView ref={dataSourcesRef} />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="learn"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                className="flex items-center justify-center min-h-[60vh]"
-              >
-                <SmartLearnComingSoon />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+      {/* Content area — fills the remaining viewport height. The data tab's
+          inner view scrolls within (list) or fills (folder detail split). */}
+      <div className="px-[124px] pt-6 pb-8 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <AnimatePresence mode="wait">
+          {tab === 'data' ? (
+            <motion.div
+              key="data"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+              className="flex-1 min-h-0 overflow-y-auto"
+            >
+              <DataSourcesView ref={dataSourcesRef} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="learn"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+              className="flex-1 min-h-0 flex items-center justify-center"
+            >
+              <SmartLearnComingSoon />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -288,10 +288,10 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -12 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="space-y-5"
+      className="h-full flex flex-col gap-5 min-h-0"
     >
       {/* Sub-breadcrumb + back */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={onBack}
           className="flex items-center gap-1 px-2 py-1 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
@@ -304,7 +304,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       </div>
 
       {/* Source header — icon + (rename-capable) name + meta + actions */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap shrink-0">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <div className={`w-12 h-12 rounded-lg ${iconTileClass} flex items-center justify-center shrink-0`}>
             <SourceIcon size={22} className={iconColorClass} />
@@ -371,30 +371,32 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
         </div>
       </div>
 
-      {/* ── Body branches by source type ── */}
-      {isFileSource ? (
-        <FileSourceBody
-          files={allFiles}
-          visible={visible}
-          uploadingFiles={uploadingFiles}
-          isFolder={source.isFolder === true}
-          search={search}
-          setSearch={setSearch}
-          sortKey={sortKey}
-          setSortKey={setSortKey}
-          sortOpen={sortOpen}
-          setSortOpen={setSortOpen}
-          expandedFileId={expandedFileId}
-          setExpandedFileId={setExpandedFileId}
-          onUpload={handleFiles}
-          onRenameFile={renameFile}
-        />
-      ) : (
-        <IntegratedSourceBody
-          config={integrationConfig}
-          sourceName={source.name}
-        />
-      )}
+      {/* ── Body branches by source type ── (fills remaining height) */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {isFileSource ? (
+          <FileSourceBody
+            files={allFiles}
+            visible={visible}
+            uploadingFiles={uploadingFiles}
+            isFolder={source.isFolder === true}
+            search={search}
+            setSearch={setSearch}
+            sortKey={sortKey}
+            setSortKey={setSortKey}
+            sortOpen={sortOpen}
+            setSortOpen={setSortOpen}
+            expandedFileId={expandedFileId}
+            setExpandedFileId={setExpandedFileId}
+            onUpload={handleFiles}
+            onRenameFile={renameFile}
+          />
+        ) : (
+          <IntegratedSourceBody
+            config={integrationConfig}
+            sourceName={source.name}
+          />
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -432,12 +434,15 @@ function FileSourceBody({
   // visible, otherwise fall back to the first one.
   const selected = visible.find(f => f.id === selectedId) ?? visible[0] ?? null;
 
+  // Folder sources fill the available height (toolbar fixed, split fills);
+  // single-file sources keep their natural inline layout.
+  const fill = isFolder && (files.length > 0 || uploadingFiles.length > 0);
   return (
-    <div className="space-y-4">
+    <div className={fill ? 'flex flex-col gap-4 h-full min-h-0' : 'space-y-4'}>
       {/* Toolbar — search + sort + upload. Single-file sources skip the
           toolbar entirely; the lone file row says everything. */}
       {isFolder && (files.length > 0 || uploadingFiles.length > 0) && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             <input
@@ -508,7 +513,7 @@ function FileSourceBody({
           setIsDragging(false);
           onUpload(e.dataTransfer.files);
         }}
-        className={`relative rounded-xl border ${isDragging ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated'} transition-colors overflow-hidden`}
+        className={`relative rounded-xl border ${isDragging ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated'} transition-colors overflow-hidden ${fill ? 'flex-1 min-h-0 flex flex-col' : ''}`}
       >
         {isDragging && (
           <div
@@ -542,7 +547,7 @@ function FileSourceBody({
           /* Folder → split: file list rail (left) + preview pane (right). The
              list stays put while you switch files, and the preview gets a
              large, fixed area instead of being crammed between rows. */
-          <div className="flex h-[clamp(420px,62vh,680px)]">
+          <div className="flex flex-1 min-h-0">
             <div className="w-[288px] shrink-0 border-r border-canvas-border flex flex-col overflow-hidden">
               <ul className="flex-1 overflow-y-auto divide-y divide-canvas-border">
                 <AnimatePresence initial={false}>
