@@ -218,7 +218,7 @@ export default function KnowledgeHubView() {
 
       {/* Content area — fills the remaining viewport height. The data tab's
           inner view scrolls within (list) or fills (folder detail split). */}
-      <div className="px-[124px] pt-6 pb-8 flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="px-[124px] pt-4 pb-8 flex-1 min-h-0 flex flex-col overflow-hidden">
         <AnimatePresence mode="wait">
           {tab === 'data' ? (
             <motion.div
