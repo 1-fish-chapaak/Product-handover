@@ -361,11 +361,14 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
               )}
             </div>
             <p className="text-[0.75rem] text-ink-500 mt-1 tabular-nums">
-              {source.subtype}
-              {isFileSource && allFiles.length > 1 && (
-                <> · {allFiles.length} files · {formatBytes(totalSize)} total</>
-              )}
-              {!isFileSource && integrationConfig && <> · {integrationConfig.provider}</>}
+              {source.isFolder
+                // Folders: one authoritative count + total size (the stored
+                // subtype already embeds these, so we don't append them again).
+                ? `Folder · ${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'} · ${formatBytes(totalSize)}`
+                : isFileSource
+                  // Single file: its own format · size (e.g. "PDF · 4.2 KB").
+                  ? source.subtype
+                  : <>{source.subtype}{integrationConfig && <> · {integrationConfig.provider}</>}</>}
             </p>
           </div>
         </div>
