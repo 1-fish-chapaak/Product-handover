@@ -478,12 +478,12 @@ function FileSourceBody({
               className="hidden"
               onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
             />
-            {/* Matches the search + sort metrics (h-[38px], rounded-lg,
-                text-[0.8125rem]) so the toolbar reads as one set; brand tint
-                marks it as the action. */}
+            {/* Platform primary-CTA treatment (solid brand-600 / white, like
+                the main KH "Add source"), at the toolbar's h-[38px]/rounded-lg
+                metrics so it stays dimensionally consistent with search + sort. */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3.5 h-[38px] rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[0.8125rem] font-semibold hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 h-[38px] rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />
               Add files
@@ -523,11 +523,11 @@ function FileSourceBody({
             <p className="text-[0.75rem] text-ink-500 mt-1">Drop files here or click upload to get started.</p>
             <div className="mt-4">
               <Button
-                variant={isFolder ? 'outline' : 'primary'}
-                leftIcon={<Upload size={13} />}
+                variant="primary"
+                leftIcon={<Plus size={14} />}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {isFolder ? 'Add files to this folder' : 'Upload files'}
+                {isFolder ? 'Add files' : 'Upload files'}
               </Button>
             </div>
           </div>
