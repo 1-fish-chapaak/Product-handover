@@ -432,19 +432,19 @@ function FileSourceBody({
       {isFolder && (files.length > 0 || uploadingFiles.length > 0) && (
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Search files…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 h-9 rounded-md border border-canvas-border bg-paper-50 text-[0.75rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
+              className="w-full pl-9 pr-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors"
             />
           </div>
           <div className="relative">
             <button
               onClick={() => setSortOpen(!sortOpen)}
-              className="flex items-center gap-1.5 px-3 h-9 rounded-md border border-canvas-border bg-paper-50 text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium text-ink-700 hover:border-brand-300 transition-colors cursor-pointer"
             >
               {sortKey === 'name' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
               {sortKey === 'name' ? 'Name' : sortKey === 'size' ? 'Size' : 'Uploaded'}
@@ -478,13 +478,16 @@ function FileSourceBody({
               className="hidden"
               onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
             />
-            <Button
-              variant={isFolder ? 'secondary' : 'primary'}
-              leftIcon={<Plus size={14} />}
+            {/* Matches the search + sort metrics (h-[38px], rounded-lg,
+                text-[0.8125rem]) so the toolbar reads as one set; brand tint
+                marks it as the action. */}
+            <button
               onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-3.5 h-[38px] rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[0.8125rem] font-semibold hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer"
             >
-              {isFolder ? 'Add files' : 'Upload files'}
-            </Button>
+              <Plus size={14} />
+              Add files
+            </button>
           </div>
         </div>
       )}
