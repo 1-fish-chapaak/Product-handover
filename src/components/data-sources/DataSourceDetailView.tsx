@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Search, ChevronDown, ArrowDown, ArrowUp,
   FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
   CheckCircle, Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
-  Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2,
+  Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
@@ -424,6 +424,13 @@ function FileSourceBody({
 }: FileSourceBodyProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Split view (folders): which file is shown in the right preview pane, and
+  // whether that preview is blown up to full screen.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  // Selection follows the visible set: keep the chosen file if it's still
+  // visible, otherwise fall back to the first one.
+  const selected = visible.find(f => f.id === selectedId) ?? visible[0] ?? null;
 
   return (
     <div className="space-y-4">
@@ -531,36 +538,79 @@ function FileSourceBody({
               </Button>
             </div>
           </div>
+        ) : isFolder ? (
+          /* Folder → split: file list rail (left) + preview pane (right). The
+             list stays put while you switch files, and the preview gets a
+             large, fixed area instead of being crammed between rows. */
+          <div className="flex h-[clamp(420px,62vh,680px)]">
+            <div className="w-[288px] shrink-0 border-r border-canvas-border flex flex-col overflow-hidden">
+              <ul className="flex-1 overflow-y-auto divide-y divide-canvas-border">
+                <AnimatePresence initial={false}>
+                  {uploadingFiles.map(uf => (
+                    <UploadingRow key={uf.id} file={uf} />
+                  ))}
+                </AnimatePresence>
+                {visible.length === 0 && uploadingFiles.length === 0 ? (
+                  <li className="text-center py-12 px-4">
+                    <Search size={20} className="mx-auto text-ink-400 mb-2" />
+                    <p className="text-[0.75rem] text-ink-500">No files match "{search}".</p>
+                  </li>
+                ) : (
+                  visible.map(f => (
+                    <li key={f.id}>
+                      <FileListItem
+                        file={f}
+                        selected={selected?.id === f.id}
+                        onSelect={() => setSelectedId(f.id)}
+                      />
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-canvas-elevated">
+              {selected ? (
+                <PreviewPane file={selected} onFullscreen={() => setFullscreen(true)} />
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-[0.8125rem] text-ink-400">
+                  Select a file to preview
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
+          /* Single-file source — one always-open inline preview, no list. */
           <ul className="divide-y divide-canvas-border">
-            {/* Uploading rows pinned at top */}
             <AnimatePresence initial={false}>
               {uploadingFiles.map(uf => (
                 <UploadingRow key={uf.id} file={uf} />
               ))}
             </AnimatePresence>
-
-            {/* Filtered + sorted file rows */}
-            {visible.length === 0 && uploadingFiles.length === 0 ? (
-              <li className="text-center py-12 px-6">
-                <Search size={22} className="mx-auto text-ink-400 mb-2" />
-                <p className="text-[0.75rem] text-ink-500">No files match "{search}".</p>
-              </li>
-            ) : (
-              visible.map(f => (
-                <FileRow
-                  key={f.id}
-                  file={f}
-                  expanded={expandedFileId === f.id}
-                  isSingle={!isFolder && files.length === 1}
-                  onToggle={() => setExpandedFileId(expandedFileId === f.id ? null : f.id)}
-                  onRename={onRenameFile}
-                />
-              ))
-            )}
+            {visible.map(f => (
+              <FileRow
+                key={f.id}
+                file={f}
+                expanded={expandedFileId === f.id}
+                isSingle={files.length === 1}
+                onToggle={() => setExpandedFileId(expandedFileId === f.id ? null : f.id)}
+                onRename={onRenameFile}
+              />
+            ))}
           </ul>
         )}
       </div>
+
+      {/* Full-screen preview overlay (folder split). */}
+      <AnimatePresence>
+        {fullscreen && selected && (
+          <FullscreenPreview
+            file={selected}
+            files={visible}
+            onNavigate={(id) => setSelectedId(id)}
+            onClose={() => setFullscreen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -622,7 +672,7 @@ function looksNumeric(v: string): boolean {
 // Presentational spreadsheet — sheet bar + row-number gutter + sticky header +
 // numeric-aware alignment. Shared by the live (parsed bytes) and sample
 // (synthesised, for files with no real bytes) previews.
-function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet }: {
+function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet, maxHeightClass = 'max-h-[360px]' }: {
   header: string[];
   body: string[][];
   totalRows: number;
@@ -631,6 +681,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
   sheetNames: string[];
   activeSheet?: number;
   onSelectSheet?: (i: number) => void;
+  maxHeightClass?: string;
 }) {
   const multi = sheetNames.length > 1;
   const activeName = sheetNames[activeSheet] ?? sheetNames[0] ?? 'Sheet1';
@@ -654,7 +705,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
         </span>
       </div>
 
-      <div className="overflow-auto max-h-[360px]">
+      <div className={`overflow-auto ${maxHeightClass}`}>
         <table className="border-collapse text-[0.75rem] w-full">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -737,7 +788,7 @@ function extractSheet(wb: XLSX.WorkBook, i: number): { rows: string[][]; total: 
   return { rows, total: Math.max(0, all.length - 1), cols };
 }
 
-function SpreadsheetPreview({ url, totalRows }: { url: string; totalRows?: number }) {
+function SpreadsheetPreview({ url, totalRows, maxHeightClass }: { url: string; totalRows?: number; maxHeightClass?: string }) {
   const wbRef = useRef<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [active, setActive] = useState(0);
@@ -796,6 +847,7 @@ function SpreadsheetPreview({ url, totalRows }: { url: string; totalRows?: numbe
       sheetNames={sheetNames}
       activeSheet={active}
       onSelectSheet={selectSheet}
+      maxHeightClass={maxHeightClass}
       live
     />
   );
@@ -811,9 +863,9 @@ const SAMPLE_ASSETS = {
 } as const;
 
 // CSV/XLSX demo files → parse and render the real bundled sample spreadsheet.
-function SampleSheetPreview({ file }: { file: DatasetFile }) {
+function SampleSheetPreview({ file, maxHeightClass }: { file: DatasetFile; maxHeightClass?: string }) {
   const url = file.format === 'CSV' ? SAMPLE_ASSETS.csv : SAMPLE_ASSETS.xlsx;
-  return <SpreadsheetPreview url={url} />;
+  return <SpreadsheetPreview url={url} maxHeightClass={maxHeightClass} />;
 }
 
 // Renders one real PDF page to a canvas via pdf.js, scaled to targetWidth.
@@ -985,6 +1037,183 @@ function useFileBlob(fileId: string) {
   return blob;
 }
 
+// Demo download — no real bytes, so export a small metadata placeholder named
+// after the file. A real backend swaps the Blob for the actual stream.
+function triggerDownload(file: DatasetFile) {
+  const content = file.format === 'CSV'
+    ? `# ${file.name}\n# Demo export from Knowledge Hub — ${(file.rows ?? 0).toLocaleString()} rows\ncolumn_a,column_b,column_c\n`
+    : `${file.name}\nDemo export from Knowledge Hub.\nFormat: ${file.format} · ${formatBytes(file.sizeBytes)}\n`;
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// The actual preview surface for a file, picked by type + whether real uploaded
+// bytes exist. Shared by the inline single-file view, the split preview pane,
+// and the full-screen overlay.
+function FilePreviewBody({ file, tall = false }: { file: DatasetFile; tall?: boolean }) {
+  const isPdf = file.pages != null;
+  const blob = useFileBlob(file.id);
+  const realPdf = isPdf && !!blob && (blob.mime === 'application/pdf' || file.format === 'PDF');
+  const realSheet = !isPdf && !!blob;
+  // Tall mode (split pane / full-screen) lets sheet tables use far more
+  // vertical room than the compact inline accordion.
+  const mh = tall ? 'max-h-[62vh]' : undefined;
+  return realSheet ? (
+    <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} maxHeightClass={mh} />
+  ) : realPdf ? (
+    <PdfCanvasViewer source={blob!.url} fileName={file.name} />
+  ) : isPdf ? (
+    <SamplePdfPreview file={file} />
+  ) : (
+    <SampleSheetPreview file={file} maxHeightClass={mh} />
+  );
+}
+
+// Count label shared by the list rail + preview header.
+function fileCountLabel(file: DatasetFile): string | null {
+  return file.pages != null
+    ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}`
+    : file.rows != null
+      ? `${file.rows.toLocaleString()} ${file.rows === 1 ? 'row' : 'rows'}`
+      : null;
+}
+
+// ─── Split view: left-rail list item ─────────────────────────────────────────
+function FileListItem({ file, selected, onSelect }: { file: DatasetFile; selected: boolean; onSelect: () => void }) {
+  const status = STATUS_META[file.status];
+  const StatusIcon = status.icon;
+  const count = fileCountLabel(file);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 transition-colors cursor-pointer ${selected ? 'bg-brand-50' : 'hover:bg-canvas'}`}
+    >
+      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${selected ? 'bg-brand-100' : 'bg-brand-50'}`}>
+        <FileText size={15} className="text-brand-700" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className={`text-[0.8125rem] truncate ${selected ? 'font-semibold text-brand-700' : 'font-medium text-ink-800'}`} title={file.name}>{file.name}</div>
+        <div className="text-[0.6875rem] text-ink-400 tabular-nums truncate">
+          {formatBytes(file.sizeBytes)}{count && <> · {count}</>}
+        </div>
+      </div>
+      <StatusIcon size={13} className={`shrink-0 ${file.status === 'failed' ? 'text-risk' : file.status === 'processing' ? 'text-ink-400 animate-spin motion-reduce:animate-none' : 'text-compliant'}`} />
+    </button>
+  );
+}
+
+// ─── Split view: right preview pane ──────────────────────────────────────────
+function PreviewPane({ file, onFullscreen }: { file: DatasetFile; onFullscreen: () => void }) {
+  const { addToast } = useToast();
+  const status = STATUS_META[file.status];
+  const StatusIcon = status.icon;
+  const count = fileCountLabel(file);
+  const isFailed = file.status === 'failed';
+  return (
+    <>
+      <div className="flex items-center gap-3 px-4 h-14 border-b border-canvas-border bg-canvas shrink-0">
+        <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0"><FileText size={15} className="text-brand-700" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[0.8125rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
+            <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
+              <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
+            </span>
+          </div>
+          <div className="text-[0.6875rem] text-ink-400 tabular-nums truncate">
+            {formatBytes(file.sizeBytes)}{count && <> · {count}</>} · uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </div>
+        </div>
+        {!isFailed && (
+          <button onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label={`Download ${file.name}`} title="Download"><Download size={15} /></button>
+        )}
+        <button onClick={onFullscreen} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label="Full screen" title="Full screen"><Maximize2 size={15} /></button>
+      </div>
+      {isFailed ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+          <AlertCircle size={24} className="text-risk" />
+          <p className="text-[0.8125rem] text-ink-700 font-medium">Processing failed</p>
+          <p className="text-[0.75rem] text-ink-500">This file couldn’t be processed — the format may not be supported.</p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto p-4">
+          <FilePreviewBody file={file} tall />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Full-screen preview overlay ─────────────────────────────────────────────
+function FullscreenPreview({ file, files, onNavigate, onClose }: {
+  file: DatasetFile;
+  files: DatasetFile[];
+  onNavigate: (id: string) => void;
+  onClose: () => void;
+}) {
+  const { addToast } = useToast();
+  const idx = files.findIndex(f => f.id === file.id);
+  const go = (delta: number) => { const n = files[idx + delta]; if (n) onNavigate(n.id); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, files]);
+  const status = STATUS_META[file.status];
+  const StatusIcon = status.icon;
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 bg-canvas flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${file.name} preview`}
+    >
+      <header className="flex items-center gap-3 px-5 h-14 border-b border-canvas-border bg-canvas-elevated shrink-0">
+        <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0"><FileText size={15} className="text-brand-700" /></div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[0.875rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
+            <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
+              <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
+            </span>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => go(-1)} disabled={idx <= 0} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas disabled:text-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer" aria-label="Previous file"><ChevronLeft size={16} /></button>
+          <span className="text-[0.75rem] text-ink-500 tabular-nums px-1 select-none">{idx + 1} / {files.length}</span>
+          <button onClick={() => go(1)} disabled={idx >= files.length - 1} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas disabled:text-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer" aria-label="Next file"><ChevronRight size={16} /></button>
+        </div>
+        <button onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download" title="Download"><Download size={15} /></button>
+        <button onClick={onClose} className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+          <Minimize2 size={14} /> Exit
+        </button>
+      </header>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-[1120px] mx-auto">
+          <FilePreviewBody key={file.id} file={file} tall />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── File row ────────────────────────────────────────────────────────────────
 
 interface FileRowProps {
@@ -1010,21 +1239,8 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
   };
   const cancelRename = () => { setDraft(file.name); setEditing(false); };
 
-  // Download — demo build has no real bytes, so we export a small placeholder
-  // carrying the file's metadata, named after the file. A real backend swaps
-  // the Blob for the actual file stream; the trigger logic stays identical.
   const handleDownload = () => {
-    const content = file.format === 'CSV'
-      ? `# ${file.name}\n# Demo export from Knowledge Hub — ${(file.rows ?? 0).toLocaleString()} rows\ncolumn_a,column_b,column_c\n`
-      : `${file.name}\nDemo export from Knowledge Hub.\nFormat: ${file.format} · ${formatBytes(file.sizeBytes)}\n`;
-    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    triggerDownload(file);
     addToast({ type: 'success', message: `Downloading ${file.name}…` });
   };
 
@@ -1045,26 +1261,10 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
     </div>
   );
 
-  // The preview block. PDFs always render as a real PDF, page-by-page, in the
-  // canvas viewer — uploaded files use their own bytes; demo files use a
-  // generated PDF. CSV/XLSX render as a real table (uploaded bytes) or a
-  // synthesised sample table (demo files).
-  const isPdf = file.pages != null;
-  const blob = useFileBlob(file.id);
-  const realPdf = isPdf && !!blob && (blob.mime === 'application/pdf' || file.format === 'PDF');
-  const realSheet = !isPdf && !!blob;
-
+  // Inline preview (single-file source path) — reuses the shared body.
   const previewBlock = (
     <div className="px-6 pb-3 pt-0">
-      {realSheet ? (
-        <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} />
-      ) : realPdf ? (
-        <PdfCanvasViewer source={blob!.url} fileName={file.name} />
-      ) : isPdf ? (
-        <SamplePdfPreview file={file} />
-      ) : (
-        <SampleSheetPreview file={file} />
-      )}
+      <FilePreviewBody file={file} />
     </div>
   );
 
