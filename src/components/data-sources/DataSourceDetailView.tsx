@@ -453,12 +453,12 @@ function FileSourceBody({
             {sortOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-32 z-20 bg-canvas-elevated border border-canvas-border rounded-md py-1 shadow-md">
+                <div className="absolute left-0 top-full mt-1 min-w-full z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-1 shadow-md">
                   {(['uploaded', 'name', 'size'] as SortKey[]).map(s => (
                     <button
                       key={s}
                       onClick={() => { setSortKey(s); setSortOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-[0.875rem] cursor-pointer transition-colors ${
+                      className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors whitespace-nowrap ${
                         s === sortKey ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'
                       }`}
                     >
