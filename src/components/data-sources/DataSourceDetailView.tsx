@@ -479,11 +479,11 @@ function FileSourceBody({
               onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
             />
             <Button
-              variant={isFolder ? 'outline' : 'primary'}
-              leftIcon={<Upload size={13} />}
+              variant={isFolder ? 'secondary' : 'primary'}
+              leftIcon={<Plus size={14} />}
               onClick={() => fileInputRef.current?.click()}
             >
-              {isFolder ? 'Add files to this folder' : 'Upload files'}
+              {isFolder ? 'Add files' : 'Upload files'}
             </Button>
           </div>
         </div>
