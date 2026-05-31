@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
-  ChevronLeft, ChevronRight, Search, ChevronDown, ArrowDown, ArrowUp,
+  ChevronLeft, ChevronRight, Search, ChevronDown, ArrowUpDown,
   FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
   CheckCircle, Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
   Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, Maximize2, Minimize2,
@@ -489,11 +489,12 @@ function FileSourceBody({
           <div className="relative">
             <button
               onClick={() => setSortOpen(!sortOpen)}
-              className="flex items-center gap-1.5 px-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium text-ink-700 hover:border-brand-300 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium text-ink-700 hover:border-brand-300 transition-colors cursor-pointer"
             >
-              {sortKey === 'name' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-              {sortKey === 'name' ? 'Name' : sortKey === 'size' ? 'Size' : 'Uploaded'}
-              <ChevronDown size={12} className={`text-ink-400 transition-transform ${sortOpen ? 'rotate-180' : ''}`} />
+              <ArrowUpDown size={13} className="text-ink-400 shrink-0" />
+              <span className="text-ink-400 font-normal">Sort</span>
+              <span>{sortKey === 'name' ? 'Name' : sortKey === 'size' ? 'Size' : 'Uploaded'}</span>
+              <ChevronDown size={13} className={`text-ink-400 transition-transform ${sortOpen ? 'rotate-180' : ''}`} />
             </button>
             {sortOpen && (
               <>
