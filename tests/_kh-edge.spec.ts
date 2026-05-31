@@ -194,13 +194,13 @@ test('E12 — Load more pagination to exhaustion', async ({ page }) => {
   await shot(page, 'load-more-expanded');
 });
 
-test('E13 — Smart Learn tab + eyebrow update', async ({ page }) => {
+test('E13 — Smart Learn tab shows coming-soon; header title persists', async ({ page }) => {
   await seedDefault(page);
   await gotoKH(page);
   await page.getByRole('button', { name: /Smart Learn/ }).first().click();
   await page.waitForTimeout(1200);
   await expect(page.getByText('Smart Learn is on the way')).toBeVisible();
-  await expect(page.getByText(/Knowledge Hub.*Smart Learn/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Knowledge Hub' })).toBeVisible();
   await shot(page, 'smart-learn');
 });
 

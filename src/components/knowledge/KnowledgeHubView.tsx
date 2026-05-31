@@ -135,7 +135,6 @@ function SmartLearnComingSoon() {
 export default function KnowledgeHubView() {
   const dataSourcesRef = useRef<DataSourcesViewHandle>(null);
   const [tab, setTab] = useState<TabId>('data');
-  const activeTabLabel = TABS.find(t => t.id === tab)?.label ?? '';
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // stays in the future tense so the header never promises a feature that
   // isn't shipped yet (the tab is Coming Soon).
@@ -192,13 +191,10 @@ export default function KnowledgeHubView() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6"
           >
-            {/* Header — breadcrumb · title · subhead. Add source CTA lives
-                on the filter row inside DataSourcesView (matches reference). */}
+            {/* Header — title · subhead. Add source CTA lives on the filter
+                row inside DataSourcesView (matches reference). */}
             <div className="min-w-0">
-              <div className="font-mono text-[0.6875rem] uppercase tracking-wider text-ink-500">
-                {activeTabLabel}
-              </div>
-              <h1 className="mt-2 font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+              <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
                 Knowledge Hub
               </h1>
               <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
