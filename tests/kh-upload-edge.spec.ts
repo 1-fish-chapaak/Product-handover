@@ -150,6 +150,26 @@ test('U8: attaching mid-upload — Wait keeps the picker open', async ({ page })
   await expect(page.getByText('Add data source')).toBeVisible();
 });
 
+test('U9: detail-view "Add files to this folder" rejects unsupported types (e.g. .xml)', async ({ page }) => {
+  // Open a folder's detail view from the default catalog.
+  await page.addInitScript(() => { try { localStorage.clear(); sessionStorage.clear(); } catch { /* */ } });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Knowledge Hub' }).first().click();
+  await page.waitForTimeout(900);
+  await page.getByText('FY26_Q2_Workpapers').first().click();
+  await page.waitForTimeout(700);
+  // The detail-view upload input shares the picker's accept filter.
+  const input = page.locator('input[accept=".pdf,.csv,.xlsx"]').first();
+  await input.setInputFiles([
+    { name: 'data_4.xml', mimeType: 'application/xml', buffer: Buffer.from('<root><a>1</a></root>') },
+    { name: 'extra_evidence.csv', mimeType: 'text/csv', buffer: Buffer.from('id,v\n1,2\n') },
+  ]);
+  // The .xml is rejected with feedback and never becomes a row; the CSV uploads.
+  await expect(page.getByText(/skipped — only PDF, CSV, XLSX/)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText('data_4.xml')).toHaveCount(0);
+  await expect(page.getByText('extra_evidence.csv')).toBeVisible({ timeout: 8000 });
+});
+
 test('U5: "Keep uploading" dismisses the confirm and leaves the modal open', async ({ page }) => {
   const input = await openUploadPicker(page);
   await input.setInputFiles([{ name: 'keep.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(800)) }]);

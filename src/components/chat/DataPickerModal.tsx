@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ConfirmationModal from '../shared/ConfirmationModal';
-import { validateUploadFile } from '../data-sources/datasetFiles';
+import { validateUploadFile, isAllowedKnowledgeFile } from '../data-sources/datasetFiles';
 import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource,
@@ -510,11 +510,9 @@ interface UploadPanelProps {
   mode: 'chat' | 'kh-add';
 }
 
-const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx'];
 function isAllowedForMode(name: string, mode: 'chat' | 'kh-add'): boolean {
   if (mode === 'chat') return true;
-  const lower = name.toLowerCase();
-  return KH_ALLOWED_EXTS.some(ext => lower.endsWith(ext));
+  return isAllowedKnowledgeFile(name);
 }
 
 // Walk a DataTransferItemList recursively. webkitGetAsEntry is supported in

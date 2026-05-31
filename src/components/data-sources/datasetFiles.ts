@@ -294,6 +294,15 @@ export async function countSheetRows(file: File): Promise<number | null> {
 // garbage that signals a mislabeled/corrupt file. No upper size limit — large
 // files are allowed.
 
+// The only file types the Knowledge Hub accepts. Single source of truth shared
+// by BOTH upload entry points (the Add-source picker and a source's detail-view
+// "Add files to this folder") so the restriction can't drift between them.
+export const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx'] as const;
+export function isAllowedKnowledgeFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  return KH_ALLOWED_EXTS.some(ext => lower.endsWith(ext));
+}
+
 export type UploadValidation = { ok: true } | { ok: false; reason: string };
 
 // Deep content parsing (pdf.js / SheetJS) needs the whole file in memory.

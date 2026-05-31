@@ -12,6 +12,7 @@ import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import {
   filesForSource, getFileBlob, loadFileBlob, registerFileBlob, setSourceFiles, metaForFormat, countPdfPages, countSheetRows, getPdfjs,
+  validateUploadFile, isAllowedKnowledgeFile,
   INTEGRATION_CONFIGS, formatBytes,
   type DatasetFile, type FileStatus, type FileFormat, type IntegrationConfig,
 } from './datasetFiles';
@@ -219,9 +220,30 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     addToast({ type: 'success', message: `${uf.name} uploaded.` });
   };
 
-  const handleFiles = (fileList: FileList | null) => {
+  const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const incoming: UploadingFile[] = Array.from(fileList).map((f, i) => {
+
+    // Same gate the Add-source picker enforces: only PDF/CSV/XLSX, and each
+    // must pass content validation (not empty / corrupt / password-protected)
+    // before it can be added. Without this, dropping e.g. a .xml here would
+    // sail straight through and show as "Processed".
+    const all = Array.from(fileList);
+    const typed = all.filter(f => isAllowedKnowledgeFile(f.name));
+    const skippedType = all.length - typed.length;
+    if (skippedType > 0) {
+      addToast({ type: 'info', message: `${skippedType} file${skippedType > 1 ? 's' : ''} skipped — only PDF, CSV, XLSX are supported.` });
+    }
+    if (typed.length === 0) return;
+
+    const checked = await Promise.all(typed.map(async f => ({ f, res: await validateUploadFile(f) })));
+    const accepted: File[] = [];
+    for (const { f, res } of checked) {
+      if (res.ok) accepted.push(f);
+      else addToast({ type: 'error', message: `${f.name} — ${res.reason}` });
+    }
+    if (accepted.length === 0) return;
+
+    const incoming: UploadingFile[] = accepted.map((f, i) => {
       const ext = f.name.split('.').pop()?.toUpperCase() ?? 'PDF';
       const format: FileFormat = (['PDF', 'CSV', 'XLSX'] as FileFormat[]).includes(ext as FileFormat)
         ? (ext as FileFormat)
@@ -452,6 +474,7 @@ function FileSourceBody({
               ref={fileInputRef}
               type="file"
               multiple
+              accept=".pdf,.csv,.xlsx"
               className="hidden"
               onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
             />
