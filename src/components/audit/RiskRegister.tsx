@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Search, X, ChevronRight, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye,
-  ArrowRight, FileText,
+  ArrowRight, FileText, HelpCircle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 
@@ -90,14 +90,58 @@ interface DrawerProps {
 
 function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
   const isEdit = !!risk;
-  const [name, setName] = useState(risk?.name || '');
-  const [description, setDescription] = useState(risk?.description || '');
-  const [businessProcess, setBusinessProcess] = useState(risk?.businessProcess || defaultProcess || '');
-  const [subProcess, setSubProcess] = useState(risk?.subProcess || '');
-  const [category, setCategory] = useState<RiskCategory | ''>(risk?.category || '');
-  const [priority, setPriority] = useState<RiskPriority | ''>(risk?.priority || '');
-  const [owner, setOwner] = useState(risk?.owner || '');
-  const [reviewer, setReviewer] = useState(risk?.reviewer || '');
+  // Capture initial values once so dirty-tracking is stable across re-renders
+  const [initial] = useState({
+    name: risk?.name || '',
+    description: risk?.description || '',
+    businessProcess: risk?.businessProcess || defaultProcess || '',
+    subProcess: risk?.subProcess || '',
+    category: (risk?.category || '') as RiskCategory | '',
+    priority: (risk?.priority || '') as RiskPriority | '',
+    owner: risk?.owner || '',
+    reviewer: risk?.reviewer || '',
+  });
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [businessProcess, setBusinessProcess] = useState(initial.businessProcess);
+  const [subProcess, setSubProcess] = useState(initial.subProcess);
+  const [category, setCategory] = useState<RiskCategory | ''>(initial.category);
+  const [priority, setPriority] = useState<RiskPriority | ''>(initial.priority);
+  const [owner, setOwner] = useState(initial.owner);
+  const [reviewer, setReviewer] = useState(initial.reviewer);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const isDirty =
+    name !== initial.name ||
+    description !== initial.description ||
+    businessProcess !== initial.businessProcess ||
+    subProcess !== initial.subProcess ||
+    category !== initial.category ||
+    priority !== initial.priority ||
+    owner !== initial.owner ||
+    reviewer !== initial.reviewer;
+
+  const requestClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const discardAndClose = () => {
+    // Reset form state then close
+    setName(initial.name);
+    setDescription(initial.description);
+    setBusinessProcess(initial.businessProcess);
+    setSubProcess(initial.subProcess);
+    setCategory(initial.category);
+    setPriority(initial.priority);
+    setOwner(initial.owner);
+    setReviewer(initial.reviewer);
+    setShowDiscardConfirm(false);
+    onClose();
+  };
 
   const isValid = name.trim() && description.trim() && businessProcess;
 
@@ -122,7 +166,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
@@ -133,8 +177,18 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
             <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
+
+        {/* Discard confirm strip — appears at top of body when user tries to close with unsaved changes */}
+        {showDiscardConfirm && (
+          <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[13px] shrink-0">
+            <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0" />
+            <div className="flex-1 text-ink-800">Discard unsaved changes?</div>
+            <button type="button" onClick={discardAndClose} className="px-3 py-1 rounded-[6px] bg-paper-0 border border-mitigated-300 text-[12px] text-ink-700 hover:bg-paper-50">Discard</button>
+            <button type="button" onClick={() => setShowDiscardConfirm(false)} className="px-3 py-1 rounded-[6px] bg-mitigated-700 text-paper-0 text-[12px] hover:bg-mitigated-800">Keep editing</button>
+          </div>
+        )}
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -202,7 +256,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <button type="button" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
             className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Save
@@ -326,10 +380,20 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [detailRisk, setDetailRisk] = useState<RiskEntry | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
+  const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 400);
+    return () => clearTimeout(t);
+  }, []);
 
   // Apply process filter first (for embedded mode)
   const embedded = !!processFilter;
-  const baseRisks = processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks;
+  const baseRisks = (processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks)
+    .filter(r => !archivedRiskIds.includes(r.id));
 
   // Derived KPIs
   const totalRisks = baseRisks.length;
@@ -393,6 +457,40 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setDetailRisk(updated);
   };
 
+  // Bulk archive: move selected risks to archived list (hidden from view)
+  const handleBulkArchive = () => {
+    const count = selectedRiskIds.length;
+    setArchivedRiskIds(prev => [...prev, ...selectedRiskIds]);
+    setSelectedRiskIds([]);
+    addToast({ message: `${count} risk${count !== 1 ? 's' : ''} archived`, type: 'success' });
+  };
+
+  // Select-all helpers based on currently-visible filteredRisks
+  const visibleIds = filteredRisks.map(r => r.id);
+  const selectedVisibleCount = visibleIds.filter(id => selectedRiskIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected;
+    }
+  }, [someVisibleSelected]);
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      // Deselect all visible
+      setSelectedRiskIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      // Select all visible (merge with existing selections from other filtered views)
+      setSelectedRiskIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const toggleSelectRisk = (id: string) => {
+    setSelectedRiskIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   // Count risks with no mapped controls (draft status = unmapped)
   const unmappedCount = baseRisks.filter(r => r.status === 'Draft').length;
 
@@ -432,6 +530,31 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           </div>
         )}
 
+        {/* True empty state — no risks at all (after process filter) — hidden during initial loading */}
+        {!isLoading && baseRisks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-ink-500" />
+            </div>
+            <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
+            <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
+            <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>
+          </div>
+        ) : (
+        <>
+
+        {/* Bulk action bar — appears when any risks selected */}
+        {selectedRiskIds.length > 0 && (
+          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-brand-50 border-y border-brand-200 rounded-[8px] mb-3">
+            <span className="text-[13px] font-medium text-brand-700">{selectedRiskIds.length} selected</span>
+            <div className="flex-1" />
+            <button type="button" onClick={handleBulkArchive} className="px-3 py-1.5 rounded-[6px] bg-paper-0 border border-ink-200 text-[12px] text-ink-800 hover:bg-paper-50 inline-flex items-center gap-1.5">
+              <Archive className="w-3.5 h-3.5" />Archive
+            </button>
+            <button type="button" onClick={() => setSelectedRiskIds([])} className="px-3 py-1.5 rounded-[6px] text-[12px] text-ink-600 hover:bg-paper-100">Cancel</button>
+          </div>
+        )}
+
         {/* Filters + Search */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -458,18 +581,67 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <table className="w-full border-collapse text-[12px]">
               <thead className="bg-white border-b border-border-light">
                 <tr>
-                  {['Risk ID', 'Risk Name', 'Sub-process', 'Category', 'Priority', ''].map(h => (
-                    <th key={h || 'action'} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th className="px-4 py-3 text-left w-8">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      aria-label="Select all visible risks"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAll}
+                      disabled={isLoading || visibleIds.length === 0}
+                      className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                    />
+                  </th>
+                  {([
+                    { key: 'risk-id', label: 'Risk ID' },
+                    { key: 'risk-name', label: 'Risk Name' },
+                    { key: 'sub-process', label: 'Sub-process' },
+                    { key: 'category', label: 'Category' },
+                    { key: 'priority', label: 'Priority', tooltip: 'Inherent risk severity — Critical/High/Medium/Low based on likelihood × impact before any controls are applied.' },
+                    { key: 'action', label: '' },
+                  ] as Array<{ key: string; label: string; tooltip?: string }>).map(h => (
+                    <th key={h.key} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
+                      {h.tooltip ? (
+                        <span className="inline-flex items-center gap-1 group/tip relative">
+                          {h.label}
+                          <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                          <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                            {h.tooltip}
+                          </span>
+                        </span>
+                      ) : h.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredRisks.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-10 text-center text-[12px] text-text-muted">No risks match your search or filters</td></tr>
-                ) : filteredRisks.map((risk, i) => (
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={`skel-${i}`} className="border-t border-border-light">
+                      {[...Array(7)].map((_, j) => (
+                        <td key={j} className="px-4 py-4">
+                          <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse" style={{ width: `${60 + ((i + j) * 7) % 30}%` }} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filteredRisks.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-10 text-center text-[12px] text-text-muted">No risks match your search or filters</td></tr>
+                ) : filteredRisks.map((risk, i) => {
+                  const isChecked = selectedRiskIds.includes(risk.id);
+                  return (
                   <motion.tr key={risk.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
                     onClick={() => setDetailRisk(risk)}
                     className="border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer">
+                    <td className="px-4 py-4 align-top" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${risk.id}`}
+                        checked={isChecked}
+                        onChange={() => toggleSelectRisk(risk.id)}
+                        className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                      />
+                    </td>
                     <td className="px-4 py-4 align-top">
                       <span className="font-mono text-[10px] text-ink-500 bg-paper-50 border border-canvas-border px-1.5 py-0.5 rounded-[4px]">{risk.id}</span>
                     </td>
@@ -492,10 +664,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       </button>
                     </td>
                   </motion.tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
         </div>
+        </>
+        )}
       </div>
 
       {/* Create Drawer */}

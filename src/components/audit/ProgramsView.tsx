@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Building2, Search, Plus, X, Trash2,
+  Building2, Search, Plus, X, Trash2, HelpCircle,
 } from 'lucide-react';
 import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
@@ -119,7 +119,13 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     <div className="flex items-end justify-between gap-4 mb-3">
                       <div>
                         <div className="text-[13px] font-semibold text-ink-700 tabular-nums leading-none">{coverage}%</div>
-                        <div className="text-[10px] text-text-muted mt-1">Coverage</div>
+                        <span className="inline-flex items-center gap-1 group/tip relative text-[10px] text-text-muted mt-1">
+                          Coverage
+                          <HelpCircle className="w-3 h-3 text-ink-400" aria-label="What is Coverage?" />
+                          <span className="absolute bottom-full left-0 mb-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                            Percent of identified risks that have at least one linked control.
+                          </span>
+                        </span>
                       </div>
                       <div className="flex gap-5">
                         {[{ label: 'Risks', value: bp.risks }, { label: 'Controls', value: bp.controls }, { label: 'RACMs', value: racmsForProcess(bp.id) }].map(m => (
@@ -258,7 +264,7 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={handleCreate} disabled={!isValid} className="px-5 py-2.5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create Process</button>
+          <button type="button" onClick={handleCreate} disabled={!isValid} className="px-5 py-2.5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">New Process</button>
         </footer>
       </motion.aside>
     </>

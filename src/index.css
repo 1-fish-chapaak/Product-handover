@@ -437,13 +437,12 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   mix-blend-mode: overlay;
 }
 
-/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ── */
+/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ──
+   Applies to buttons only. Inputs/textareas/selects show focus via
+   border-color change at the component level (no ring/glow). */
 .focus-ring:focus-visible,
 button:focus-visible,
-[role="button"]:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
+[role="button"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24);
   border-radius: var(--radius-md);

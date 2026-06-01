@@ -6,6 +6,7 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive,
 } from 'lucide-react';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
@@ -54,7 +55,7 @@ function getSOPAction(status: SOPStatus, hasRacm: boolean, racmFrozen?: boolean)
   switch (status) {
     case 'Draft':      return { label: 'Start Processing',  cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Processing': return { label: 'View Progress',     cls: 'bg-paper-100 text-ink-500 hover:bg-paper-50' };
-    case 'Processed':  return { label: 'Create RACM',       cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
+    case 'Processed':  return { label: 'New RACM',          cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Linked':     return { label: 'Edit RACM Draft',   cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Archived':   return { label: 'View SOP',          cls: 'bg-paper-50 text-ink-400 hover:bg-paper-100' };
   }
@@ -378,7 +379,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
           <div className="flex justify-end mt-3">
             <button type="button" onClick={() => setShowConfirmModal(true)} disabled={activeRisks.length === 0 || (isPartial && !partialConfirmed)}
               className="px-4 py-2 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
-              <FileText size={13} />Create Draft RACM
+              <FileText size={13} />New RACM
             </button>
           </div>
 
@@ -450,7 +451,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-[13px] font-semibold text-text">Extracted Risks ({risks.length})</h3>
           <button type="button" onClick={() => setShowAddRisk(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
-            <Plus size={11} />Add Missing Risk
+            <Plus size={11} />New Risk
           </button>
         </div>
         <div className="border-t border-border-light overflow-x-auto">
@@ -531,7 +532,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
             <p className="text-[10px] text-ink-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
           </div>
           <button type="button" onClick={() => setShowAddCtrl(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
-            <Plus size={11} />Add Missing Reference
+            <Plus size={11} />New Control reference
           </button>
         </div>
         <div className="border-t border-border-light overflow-x-auto">
@@ -738,6 +739,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   const [description, setDescription] = useState('');
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const now = new Date();
   const uploadDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -750,8 +752,15 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   };
 
   const isValid = name.trim() && fileName;
+  // Drawer is dirty as soon as the user touches any field — close attempts go through confirm.
+  const isDirty = !!(name.trim() || description.trim() || fileName);
 
   const buildData = (): UploadSOPData => ({ name: name.trim(), version: 'v1.0', description: description.trim(), fileName });
+
+  // Discard-aware close handlers.
+  const requestClose = () => { if (isDirty) setShowDiscardConfirm(true); else onClose(); };
+  const discardAndClose = () => { setName(''); setDescription(''); setFileName(''); setShowDiscardConfirm(false); onClose(); };
+  const cancelClose = () => setShowDiscardConfirm(false);
 
   const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
@@ -759,17 +768,27 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+
+        {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
+        {showDiscardConfirm && (
+          <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[13px]">
+            <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0" />
+            <div className="flex-1 text-ink-800">Discard unsaved changes?</div>
+            <button type="button" onClick={discardAndClose} className="px-3 py-1 rounded-[6px] bg-paper-0 border border-mitigated-300 text-[12px] text-ink-700 hover:bg-paper-50">Discard</button>
+            <button type="button" onClick={cancelClose} className="px-3 py-1 rounded-[6px] bg-mitigated-700 text-paper-0 text-[12px] hover:bg-mitigated-800">Keep editing</button>
+          </div>
+        )}
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
             <h2 className="font-display text-[18px] font-semibold text-ink-900">Upload SOP</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -830,7 +849,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
         </div>
 
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
           <button type="button" onClick={() => { if (isValid) onUploadAndProcess(buildData()); }} disabled={!isValid}
             className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Upload & Process
@@ -947,15 +966,33 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   const [uploadParsing, setUploadParsing] = useState(false);
   const [uploadParsed, setUploadParsed] = useState(false);
   const [extractedStats, setExtractedStats] = useState<{ risks: number; controls: number; rows: number } | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Form state
   const sopLabel = sopName.replace(/\s*SOP\s*/i, '').trim();
-  const [name, setName] = useState(sopLabel ? `FY26 ${bpAbbr} — ${sopLabel}` : '');
+  const initialName = sopLabel ? `FY26 ${bpAbbr} — ${sopLabel}` : '';
+  const [name, setName] = useState(initialName);
   const [description, setDescription] = useState('');
   const [framework, setFramework] = useState('');
   const [owner, setOwner] = useState('Current User');
 
   const isFormValid = name.trim().length > 0 && owner.trim().length > 0;
+  // Dirty if any user-editable field deviates from its initial state, or a file/source is loaded.
+  const isDirty = name !== initialName
+    || description.trim().length > 0
+    || framework.length > 0
+    || owner !== 'Current User'
+    || !!uploadedFile
+    || (source !== (sopName ? 'sop' : null));
+  const requestClose = () => { if (isDirty) setShowDiscardConfirm(true); else onClose(); };
+  const discardAndClose = () => {
+    setName(initialName); setDescription(''); setFramework(''); setOwner('Current User');
+    setUploadedFile(null); setUploadParsing(false); setUploadParsed(false); setExtractedStats(null);
+    setSource(sopName ? 'sop' : null);
+    setShowDiscardConfirm(false);
+    onClose();
+  };
+  const cancelClose = () => setShowDiscardConfirm(false);
   const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
 
@@ -988,17 +1025,27 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className="fixed top-0 right-0 z-50 w-full max-w-[540px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+
+        {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
+        {showDiscardConfirm && (
+          <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[13px]">
+            <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0" />
+            <div className="flex-1 text-ink-800">Discard unsaved changes?</div>
+            <button type="button" onClick={discardAndClose} className="px-3 py-1 rounded-[6px] bg-paper-0 border border-mitigated-300 text-[12px] text-ink-700 hover:bg-paper-50">Discard</button>
+            <button type="button" onClick={cancelClose} className="px-3 py-1 rounded-[6px] bg-mitigated-700 text-paper-0 text-[12px] hover:bg-mitigated-800">Keep editing</button>
+          </div>
+        )}
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
             <h2 className="font-display text-[18px] font-semibold text-ink-900">Create RACM</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">Define a new Risk &amp; Control Matrix for audit governance.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -1114,7 +1161,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
         {/* Footer — shown once a source type is selected */}
         {source && (
           <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+            <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
             <button type="button" onClick={() => {
                 if (!isFormValid) return;
                 if (isUploadReview && onStartReview) {
@@ -1169,6 +1216,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
+
+  // Skeleton state — short 400ms placeholder so SOP list never paints into a flash of "empty" / "no SOPs".
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 400);
+    return () => clearTimeout(t);
+  }, []);
 
   // Check for duplicate before creating
   const handleUploadIntent = useCallback((data: UploadSOPData, startProcessing: boolean) => {
@@ -1326,7 +1380,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     switch (action.label) {
       case 'Start Processing':  handleStartProcessing(sop.id); break;
       case 'View Progress':     addToast({ message: `"${sop.name}" is currently being processed...`, type: 'info' }); break;
-      case 'Create RACM':       setShowCreateRacmForSopId(sop.id); break;
+      case 'New RACM':          setShowCreateRacmForSopId(sop.id); break;
       case 'Edit RACM Draft':   if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'Configure RACM':    if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'View SOP':          setPreviewingSopId(sop.id); break;
@@ -1373,15 +1427,17 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
   return (
     <div>
-      {/* Empty state */}
-      {sortedSops.length === 0 ? (
-        <div className="bg-white rounded-[8px] border border-canvas-border p-10 text-center">
-          <FileText size={32} className="mx-auto text-ink-300 mb-3" />
-          <div className="text-[14px] font-semibold text-text mb-1">No SOPs uploaded yet</div>
-          <p className="text-[12px] text-ink-400 max-w-sm mx-auto mb-4">Upload a Standard Operating Procedure to extract risks and control references.</p>
+      {/* Empty state — only after loading settles so we don't flash it. */}
+      {!isLoading && sortedSops.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+          <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+            <FileText className="w-6 h-6 text-ink-500" />
+          </div>
+          <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
+          <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
           <button type="button" onClick={() => setShowUploadDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer">
-            <Upload size={14} />Upload SOP
+            className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
+            New SOP
           </button>
         </div>
       ) : (
@@ -1405,7 +1461,22 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedSops.map((sop, i) => {
+                  {isLoading ? (
+                    /* 5 skeleton rows during 400ms placeholder. Headers always render above. */
+                    [...Array(5)].map((_, i) => (
+                      <tr key={`skel-sop-${i}`} className="border-t border-border-light">
+                        {[...Array(3)].map((_, j) => (
+                          <td key={j} className="px-4 py-4">
+                            <div
+                              className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
+                              style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                  sortedSops.map((sop, i) => {
                     const isProcessing = sop.status === 'Processing';
                     const action = getSOPAction(sop.status, !!sop.racmId, false);
                     const showCounts = sop.status !== 'Draft' && sop.status !== 'Processing';
@@ -1464,7 +1535,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         </tr>
                       )}
                     </React.Fragment>);
-                  })}
+                  })
+                  )}
                 </tbody>
               </table>
           </div>
@@ -1614,10 +1686,37 @@ const SEED_DESIGN_CONTROLS: DesignControl[] = [
   { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'] },
 ];
 
-function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean }) {
+function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
   const { addToast } = useToast();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Skeleton state — 400ms placeholder before first paint of the controls grid.
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Bulk select + bulk archive (in-memory archive — removes from list, no API).
+  const [selectedControlIds, setSelectedControlIds] = useState<string[]>([]);
+  const allVisibleIds = controls.map(c => c.id);
+  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedControlIds.includes(id));
+  const someSelected = selectedControlIds.length > 0 && !allSelected;
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedControlIds([]);
+    else setSelectedControlIds(allVisibleIds);
+  };
+  const toggleSelectOne = (id: string) => {
+    setSelectedControlIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const handleBulkArchive = () => {
+    const count = selectedControlIds.length;
+    if (count === 0) return;
+    setControls(prev => prev.filter(c => !selectedControlIds.includes(c.id)));
+    setSelectedControlIds([]);
+    addToast({ message: `${count} control${count !== 1 ? 's' : ''} archived`, type: 'success' });
+  };
 
   const handleCreateWorkflow = (ctrl: DesignControl) => {
     addToast({ message: `Opening Ask IRA to create workflow for "${ctrl.name}" (${ctrl.id})`, type: 'info' });
@@ -1627,12 +1726,22 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
     return ctrl.workflows.length > 0 && ctrl.mappedRisks.length > 0 ? 'Complete' : 'Incomplete';
   };
 
-  if (controls.length === 0) {
+  if (!isLoading && controls.length === 0) {
     return (
-      <div className="bg-canvas-elevated border border-canvas-border rounded-[8px] p-10 text-center">
-        <ShieldCheck size={32} className="mx-auto text-ink-300 mb-3" />
-        <div className="text-[14px] font-semibold text-ink-600 mb-1">No controls yet</div>
-        <p className="text-[12px] text-ink-400">Controls appear here once you map them from a RACM.</p>
+      <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+        <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+          <Shield className="w-6 h-6 text-ink-500" />
+        </div>
+        <h3 className="text-[15px] font-display text-ink-800 mb-1">No controls yet</h3>
+        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Controls live inside a RACM. Open RACM to map risks to controls — they'll appear here.</p>
+        {onGoToRacm && (
+          <button
+            type="button"
+            onClick={onGoToRacm}
+            className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
+            Go to RACM
+          </button>
+        )}
       </div>
     );
   }
@@ -1640,23 +1749,100 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
   return (
     <div className="space-y-4">
 
+      {/* Bulk action bar — only when one or more controls selected. */}
+      {selectedControlIds.length > 0 && (
+        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-brand-50 border-y border-brand-200 rounded-[8px] mb-3">
+          <span className="text-[13px] font-medium text-brand-700">{selectedControlIds.length} selected</span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={handleBulkArchive}
+            className="px-3 py-1.5 rounded-[6px] bg-paper-0 border border-ink-200 text-[12px] text-ink-800 hover:bg-paper-50 inline-flex items-center gap-1.5"
+          >
+            <Archive className="w-3.5 h-3.5" />Archive
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedControlIds([])}
+            className="px-3 py-1.5 rounded-[6px] text-[12px] text-ink-600 hover:bg-paper-100"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="border-t border-border-light overflow-x-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead className="bg-white border-b border-border-light">
             <tr>
-              {['Control', 'Classification', 'Nature', 'Workflows', 'Mapped Risks', 'RACMs', 'Design Status', ''].map(h => (
-                <th key={h || 'act'} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">{h}</th>
+              {/* Select-all checkbox — first column. */}
+              <th className="pl-4 pr-2 py-3 w-[44px]">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={el => { if (el) el.indeterminate = someSelected; }}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer"
+                  aria-label="Select all controls"
+                />
+              </th>
+              {([
+                { label: 'Control' },
+                { label: 'Classification', tip: 'Marked as Key for SOX or regulatory reporting; Non-Key is supportive but not externally tested.' },
+                { label: 'Nature' },
+                { label: 'Workflows' },
+                { label: 'Mapped Risks' },
+                { label: 'RACMs' },
+                { label: 'Design Status', tip: 'Whether the control has both linked workflows and mapped risks. Incomplete controls cannot be tested.' },
+                { label: '' },
+              ] as { label: string; tip?: string }[]).map(h => (
+                <th key={h.label || 'act'} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  {h.tip ? (
+                    <span className="inline-flex items-center gap-1 group/tip relative">
+                      {h.label}
+                      <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                      <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                        {h.tip}
+                      </span>
+                    </span>
+                  ) : h.label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {controls.map((ctrl, i) => {
+            {isLoading ? (
+              /* 5 skeleton rows — column count is 9 (1 checkbox + 8 data cols). */
+              [...Array(5)].map((_, i) => (
+                <tr key={`skel-ctrl-${i}`} className="border-t border-border-light">
+                  {[...Array(9)].map((_, j) => (
+                    <td key={j} className="px-4 py-4">
+                      <div
+                        className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
+                        style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+            controls.map((ctrl, i) => {
               const isExpanded = expandedId === ctrl.id;
               const hasBound = ctrl.workflows.length > 0;
               return (
                 <React.Fragment key={ctrl.id}>
                   <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                    className="border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
+                    className={`border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer ${selectedControlIds.includes(ctrl.id) ? 'bg-brand-50/50' : ''}`} onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
+                    {/* Per-row checkbox — stopPropagation so it doesn't toggle the row expand. */}
+                    <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedControlIds.includes(ctrl.id)}
+                        onChange={() => toggleSelectOne(ctrl.id)}
+                        className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer"
+                        aria-label={`Select ${ctrl.name}`}
+                      />
+                    </td>
                     <td className="px-4 py-4 align-top">
                       <div className="flex flex-col gap-1">
                         <span className="text-[13px] font-medium text-text leading-snug">{ctrl.name}</span>
@@ -1690,7 +1876,7 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
                     </td>
                     <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">Create Workflow</button>}
+                        {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
                         <button type="button" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
                       </div>
                     </td>
@@ -1698,7 +1884,7 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
 
                   {isExpanded && (
                     <tr>
-                      <td colSpan={8} className="p-0">
+                      <td colSpan={9} className="p-0">
                         <div className="px-5 py-4 bg-surface-2/20 border-t border-canvas-border space-y-3">
                           <div className="grid grid-cols-2 gap-4">
                             <div><span className="text-[10px] text-ink-400 uppercase block">Description</span><p className="text-[11px] text-text mt-0.5">{ctrl.description}</p></div>
@@ -1725,10 +1911,10 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
                               <span className="text-[10px] text-ink-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
-                              <button type="button" onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">+ Create Workflow</button>
+                              <button type="button" onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">+ New Workflow</button>
                             </div>
                             {ctrl.workflows.length === 0 ? (
-                              <div className="text-[10px] text-mitigated-700 py-2">No workflows mapped. Create a workflow to enable testing.</div>
+                              <div className="text-[10px] text-mitigated-700 py-2">No workflows mapped. Add a new workflow to enable testing.</div>
                             ) : (
                               <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
                                 <table className="w-full text-[11px]">
@@ -1765,7 +1951,8 @@ function ControlDesignTab({ bpAbbr, seeded }: { bpAbbr: string; seeded: boolean 
                   )}
                 </React.Fragment>
               );
-            })}
+            })
+            )}
           </tbody>
         </table>
       </div>
@@ -1801,6 +1988,13 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   const [search, setSearch] = useState('');
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Skeleton state — 400ms placeholder so workflow list doesn't flash empty.
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 400);
+    return () => clearTimeout(t);
+  }, []);
 
   const searched = search.trim() ? workflows.filter(w => w.name.toLowerCase().includes(search.toLowerCase()) || w.description.toLowerCase().includes(search.toLowerCase())) : workflows;
   const filtered = usageFilter === 'All' ? searched
@@ -1853,12 +2047,18 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     setBulkMode(false); setSelectedIds(new Set());
   };
 
-  if (workflows.length === 0) {
+  if (!isLoading && workflows.length === 0) {
     return (
-      <div className="bg-canvas-elevated border border-canvas-border rounded-[8px] p-10 text-center">
-        <Play size={32} className="mx-auto text-ink-300 mb-3" />
-        <div className="text-[14px] font-semibold text-ink-600 mb-1">No workflows yet</div>
-        <p className="text-[12px] text-ink-400">Link a workflow to define how controls get tested.</p>
+      <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+        <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+          <Workflow className="w-6 h-6 text-ink-500" />
+        </div>
+        <h3 className="text-[15px] font-display text-ink-800 mb-1">No workflows yet</h3>
+        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Connect approval steps and evidence collection.</p>
+        <button type="button" onClick={() => setShowCreateDrawer(true)}
+          className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
+          New Workflow
+        </button>
       </div>
     );
   }
@@ -1901,7 +2101,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
             <>
               <button type="button" onClick={() => setShowCreateDrawer(true)}
                 className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-primary-xlight text-primary border border-primary/15 text-[13px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
-                <Sparkles size={14} />Create Workflow
+                <Sparkles size={14} />New Workflow
               </button>
               <button type="button" onClick={() => setBulkMode(true)}
                 className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-white text-text border border-border text-[13px] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]">
@@ -1913,15 +2113,15 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
-        <div className="bg-white rounded-[8px] border border-canvas-border p-10 text-center">
-          <FileText size={32} className="mx-auto text-ink-300 mb-3" />
-          <p className="text-[14px] font-semibold text-text-muted mb-1">
-            {workflows.length === 0 ? 'No workflows created for this process yet' : `No workflows match "${search || usageFilter}"`}
+      {!isLoading && filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+          <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+            <Search className="w-6 h-6 text-ink-500" />
+          </div>
+          <h3 className="text-[15px] font-display text-ink-800 mb-1">No matching workflows</h3>
+          <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">
+            Nothing matched <span className="font-mono">"{search || usageFilter}"</span>. Try a different search or filter.
           </p>
-          {workflows.length === 0 && (
-            <button type="button" onClick={() => setShowCreateDrawer(true)} className="mt-3 px-4 py-2 rounded-[8px] text-[12px] font-semibold bg-primary text-white hover:bg-primary/90 cursor-pointer inline-flex items-center gap-1"><Plus size={12} />Create Workflow</button>
-          )}
         </div>
       ) : (
         <div className="border-t border-border-light">
@@ -1942,7 +2142,22 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
               </tr>
             </thead>
             <tbody>
-              {filtered.map((wf, i) => {
+              {isLoading ? (
+                /* 5 skeleton rows — column count is 5 base + 1 if bulkMode (checkbox). */
+                [...Array(5)].map((_, i) => (
+                  <tr key={`skel-wf-${i}`} className="border-t border-border-light">
+                    {[...Array(bulkMode ? 6 : 5)].map((_, j) => (
+                      <td key={j} className="px-4 py-4">
+                        <div
+                          className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
+                          style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+              filtered.map((wf, i) => {
                 const isSelected = selectedIds.has(wf.id);
                 return (
                 <motion.tr key={wf.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
@@ -2017,7 +2232,8 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                   </td>
                 </motion.tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
@@ -2061,14 +2277,29 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
         {showCreateDrawer && (() => {
           const D = () => {
             const [n, setN] = useState(''); const [t, setT] = useState<'Automated' | 'Manual'>('Automated'); const [nat, setNat] = useState<'Preventive' | 'Detective'>('Preventive'); const [d, setD] = useState('');
+            const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
             const fCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
+            // Dirty as soon as any field deviates from its initial default.
+            const isDirty = n.trim().length > 0 || d.trim().length > 0 || t !== 'Automated' || nat !== 'Preventive';
+            const requestClose = () => { if (isDirty) setShowDiscardConfirm(true); else setShowCreateDrawer(false); };
+            const discardAndClose = () => { setN(''); setD(''); setT('Automated'); setNat('Preventive'); setShowDiscardConfirm(false); setShowCreateDrawer(false); };
+            const cancelClose = () => setShowDiscardConfirm(false);
             return (<>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={() => setShowCreateDrawer(false)} />
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
               <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
                 className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+                {/* Discard-changes confirm strip */}
+                {showDiscardConfirm && (
+                  <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[13px]">
+                    <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0" />
+                    <div className="flex-1 text-ink-800">Discard unsaved changes?</div>
+                    <button type="button" onClick={discardAndClose} className="px-3 py-1 rounded-[6px] bg-paper-0 border border-mitigated-300 text-[12px] text-ink-700 hover:bg-paper-50">Discard</button>
+                    <button type="button" onClick={cancelClose} className="px-3 py-1 rounded-[6px] bg-mitigated-700 text-paper-0 text-[12px] hover:bg-mitigated-800">Keep editing</button>
+                  </div>
+                )}
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
                   <div><h2 className="font-display text-[18px] font-semibold text-ink-900">Create Workflow</h2><p className="text-[12px] text-ink-500 mt-0.5">Define a new workflow for this business process.</p></div>
-                  <button type="button" aria-label="Close" onClick={() => setShowCreateDrawer(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+                  <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Name <span className="text-risk">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
@@ -2084,7 +2315,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Description</label><textarea value={d} onChange={e => setD(e.target.value)} rows={3} placeholder="Describe what this workflow does..." className={fCls + ' resize-none'} /></div>
                 </div>
                 <div className="px-6 py-4 border-t border-canvas-border flex justify-end gap-3 shrink-0">
-                  <button type="button" onClick={() => setShowCreateDrawer(false)} className="px-4 py-2.5 rounded-[8px] border border-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
+                  <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
                   <button type="button" onClick={() => { if (n.trim()) handleCreate({ name: n.trim(), type: t, nature: nat, desc: d }); }} disabled={!n.trim()} className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
                 </div>
               </motion.aside>
@@ -2175,6 +2406,14 @@ const GRID_COLUMNS: GridColumn[] = [
   { key: 'keyControl',   label: 'Key',              minW: 38,  type: 'checkbox' },
   { key: 'reviewStatus', label: 'Status',           minW: 70,  type: 'status' },
 ];
+
+// Tooltip copy for jargon-y column headers in the RACM import grid.
+const GRID_HEADER_TIPS: Record<string, string> = {
+  keyControl: 'Marked as a key control — required for SOX or regulatory reporting.',
+  assertion: 'The financial assertion this control supports (e.g. Accuracy, Completeness, Authorization).',
+  attribute: 'The specific attribute or test step evidenced when this control runs.',
+  riskRating: 'Inherent likelihood and impact of this risk before controls are applied.',
+};
 
 const MOCK_IMPORT_ROWS: ImportedRow[] = [
   { id: 'ir-1', sourceRow: 2, process: 'P2P', subProcess: 'Invoice Processing', riskId: 'R-001', riskName: 'Unauthorized vendor payments', riskDesc: 'Payments without approved PO', riskRating: 'High', controlId: 'C-001', controlName: 'Three-way PO match', controlDesc: 'System-enforced matching', controlObjective: 'Prevent unauthorized payments', controlOwner: 'Rajiv Sharma', frequency: 'Per transaction', controlType: 'Preventive', keyControl: true, assertion: 'Accuracy', attribute: 'PO Existence', framework: 'SOX ICFR', reviewStatus: 'Needs Review', validationIssues: [] },
@@ -2392,13 +2631,24 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
             <table className="w-full text-[11px] border-collapse" style={{ minWidth: totalMinW }}>
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-border bg-paper-50/80">
-                  {GRID_COLUMNS.map(c => (
-                    <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap"
-                      style={{ minWidth: c.minW }}>
-                      {c.label}
-                      {c.required && <span className="text-risk-700 ml-0.5">*</span>}
-                    </th>
-                  ))}
+                  {GRID_COLUMNS.map(c => {
+                    const tip = GRID_HEADER_TIPS[c.key as string];
+                    return (
+                      <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap"
+                        style={{ minWidth: c.minW }}>
+                        {tip ? (
+                          <span className="inline-flex items-center gap-1 group/tip relative">
+                            {c.label}
+                            <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${c.label}?`} />
+                            <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                              {tip}
+                            </span>
+                          </span>
+                        ) : c.label}
+                        {c.required && <span className="text-risk-700 ml-0.5">*</span>}
+                      </th>
+                    );
+                  })}
                   <th className="px-1.5 py-2 w-14 sticky right-0 bg-paper-50/80"></th>
                 </tr>
               </thead>
@@ -2686,6 +2936,15 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                   </div>
                 )}
 
+                {/* Lock-for-audit callout — strong warning above the confirm. */}
+                <div className="p-3 bg-mitigated-50 border border-mitigated-200 rounded-[8px] mb-4 flex gap-3">
+                  <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0 mt-0.5" />
+                  <div className="text-[12px] text-ink-800">
+                    <div className="font-semibold text-mitigated-800 mb-1">This will lock the RACM for audit</div>
+                    <div className="text-[12px] leading-snug">No edits can be made after freezing. To make changes later, an admin must re-open it from the RACM row actions.</div>
+                  </div>
+                </div>
+
                 {/* Confirmation checkbox */}
                 <label className="flex items-start gap-2.5 p-3 rounded-[8px] bg-surface-2/40 border border-border-light mb-5 cursor-pointer select-none hover:bg-surface-2/70 transition-colors">
                   <input type="checkbox" checked={freezeConfirmed} onChange={e => setFreezeConfirmed(e.target.checked)}
@@ -2714,15 +2973,100 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 }
 
 /* ─── BP Detail View ─── */
-function SectionHeader({ title, count, countLabel, warning }: {
+
+// Health signal per section — drives the small badge on the SectionCard.
+type SectionHealth = 'healthy' | 'attention' | 'stale' | 'empty';
+
+// Minimal health signal: a single uppercase mono word, colored. "Healthy" stays
+// silent so the eye only catches what actually needs attention.
+const HEALTH_LABEL: Record<SectionHealth, { label: string | null; cls: string }> = {
+  healthy:   { label: null,        cls: '' },
+  attention: { label: 'Attention', cls: 'text-mitigated-700' },
+  stale:     { label: 'Stale',     cls: 'text-high-700' },
+  empty:     { label: 'Empty',     cls: 'text-ink-400' },
+};
+
+// Minimal section card. Two lines, no icon tile, no pill badges, no inline CTA pill.
+// Title + count + health word (only when non-healthy) on row 1; muted breakdown on row 2.
+// Health is implied by silence for "healthy" so the eye only catches what actually matters.
+function SectionCard({
+  title, count, countLabel, breakdown, lastActivity, health, locked, lockedReason, onClick,
+}: {
+  title: string;
+  count: number;
+  countLabel: string;
+  breakdown: string;
+  lastActivity: string;
+  health: SectionHealth;
+  locked?: boolean;
+  lockedReason?: string;
+  onClick: () => void;
+}) {
+  if (locked) {
+    return (
+      <div className="w-full bg-paper-50/40 border border-dashed border-canvas-border rounded-[12px] px-5 py-4">
+        <div className="flex items-baseline justify-between gap-3 mb-1">
+          <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-400 leading-none">{title}</h2>
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400 inline-flex items-center gap-1 shrink-0">
+            <Lock size={9} aria-hidden />Locked
+          </span>
+        </div>
+        <div className="text-[12px] text-ink-400 leading-tight">{lockedReason ?? 'Available after the previous step is set up.'}</div>
+      </div>
+    );
+  }
+  const healthInfo = HEALTH_LABEL[health];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group w-full bg-white border border-canvas-border rounded-[12px] hover:border-brand-200 hover:bg-paper-50/30 transition-colors cursor-pointer text-left px-5 py-4"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-3 mb-1">
+            <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-900 leading-none">{title}</h2>
+            <span className="text-[12px] text-ink-500 font-mono tabular-nums shrink-0">{count} {countLabel}</span>
+            {healthInfo.label && (
+              <span className={`text-[10px] uppercase tracking-wider font-semibold shrink-0 ${healthInfo.cls}`}>
+                {healthInfo.label}
+              </span>
+            )}
+          </div>
+          <div className="text-[12px] text-ink-500 leading-tight truncate">
+            {breakdown}
+            <span className="text-ink-300 mx-1.5">·</span>
+            {lastActivity}
+          </div>
+        </div>
+        <ChevronRight size={14} className="text-ink-300 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
+      </div>
+    </button>
+  );
+}
+
+// LEGACY (chevron-collapsible): used only when USE_LEGACY_COLLAPSIBLE = true inside BPDetailView.
+function SectionHeader({ title, count, countLabel, warning, open, onToggle }: {
   title: string;
   count: number;
   countLabel: string;
   warning?: string;
+  open: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-6 pb-4 mb-6 border-b border-canvas-border">
-      <div className="flex items-baseline gap-4">
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="group w-full flex items-baseline justify-between gap-6 pb-4 border-b border-canvas-border text-left cursor-pointer"
+    >
+      <div className="flex items-baseline gap-3">
+        <ChevronDown
+          size={16}
+          className={`text-ink-500 shrink-0 self-center transition-transform duration-200 group-hover:text-ink-700 ${open ? '' : '-rotate-90'}`}
+          aria-hidden
+        />
         <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-none">{title}</h2>
         {warning && (
           <span className="text-[11px] font-mono text-mitigated-700 tracking-tight">{warning}</span>
@@ -2731,7 +3075,7 @@ function SectionHeader({ title, count, countLabel, warning }: {
       <span className="text-[11px] font-mono text-ink-500 tabular-nums tracking-tight shrink-0">
         {count} {countLabel}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -2750,6 +3094,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   const racmSectionRef = useRef<HTMLElement | null>(null);
   const scrollToRacms = () => racmSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  type SectionKey = 'sop' | 'racm' | 'risks' | 'controls' | 'workflows';
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    sop: true, racm: true, risks: true, controls: true, workflows: true,
+  });
+  const toggleSection = (k: SectionKey) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }));
+
   // ─── Data: single query per entity, filtered by business_process_id ───
   const bpRacms = RACMS.filter(r => r.bpId === bp.id);
   const bpSops = SOPS.filter(s => s.bpId === bp.id);
@@ -2766,6 +3116,199 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
 
+  // DRILL-IN state + per-section metadata
+  // Seed from URL on first render so deep links + back/forward navigation work.
+  const VALID_SECTIONS: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+  const readSectionFromUrl = (): SectionKey | null => {
+    if (typeof window === 'undefined') return null;
+    const raw = new URLSearchParams(window.location.search).get('section');
+    return raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
+  };
+  const [drilledSection, setDrilledSection] = useState<SectionKey | null>(() => readSectionFromUrl());
+
+  // Listen for browser back/forward so closing the drilled section via browser back works.
+  // On unmount (user navigated away from this BP entirely), strip the ?section= query so it
+  // doesn't leak into a different BP later. We use replaceState — never push/clobber history.
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const raw = (e.state && (e.state as { section?: string }).section) ?? null;
+      const next = raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
+      setDrilledSection(next);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('section')) {
+        window.history.replaceState({ section: null }, '', window.location.pathname);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Push a URL entry whenever the drilled section changes so the back button is meaningful.
+  // We only push when the URL actually differs from current state — avoids double-stacking on
+  // mount when we seeded from the URL above.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const current = new URLSearchParams(window.location.search).get('section');
+    if (drilledSection && current !== drilledSection) {
+      window.history.pushState({ section: drilledSection }, '', `?section=${drilledSection}`);
+    } else if (!drilledSection && current) {
+      // User cleared the drilled section in-code (e.g. clicked the BP-name breadcrumb).
+      // Replace the URL so reload doesn't restore the drilled view.
+      window.history.pushState({ section: null }, '', window.location.pathname);
+    }
+  }, [drilledSection]);
+
+  // Close the drilled view by going back in history so browser back/forward stays consistent.
+  const closeDrilledSection = () => {
+    if (typeof window !== 'undefined' && window.history.state && (window.history.state as { section?: string }).section) {
+      window.history.back();
+    } else {
+      setDrilledSection(null);
+    }
+  };
+
+  const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
+    sop: { title: 'SOPs', count: bpSops.length, countLabel: 'documents', warning: bpSops.length === 0 ? 'no SOPs uploaded' : undefined },
+    racm: { title: 'RACMs', count: bpRacms.length + createdRacms.length, countLabel: 'matrices', warning: (bpRacms.length + createdRacms.length) === 0 ? 'no RACMs yet' : undefined },
+    risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
+    controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
+    workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
+  };
+  const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+
+  // ── Rich insights per section — drive the BP detail index cards. ────────────
+  // Each section reads its underlying seed data and reports:
+  //   health      — visible badge (Healthy / Attention / Stale / Empty)
+  //   breakdown   — secondary line (e.g. "1 linked · 1 standalone")
+  //   lastActivity — short timestamp string
+  //   ctaLabel    — pill on the card hinting at the create affordance
+  type SectionInsight = { health: SectionHealth; breakdown: string; lastActivity: string; ctaLabel: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+  const sectionInsights: Record<SectionKey, SectionInsight> = useMemo(() => {
+    const totalRacms = bpRacms.length + createdRacms.length;
+    const draftRacms = bpRacms.filter(r => r.status === 'draft').length
+                     + createdRacms.filter(r => r.isFrozen === false).length;
+    const activeRacms = totalRacms - draftRacms;
+    const linkedSops = bpSops.filter(s => s.racmId).length;
+    const standaloneSops = bpSops.length - linkedSops;
+    const unmappedRisks = bpRisks.filter(r => r.ctls === 0).length;
+    const mappedRisks = bpRisks.length - unmappedRisks;
+    const keyCtls = bpControls.filter(c => c.isKey).length;
+    const ineffectiveCtls = bpControls.filter(c => c.status === 'ineffective').length;
+    const activeWfs = bpWfs.filter(w => w.status === 'active').length;
+    const idleWfs = bpWfs.length - activeWfs;
+
+    // SOP staleness — anything dated before Mar 2026 in this demo dataset is "stale".
+    const staleSops = bpSops.filter(s => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(s.at)).length;
+
+    return {
+      sop: {
+        icon: FileText,
+        health: bpSops.length === 0 ? 'empty' : (staleSops > 0 ? 'stale' : 'healthy'),
+        breakdown: bpSops.length === 0
+          ? 'No SOPs uploaded yet'
+          : `${linkedSops} linked to RACM${standaloneSops > 0 ? ` · ${standaloneSops} standalone` : ''}`,
+        lastActivity: bpSops.length === 0 ? 'No activity yet' : `Latest: ${bpSops[0].at}`,
+        ctaLabel: bpSops.length === 0 ? 'Upload SOP' : 'Open',
+      },
+      racm: {
+        icon: Grid3x3,
+        health: totalRacms === 0 ? 'empty' : (draftRacms > 0 ? 'attention' : 'healthy'),
+        breakdown: totalRacms === 0
+          ? 'Build your first matrix'
+          : `${activeRacms} active${draftRacms > 0 ? ` · ${draftRacms} draft` : ''}`,
+        lastActivity: bpRacms[0]?.lastRun
+          ? (bpRacms[0].lastRun === 'Never' ? 'Never run' : `Last run: ${bpRacms[0].lastRun}`)
+          : 'No activity yet',
+        ctaLabel: totalRacms === 0 ? 'New RACM' : 'Open',
+      },
+      risks: {
+        icon: AlertTriangle,
+        health: bpRisks.length === 0 ? 'empty' : (unmappedRisks > 0 ? 'attention' : 'healthy'),
+        breakdown: bpRisks.length === 0
+          ? 'No risks captured'
+          : `${mappedRisks} mapped${unmappedRisks > 0 ? ` · ${unmappedRisks} unmapped` : ''}`,
+        lastActivity: bpRisks.length === 0
+          ? 'No activity yet'
+          : (bpRisks.find(r => r.lastUpdated)?.lastUpdated ? `Latest: ${bpRisks.find(r => r.lastUpdated)!.lastUpdated}` : 'No activity yet'),
+        ctaLabel: bpRisks.length === 0 ? 'New Risk' : 'Open',
+      },
+      controls: {
+        icon: Shield,
+        health: bpControls.length === 0 ? 'empty' : (ineffectiveCtls > 0 ? 'attention' : 'healthy'),
+        breakdown: bpControls.length === 0
+          ? 'Mapped via RACM'
+          : `${keyCtls} key${ineffectiveCtls > 0 ? ` · ${ineffectiveCtls} ineffective` : ''}`,
+        lastActivity: bpControls.length === 0 ? 'No activity yet' : 'Mapped via RACM',
+        ctaLabel: bpControls.length === 0 ? 'Go to RACM' : 'Open',
+      },
+      workflows: {
+        icon: Workflow,
+        health: bpWfs.length === 0 ? 'empty' : (idleWfs > 0 ? 'attention' : 'healthy'),
+        breakdown: bpWfs.length === 0
+          ? 'No workflows linked'
+          : `${activeWfs} active${idleWfs > 0 ? ` · ${idleWfs} idle` : ''}`,
+        lastActivity: bpWfs[0]?.lastRun ? `Last run: ${bpWfs[0].lastRun}` : 'No activity yet',
+        ctaLabel: bpWfs.length === 0 ? 'New Workflow' : 'Open',
+      },
+    };
+  }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
+
+  // ── "What needs attention" items — computed from the same seed data. ───────
+  // Each item links to the section where the user can act on it.
+  const attentionItems = useMemo(() => {
+    const items: Array<{ text: string; section: SectionKey }> = [];
+    const draftRacms = bpRacms.filter(r => r.status === 'draft').length
+                     + createdRacms.filter(r => r.isFrozen === false).length;
+    if (draftRacms > 0) {
+      items.push({ text: `${draftRacms} RACM${draftRacms !== 1 ? 's' : ''} in draft — finish setup before audit can run`, section: 'racm' });
+    }
+    const unmappedRisks = bpRisks.filter(r => r.ctls === 0).length;
+    if (unmappedRisks > 0) {
+      items.push({ text: `${unmappedRisks} risk${unmappedRisks !== 1 ? 's' : ''} not yet mapped to a control`, section: 'risks' });
+    }
+    const ineffectiveCtls = bpControls.filter(c => c.status === 'ineffective').length;
+    if (ineffectiveCtls > 0) {
+      items.push({ text: `${ineffectiveCtls} control${ineffectiveCtls !== 1 ? 's' : ''} flagged as ineffective`, section: 'controls' });
+    }
+    const staleSops = bpSops.filter(s => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(s.at)).length;
+    if (staleSops > 0) {
+      items.push({ text: `${staleSops} SOP${staleSops !== 1 ? 's' : ''} not updated in 30+ days`, section: 'sop' });
+    }
+    const idleWfs = bpWfs.length - bpWfs.filter(w => w.status === 'active').length;
+    if (idleWfs > 0) {
+      items.push({ text: `${idleWfs} workflow${idleWfs !== 1 ? 's' : ''} idle for the last 14 days`, section: 'workflows' });
+    }
+    return items;
+  }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
+
+  // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
+  const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
+
+  // Section switcher pill labels (shorter than full section titles where useful).
+  const sectionPillLabel: Record<SectionKey, string> = {
+    sop: 'SOP',
+    racm: 'RACM',
+    risks: 'Risks',
+    controls: 'Controls',
+    workflows: 'Workflows',
+  };
+  // Switch to a different drilled section in-place (also updates URL).
+  const switchDrilledSection = (next: SectionKey) => {
+    if (next === drilledSection) return;
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ section: next }, '', `?section=${next}`);
+    }
+    setDrilledSection(next);
+  };
+
+  // ============================================================
+  // LEGACY chevron-collapsible view — flip USE_LEGACY_COLLAPSIBLE to true to restore.
+  // The entire old return JSX is preserved verbatim inside this guarded block.
+  // ============================================================
+  const USE_LEGACY_COLLAPSIBLE = false;
+  if (USE_LEGACY_COLLAPSIBLE) {
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
@@ -2795,10 +3338,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             </div>
             <div className="flex items-center gap-2">
               <span className="font-bold">Status:</span>
-              <span className="inline-flex items-center gap-1.5 bg-success-bg text-compliant-700 px-2.5 py-0.5 rounded-full text-[12px] font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                {bp.status ?? 'Active'}
-              </span>
+              {(() => {
+                const s = bp.status ?? 'Active';
+                const tone =
+                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                return (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                    {s}
+                  </span>
+                );
+              })()}
             </div>
           </div>
           {bp.description && (
@@ -2842,7 +3395,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 count={bpSops.length}
                 countLabel="documents"
                 warning={bpSops.length === 0 ? 'no SOPs uploaded' : undefined}
+                open={openSections.sop}
+                onToggle={() => toggleSection('sop')}
               />
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.sop ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <div className="pt-6">
               <SOPTabContent
                 bpId={bp.id}
                 bpAbbr={bp.abbr}
@@ -2870,6 +3428,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   setReviewingRacmId(racmId);
                 }}
               />
+                  </div>
+                </div>
+              </div>
             </section>
 
             {/* RACMs */}
@@ -2879,15 +3440,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 count={bpRacms.length + createdRacms.length}
                 countLabel="matrices"
                 warning={(bpRacms.length + createdRacms.length) === 0 ? 'no RACMs yet' : undefined}
+                open={openSections.racm}
+                onToggle={() => toggleSection('racm')}
               />
-              <div className="space-y-4">
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.racm ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <div className="pt-6 space-y-4">
                 <RacmListTable
                   processFilter={bp.abbr}
                   extraRacms={createdRacms}
+                  onCreate={() => setShowCreateRacm(true)}
                   headerAction={
                     <button type="button" onClick={() => setShowCreateRacm(true)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                      <Plus size={13} />Create RACM
+                      <Plus size={13} />New RACM
                     </button>
                   }
                   onEditDraft={(racm) => {
@@ -2929,6 +3495,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                     />
                   )}
                 </AnimatePresence>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -2939,8 +3507,16 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 count={bpRisks.length}
                 countLabel="risks"
                 warning={bpRisks.length === 0 ? 'no risks captured' : undefined}
+                open={openSections.risks}
+                onToggle={() => toggleSection('risks')}
               />
-              <RiskRegister processFilter={bp.abbr} />
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.risks ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <div className="pt-6">
+                    <RiskRegister processFilter={bp.abbr} />
+                  </div>
+                </div>
+              </div>
             </section>
 
             {/* Controls */}
@@ -2950,8 +3526,16 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 count={bpControls.length}
                 countLabel="controls"
                 warning={bpControls.length === 0 ? 'no controls defined' : undefined}
+                open={openSections.controls}
+                onToggle={() => toggleSection('controls')}
               />
-              <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} />
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.controls ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <div className="pt-6">
+                    <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={scrollToRacms} />
+                  </div>
+                </div>
+              </div>
             </section>
 
             {/* Workflows */}
@@ -2961,12 +3545,328 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 count={bpWfs.length}
                 countLabel="workflows"
                 warning={bpWfs.length === 0 ? 'no workflows linked' : undefined}
+                open={openSections.workflows}
+                onToggle={() => toggleSection('workflows')}
               />
-              <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.workflows ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <div className="pt-6">
+                    <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />
+                  </div>
+                </div>
+              </div>
             </section>
           </div>
         )}
 
+      </div>
+    </div>
+  );
+  }
+
+  // ============================================================
+  // DRILL-IN view — current active pattern.
+  // ============================================================
+
+  // RACM editor takeover — full-screen replaces all views while editing
+  if (reviewingRacm) {
+    return (
+      <div className="h-full overflow-y-auto bg-canvas">
+        <div className="px-[124px] py-8">
+          <ReviewImportWorkspace
+            racmName={reviewingRacm.name}
+            bpAbbr={bp.abbr}
+            fileName={reviewingRacm.sourceFileName || 'imported.xlsx'}
+            onBack={() => setReviewingRacmId(null)}
+            onFreeze={(importedRows) => {
+              const uniqueRisks = new Set(importedRows.filter(r => r.riskId.trim()).map(r => r.riskId));
+              const uniqueControls = new Set(importedRows.filter(r => r.controlId.trim()).map(r => r.controlId));
+              const keyControlIds = new Set(importedRows.filter(r => r.keyControl && r.controlId.trim()).map(r => r.controlId));
+              const mappings = new Set(importedRows.filter(r => r.riskId.trim() && r.controlId.trim()).map(r => `${r.riskId}::${r.controlId}`));
+              const framework = importedRows.find(r => r.framework.trim())?.framework || reviewingRacm.framework;
+              setCreatedRacms(prev => prev.map(r => r.id === reviewingRacm.id ? {
+                ...r, isFrozen: true,
+                risks: uniqueRisks.size, controls: uniqueControls.size,
+                mappedRisks: uniqueRisks.size, unmappedRisks: 0,
+                keyControls: keyControlIds.size, framework,
+                workflowCoverage: 0, attributesCoverage: 0, isValidated: true,
+              } : r));
+              setReviewingRacmId(null);
+              addToast({
+                message: `RACM "${reviewingRacm.name}" frozen — ${uniqueRisks.size} risks, ${uniqueControls.size} controls, ${mappings.size} mappings created.`,
+                type: 'success',
+              });
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Drilled view — full-screen content for one section with updated breadcrumb
+  if (drilledSection) {
+    const info = sectionMeta[drilledSection];
+    return (
+      <div className="h-full overflow-y-auto bg-canvas">
+        <div className="px-[124px] py-8">
+          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-6 border-b border-border">
+            <div className="font-mono text-[11px] mb-3 tracking-tight flex items-center gap-1.5">
+              <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                <ArrowLeft size={12} />Process Hub
+              </button>
+              <span className="text-ink-300">/</span>
+              <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer">{bp.name}</button>
+              <span className="text-ink-300">/</span>
+              <span className="text-ink-700">{info.title}</span>
+            </div>
+
+            {/* Section switcher pills — keeps users oriented inside the drilled view */}
+            <div className="flex items-center gap-2 mt-3 mb-5 overflow-x-auto -mx-1 px-1 pb-1">
+              {sectionOrder.map(key => {
+                const m = sectionMeta[key];
+                const active = drilledSection === key;
+                return (
+                  <button
+                    type="button"
+                    key={key}
+                    aria-label={`Switch to ${m.title}`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => switchDrilledSection(key)}
+                    className={`shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-brand-600 text-paper-0'
+                        : 'bg-paper-100 text-ink-700 hover:bg-paper-200'
+                    }`}
+                  >
+                    {sectionPillLabel[key]}
+                    {m.count > 0 && (
+                      <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+          </div>
+
+          {drilledSection === 'sop' && (
+            <SOPTabContent
+              bpId={bp.id}
+              bpAbbr={bp.abbr}
+              existingSops={bpSops}
+              existingRacms={bpRacms}
+              onGoToRacm={() => switchDrilledSection('racm')}
+              onRacmCreated={(racmId, racmName, process, framework) => {
+                setCreatedRacms(prev => [...prev, {
+                  id: racmId, name: racmName, version: 'v1.0', process, framework,
+                  risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                  workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
+                  isFrozen: false,
+                }]);
+              }}
+              onViewRacm={(racmId) => {
+                const exists = createdRacms.some(r => r.id === racmId);
+                if (!exists) {
+                  setCreatedRacms(prev => [...prev, {
+                    id: racmId, name: `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
+                    risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                    workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
+                    isFrozen: false,
+                  }]);
+                }
+                setReviewingRacmId(racmId);
+              }}
+            />
+          )}
+          {drilledSection === 'racm' && (
+            <div className="space-y-4">
+              <RacmListTable
+                processFilter={bp.abbr}
+                extraRacms={createdRacms}
+                onCreate={() => setShowCreateRacm(true)}
+                headerAction={
+                  <button type="button" onClick={() => setShowCreateRacm(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                    <Plus size={13} />New RACM
+                  </button>
+                }
+                onEditDraft={(racm) => {
+                  const exists = createdRacms.some(r => r.id === racm.id);
+                  if (!exists) {
+                    setCreatedRacms(prev => [...prev, { ...racm, isFrozen: false }]);
+                  }
+                  setReviewingRacmId(racm.id);
+                }}
+                onOpenInEditor={onOpenRacmEditor}
+              />
+              <AnimatePresence>
+                {showCreateRacm && (
+                  <CreateRacmFromSOPModal
+                    sopName=""
+                    bpAbbr={bp.abbr}
+                    onClose={() => setShowCreateRacm(false)}
+                    onStartReview={(racmName, fileName) => {
+                      const racmId = `racm-${Date.now()}`;
+                      setCreatedRacms(prev => [...prev, {
+                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
+                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
+                        isFrozen: false, sourceFileName: fileName,
+                      }]);
+                      setReviewingRacmId(racmId);
+                      setShowCreateRacm(false);
+                    }}
+                    onCreate={(racmName, framework) => {
+                      const racmId = `racm-${Date.now()}`;
+                      setCreatedRacms(prev => [...prev, {
+                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework,
+                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
+                        isFrozen: true,
+                      }]);
+                      setShowCreateRacm(false);
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
+          {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
+          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />}
+        </div>
+      </div>
+    );
+  }
+
+  // Index view — header strip + 5 clickable section rows
+  return (
+    <div className="h-full overflow-y-auto bg-canvas">
+      <div className="px-[124px] py-8">
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
+          <button type="button" onClick={onBack} className="font-mono text-[11px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
+            <ArrowLeft size={12} />Process Hub
+          </button>
+
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+            <div className="text-right shrink-0">
+              <div className="text-2xl font-bold tabular-nums text-ink-800">{coverage}%</div>
+              <div className="text-[10px] text-text-muted">Coverage</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 mb-5 text-[12px] text-text-muted">
+            <span className="font-mono">{bp.abbr}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">Owner:</span>
+              <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold">Status:</span>
+              {(() => {
+                const s = bp.status ?? 'Active';
+                const tone =
+                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                return (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                    {s}
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+          {bp.description && (
+            <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl pb-5">{bp.description}</p>
+          )}
+        </div>
+
+        {/* Fresh-BP onboarding banner — only when nothing's set up yet. */}
+        {isFreshBP && (
+          <div className="mb-5 bg-brand-50/60 border border-brand-200/60 rounded-[12px] p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-[8px] bg-brand-600 flex items-center justify-center shrink-0">
+              <Sparkles size={18} className="text-paper-0" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-display text-[18px] font-[420] tracking-tight text-ink-900 mb-1">Start by uploading an SOP</h3>
+              <p className="text-[13px] text-ink-700 leading-snug">
+                Upload your first SOP and we&apos;ll extract risks and controls automatically. The other sections unlock once you have a RACM.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => switchDrilledSection('sop')}
+              className="shrink-0 px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700 transition-colors inline-flex items-center gap-1.5"
+            >
+              <Upload size={13} />Upload SOP
+            </button>
+          </div>
+        )}
+
+        {/* Attention card — white interior like the section cards below, but
+            outlined in a warmer border so it differs by OUTLINE not by FILL. */}
+        {!isFreshBP && attentionItems.length > 0 && (
+          <div className="mb-5 bg-white border border-mitigated/25 rounded-[12px] overflow-hidden" aria-label="Items needing attention">
+            <div className="flex items-center gap-2 px-5 pt-3.5 pb-2">
+              <AlertTriangle size={11} className="text-mitigated-700" aria-hidden />
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-mitigated-700">
+                Needs attention
+              </span>
+              <span className="text-[10px] uppercase tracking-wider font-mono text-ink-400 tabular-nums">
+                · {attentionItems.length}
+              </span>
+            </div>
+            <ul className="divide-y divide-canvas-border/60">
+              {attentionItems.map((item, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => switchDrilledSection(item.section)}
+                    aria-label={`Open ${item.section}: ${item.text}`}
+                    className="w-full flex items-center gap-3 px-5 py-2.5 text-left hover:bg-paper-50/40 transition-colors cursor-pointer group"
+                  >
+                    <span className="text-[13px] text-ink-800 leading-snug flex-1 min-w-0">{item.text}</span>
+                    <ChevronRight size={13} className="text-ink-300 group-hover:text-mitigated-700 transition-colors shrink-0" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {sectionOrder.map(key => {
+            const m = sectionMeta[key];
+            const ins = sectionInsights[key];
+            // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
+            const locked = isFreshBP && key !== 'sop'
+              ? true
+              : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
+            const lockedReason = key === 'sop'
+              ? undefined
+              : key === 'racm'
+                ? 'Available after the first SOP is uploaded.'
+                : 'Available after the first RACM is created.';
+            return (
+              <SectionCard
+                key={key}
+                title={m.title}
+                count={m.count}
+                countLabel={m.countLabel}
+                breakdown={ins.breakdown}
+                lastActivity={ins.lastActivity}
+                health={ins.health}
+                locked={locked}
+                lockedReason={lockedReason}
+                onClick={() => switchDrilledSection(key)}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
