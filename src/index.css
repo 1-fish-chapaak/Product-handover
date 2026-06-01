@@ -445,7 +445,9 @@ select:focus-visible {
   border-radius: var(--radius-md);
 }
 
-/* Opt-out: suppress the focus ring on inputs/textareas tagged .no-focus-ring */
+/* Opt-out: suppress the global focus ring on anything tagged .no-focus-ring
+   (e.g. full-bleed list rows that show focus via a background tint instead). */
+.no-focus-ring:focus-visible,
 input.no-focus-ring:focus-visible,
 textarea.no-focus-ring:focus-visible,
 select.no-focus-ring:focus-visible {

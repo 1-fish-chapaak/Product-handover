@@ -455,7 +455,9 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
 }
 
 function SourceRow({ source, selected, onToggle }: { source: DataSource; selected: boolean; onToggle: () => void }) {
-  const { icon: Icon, tone, label: typeLabel } = TYPE_META[source.type];
+  // One calm brand tile tone for every source so the icon frame reads the same
+  // here as it does in the Knowledge Hub; the glyph still distinguishes type.
+  const { icon: Icon, label: typeLabel } = TYPE_META[source.type];
   return (
     <li>
       <button
@@ -473,8 +475,8 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
           {selected && <Check size={11} className="text-white" />}
         </div>
 
-        {/* Type-tinted icon tile */}
-        <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
+        {/* Brand icon tile — same flat lavender frame everywhere */}
+        <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
           <Icon size={15} />
         </div>
 

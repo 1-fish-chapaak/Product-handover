@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Search, ChevronDown, ArrowUpDown,
   FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
   CheckCircle, Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
-  Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, Maximize2, Minimize2,
+  Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
@@ -58,7 +58,8 @@ const HEALTH_META: Record<IntegrationConfig['health'], { label: string; tone: st
   untested: { label: 'Not yet tested',       tone: 'text-ink-700 bg-paper-100',                                         dot: 'bg-ink-400' },
 };
 
-type SortKey = 'name' | 'size' | 'uploaded';
+type SortKey = 'name' | 'type' | 'size' | 'rows' | 'uploaded' | 'status';
+type SortDir = 'asc' | 'desc';
 
 // Pseudo-progress shape for files mid-upload (Path: simulated client-side).
 interface UploadingFile {
@@ -76,7 +77,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('uploaded');
-  const [sortOpen, setSortOpen] = useState(false);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedFileId, setExpandedFileId] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [recentlyAdded, setRecentlyAdded] = useState<DatasetFile[]>([]);
@@ -121,6 +122,9 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   const baseFiles = isFileSource ? filesForSource(source) : [];
   const allFiles = [...recentlyAdded, ...baseFiles];
   const integrationConfig = !isFileSource ? INTEGRATION_CONFIGS[source.id] : undefined;
+  // For a single-file source, the header carries that file's status + date and
+  // a direct download (folders download the whole pack instead).
+  const headerFile = isFileSource && !source.isFolder ? allFiles[0] : undefined;
 
   // Single-file sources auto-expand their preview — no extra click required.
   useEffect(() => {
@@ -134,10 +138,17 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     const filtered = allFiles.filter(f =>
       !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.format.toLowerCase().includes(search.toLowerCase())
     );
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const rowCount = (f: DatasetFile) => f.rows ?? f.pages ?? 0;
     const cmp = (a: DatasetFile, b: DatasetFile): number => {
-      if (sortKey === 'name')   return a.name.localeCompare(b.name);
-      if (sortKey === 'size')   return b.sizeBytes - a.sizeBytes;
-      return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
+      switch (sortKey) {
+        case 'name':   return a.name.localeCompare(b.name) * dir;
+        case 'type':   return (a.format.localeCompare(b.format) || a.name.localeCompare(b.name)) * dir;
+        case 'size':   return (a.sizeBytes - b.sizeBytes) * dir;
+        case 'rows':   return (rowCount(a) - rowCount(b)) * dir;
+        case 'status': return (a.status.localeCompare(b.status) || a.name.localeCompare(b.name)) * dir;
+        default:       return (new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime()) * dir;
+      }
     };
     // Pin just-uploaded files to the top (newest first) regardless of the sort
     // key, so a fresh upload is always visible; everything else sorts normally.
@@ -145,7 +156,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     const recent = filtered.filter(f => recentIds.has(f.id)); // keeps insertion order (newest first)
     const rest   = filtered.filter(f => !recentIds.has(f.id)).sort(cmp);
     return [...recent, ...rest];
-  }, [allFiles, recentlyAdded, search, sortKey]);
+  }, [allFiles, recentlyAdded, search, sortKey, sortDir]);
 
   const totalSize = allFiles.reduce((acc, f) => acc + f.sizeBytes, 0);
   // Folders get the FolderOpen + evidence-tile treatment so the detail header
@@ -282,31 +293,57 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     });
   };
 
+  // Download the whole folder. A real backend streams a .zip; here we export a
+  // manifest of the folder's contents so the action is wired and honest.
+  const downloadFolder = () => {
+    const lines = allFiles.map(f => `${f.name}\t${formatBytes(f.sizeBytes)}`).join('\n');
+    const content = `# ${source.name}\n# ${allFiles.length} files · ${formatBytes(totalSize)}\n\n${lines}\n`;
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${source.name}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    addToast({ type: 'success', message: `Downloading ${source.name} — ${allFiles.length} files…` });
+  };
+
+  // Header download: the whole folder, or the single file for a file source.
+  const downloadHeader = () => {
+    if (source.isFolder) { downloadFolder(); return; }
+    if (headerFile) { triggerDownload(headerFile); addToast({ type: 'success', message: `Downloading ${headerFile.name}…` }); }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -12 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="h-full flex flex-col gap-5 min-h-0"
+      className="flex flex-col gap-5"
     >
-      {/* Sub-breadcrumb + back */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Back */}
+      <div className="flex items-center shrink-0">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 px-2 py-1 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
+          className="flex items-center gap-1 px-2 py-1 text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer"
         >
           <ChevronLeft size={14} />
           Data Sources
         </button>
-        <span className="font-mono text-[0.75rem] text-ink-300">/</span>
-        <span className="text-[0.75rem] font-medium text-ink-700 truncate">{source.name}</span>
       </div>
 
-      {/* Source header — icon + (rename-capable) name + meta + actions */}
-      <div className="flex items-start justify-between gap-4 flex-wrap shrink-0">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
-          <div className={`w-12 h-12 rounded-lg ${iconTileClass} flex items-center justify-center shrink-0`}>
+      {/* Source header — presented as a card (outlined, elevated surface) that
+          eases in on mount, matching the platform's entrance motion. */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.2, 0, 0, 1], delay: 0.04 }}
+        className="flex items-center justify-between gap-4 flex-wrap shrink-0 rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-4 shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]"
+      >
+        <div className="group/hd flex items-center gap-3.5 min-w-0 flex-1">
+          <div className={`w-12 h-12 rounded-xl ${iconTileClass} flex items-center justify-center shrink-0`}>
             <SourceIcon size={22} className={iconColorClass} />
           </div>
           <div className="min-w-0">
@@ -329,30 +366,37 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                       }
                       commitRename();
                     }}
-                    className="h-9 px-2 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-md focus:outline-none focus:ring-4 focus:ring-brand-600/15 transition-all min-w-0 flex-1"
+                    className="h-10 px-2.5 text-[1.125rem] font-semibold tracking-tight text-ink-900 bg-canvas-elevated border border-brand-600 rounded-lg focus:outline-none focus:ring-4 focus:ring-brand-600/15 transition-all min-w-0 flex-1"
                   />
                   <button
                     onClick={commitRename}
                     className="p-1.5 text-compliant hover:bg-compliant-50 rounded-md transition-colors cursor-pointer"
                     aria-label="Save name"
                   >
-                    <Check size={15} />
+                    <Check size={16} />
                   </button>
                   <button
                     onMouseDown={() => { suppressBlurCommitRef.current = true; }}
                     onClick={cancelRename}
-                    className="p-1.5 text-ink-500 hover:bg-paper-50 rounded-md transition-colors cursor-pointer"
+                    className="p-1.5 text-ink-500 hover:bg-brand-50 rounded-md transition-colors cursor-pointer"
                     aria-label="Cancel rename"
                   >
-                    <X size={15} />
+                    <X size={16} />
                   </button>
                 </>
               ) : (
                 <>
-                  <h1 className="text-[0.875rem] font-semibold text-ink-900 truncate">{source.name}</h1>
+                  <h1
+                    onClick={startRename}
+                    title="Rename source"
+                    className="text-[1.125rem] font-semibold tracking-tight text-ink-900 truncate cursor-pointer hover:text-brand-700 transition-colors"
+                  >
+                    {source.name}
+                  </h1>
+                  {headerFile && <StatusPillFlat status={headerFile.status} />}
                   <button
                     onClick={startRename}
-                    className="p-1.5 text-ink-400 hover:text-brand-700 hover:bg-paper-50 rounded-md transition-colors cursor-pointer shrink-0"
+                    className="p-1 text-ink-300 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 opacity-0 group-hover/hd:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                     aria-label="Rename source"
                   >
                     <Pencil size={13} />
@@ -360,22 +404,35 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                 </>
               )}
             </div>
-            <p className="text-[0.75rem] text-ink-500 mt-1 tabular-nums">
+            <p className="text-[0.8125rem] text-ink-500 mt-1 tabular-nums">
               {source.isFolder
-                // Folders: one authoritative count + total size (the stored
-                // subtype already embeds these, so we don't append them again).
-                ? `Folder · ${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'} · ${formatBytes(totalSize)}`
+                // Folders: count + total size (type is shown as the badge above).
+                ? `${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'} · ${formatBytes(totalSize)}`
                 : isFileSource
-                  // Single file: its own format · size (e.g. "PDF · 4.2 KB").
-                  ? source.subtype
+                  // Single file: format · size · upload date (status is the pill above).
+                  ? <>{source.subtype}{headerFile && <> · uploaded {new Date(headerFile.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>}</>
                   : <>{source.subtype}{integrationConfig && <> · {integrationConfig.provider}</>}</>}
             </p>
           </div>
         </div>
-      </div>
+        {isFileSource && allFiles.length > 0 && headerFile?.status !== 'failed' && (
+          /* Download — whole folder, or the single file. Soft icon tile that
+             pairs with the header's icon (not a lonely outline box). */
+          <button
+            onClick={downloadHeader}
+            title={source.isFolder ? 'Download all files' : 'Download file'}
+            aria-label={source.isFolder ? 'Download all files' : 'Download file'}
+            className="group shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-paper-100 text-ink-600 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+          >
+            <Download size={18} className="transition-transform duration-200 group-hover:translate-y-0.5 motion-reduce:transition-none" />
+          </button>
+        )}
+      </motion.div>
 
-      {/* ── Body branches by source type ── (fills remaining height) */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      {/* ── Body branches by source type ── (viewport-tall so the back button +
+          header card scroll away above it, while the reading pane keeps its own
+          internal scroll) */}
+      <div className="shrink-0 flex flex-col h-[calc(100vh-13rem)]">
         {isFileSource ? (
           <FileSourceBody
             files={allFiles}
@@ -386,8 +443,8 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
             setSearch={setSearch}
             sortKey={sortKey}
             setSortKey={setSortKey}
-            sortOpen={sortOpen}
-            setSortOpen={setSortOpen}
+            sortDir={sortDir}
+            setSortDir={setSortDir}
             expandedFileId={expandedFileId}
             setExpandedFileId={setExpandedFileId}
             onUpload={handleFiles}
@@ -415,8 +472,8 @@ interface FileSourceBodyProps {
   setSearch: (s: string) => void;
   sortKey: SortKey;
   setSortKey: (k: SortKey) => void;
-  sortOpen: boolean;
-  setSortOpen: (b: boolean) => void;
+  sortDir: SortDir;
+  setSortDir: (d: SortDir) => void;
   expandedFileId: string | null;
   setExpandedFileId: (s: string | null) => void;
   onUpload: (files: FileList | null) => void;
@@ -424,98 +481,115 @@ interface FileSourceBodyProps {
 }
 
 function FileSourceBody({
-  files, visible, uploadingFiles, isFolder, search, setSearch, sortKey, setSortKey, sortOpen, setSortOpen,
+  files, visible, uploadingFiles, isFolder, search, setSearch, sortKey, setSortKey, sortDir, setSortDir,
   expandedFileId, setExpandedFileId, onUpload, onRenameFile,
 }: FileSourceBodyProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  // Split view (folders): which file is shown in the right preview pane, and
-  // whether that preview is blown up to full screen.
+  const [sortOpen, setSortOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Reading-pane: the LIST stays on the left and the selected file previews
+  // LIVE on the right — so moving through files (click or ↑/↓) shows content
+  // with no opening, no back. Selection falls back to the first visible file
+  // so the pane is never empty.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  // Selection follows the visible set: keep the chosen file if it's still
-  // visible, otherwise fall back to the first one.
   const selected = visible.find(f => f.id === selectedId) ?? visible[0] ?? null;
-  const railRef = useRef<HTMLUListElement>(null);
 
-  // Folder sources fill the available height (toolbar fixed, split fills);
-  // single-file sources keep their natural inline layout.
   const fill = isFolder && (files.length > 0 || uploadingFiles.length > 0);
+  // Single-file preview: the spreadsheet/PDF preview is already its own card, so
+  // the wrapper drops its border/bg to avoid a card-inside-a-card.
+  const singlePreview = !isFolder && files.length > 0;
 
-  // Keyboard navigation for the split: ↑/↓ moves the selection, Enter opens
-  // full screen. Skipped while typing in a field or while full screen is open
-  // (that has its own ←/→/Esc handling).
+  // ↑/↓ steps the selection (and thus the live preview) when focus isn't in a
+  // text field. This is the "see without clicking each" path.
   useEffect(() => {
     if (!fill) return;
     const onKey = (e: KeyboardEvent) => {
-      if (fullscreen) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
-      const idx = visible.findIndex(f => f.id === selected?.id);
-      if (e.key === 'Enter') { if (selected) { e.preventDefault(); setFullscreen(true); } return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       e.preventDefault();
+      const idx = visible.findIndex(f => f.id === selected?.id);
       const next = e.key === 'ArrowDown' ? visible[Math.min(idx + 1, visible.length - 1)] : visible[Math.max(idx - 1, 0)];
       if (next) setSelectedId(next.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fill, fullscreen, visible, selected?.id]);
+  }, [fill, visible, selected?.id]);
 
-  // Keep the selected rail item in view when moving by keyboard.
+  // Keep the selected row visible while arrowing through the list.
   useEffect(() => {
     if (!fill || !selected) return;
-    const el = railRef.current?.querySelector(`[data-file-id="${CSS.escape(selected.id)}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
+    listRef.current?.querySelector(`[data-file-id="${CSS.escape(selected.id)}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [fill, selected?.id]);
+
+  // A handful of plain-language sort orders — enough for "find my file",
+  // without the noise of six sortable column headers.
+  const SORTS: { key: SortKey; dir: SortDir; label: string }[] = [
+    { key: 'uploaded', dir: 'desc', label: 'Newest first' },
+    { key: 'uploaded', dir: 'asc',  label: 'Oldest first' },
+    { key: 'name',     dir: 'asc',  label: 'Name (A–Z)' },
+    { key: 'size',     dir: 'desc', label: 'Largest first' },
+  ];
+  const activeSort = SORTS.find(s => s.key === sortKey && s.dir === sortDir) ?? SORTS[0];
 
   return (
     <div className={fill ? 'flex flex-col gap-4 h-full min-h-0' : 'space-y-4'}>
-      {/* Toolbar — search + sort + upload. Single-file sources skip the
-          toolbar entirely; the lone file row says everything. */}
+      {/* Finder bar — search leads (the job here is finding one file), then sort + upload. */}
       {isFolder && (files.length > 0 || uploadingFiles.length > 0) && (
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+          <div className="relative flex-1 min-w-[220px] max-w-xl">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             <input
+              ref={searchRef}
               type="text"
-              placeholder="Search files…"
+              placeholder="Search files by name…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="no-focus-ring w-full pl-9 pr-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors"
+              className="no-focus-ring w-full pl-9 pr-9 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors"
             />
+            {search && (
+              <button
+                onClick={() => { setSearch(''); searchRef.current?.focus(); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-          <div className="relative">
+          <div className="relative ml-auto">
             <button
               onClick={() => setSortOpen(!sortOpen)}
-              className="flex items-center gap-2 px-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium text-ink-700 hover:border-brand-300 transition-colors cursor-pointer"
+              className="no-focus-ring flex items-center gap-2 px-3 h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium text-ink-700 hover:border-brand-300 focus-visible:border-brand-400 transition-colors cursor-pointer"
             >
               <ArrowUpDown size={13} className="text-ink-400 shrink-0" />
-              <span className="text-ink-400 font-normal">Sort</span>
-              <span>{sortKey === 'name' ? 'Name' : sortKey === 'size' ? 'Size' : 'Uploaded'}</span>
+              <span>{activeSort.label}</span>
               <ChevronDown size={13} className={`text-ink-400 transition-transform ${sortOpen ? 'rotate-180' : ''}`} />
             </button>
             {sortOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 min-w-full z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-1 shadow-md">
-                  {(['uploaded', 'name', 'size'] as SortKey[]).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => { setSortKey(s); setSortOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors whitespace-nowrap ${
-                        s === sortKey ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'
-                      }`}
-                    >
-                      {s === 'name' ? 'Name' : s === 'size' ? 'Size' : 'Uploaded'}
-                    </button>
-                  ))}
+                <div className="absolute left-0 right-0 top-full mt-1 w-full z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-1 shadow-md">
+                  {SORTS.map(s => {
+                    const on = s.key === sortKey && s.dir === sortDir;
+                    return (
+                      <button
+                        key={s.label}
+                        onClick={() => { setSortKey(s.key); setSortDir(s.dir); setSortOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors whitespace-nowrap ${on ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-brand-50'}`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
           </div>
-          <div className="ml-auto">
+          <div>
             <input
               ref={fileInputRef}
               type="file"
@@ -524,12 +598,11 @@ function FileSourceBody({
               className="hidden"
               onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
             />
-            {/* Platform primary-CTA treatment (solid brand-600 / white, like
-                the main KH "Add source"), at the toolbar's h-[38px]/rounded-lg
-                metrics so it stays dimensionally consistent with search + sort. */}
+            {/* Platform primary CTA — brand-600 / white, gap-2, rounded-md,
+                sized to the finder bar's h-[38px] so the row aligns. */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-4 h-[38px] rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 h-[38px] rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />
               Add files
@@ -547,7 +620,7 @@ function FileSourceBody({
           setIsDragging(false);
           onUpload(e.dataTransfer.files);
         }}
-        className={`relative rounded-xl border ${isDragging ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated'} transition-colors overflow-hidden ${fill ? 'flex-1 min-h-0 flex flex-col' : ''}`}
+        className={`relative transition-colors ${isDragging ? 'rounded-xl overflow-hidden border border-brand-300 bg-brand-50/40' : singlePreview ? '' : 'rounded-xl overflow-hidden border border-canvas-border bg-canvas-elevated'} ${fill ? 'flex-1 min-h-0 flex flex-col' : ''}`}
       >
         {isDragging && (
           <div
@@ -578,48 +651,34 @@ function FileSourceBody({
             </div>
           </div>
         ) : isFolder ? (
-          /* Folder → split: file list rail (left) + preview pane (right). The
-             list stays put while you switch files, and the preview gets a
-             large, fixed area instead of being crammed between rows. */
+          /* Folder → reading pane: finder list (left) + live preview (right).
+             Selecting a row (click or ↑/↓) updates the preview instantly. */
           <div className="flex flex-1 min-h-0">
-            <div className="w-[272px] shrink-0 border-r border-canvas-border flex flex-col overflow-hidden">
-              {/* Rail header — file count + use ↑/↓ hint. */}
-              <div className="shrink-0 flex items-center justify-between gap-2 px-3.5 h-9 border-b border-canvas-border bg-canvas">
+            <div className="w-[24rem] shrink-0 border-r border-canvas-border flex flex-col min-h-0">
+              {/* List header — aligns with the preview header (h-14) so the
+                  divider runs straight across; shows count + keyboard hint. */}
+              <div className="shrink-0 flex items-center justify-between gap-2 px-4 h-14 border-b border-canvas-border bg-canvas">
                 <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 tabular-nums">
-                  {visible.length} {visible.length === 1 ? 'file' : 'files'}
+                  {search ? `${visible.length} ${visible.length === 1 ? 'result' : 'results'}` : 'Files'}
                 </span>
-                <span className="text-[0.625rem] text-ink-400">↑↓ to move</span>
+                <span className="text-[0.6875rem] text-ink-400">↑↓ to move</span>
               </div>
-              <ul ref={railRef} className="flex-1 overflow-y-auto py-1">
-                <AnimatePresence initial={false}>
-                  {uploadingFiles.map(uf => (
-                    <UploadingRow key={uf.id} file={uf} />
-                  ))}
-                </AnimatePresence>
-                {visible.length === 0 && uploadingFiles.length === 0 ? (
-                  <li className="text-center py-12 px-4">
-                    <Search size={20} className="mx-auto text-ink-400 mb-2" />
-                    <p className="text-[0.75rem] text-ink-500">No files match "{search}".</p>
-                  </li>
-                ) : (
-                  visible.map(f => (
-                    <li key={f.id}>
-                      <FileListItem
-                        file={f}
-                        selected={selected?.id === f.id}
-                        onSelect={() => setSelectedId(f.id)}
-                      />
-                    </li>
-                  ))
-                )}
-              </ul>
+              <div ref={listRef} className="flex-1 overflow-y-auto">
+                <FileList
+                  visible={visible}
+                  uploadingFiles={uploadingFiles}
+                  search={search}
+                  selectedId={selected?.id ?? null}
+                  onSelect={setSelectedId}
+                />
+              </div>
             </div>
-            <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-canvas-elevated">
+            <div className="flex-1 min-w-0 flex flex-col min-h-0 bg-canvas-elevated">
               {selected ? (
-                <PreviewPane file={selected} onFullscreen={() => setFullscreen(true)} />
+                <PreviewPane file={selected} />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-[0.8125rem] text-ink-400">
-                  Select a file to preview
+                  Select a file to preview it here.
                 </div>
               )}
             </div>
@@ -645,18 +704,6 @@ function FileSourceBody({
           </ul>
         )}
       </div>
-
-      {/* Full-screen preview overlay (folder split). */}
-      <AnimatePresence>
-        {fullscreen && selected && (
-          <FullscreenPreview
-            file={selected}
-            files={visible}
-            onNavigate={(id) => setSelectedId(id)}
-            onClose={() => setFullscreen(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -718,7 +765,7 @@ function looksNumeric(v: string): boolean {
 // Presentational spreadsheet — sheet bar + row-number gutter + sticky header +
 // numeric-aware alignment. Shared by the live (parsed bytes) and sample
 // (synthesised, for files with no real bytes) previews.
-function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet, maxHeightClass = 'max-h-[360px]' }: {
+function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet, maxHeightClass = 'max-h-[360px]', bare = false }: {
   header: string[];
   body: string[][];
   totalRows: number;
@@ -728,6 +775,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
   activeSheet?: number;
   onSelectSheet?: (i: number) => void;
   maxHeightClass?: string;
+  bare?: boolean;
 }) {
   const multi = sheetNames.length > 1;
   const activeName = sheetNames[activeSheet] ?? sheetNames[0] ?? 'Sheet1';
@@ -738,28 +786,63 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
   });
   const cellAlign = (ci: number) => (colNumeric[ci] ? 'text-right tabular-nums' : 'text-left');
 
+  // A `w-full` table forces 4 narrow columns to sprawl across the whole pane
+  // with big empty gaps. Instead: short columns hug their content and the one
+  // prose-heavy column (longest content) absorbs the slack. If nothing is
+  // prose-y, the table hugs left at its natural width rather than stretching.
+  const colMaxLen = (ci: number) =>
+    Math.max((header[ci] ?? '').length, 0, ...body.map(r => (r[ci] ?? '').length));
+  let flexCol = -1;
+  let flexBest = 24; // a column must read as prose (>24 chars) to win the slack
+  header.forEach((_, ci) => { const l = colMaxLen(ci); if (l > flexBest) { flexBest = l; flexCol = ci; } });
+  const hasFlex = flexCol >= 0;
+
   return (
-    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-canvas">
-        <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 truncate">
-          <Table2 size={13} className="text-compliant shrink-0" />
-          {activeName}
-        </span>
+    <div className={bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'}>
+      {/* Sheet switcher up top — for multi-sheet workbooks this is the most
+          important control, so it leads instead of hiding under the table. */}
+      <div className="flex items-center justify-between gap-3 px-2.5 h-12 border-b border-canvas-border bg-canvas shrink-0">
+        {multi ? (
+          <div className="flex items-center gap-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {sheetNames.map((name, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onSelectSheet?.(i)}
+                aria-pressed={i === activeSheet}
+                title={name}
+                className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md text-[0.75rem] max-w-[12rem] truncate transition-colors cursor-pointer ${
+                  i === activeSheet
+                    ? 'bg-brand-50 text-brand-700 font-semibold'
+                    : 'text-ink-500 hover:text-ink-800 hover:bg-brand-50'
+                }`}
+              >
+                <Table2 size={13} className={i === activeSheet ? 'text-brand-600 shrink-0' : 'text-ink-400 shrink-0'} />
+                <span className="truncate">{name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-2.5 text-[0.8125rem] font-semibold text-ink-800 truncate">
+            <span className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
+            {activeName}
+          </span>
+        )}
         <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">
-          {multi && <>{sheetNames.length} sheets <span className="text-ink-300">·</span> </>}
           {totalRows.toLocaleString()} rows × {totalCols.toLocaleString()} cols
         </span>
       </div>
 
       <div className={`overflow-auto ${maxHeightClass}`}>
-        <table className="border-collapse text-[0.75rem] w-full">
+        <table className={`border-collapse text-[0.75rem] ${hasFlex ? 'w-full' : 'w-auto'}`}>
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="sticky left-0 z-20 w-10 px-2 py-2.5 bg-canvas border-b border-canvas-border" aria-hidden />
+              <th className="sticky left-0 z-20 w-10 px-2.5 py-2.5 bg-canvas-elevated border-b border-canvas-border" aria-hidden />
               {header.map((h, i) => (
                 <th
                   key={i}
-                  className={`px-3.5 py-2.5 min-w-[7.5rem] bg-canvas border-b border-canvas-border font-semibold text-ink-700 whitespace-nowrap ${colNumeric[i] ? 'text-right' : 'text-left'}`}
+                  title={h}
+                  className={`px-3.5 py-2.5 bg-canvas-elevated border-b border-canvas-border text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 truncate ${i === flexCol ? 'w-full' : 'min-w-[5rem] max-w-[13rem]'} ${colNumeric[i] ? 'text-right' : 'text-left'}`}
                 >
                   {h}
                 </th>
@@ -768,8 +851,8 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
           </thead>
           <tbody>
             {body.map((row, r) => (
-              <tr key={r} className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/40 transition-colors">
-                <td className="sticky left-0 z-10 w-10 px-2 text-right text-[0.6875rem] text-ink-300 tabular-nums bg-canvas-elevated select-none">
+              <tr key={r} className="group/row border-b border-canvas-border/40 last:border-0 transition-colors hover:bg-brand-50">
+                <td className="sticky left-0 z-10 w-10 px-2.5 text-right text-[0.6875rem] text-ink-300 tabular-nums select-none bg-canvas-elevated transition-colors group-hover/row:bg-paper-50">
                   {r + 1}
                 </td>
                 {header.map((_, ci) => {
@@ -777,7 +860,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
                   return (
                     <td
                       key={ci}
-                      className={`px-3.5 py-2 min-w-[7.5rem] max-w-[240px] truncate text-ink-700 ${cellAlign(ci)}`}
+                      className={`px-3.5 py-2 text-[0.75rem] text-ink-700 ${ci === flexCol ? 'max-w-0 truncate' : 'max-w-[13rem] truncate'} ${cellAlign(ci)}`}
                       title={v}
                     >
                       {v === '' ? <span className="text-ink-300">—</span> : v}
@@ -790,28 +873,6 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
         </table>
       </div>
 
-      {/* Sheet tabs — only when the workbook has more than one sheet. */}
-      {multi && (
-        <div className="flex items-center gap-1 px-2 py-1.5 border-t border-canvas-border bg-canvas overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {sheetNames.map((name, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onSelectSheet?.(i)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[0.75rem] transition-colors cursor-pointer ${
-                i === activeSheet
-                  ? 'bg-canvas-elevated text-brand-700 font-semibold border border-canvas-border shadow-[0_1px_2px_rgb(15_8_30_/_0.05)]'
-                  : 'text-ink-500 hover:text-ink-800 hover:bg-canvas-elevated/70'
-              }`}
-              aria-pressed={i === activeSheet}
-            >
-              <Table2 size={11} className={i === activeSheet ? 'text-compliant' : 'text-ink-400'} />
-              {name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="px-3 h-9 flex items-center border-t border-canvas-border text-[0.75rem] text-ink-500 tabular-nums">
         Showing first {body.length} {body.length === 1 ? 'row' : 'rows'}
         <span className="text-ink-400"> · {totalRows.toLocaleString()} total · {live ? 'live preview' : 'sample preview'}</span>
@@ -822,7 +883,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
 
 // Live preview — parses the uploaded bytes with SheetJS (reads CSV and XLSX).
 // Parses the workbook once, then lets the user switch between sheets via tabs.
-const SHEET_MAX_ROWS = 10;
+const SHEET_MAX_ROWS = 50;
 const SHEET_MAX_COLS = 12;
 
 function extractSheet(wb: XLSX.WorkBook, i: number): { rows: string[][]; total: number; cols: number } {
@@ -834,7 +895,7 @@ function extractSheet(wb: XLSX.WorkBook, i: number): { rows: string[][]; total: 
   return { rows, total: Math.max(0, all.length - 1), cols };
 }
 
-function SpreadsheetPreview({ url, totalRows, maxHeightClass }: { url: string; totalRows?: number; maxHeightClass?: string }) {
+function SpreadsheetPreview({ url, totalRows, maxHeightClass, bare = false }: { url: string; totalRows?: number; maxHeightClass?: string; bare?: boolean }) {
   const wbRef = useRef<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [active, setActive] = useState(0);
@@ -865,21 +926,39 @@ function SpreadsheetPreview({ url, totalRows, maxHeightClass }: { url: string; t
     setData(extractSheet(wbRef.current, i));
   };
 
+  const shellClass = bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]';
   if (failed || (data && data.rows.length === 0)) {
     return (
-      <div className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-        <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Preview</div>
-        <p className="text-[0.75rem] text-ink-700 tabular-nums">
-          {totalRows != null ? `${totalRows.toLocaleString()} total rows` : 'Preview unavailable'}
-        </p>
+      <div className={shellClass}>
+        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 px-6">
+          <Table2 size={22} className="text-ink-300" />
+          <p className="text-[0.8125rem] text-ink-700 font-medium">Preview unavailable</p>
+          <p className="text-[0.75rem] text-ink-500 tabular-nums">
+            {totalRows != null ? `${totalRows.toLocaleString()} total rows · couldn’t render a preview` : 'This file couldn’t be parsed for preview.'}
+          </p>
+        </div>
       </div>
     );
   }
   if (!data) {
+    // Skeleton — sheet bar + shimmer rows, so the load reads as the table
+    // forming rather than an empty bordered box.
     return (
-      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center gap-2 text-[0.75rem] text-ink-500">
-        <Loader2 size={13} className="animate-spin motion-reduce:animate-none" />
-        Reading file…
+      <div className={shellClass}>
+        <div className="flex items-center gap-2.5 px-3 h-12 border-b border-canvas-border bg-canvas">
+          <span className="w-7 h-7 rounded-md bg-paper-100 animate-pulse" />
+          <span className="h-3 w-28 rounded bg-paper-100 animate-pulse" />
+        </div>
+        <div className="px-4 py-3.5 space-y-3.5">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <span className="h-3 w-6 rounded bg-paper-100/80 animate-pulse shrink-0" />
+              <span className="h-3 flex-1 rounded bg-paper-100 animate-pulse" />
+              <span className="h-3 w-20 rounded bg-paper-100/80 animate-pulse shrink-0" />
+              <span className="h-3 w-16 rounded bg-paper-100/80 animate-pulse shrink-0" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -894,6 +973,7 @@ function SpreadsheetPreview({ url, totalRows, maxHeightClass }: { url: string; t
       activeSheet={active}
       onSelectSheet={selectSheet}
       maxHeightClass={maxHeightClass}
+      bare={bare}
       live
     />
   );
@@ -909,9 +989,9 @@ const SAMPLE_ASSETS = {
 } as const;
 
 // CSV/XLSX demo files → parse and render the real bundled sample spreadsheet.
-function SampleSheetPreview({ file, maxHeightClass }: { file: DatasetFile; maxHeightClass?: string }) {
+function SampleSheetPreview({ file, maxHeightClass, bare = false }: { file: DatasetFile; maxHeightClass?: string; bare?: boolean }) {
   const url = file.format === 'CSV' ? SAMPLE_ASSETS.csv : SAMPLE_ASSETS.xlsx;
-  return <SpreadsheetPreview url={url} maxHeightClass={maxHeightClass} />;
+  return <SpreadsheetPreview url={url} maxHeightClass={maxHeightClass} bare={bare} />;
 }
 
 // Renders one real PDF page to a canvas via pdf.js, scaled to targetWidth.
@@ -944,7 +1024,7 @@ function PdfCanvas({ doc, pageNumber, targetWidth }: { doc: PDFDocumentProxy; pa
 // The page-by-page PDF viewer: a thumbnail rail + the active page, both rendered
 // as REAL PDF pages (pdf.js → canvas). Used for uploaded files (their bytes) and
 // for demo files (a generated PDF) alike — so it's always a real PDF render.
-function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName: string }) {
+function PdfCanvasViewer({ source, fileName, bare = false }: { source: string | Blob; fileName: string; bare?: boolean }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [page, setPage] = useState(1);
@@ -968,11 +1048,6 @@ function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName
     return () => { cancelled = true; loaded?.destroy(); };
   }, [source]);
 
-  const openFull = () => {
-    const u = typeof source === 'string' ? source : URL.createObjectURL(source);
-    window.open(u, '_blank', 'noopener,noreferrer');
-  };
-
   if (failed) {
     return (
       <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center text-[0.75rem] text-ink-500">
@@ -990,7 +1065,7 @@ function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName
   }
 
   return (
-    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+    <div className={`overflow-hidden ${bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'}`}>
       <div className="flex items-center justify-between gap-2 px-3 h-9 border-b border-canvas-border bg-paper-50/60">
         <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 truncate">
           <FileText size={13} className="text-risk shrink-0" />
@@ -1027,34 +1102,25 @@ function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-3 h-11 border-t border-canvas-border">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={page === 1}
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === 1 ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-paper-50 cursor-pointer'}`}
-            aria-label="Previous page"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="text-[0.75rem] text-ink-600 tabular-nums">Page <span className="font-semibold text-ink-800">{page}</span> of {numPages}</span>
-          <button
-            type="button"
-            disabled={page === numPages}
-            onClick={() => setPage(p => Math.min(numPages, p + 1))}
-            className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === numPages ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-paper-50 cursor-pointer'}`}
-            aria-label="Next page"
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
+      <div className="flex items-center gap-1.5 px-3 h-11 border-t border-canvas-border">
         <button
           type="button"
-          onClick={openFull}
-          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+          disabled={page === 1}
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === 1 ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-brand-50 cursor-pointer'}`}
+          aria-label="Previous page"
         >
-          <Eye size={13} /> Open full preview
+          <ChevronLeft size={15} />
+        </button>
+        <span className="text-[0.75rem] text-ink-600 tabular-nums">Page <span className="font-semibold text-ink-800">{page}</span> of {numPages}</span>
+        <button
+          type="button"
+          disabled={page === numPages}
+          onClick={() => setPage(p => Math.min(numPages, p + 1))}
+          className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${page === numPages ? 'text-ink-300 cursor-not-allowed' : 'text-ink-500 hover:text-brand-700 hover:bg-brand-50 cursor-pointer'}`}
+          aria-label="Next page"
+        >
+          <ChevronRight size={15} />
         </button>
       </div>
     </div>
@@ -1063,8 +1129,8 @@ function PdfCanvasViewer({ source, fileName }: { source: string | Blob; fileName
 
 // Demo PDF (no uploaded bytes): render the real bundled sample PDF, page-by-page,
 // through the same canvas viewer as uploaded files.
-function SamplePdfPreview({ file }: { file: DatasetFile }) {
-  return <PdfCanvasViewer source={SAMPLE_ASSETS.pdf} fileName={file.name} />;
+function SamplePdfPreview({ file, bare = false }: { file: DatasetFile; bare?: boolean }) {
+  return <PdfCanvasViewer source={SAMPLE_ASSETS.pdf} fileName={file.name} bare={bare} />;
 }
 
 // Resolves a file's real bytes for preview: instant for files uploaded this
@@ -1102,94 +1168,171 @@ function triggerDownload(file: DatasetFile) {
 // The actual preview surface for a file, picked by type + whether real uploaded
 // bytes exist. Shared by the inline single-file view, the split preview pane,
 // and the full-screen overlay.
-function FilePreviewBody({ file, tall = false }: { file: DatasetFile; tall?: boolean }) {
+function FilePreviewBody({ file, tall = false, bare = false }: { file: DatasetFile; tall?: boolean; bare?: boolean }) {
   const isPdf = file.pages != null;
   const blob = useFileBlob(file.id);
   const realPdf = isPdf && !!blob && (blob.mime === 'application/pdf' || file.format === 'PDF');
   const realSheet = !isPdf && !!blob;
   // Tall mode (split pane / full-screen) lets sheet tables use far more
-  // vertical room than the compact inline accordion.
+  // vertical room than the compact inline accordion. Bare mode drops the
+  // preview's own card chrome when it already sits inside a card (reading pane).
   const mh = tall ? 'max-h-[62vh]' : undefined;
   return realSheet ? (
-    <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} maxHeightClass={mh} />
+    <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} maxHeightClass={mh} bare={bare} />
   ) : realPdf ? (
-    <PdfCanvasViewer source={blob!.url} fileName={file.name} />
+    <PdfCanvasViewer source={blob!.url} fileName={file.name} bare={bare} />
   ) : isPdf ? (
-    <SamplePdfPreview file={file} />
+    <SamplePdfPreview file={file} bare={bare} />
   ) : (
-    <SampleSheetPreview file={file} maxHeightClass={mh} />
+    <SampleSheetPreview file={file} maxHeightClass={mh} bare={bare} />
   );
 }
 
-// Count label shared by the list rail + preview header.
-function fileCountLabel(file: DatasetFile): string | null {
-  return file.pages != null
-    ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}`
-    : file.rows != null
-      ? `${file.rows.toLocaleString()} ${file.rows === 1 ? 'row' : 'rows'}`
-      : null;
+// Format identity, shared by the table rows and the preview headers. One calm
+// brand tile tone for every file so the icon frame reads the same everywhere in
+// the Knowledge Hub; the glyph distinguishes type by SHAPE (sheet vs document),
+// not colour.
+function fileTile(file: DatasetFile): { Icon: React.ElementType; tone: string } {
+  const isSheet = file.format === 'CSV' || file.format === 'XLSX';
+  return {
+    Icon: isSheet ? Table2 : FileText,
+    tone: 'bg-brand-50 text-brand-700',
+  };
 }
 
-// ─── Split view: left-rail list item ─────────────────────────────────────────
-function FileListItem({ file, selected, onSelect }: { file: DatasetFile; selected: boolean; onSelect: () => void }) {
-  const count = fileCountLabel(file);
-  const isFailed = file.status === 'failed';
-  const isProcessing = file.status === 'processing';
+// Flat status pill — design-system correct: tinted bg + label, no icon.
+function StatusPillFlat({ status }: { status: FileStatus }) {
+  const tone = status === 'processed' ? 'bg-compliant-50 text-compliant-700'
+    : status === 'processing' ? 'bg-evidence-50 text-evidence-700'
+    : 'bg-risk-50 text-risk-700';
   return (
-    <button
-      type="button"
-      data-file-id={file.id}
-      onClick={onSelect}
-      aria-pressed={selected}
-      title={file.name}
-      className={`group/item relative w-full text-left flex items-center gap-2 pl-3.5 pr-3 h-10 transition-colors cursor-pointer ${selected ? 'bg-brand-50' : 'hover:bg-canvas'}`}
-    >
-      {selected && <span aria-hidden className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-brand-600" />}
-      <FileText size={14} className={`shrink-0 ${selected ? 'text-brand-700' : 'text-ink-400'}`} />
-      <span className={`flex-1 min-w-0 truncate text-[0.8125rem] ${selected ? 'font-semibold text-brand-700' : 'text-ink-800'}`}>{file.name}</span>
-      {/* Size/rows are identical across most files, so only surface them on the
-          active or hovered row to keep the list quiet. */}
-      <span className={`shrink-0 text-[0.6875rem] text-ink-400 tabular-nums ${selected ? 'inline' : 'hidden group-hover/item:inline'}`}>
-        {formatBytes(file.sizeBytes)}{count && ` · ${count}`}
-      </span>
-      {isFailed ? (
-        <AlertCircle size={12} className="shrink-0 text-risk" aria-label="Failed" />
-      ) : isProcessing ? (
-        <Loader2 size={12} className="shrink-0 text-ink-400 animate-spin motion-reduce:animate-none" aria-label="Processing" />
+    <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold ${tone}`}>
+      {STATUS_META[status].label}
+    </span>
+  );
+}
+
+// ─── Folder view: finder list (left rail of the reading pane) ─────────────────
+// Selecting a row (click or ↑/↓) drives the live preview on the right — no
+// opening, no back. Rows are dense + file-forward (name + one quiet meta line).
+function FileList({ visible, uploadingFiles, search, selectedId, onSelect }: {
+  visible: DatasetFile[];
+  uploadingFiles: UploadingFile[];
+  search: string;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <ul className="px-2 py-2 space-y-0.5">
+      <AnimatePresence initial={false}>
+        {uploadingFiles.map(uf => (<UploadingListRow key={uf.id} file={uf} />))}
+      </AnimatePresence>
+      {visible.length === 0 && uploadingFiles.length === 0 ? (
+        <li className="text-center py-16 px-4">
+          <Search size={20} className="mx-auto text-ink-400 mb-2" />
+          <p className="text-[0.8125rem] text-ink-700 font-medium">No files match “{search}”.</p>
+          <p className="text-[0.75rem] text-ink-500 mt-0.5">Try a different name or clear the search.</p>
+        </li>
       ) : (
-        <span aria-hidden className="shrink-0 w-1.5 h-1.5 rounded-full bg-compliant" title="Processed" />
+        visible.map(f => (
+          <FileListRow key={f.id} file={f} selected={selectedId === f.id} onSelect={() => onSelect(f.id)} />
+        ))
       )}
-    </button>
+    </ul>
   );
 }
 
-// ─── Split view: right preview pane ──────────────────────────────────────────
-function PreviewPane({ file, onFullscreen }: { file: DatasetFile; onFullscreen: () => void }) {
-  const { addToast } = useToast();
-  const status = STATUS_META[file.status];
-  const StatusIcon = status.icon;
-  const isFailed = file.status === 'failed';
-  // Slim, single-line header — name + status + actions. Size/rows live in the
-  // rail and the table caption, so they aren't repeated here; just the upload
-  // date, which isn't shown elsewhere.
+function FileListRow({ file, selected, onSelect }: { file: DatasetFile; selected: boolean; onSelect: () => void }) {
+  const { Icon } = fileTile(file);
+  const dateStr = new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const count = file.rows != null
+    ? `${file.rows.toLocaleString()} ${file.rows === 1 ? 'row' : 'rows'}`
+    : file.pages != null
+      ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}`
+      : null;
+  const meta = count ? `${count} · ${formatBytes(file.sizeBytes)}` : formatBytes(file.sizeBytes);
+
   return (
-    <>
-      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-canvas-border bg-canvas shrink-0">
-        <FileText size={15} className="text-brand-700 shrink-0" />
-        <span className="text-[0.8125rem] font-semibold text-ink-900 truncate min-w-0" title={file.name}>{file.name}</span>
-        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
-          <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
+    <li>
+      <div
+        role="button"
+        tabIndex={0}
+        data-file-id={file.id}
+        onClick={onSelect}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+        aria-pressed={selected}
+        title={file.name}
+        className={`no-focus-ring group flex items-center gap-2.5 px-2.5 h-[3.25rem] rounded-lg transition-colors cursor-pointer outline-none ${selected ? 'bg-brand-50 ring-1 ring-inset ring-brand-100' : 'hover:bg-brand-50/70 focus-visible:bg-brand-50/60'}`}
+      >
+        <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><Icon size={16} /></span>
+        <span className="flex-1 min-w-0">
+          <span className={`block truncate text-[0.875rem] font-semibold ${selected ? 'text-brand-700' : 'text-ink-900'}`}>{file.name}</span>
+          <span className="block truncate text-[0.75rem] text-ink-400 tabular-nums mt-0.5">{meta} · {dateStr}</span>
         </span>
-        <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums hidden sm:inline">
-          uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </span>
-        <div className="ml-auto flex items-center gap-1 shrink-0">
-        {!isFailed && (
-          <button onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label={`Download ${file.name}`} title="Download"><Download size={15} /></button>
-        )}
-        <button onClick={onFullscreen} className="flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer" aria-label="Full screen" title="Full screen"><Maximize2 size={15} /></button>
+        {file.status !== 'processed' && <StatusPillFlat status={file.status} />}
+      </div>
+    </li>
+  );
+}
+
+// Uploading file as a list row, with a progress bar under the name.
+function UploadingListRow({ file }: { file: UploadingFile }) {
+  return (
+    <motion.li
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.18 }}
+      className="overflow-hidden"
+    >
+      <div className="flex items-center gap-2.5 px-2.5 h-[3.5rem] rounded-lg bg-brand-50/40">
+        <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><FileText size={16} /></span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-[0.875rem] font-semibold text-ink-900">{file.name}</span>
+            <span className="shrink-0 text-[0.75rem] text-evidence-700 tabular-nums">{file.progress}%</span>
+          </div>
+          <div className="mt-1.5 h-1 rounded-full bg-paper-100 overflow-hidden">
+            <motion.div className="h-full bg-brand-600" initial={{ width: 0 }} animate={{ width: `${file.progress}%` }} transition={{ duration: 0.18, ease: 'linear' }} />
+          </div>
         </div>
       </div>
+    </motion.li>
+  );
+}
+
+// ─── Reading pane: live preview (right side) ─────────────────────────────────
+// Shows whichever file is selected in the list. Updates instantly as selection
+// changes — no opening, no back. Header carries identity + download; body is
+// the full preview.
+function PreviewPane({ file }: { file: DatasetFile }) {
+  const { addToast } = useToast();
+  const { Icon, tone } = fileTile(file);
+  const isFailed = file.status === 'failed';
+  const dateStr = new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <>
+      <header className="flex items-center gap-3 px-4 h-14 border-b border-canvas-border bg-canvas shrink-0">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${tone}`}><Icon size={17} /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[0.875rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
+            <StatusPillFlat status={file.status} />
+          </div>
+          <div className="text-[0.75rem] text-ink-500 tabular-nums mt-0.5">{file.format} · uploaded {dateStr}</div>
+        </div>
+        {!isFailed && (
+          <button
+            onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }}
+            className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer"
+            aria-label="Download"
+            title="Download"
+          >
+            <Download size={15} />
+          </button>
+        )}
+      </header>
       {isFailed ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
           <AlertCircle size={24} className="text-risk" />
@@ -1197,73 +1340,11 @@ function PreviewPane({ file, onFullscreen }: { file: DatasetFile; onFullscreen: 
           <p className="text-[0.75rem] text-ink-500">This file couldn’t be processed — the format may not be supported.</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-4">
-          <FilePreviewBody file={file} tall />
+        <div className="flex-1 min-h-0 overflow-auto">
+          <FilePreviewBody key={file.id} file={file} tall bare />
         </div>
       )}
     </>
-  );
-}
-
-// ─── Full-screen preview overlay ─────────────────────────────────────────────
-function FullscreenPreview({ file, files, onNavigate, onClose }: {
-  file: DatasetFile;
-  files: DatasetFile[];
-  onNavigate: (id: string) => void;
-  onClose: () => void;
-}) {
-  const { addToast } = useToast();
-  const idx = files.findIndex(f => f.id === file.id);
-  const go = (delta: number) => { const n = files[idx + delta]; if (n) onNavigate(n.id); };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft') go(-1);
-      else if (e.key === 'ArrowRight') go(1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, files]);
-  const status = STATUS_META[file.status];
-  const StatusIcon = status.icon;
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-      className="fixed inset-0 z-50 bg-canvas flex flex-col"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${file.name} preview`}
-    >
-      <header className="flex items-center gap-3 px-5 h-14 border-b border-canvas-border bg-canvas-elevated shrink-0">
-        <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0"><FileText size={15} className="text-brand-700" /></div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[0.875rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
-            <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6875rem] font-semibold ${status.tone}`}>
-              <StatusIcon size={9} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />{status.label}
-            </span>
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => go(-1)} disabled={idx <= 0} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas disabled:text-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer" aria-label="Previous file"><ChevronLeft size={16} /></button>
-          <span className="text-[0.75rem] text-ink-500 tabular-nums px-1 select-none">{idx + 1} / {files.length}</span>
-          <button onClick={() => go(1)} disabled={idx >= files.length - 1} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas disabled:text-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer" aria-label="Next file"><ChevronRight size={16} /></button>
-        </div>
-        <button onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }} className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download" title="Download"><Download size={15} /></button>
-        <button onClick={onClose} className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
-          <Minimize2 size={14} /> Exit
-        </button>
-      </header>
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-[1120px] mx-auto">
-          <FilePreviewBody key={file.id} file={file} tall />
-        </div>
-      </div>
-    </motion.div>
   );
 }
 
@@ -1326,31 +1407,15 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
   // header lacks — status, row/page count, upload date, download — then the
   // always-open preview.
   if (isSingle) {
+    // The header card already shows status · size · upload date + download, and
+    // the table caption shows the row count — so the row is just the preview,
+    // full-width (its own card), with no extra wrapper around it.
     return (
       <li>
-        <div className="flex items-center gap-3 px-6 pt-1 pb-3">
-          <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${status.tone}`}>
-            <StatusIcon size={10} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />
-            {status.label}
-          </span>
-          <span className="text-[0.75rem] text-ink-500 tabular-nums">
-            {countLabel && <>{countLabel} · </>}uploaded {new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-          {!isFailed && (
-            <button
-              onClick={handleDownload}
-              className="ml-auto flex items-center justify-center w-8 h-8 text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated rounded-md transition-colors cursor-pointer"
-              aria-label={`Download ${file.name}`}
-              title="Download"
-            >
-              <Download size={15} />
-            </button>
-          )}
-        </div>
         {isFailed && (
-          <div className="px-6 pb-2 text-[0.75rem] text-risk-700">Processing failed. Format may not be supported.</div>
+          <div className="pb-3 text-[0.75rem] text-risk-700">Processing failed. Format may not be supported.</div>
         )}
-        {previewBlock}
+        <FilePreviewBody file={file} tall />
       </li>
     );
   }
@@ -1594,7 +1659,7 @@ function ConfigFieldRow({ field }: { field: { label: string; value: string; sens
   };
 
   return (
-    <div className="grid grid-cols-[180px_1fr_auto] items-center gap-3 px-5 py-2.5 hover:bg-paper-50/60 transition-colors">
+    <div className="grid grid-cols-[180px_1fr_auto] items-center gap-3 px-5 py-2.5 hover:bg-brand-50/60 transition-colors">
       <div className="text-[0.75rem] font-medium text-ink-500">{field.label}</div>
       <div className={`text-[0.75rem] text-ink-900 ${field.sensitive && !revealed ? 'tracking-widest font-mono' : 'font-mono'} truncate`}>
         {display}

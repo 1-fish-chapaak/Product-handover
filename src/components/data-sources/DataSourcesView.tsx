@@ -274,7 +274,7 @@ function InlineRename({ initial, onCommit, onCancel }: {
       <button onMouseDown={e => e.preventDefault()} onClick={commit} className="p-1.5 text-brand-700 hover:bg-brand-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Save name">
         <Check size={15} />
       </button>
-      <button onMouseDown={e => e.preventDefault()} onClick={onCancel} className="p-1.5 text-ink-500 hover:bg-paper-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Cancel rename">
+      <button onMouseDown={e => e.preventDefault()} onClick={onCancel} className="p-1.5 text-ink-500 hover:bg-brand-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Cancel rename">
         <X size={15} />
       </button>
     </div>
@@ -406,7 +406,7 @@ function SourceTile({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-50 transition-opacity cursor-pointer shrink-0 ${
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-opacity cursor-pointer shrink-0 ${
             menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
           }`}
           aria-label="Source actions"
@@ -533,7 +533,7 @@ function SourceRow({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-opacity cursor-pointer shrink-0 ${
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-opacity cursor-pointer shrink-0 ${
             menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
           }`}
           aria-label="Source actions"
@@ -606,7 +606,7 @@ function MenuItem({
       className={`w-full flex items-center gap-2.5 px-3 h-8 text-[0.75rem] font-medium text-left transition-colors cursor-pointer ${
         destructive
           ? 'text-risk-700 hover:bg-risk-50'
-          : 'text-ink-800 hover:bg-paper-50'
+          : 'text-ink-800 hover:bg-brand-50'
       }`}
     >
       <Icon size={13} className="shrink-0" />
@@ -1445,7 +1445,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-paper-100 cursor-pointer"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 cursor-pointer"
               aria-label="Clear search"
             >
               <X size={12} />
@@ -1643,7 +1643,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <button
               type="button"
               onClick={() => setVisibleLimit(l => l + PAGE_SIZE)}
-              className="inline-flex items-center px-6 h-11 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-paper-50 hover:border-ink-300 transition-colors cursor-pointer"
+              className="inline-flex items-center px-6 h-11 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-brand-50 hover:border-ink-300 transition-colors cursor-pointer"
             >
               Load more data
             </button>
