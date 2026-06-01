@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Building2, Search, ChevronRight, Plus, X, Trash2,
+  Building2, Search, Plus, X, Trash2,
 } from 'lucide-react';
 import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
+import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ interface Props {
 const NEW_COLORS = ['#0891b2', '#c026d3', '#ea580c', '#4f46e5', '#16a34a', '#9333ea', '#e11d48', '#0d9488'];
 const DEPARTMENTS = ['Finance', 'Procurement', 'Sales', 'HR', 'IT', 'Operations', 'Legal & Compliance', 'Other'];
 const OWNERS = ['Tushar Goel', 'Deepak Bansal', 'Neha Joshi', 'Karan Mehta', 'Sneha Desai', 'Rohan Patel', 'Priya Singh'];
-const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
 
@@ -82,10 +83,10 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input type="text" placeholder="Search processes..." value={search} onChange={e => setSearch(e.target.value)}
               aria-label="Search processes"
-              className="pl-9 pr-3 py-2 text-[12px] border border-canvas-border rounded-lg bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
+              className="pl-9 pr-3 py-2 text-[12px] border border-canvas-border rounded-[8px] bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
           </div>
-          <button onClick={() => setShowCreateDrawer(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer shrink-0">
+          <button type="button" onClick={() => setShowCreateDrawer(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer shrink-0">
             <Plus size={14} />New Process
           </button>
         </div>
@@ -93,31 +94,31 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
         {/* ── Process Grid ── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
           {filteredProcesses.length === 0 ? (
-            <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-12 text-center"><Building2 size={32} className="text-text-muted mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No processes found</p><p className="text-[12px] text-text-muted">Try adjusting your search.</p></div>
+            <div className="bg-canvas-elevated border border-canvas-border rounded-[8px] p-10 text-center"><Building2 size={32} className="text-text-muted mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No processes found</p><p className="text-[12px] text-text-muted">Try adjusting your search.</p></div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ChromaGrid className="grid grid-cols-1 md:grid-cols-2 gap-4" radius={320} damping={0.45} fadeOut={0.6}>
               {filteredProcesses.map((bp, i) => {
                 const coverage = coverageForProcess(bp);
                 return (
                   <motion.button type="button" key={bp.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.04 }}
                     onClick={() => handleProcessClick(bp)}
-                    className="text-left bg-canvas-elevated border border-canvas-border rounded-lg p-5 hover:border-brand-200 transition-colors cursor-pointer group">
+                    onMouseMove={handleChromaCardMove}
+                    className="chroma-card-lite text-left bg-canvas-elevated border border-canvas-border rounded-[12px] p-6 hover:border-brand-200 transition-colors cursor-pointer group">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-50 text-brand-700 text-[13px] font-bold">{bp.abbr}</div>
+                        <div className="w-10 h-10 rounded-[8px] flex items-center justify-center bg-brand-50 text-brand-700 text-[13px] font-bold">{bp.abbr}</div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-[16px] font-semibold text-text">{bp.name}</span>
-                            {bp.status === 'Draft' && <span className="px-1.5 h-4 rounded text-[9px] font-bold bg-paper-100 text-ink-500">Draft</span>}
+                            {bp.status === 'Draft' && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold bg-paper-100 text-ink-500">Draft</span>}
                           </div>
                           <div className="text-[11px] text-text-muted">{bp.abbr}</div>
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-text-muted group-hover:text-primary transition-colors" />
                     </div>
                     <div className="flex items-end justify-between gap-4 mb-3">
                       <div>
-                        <div className="text-[26px] font-bold text-ink-800 tabular-nums leading-none">{coverage}%</div>
+                        <div className="text-[13px] font-semibold text-ink-700 tabular-nums leading-none">{coverage}%</div>
                         <div className="text-[10px] text-text-muted mt-1">Coverage</div>
                       </div>
                       <div className="flex gap-5">
@@ -130,7 +131,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                   </motion.button>
                 );
               })}
-            </div>
+            </ChromaGrid>
           )}
         </motion.div>
       </div>
@@ -206,7 +207,7 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
               <div className="flex items-center gap-2"><Building2 size={18} className="text-brand-600" /><h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Create Business Process</h2></div>
               <p className="text-[12px] text-ink-500 mt-0.5">Define a new business process as a taxonomy object.</p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+            <button type="button" aria-label="Close drawer" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
         </header>
 
@@ -214,7 +215,7 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
           <div className="mb-3"><label className={labelCls}>Process Name *</label><input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Procure to Pay" className={inputCls} /></div>
           <div className="mb-3">
             <label className={labelCls}>Process Code *</label>
-            <input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="e.g. P2P" maxLength={6} className={`${inputCls} font-mono uppercase ${isDuplicate ? 'border-risk focus:border-risk focus:ring-risk/10' : ''}`} />
+            <input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="e.g. P2P" maxLength={6} className={`${inputCls} font-mono uppercase ${isDuplicate ? 'border-risk focus:border-risk' : ''}`} />
             {isDuplicate && <p className="text-[10px] text-risk-700 mt-0.5 px-1">Code "{codeUpper}" already exists.</p>}
             {!isDuplicate && codeUpper.length > 0 && <p className="text-[10px] text-compliant-700 mt-0.5 px-1">Code available</p>}
           </div>
@@ -226,14 +227,14 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
             <label className={labelCls}>Status</label>
             <div className="flex gap-2">
               {(['Draft', 'Active', 'Archived'] as const).map(s => (
-                <button key={s} onClick={() => setStatus(s)} className={`px-4 py-2 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${status === s ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{s}</button>
+                <button type="button" key={s} onClick={() => setStatus(s)} className={`px-4 py-2 rounded-[8px] border text-[12px] font-medium transition-all cursor-pointer ${status === s ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{s}</button>
               ))}
             </div>
           </div>
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
               <label className={labelCls + ' mb-0'}>Sub-processes</label>
-              <button onClick={addSubProcess} className="text-[11px] font-semibold text-brand-600 hover:underline cursor-pointer flex items-center gap-1"><Plus size={11} />Add row</button>
+              <button type="button" onClick={addSubProcess} className="text-[11px] font-semibold text-brand-600 hover:underline cursor-pointer flex items-center gap-1"><Plus size={11} />Add row</button>
             </div>
             <div className="space-y-2">
               {subProcesses.map((sp, idx) => (
@@ -241,13 +242,13 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
                   <div className="flex-1 space-y-1.5">
                     <input type="text" value={sp.name} onChange={e => updateSubProcess(idx, 'name', e.target.value)}
                       placeholder={`Sub-process name (e.g. ${['Vendor onboarding', 'Purchase order creation', 'Goods receipt', 'Invoice processing', 'Payment release'][idx] || 'Sub-process'})`}
-                      className="w-full px-2.5 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 transition-all" />
+                      className="w-full px-2.5 py-2 border border-border rounded-[8px] text-[12px] text-text bg-white outline-none focus:border-primary/40 transition-all" />
                     <input type="text" value={sp.description} onChange={e => updateSubProcess(idx, 'description', e.target.value)}
                       placeholder="Brief description (optional)"
-                      className="w-full px-2.5 py-1.5 border border-border/60 rounded-lg text-[11px] text-text-muted bg-white outline-none focus:border-primary/40 transition-all" />
+                      className="w-full px-2.5 py-1.5 border border-border/60 rounded-[8px] text-[11px] text-text-muted bg-white outline-none focus:border-primary/40 transition-all" />
                   </div>
                   {subProcesses.length > 1 && (
-                    <button onClick={() => removeSubProcess(idx)} className="p-1.5 mt-1 rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"><Trash2 size={12} /></button>
+                    <button type="button" aria-label="Remove sub-process" onClick={() => removeSubProcess(idx)} className="p-1.5 mt-1 rounded-[6px] hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"><Trash2 size={12} /></button>
                   )}
                 </div>
               ))}
@@ -256,8 +257,8 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button onClick={handleCreate} disabled={!isValid} className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create Process</button>
+          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={handleCreate} disabled={!isValid} className="px-5 py-2.5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create Process</button>
         </footer>
       </motion.aside>
     </>
