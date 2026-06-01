@@ -2227,7 +2227,7 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
           <Layers size={14} className="text-ink-500 shrink-0" />
           <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">Business processes</h3>
         </div>
-        <button onClick={() => setView('business-processes')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
+        <button onClick={() => setView('programs')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
       </div>
       <div className="flex-1 overflow-auto p-4 grid grid-cols-2 gap-3 auto-rows-min">
         {BUSINESS_PROCESSES.map(bp => (

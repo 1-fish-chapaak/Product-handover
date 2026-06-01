@@ -61,6 +61,7 @@ import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPane
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
 import NotificationDrawer from './components/notifications/NotificationDrawer';
 import { createNotification, type PlatformNotification } from './data/notifications';
+import CommandPalette from './components/shared/CommandPalette';
 // V3 Configurable Engagement — dev-only preview (not wired to main flow)
 import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
 import EngagementFinalModule from './components/engagement-final/EngagementFinalModule';
@@ -118,6 +119,7 @@ function AppInner() {
     toggleChatHistory,
     setSelectedWorkflow,
     setSelectedBP,
+    addUserProcess,
     openAuditExecution,
     openEngagement,
     openCaseManagement,
@@ -273,6 +275,32 @@ function AppInner() {
     window.addEventListener('irame:open-report', handler);
     return () => window.removeEventListener('irame:open-report', handler);
   }, [setView]);
+
+  // Command palette (Cmd+K) navigation. The palette is a leaf component —
+  // it dispatches a CustomEvent and the shell owns routing. For 'process'
+  // selections we set the selected BP (which auto-switches the view to
+  // bp-detail). For everything else we just switch the view.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        kind: 'process' | 'racm' | 'risk' | 'control';
+        id: string;
+        view: string;
+        bpId?: string;
+      }>).detail;
+      if (!detail) return;
+      if (detail.kind === 'process' && detail.bpId) {
+        setSelectedBP(detail.bpId);
+      } else {
+        setView(detail.view as any);
+        // Pass the picked id along as a deep-link focus hint — same pattern
+        // the notification drawer uses to highlight the destination row.
+        setFocusedNotificationRefId(detail.id);
+      }
+    };
+    window.addEventListener('irame:command-palette-navigate', handler);
+    return () => window.removeEventListener('irame:command-palette-navigate', handler);
+  }, [setView, setSelectedBP, setFocusedNotificationRefId]);
 
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
@@ -564,6 +592,8 @@ function AppInner() {
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
+            addUserProcess={addUserProcess}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
@@ -578,6 +608,7 @@ function AppInner() {
           <BusinessProcesses
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
             onOpenEngagement={(engId) => {
               setEngagementBackView('business-processes');
               openAuditExecution(engId);
@@ -1006,6 +1037,9 @@ function AppInner() {
             />
           )}
         </AnimatePresence>
+
+        {/* Global Cmd+K command palette */}
+        <CommandPalette />
       </div>
       </BulkRunProgressProvider>
     </ToastProvider>

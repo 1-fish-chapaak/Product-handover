@@ -528,7 +528,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-2">
               <ArrowLeft size={14} />Back to RACM
             </button>
-            <h3 className="text-[16px] font-bold text-text">
+            <h3 className="text-[18px] font-bold text-text">
               Risk-Control Mapping
               {racmName && <span className="text-[13px] font-medium text-text-muted ml-2">— {racmName}</span>}
             </h3>
@@ -556,7 +556,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
       {risks.length === 0 && !isLoading && (
         <div className="glass-card rounded-xl p-10 text-center space-y-3">
           <Shield size={28} className="mx-auto text-gray-300" />
-          <h4 className="text-[14px] font-semibold text-text">No risks added yet</h4>
+          <h4 className="text-[15px] font-semibold text-text">No risks added yet</h4>
           <p className="text-[12px] text-text-muted max-w-sm mx-auto">This RACM has no risks. Import from a file or go back to the setup workspace to add risks.</p>
           <button onClick={onBack} className="mt-2 px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
             Back to Setup
@@ -665,7 +665,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
                 transition={{ duration: 0.2 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[440px] p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-xl bg-brand-50"><FileCheck size={20} className="text-brand-600" /></div>
-                  <h2 className="text-[16px] font-bold text-text">Validate RACM</h2>
+                  <h2 className="text-[18px] font-bold text-text">Validate RACM</h2>
                 </div>
 
                 {/* Checklist */}
@@ -702,9 +702,9 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
 
                 {/* Summary */}
                 <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-                  <div className="glass-card rounded-lg p-2"><div className="text-lg font-bold text-text">{totalRisks}</div><div className="text-[10px] text-text-muted">Risks</div></div>
-                  <div className="glass-card rounded-lg p-2"><div className="text-lg font-bold text-text">{mappedCount}</div><div className="text-[10px] text-text-muted">Mapped</div></div>
-                  <div className="glass-card rounded-lg p-2"><div className="text-lg font-bold text-text">{risks.flatMap(r => r.controls).filter(c => c.isKey).length}</div><div className="text-[10px] text-text-muted">Key Controls</div></div>
+                  <div className="glass-card rounded-lg p-2"><div className="text-[18px] font-bold text-text">{totalRisks}</div><div className="text-[10px] text-text-muted">Risks</div></div>
+                  <div className="glass-card rounded-lg p-2"><div className="text-[18px] font-bold text-text">{mappedCount}</div><div className="text-[10px] text-text-muted">Mapped</div></div>
+                  <div className="glass-card rounded-lg p-2"><div className="text-[18px] font-bold text-text">{risks.flatMap(r => r.controls).filter(c => c.isKey).length}</div><div className="text-[10px] text-text-muted">Key Controls</div></div>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -744,7 +744,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
                 transition={{ duration: 0.2 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[420px] p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle size={16} className="text-amber-500" />
-                  <h2 className="text-[16px] font-bold text-text">Similar risk exists</h2>
+                  <h2 className="text-[18px] font-bold text-text">Similar risk exists</h2>
                 </div>
                 <p className="text-[12px] text-text-muted mb-3">A risk with a similar name already exists in this RACM:</p>
                 <div className="rounded-lg border border-border bg-gray-50 px-4 py-3 mb-4">
