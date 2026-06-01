@@ -3025,6 +3025,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const saveWorkflowConfigRef = useRef<{ amount: string; date: string; threshold: string }>({
     amount: '', date: '', threshold: '',
   });
+  // Save-as-workflow pre-modal clarification — captures whether the saved
+  // workflow is exception-style (severity rules) or a KPI tracker
+  // (attention thresholds + cadence). Drives the configurable keys that
+  // pre-populate the Save modal's Configuration section.
+  const saveWorkflowAnswersRef = useRef<{
+    kind: 'exception' | 'kpi';
+    pairs: { question: string; answer: string }[];
+  }>({ kind: 'exception', pairs: [] });
 
   // Data picker modal — replaces the raw file-input click on the upload buttons.
   // attachedSources are picks from existing data (files / DBs / APIs / cloud / session)
@@ -3471,6 +3479,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 80);
 
     if (flow.purpose === 'save-workflow') {
+      // Stash full answers for the new save-workflow clarification so the
+      // modal's Configuration section can pre-populate from them.
+      saveWorkflowAnswersRef.current = {
+        kind: saveWorkflowAnswersRef.current.kind,
+        pairs: consolidated,
+      };
       // Stash answers so the Save-as-Workflow modal's prefilled name/description
       // echo them. Defaults match the question's "(current)" option.
       const findAnswer = (kw: string) =>
@@ -3814,15 +3828,119 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     addToast({ type: 'info', message: 'Removed from report.' });
   };
 
-  // Path 3 entry — open the Save-as-Workflow modal from the audit-result action bar.
-  // Path 3 entry — open the metadata modal directly. The previous flow
-  // posted an inline clarification asking for tolerance / threshold config
-  // first, but those choices are already captured by the assumptions on
-  // the audit result; re-asking before every save felt repetitive. The
-  // tolerance config can be edited inside the modal's Description (or by
-  // running a new query) instead.
+  // Path 3 entry — Save-as-Workflow click on the audit-result action bar.
+  // Posts an inline clarification card BEFORE opening the metadata modal,
+  // so the saved workflow ships with explicit rules (what counts as an
+  // exception + severity thresholds, or — for KPI trackers — the
+  // attention-change threshold + refresh cadence). The same clarification
+  // infrastructure as the audit-query flow is reused; `purpose:
+  // 'save-workflow'` routes the submit handler to open the modal instead
+  // of running an audit. The captured answers seed the modal's
+  // Configuration section.
   const openSaveAsWorkflowModal = () => {
-    setShowSaveAsWfModal(true);
+    // Heuristic: scan the most recent user message for exception-style
+    // wording. If nothing matches, default to KPI tracker. Either set is
+    // 4 questions, so the card always reads the same shape.
+    const lastUserText = [...messages].reverse().find(m => m.role === 'user')?.text?.toLowerCase() || '';
+    const exceptionKeywords = ['duplicate', 'exception', 'anomal', 'outlier', 'fraud', 'mismatch', 'flag', 'irregular', 'missing'];
+    const kpiKeywords = ['kpi', 'metric', 'trend', 'rate', 'ratio', 'percentage', 'monitor', 'track'];
+    const isException = exceptionKeywords.some(k => lastUserText.includes(k));
+    const isKpi = !isException && kpiKeywords.some(k => lastUserText.includes(k));
+    const kind: 'exception' | 'kpi' = isKpi ? 'kpi' : 'exception';
+
+    // Reset; will be filled by submitClarification when the user submits.
+    saveWorkflowAnswersRef.current = { kind, pairs: [] };
+
+    const exceptionQuestions = [
+      {
+        question: 'Which scenarios should this workflow flag as exceptions?',
+        options: [
+          'Same vendor + same amount within tolerance window',
+          'Same PO referenced more than once',
+          'Amount or date matches across two invoices',
+          'All of the above',
+        ],
+      },
+      {
+        question: 'When should a row turn red (highest severity)?',
+        options: [
+          'Match ≥ 95% and amount ≥ ₹1,00,000',
+          'Match ≥ 90% (any amount)',
+          'Same vendor + exact amount + within 3 days',
+          'I’ll define this later',
+        ],
+      },
+      {
+        question: 'When should a row turn yellow (needs review)?',
+        options: [
+          'Match 80–94%',
+          'Match 70–89% or unusual amount band',
+          'Cross-checks failed but match score is mid-range',
+          'Skip yellow — only red and green',
+        ],
+      },
+      {
+        question: 'What happens to rows below your yellow threshold?',
+        options: [
+          'Auto-resolve as green (no action)',
+          'Show but de-prioritise',
+          'Hide from the exception list',
+          'Send to a low-priority queue',
+        ],
+      },
+    ];
+
+    const kpiQuestions = [
+      {
+        question: 'Which KPI should this workflow track?',
+        options: [
+          'Duplicates found (count)',
+          'Total flagged amount (₹)',
+          'Avg confidence score (%)',
+          'Vendors flagged (count)',
+        ],
+      },
+      {
+        question: 'What % change vs last run counts as needs attention?',
+        options: ['±5%', '±10%', '±20%', 'Any change'],
+      },
+      {
+        question: 'How often should this KPI refresh?',
+        options: ['Hourly', 'Daily', 'Weekly', 'On data change'],
+      },
+      {
+        question: 'Who should be notified when attention is needed?',
+        options: ['Me only', 'My team', 'Process owner', 'No one — just log it'],
+      },
+    ];
+
+    const questions = kind === 'kpi' ? kpiQuestions : exceptionQuestions;
+    const intro = kind === 'kpi'
+      ? 'Before I save this as a KPI tracker, help me lock in the alerting rules.'
+      : 'Before I save this as a workflow, help me define what counts as an exception.';
+
+    const data: ClarificationData = {
+      intro,
+      questions,
+      answers: {},
+      status: 'open',
+      purpose: 'save-workflow',
+    };
+
+    setMessages(prev => [...prev, {
+      id: `msg-save-clarify-${Date.now()}`,
+      role: 'assistant',
+      text: '',
+      thinking: [
+        kind === 'kpi'
+          ? 'Detected KPI-tracker intent from the query'
+          : 'Detected exception/anomaly intent from the query',
+        'Drafting 4 clarifications so the saved workflow carries explicit rules',
+      ],
+      timestamp: new Date(),
+      richType: 'clarification',
+      richData: data as unknown as Record<string, unknown>,
+    }]);
   };
 
   // Path 3 commit — modal confirmed. Lock the thread into workflow mode,
@@ -6730,17 +6848,51 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           const thresholdShort = (cfg.threshold || '≥90%').replace(/\s*\(current\)\s*/i, '').trim();
           const defaultName = `Duplicate Invoice Detection: Q1 ${dateShort}`;
           const defaultDescription = `Detects duplicate invoices in Q1 2026 with same vendor, ${amountShort} amount tolerance, and ${dateShort} date tolerance at ${thresholdShort} match threshold.`;
-          // Seed the LLM-detected configurable keys from the tolerance config
-          // the user just chose. `threshold_amount` is parsed out of the
-          // amount tolerance string (e.g. "±₹1,000" → "1000"); the other two
-          // keys are static defaults the assistant exposes for this query
-          // template.
+          // Seed the LLM-detected configurable keys from the pre-modal
+          // clarification answers (exception scenarios + severity, or KPI
+          // metric + attention cadence). Falls back to legacy tolerance keys
+          // when no clarification answers were captured — e.g. the modal
+          // was opened directly from a deep-link or a test harness.
           const amountDigits = (cfg.amount || '').replace(/[^\d]/g, '');
-          const defaultConfigurables: { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string }[] = [
-            { key: 'threshold_amount', type: 'float', value: amountDigits || '100000' },
-            { key: 'quarter_match_keys', type: 'list_str', value: '1, q1, quarter1, qtr1' },
-            { key: 'summary_top_n', type: 'int', value: '3' },
-          ];
+          const clarif = saveWorkflowAnswersRef.current;
+          const findAns = (kw: string): string =>
+            clarif.pairs.find(p => p.question.toLowerCase().includes(kw.toLowerCase()))?.answer ?? '';
+
+          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
+          let defaultConfigurables: ConfigEntry[] = [];
+
+          if (clarif.kind === 'kpi' && clarif.pairs.length > 0) {
+            const kpiName = findAns('which kpi');
+            const attentionAns = findAns('% change') || findAns('attention');
+            const attentionPct = (attentionAns.match(/\d+/)?.[0]) || '10';
+            const refresh = findAns('how often') || findAns('refresh');
+            const notify = findAns('notified');
+            defaultConfigurables = [
+              ...(kpiName ? [{ key: 'kpi_metric', type: 'str' as const, value: kpiName }] : []),
+              { key: 'attention_change_pct', type: 'float' as const, value: attentionPct },
+              ...(refresh ? [{ key: 'refresh_frequency', type: 'str' as const, value: refresh }] : []),
+              ...(notify ? [{ key: 'notify_audience', type: 'str' as const, value: notify }] : []),
+            ];
+          } else if (clarif.kind === 'exception' && clarif.pairs.length > 0) {
+            const scenarios = findAns('flagged as exceptions') || findAns('scenarios');
+            const redRule = findAns('turn red');
+            const yellowRule = findAns('turn yellow');
+            const belowYellow = findAns('below your yellow') || findAns('below');
+            defaultConfigurables = [
+              ...(scenarios ? [{ key: 'exception_scenarios', type: 'str' as const, value: scenarios }] : []),
+              ...(redRule ? [{ key: 'severity_red_rule', type: 'str' as const, value: redRule }] : []),
+              ...(yellowRule ? [{ key: 'severity_yellow_rule', type: 'str' as const, value: yellowRule }] : []),
+              ...(belowYellow ? [{ key: 'below_yellow_action', type: 'str' as const, value: belowYellow }] : []),
+            ];
+          }
+
+          if (defaultConfigurables.length === 0) {
+            defaultConfigurables = [
+              { key: 'threshold_amount', type: 'float', value: amountDigits || '100000' },
+              { key: 'quarter_match_keys', type: 'list_str', value: '1, q1, quarter1, qtr1' },
+              { key: 'summary_top_n', type: 'int', value: '3' },
+            ];
+          }
           return (
             <SaveAsWorkflowModal
               open={showSaveAsWfModal}
