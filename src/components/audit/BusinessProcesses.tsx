@@ -13,6 +13,7 @@ import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable from './RacmListTable';
 import RiskRegister from './RiskRegister';
+import ColumnFilter from '../shared/ColumnFilter';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
@@ -343,7 +344,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-text">{sop.name}</h2>
                 <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-[4px]">{sop.version}</span>
-                <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+                <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
               </div>
               <div className="flex items-center gap-4 mt-1.5 text-[11px] text-ink-500">
                 <span>Uploaded by {sop.uploadedBy} · {sop.uploadedAt}</span>
@@ -1214,6 +1215,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [showUploadDrawer, setShowUploadDrawer] = useState(false);
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
+  const [sopStatusFilter, setSopStatusFilter] = useState<string[]>([]);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
 
@@ -1222,6 +1224,16 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   useEffect(() => {
     const t = setTimeout(() => setIsLoading(false), 400);
     return () => clearTimeout(t);
+  }, []);
+
+  // Listen for header-level "Create new SOP" trigger.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ section?: string }>;
+      if (ce.detail?.section === 'sop') setShowUploadDrawer(true);
+    };
+    window.addEventListener('process-hub-create', handler);
+    return () => window.removeEventListener('process-hub-create', handler);
   }, []);
 
   // Check for duplicate before creating
@@ -1412,7 +1424,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
   // Sort: latest version first (higher version number = first), then newest upload date
   const sortedSops = useMemo(() => {
-    return [...localSops].sort((a, b) => {
+    const sorted = [...localSops].sort((a, b) => {
       // Parse version numbers for comparison
       const parseVer = (v: string) => {
         const m = v.match(/v(\d+)\.(\d+)/);
@@ -1423,12 +1435,15 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       // Newer uploads first (by id — newer IDs are larger timestamps)
       return b.id.localeCompare(a.id);
     });
-  }, [localSops]);
+    return sopStatusFilter.length > 0 ? sorted.filter(s => sopStatusFilter.includes(s.status)) : sorted;
+  }, [localSops, sopStatusFilter]);
+
+  const sopStatusOptions = useMemo(() => Array.from(new Set(localSops.map(s => s.status))).sort(), [localSops]);
 
   return (
     <div>
       {/* Empty state — only after loading settles so we don't flash it. */}
-      {!isLoading && sortedSops.length === 0 ? (
+      {!isLoading && localSops.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
             <FileText className="w-6 h-6 text-ink-500" />
@@ -1442,21 +1457,20 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </div>
       ) : (
         <>
-          {/* Header */}
-          <div className="flex items-center justify-end mb-4">
-            <button type="button" onClick={() => setShowUploadDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
-              <Upload size={13} />Upload SOP
-            </button>
-          </div>
-
-          {/* SOP Table */}
-          <div className="border-t border-border-light overflow-x-auto">
+          {/* SOP Table — Workflow-table chrome, now with version, linked RACM, and extracted counts. */}
+          <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
               <table className="w-full border-collapse text-[12px]">
                 <thead className="bg-white border-b border-border-light">
                   <tr>
-                    {['SOP Name', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    {['SOP Name', 'Version', 'Linked to', 'Extracted', 'Status', 'Actions'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
+                        {h === 'Status' ? (
+                          <span className="inline-flex items-center gap-1">
+                            Status
+                            <ColumnFilter label="Status" options={sopStatusOptions} value={sopStatusFilter} onChange={setSopStatusFilter} />
+                          </span>
+                        ) : h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -1465,7 +1479,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     /* 5 skeleton rows during 400ms placeholder. Headers always render above. */
                     [...Array(5)].map((_, i) => (
                       <tr key={`skel-sop-${i}`} className="border-t border-border-light">
-                        {[...Array(3)].map((_, j) => (
+                        {[...Array(6)].map((_, j) => (
                           <td key={j} className="px-4 py-4">
                             <div
                               className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
@@ -1475,6 +1489,19 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         ))}
                       </tr>
                     ))
+                  ) : sortedSops.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-[12px] text-text-muted">
+                        No SOPs match your filters.
+                        <button
+                          type="button"
+                          onClick={() => setSopStatusFilter([])}
+                          className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                        >
+                          Clear filters
+                        </button>
+                      </td>
+                    </tr>
                   ) : (
                   sortedSops.map((sop, i) => {
                     const isProcessing = sop.status === 'Processing';
@@ -1488,6 +1515,30 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                             <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
                             <span className="text-[11px] text-ink-500">{sop.uploadedBy} · {sop.uploadedAt}</span>
                           </div>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <span className="font-mono text-[11px] text-ink-700 tabular-nums">{sop.version}</span>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          {sop.racmId ? (
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="text-[12px] text-ink-800 leading-snug truncate max-w-[200px]">{sop.racmName ?? sop.racmId}</span>
+                              <span className="font-mono text-[10px] text-ink-400 tabular-nums">{sop.racmId}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-ink-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          {showCounts ? (
+                            <span className="text-[12px] text-ink-700 leading-snug">
+                              <span className="tabular-nums font-medium">{sop.risks}</span> risks
+                              <span className="text-ink-300 mx-1">·</span>
+                              <span className="tabular-nums font-medium">{sop.controls}</span> controls
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-ink-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-4 align-top">
                           <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
@@ -1513,13 +1564,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       {/* Processing stepper */}
                       <AnimatePresence>
                         {isProcessing && (
-                          <tr><td colSpan={3} className="p-0"><ProcessingStepperPanel sop={sop} /></td></tr>
+                          <tr><td colSpan={6} className="p-0"><ProcessingStepperPanel sop={sop} /></td></tr>
                         )}
                       </AnimatePresence>
                       {/* Failed state */}
                       {sop.status === 'Draft' && (
                         <tr>
-                          <td colSpan={3} className="p-0">
+                          <td colSpan={6} className="p-0">
                             <div className="px-4 py-3 bg-paper-50 border-t border-canvas-border">
                               <div className="flex items-center gap-3">
                                 <span className="text-[11px] text-risk-700 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
@@ -1690,6 +1741,9 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const { addToast } = useToast();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [classificationFilter, setClassificationFilter] = useState<string[]>([]);
+  const [natureFilter, setNatureFilter] = useState<string[]>([]);
+  const [designStatusFilter, setDesignStatusFilter] = useState<string[]>([]);
 
   // Skeleton state — 400ms placeholder before first paint of the controls grid.
   const [isLoading, setIsLoading] = useState(true);
@@ -1698,9 +1752,23 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     return () => clearTimeout(t);
   }, []);
 
+  const getDesignStatus = (ctrl: DesignControl): 'Complete' | 'Incomplete' => {
+    return ctrl.workflows.length > 0 && ctrl.mappedRisks.length > 0 ? 'Complete' : 'Incomplete';
+  };
+
+  const filteredControls = controls.filter(c => {
+    if (classificationFilter.length > 0 && !classificationFilter.includes(c.classification)) return false;
+    if (natureFilter.length > 0 && !natureFilter.includes(c.nature)) return false;
+    if (designStatusFilter.length > 0 && !designStatusFilter.includes(getDesignStatus(c))) return false;
+    return true;
+  });
+  const classificationOptions = Array.from(new Set(controls.map(c => c.classification))).sort();
+  const natureOptions = Array.from(new Set(controls.map(c => c.nature))).sort();
+  const designStatusOptions = ['Complete', 'Incomplete'];
+
   // Bulk select + bulk archive (in-memory archive — removes from list, no API).
   const [selectedControlIds, setSelectedControlIds] = useState<string[]>([]);
-  const allVisibleIds = controls.map(c => c.id);
+  const allVisibleIds = filteredControls.map(c => c.id);
   const allSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedControlIds.includes(id));
   const someSelected = selectedControlIds.length > 0 && !allSelected;
   const toggleSelectAll = () => {
@@ -1710,20 +1778,17 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const toggleSelectOne = (id: string) => {
     setSelectedControlIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
-  const handleBulkArchive = () => {
-    const count = selectedControlIds.length;
-    if (count === 0) return;
-    setControls(prev => prev.filter(c => !selectedControlIds.includes(c.id)));
-    setSelectedControlIds([]);
-    addToast({ message: `${count} control${count !== 1 ? 's' : ''} archived`, type: 'success' });
+  const handleArchiveOne = (id: string) => {
+    setControls(prev => prev.filter(c => c.id !== id));
+    setSelectedControlIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Control archived`, type: 'success' });
+  };
+  const handleCancelOne = (id: string) => {
+    setSelectedControlIds(prev => prev.filter(s => s !== id));
   };
 
   const handleCreateWorkflow = (ctrl: DesignControl) => {
     addToast({ message: `Opening Ask IRA to create workflow for "${ctrl.name}" (${ctrl.id})`, type: 'info' });
-  };
-
-  const getDesignStatus = (ctrl: DesignControl): 'Complete' | 'Incomplete' => {
-    return ctrl.workflows.length > 0 && ctrl.mappedRisks.length > 0 ? 'Complete' : 'Incomplete';
   };
 
   if (!isLoading && controls.length === 0) {
@@ -1746,32 +1811,14 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     );
   }
 
+  const incompleteCount = controls.filter(c => getDesignStatus(c) === 'Incomplete').length;
+
   return (
     <div className="space-y-4">
 
-      {/* Bulk action bar — only when one or more controls selected. */}
-      {selectedControlIds.length > 0 && (
-        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-brand-50 border-y border-brand-200 rounded-[8px] mb-3">
-          <span className="text-[13px] font-medium text-brand-700">{selectedControlIds.length} selected</span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={handleBulkArchive}
-            className="px-3 py-1.5 rounded-[6px] bg-paper-0 border border-ink-200 text-[12px] text-ink-800 hover:bg-paper-50 inline-flex items-center gap-1.5"
-          >
-            <Archive className="w-3.5 h-3.5" />Archive
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedControlIds([])}
-            className="px-3 py-1.5 rounded-[6px] text-[12px] text-ink-600 hover:bg-paper-100"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+      {/* "Map controls in RACM" link moved to per-row Actions cell, beside View. */}
 
-      <div className="border-t border-border-light overflow-x-auto">
+      <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
         <table className="w-full border-collapse text-[12px]">
           <thead className="bg-white border-b border-border-light">
             <tr>
@@ -1788,24 +1835,35 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               </th>
               {([
                 { label: 'Control' },
-                { label: 'Classification', tip: 'Marked as Key for SOX or regulatory reporting; Non-Key is supportive but not externally tested.' },
-                { label: 'Nature' },
+                { label: 'Classification', tip: 'Marked as Key for SOX or regulatory reporting; Non-Key is supportive but not externally tested.', filter: 'classification' as const },
+                { label: 'Nature', filter: 'nature' as const },
                 { label: 'Workflows' },
                 { label: 'Mapped Risks' },
                 { label: 'RACMs' },
-                { label: 'Design Status', tip: 'Whether the control has both linked workflows and mapped risks. Incomplete controls cannot be tested.' },
+                { label: 'Design Status', tip: 'Whether the control has both linked workflows and mapped risks. Incomplete controls cannot be tested.', filter: 'designStatus' as const },
                 { label: '' },
-              ] as { label: string; tip?: string }[]).map(h => (
+              ] as { label: string; tip?: string; filter?: 'classification' | 'nature' | 'designStatus' }[]).map(h => (
                 <th key={h.label || 'act'} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
-                  {h.tip ? (
-                    <span className="inline-flex items-center gap-1 group/tip relative">
-                      {h.label}
-                      <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
-                      <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                        {h.tip}
+                  <span className="inline-flex items-center gap-1">
+                    {h.tip ? (
+                      <span className="inline-flex items-center gap-1 group/tip relative">
+                        {h.label}
+                        <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                        <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                          {h.tip}
+                        </span>
                       </span>
-                    </span>
-                  ) : h.label}
+                    ) : h.label}
+                    {h.filter === 'classification' && (
+                      <ColumnFilter label="Classification" options={classificationOptions} value={classificationFilter} onChange={setClassificationFilter} />
+                    )}
+                    {h.filter === 'nature' && (
+                      <ColumnFilter label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
+                    )}
+                    {h.filter === 'designStatus' && (
+                      <ColumnFilter label="Design Status" options={designStatusOptions} value={designStatusFilter} onChange={setDesignStatusFilter} />
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -1825,8 +1883,21 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   ))}
                 </tr>
               ))
+            ) : filteredControls.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-text-muted">
+                  No controls match your filters.
+                  <button
+                    type="button"
+                    onClick={() => { setClassificationFilter([]); setNatureFilter([]); setDesignStatusFilter([]); }}
+                    className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                  >
+                    Clear filters
+                  </button>
+                </td>
+              </tr>
             ) : (
-            controls.map((ctrl, i) => {
+            filteredControls.map((ctrl, i) => {
               const isExpanded = expandedId === ctrl.id;
               const hasBound = ctrl.workflows.length > 0;
               return (
@@ -1876,8 +1947,32 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                     </td>
                     <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
-                        <button type="button" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
+                        {selectedControlIds.includes(ctrl.id) ? (
+                          <>
+                            <button type="button"
+                              onClick={() => handleArchiveOne(ctrl.id)}
+                              className="px-2 py-1 rounded-[4px] text-[10px] font-medium inline-flex items-center gap-1 bg-paper-0 border border-ink-200 text-ink-800 hover:bg-paper-50 cursor-pointer transition-colors">
+                              <Archive size={10} />Archive
+                            </button>
+                            <button type="button"
+                              onClick={() => handleCancelOne(ctrl.id)}
+                              className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors">
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
+                            <button type="button" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
+                            {onGoToRacm && (
+                              <button type="button" onClick={onGoToRacm}
+                                className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-0.5 cursor-pointer transition-colors">
+                                Map in RACM
+                                <ChevronRight size={10} />
+                              </button>
+                            )}
+                          </>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
@@ -1984,6 +2079,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [usageFilter, setUsageFilter] = useState<'All' | 'Used' | 'Unused'>('All');
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [showLinkedControls, setShowLinkedControls] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [bulkMode, setBulkMode] = useState(false);
@@ -1996,10 +2092,27 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     return () => clearTimeout(t);
   }, []);
 
+  // Listen for header-level "Create new Workflow" trigger.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ section?: string }>;
+      if (ce.detail?.section === 'workflows') setShowCreateDrawer(true);
+    };
+    window.addEventListener('process-hub-create', handler);
+    return () => window.removeEventListener('process-hub-create', handler);
+  }, []);
+
   const searched = search.trim() ? workflows.filter(w => w.name.toLowerCase().includes(search.toLowerCase()) || w.description.toLowerCase().includes(search.toLowerCase())) : workflows;
-  const filtered = usageFilter === 'All' ? searched
+  const usageScoped = usageFilter === 'All' ? searched
     : usageFilter === 'Used' ? searched.filter(w => w.linkedControls.length > 0)
     : searched.filter(w => w.linkedControls.length === 0);
+  const filtered = typeFilter.length > 0
+    ? usageScoped.filter(w => typeFilter.includes(w.type) || typeFilter.includes(w.nature))
+    : usageScoped;
+  const typeOptions = [
+    ...Array.from(new Set(workflows.map(w => w.type))).sort(),
+    ...Array.from(new Set(workflows.map(w => w.nature))).sort(),
+  ];
 
   const usedCount = workflows.filter(w => w.linkedControls.length > 0).length;
   const unusedCount = workflows.filter(w => w.linkedControls.length === 0).length;
@@ -2099,10 +2212,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
             </>
           ) : (
             <>
-              <button type="button" onClick={() => setShowCreateDrawer(true)}
-                className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-primary-xlight text-primary border border-primary/15 text-[13px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
-                <Sparkles size={14} />New Workflow
-              </button>
+              {/* "New Workflow" CTA moved to the Process Hub drilled-view header. */}
               <button type="button" onClick={() => setBulkMode(true)}
                 className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-white text-text border border-border text-[13px] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]">
                 <Play size={14} />Bulk Run
@@ -2120,11 +2230,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No matching workflows</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">
-            Nothing matched <span className="font-mono">"{search || usageFilter}"</span>. Try a different search or filter.
+            Nothing matched <span className="font-mono">"{search || usageFilter}"</span>{typeFilter.length > 0 ? <> with Type <span className="font-mono">{typeFilter.join(', ')}</span></> : null}. Try a different search or filter.
           </p>
         </div>
       ) : (
-        <div className="border-t border-border-light">
+        <div className="border-t border-border-light min-h-[calc(100vh-280px)]">
           <table className="w-full border-collapse">
             <thead className="bg-white sticky top-0 z-10 border-b border-border-light">
               <tr>
@@ -2136,7 +2246,12 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                 )}
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[280px]">Workflow Name</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">Description</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[160px]">Type</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[160px]">
+                  <span className="inline-flex items-center gap-1">
+                    Type
+                    <ColumnFilter label="Type" options={typeOptions} value={typeFilter} onChange={setTypeFilter} />
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[150px]">Usage</th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[120px]" aria-label="Actions"></th>
               </tr>
@@ -2253,7 +2368,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                 onClick={e => e.stopPropagation()}>
                 <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
                   <div>
-                    <h3 className="text-[14px] font-bold text-text">Linked Controls</h3>
+                    <h3 className="text-[13px] font-bold text-text">Linked Controls</h3>
                     <p className="text-[11px] text-text-muted mt-0.5">{wf.name}</p>
                   </div>
                   <button type="button" aria-label="Close" onClick={() => setShowLinkedControls(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={14} /></button>
@@ -3303,6 +3418,43 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     setDrilledSection(next);
   };
 
+  // Section-specific create button label rendered in the drilled-view header.
+  const sectionCreateLabel: Record<SectionKey, string> = {
+    sop: 'Create new SOP',
+    racm: 'Create new RACM',
+    risks: 'Create new Risk',
+    controls: 'Create new Control',
+    workflows: 'Create new Workflow',
+  };
+
+  // Trigger the create flow for a given section. RACM lives in this component;
+  // other sections own their own drawer state and listen for a window event.
+  const triggerSectionCreate = (section: SectionKey) => {
+    if (section === 'racm') {
+      setShowCreateRacm(true);
+      return;
+    }
+    if (section === 'controls') {
+      // Controls aren't created directly — they're mapped from a RACM.
+      switchDrilledSection('racm');
+      addToast({ message: 'Controls are mapped inside a RACM. Open a RACM to define controls.', type: 'info' });
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('process-hub-create', { detail: { section } }));
+    }
+  };
+
+  // Dropdown menu — used in the BP detail INDEX header. Picks a section,
+  // navigates to it, then fires triggerSectionCreate.
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const handleDropdownPick = (section: SectionKey) => {
+    setCreateMenuOpen(false);
+    if (section !== drilledSection) switchDrilledSection(section);
+    // Defer trigger to next tick so the section component has mounted.
+    setTimeout(() => triggerSectionCreate(section), 50);
+  };
+
   // ============================================================
   // LEGACY chevron-collapsible view — flip USE_LEGACY_COLLAPSIBLE to true to restore.
   // The entire old return JSX is preserved verbatim inside this guarded block.
@@ -3315,7 +3467,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         {/* Header — full-bleed white strip, matches Reports */}
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
           {/* Breadcrumb (back) */}
-          <button type="button" onClick={onBack} className="font-mono text-[11px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
+          <button type="button" onClick={onBack} className="font-mono text-[12px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
             <ArrowLeft size={12} />
             Process Hub
           </button>
@@ -3609,19 +3761,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-6 border-b border-border">
-            <div className="font-mono text-[11px] mb-3 tracking-tight flex items-center gap-1.5">
+          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-6 border-b border-border">
+            <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
               <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
                 <ArrowLeft size={12} />Process Hub
               </button>
               <span className="text-ink-300">/</span>
-              <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer">{bp.name}</button>
+              <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
               <span className="text-ink-300">/</span>
-              <span className="text-ink-700">{info.title}</span>
+              <span className="text-ink-700 truncate">{info.title}</span>
             </div>
 
-            {/* Section switcher pills — keeps users oriented inside the drilled view */}
-            <div className="flex items-center gap-2 mt-3 mb-5 overflow-x-auto -mx-1 px-1 pb-1">
+            {/* Section switcher pills + section-specific create button — share one row. */}
+            <div className="flex items-center justify-between gap-3 mt-3">
+              <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
               {sectionOrder.map(key => {
                 const m = sectionMeta[key];
                 const active = drilledSection === key;
@@ -3632,10 +3785,10 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                     aria-label={`Switch to ${m.title}`}
                     aria-current={active ? 'page' : undefined}
                     onClick={() => switchDrilledSection(key)}
-                    className={`shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                    className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
                       active
                         ? 'bg-brand-600 text-paper-0'
-                        : 'bg-paper-100 text-ink-700 hover:bg-paper-200'
+                        : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
                     }`}
                   >
                     {sectionPillLabel[key]}
@@ -3645,6 +3798,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   </button>
                 );
               })}
+              </div>
+              {/* Section-specific create button — text changes per drilled section. */}
+              <button
+                type="button"
+                onClick={() => triggerSectionCreate(drilledSection)}
+                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />{sectionCreateLabel[drilledSection]}
+              </button>
             </div>
 
           </div>
@@ -3684,12 +3845,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 processFilter={bp.abbr}
                 extraRacms={createdRacms}
                 onCreate={() => setShowCreateRacm(true)}
-                headerAction={
-                  <button type="button" onClick={() => setShowCreateRacm(true)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                    <Plus size={13} />New RACM
-                  </button>
-                }
                 onEditDraft={(racm) => {
                   const exists = createdRacms.some(r => r.id === racm.id);
                   if (!exists) {
@@ -3744,7 +3899,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          <button type="button" onClick={onBack} className="font-mono text-[11px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
+          <button type="button" onClick={onBack} className="font-mono text-[12px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
             <ArrowLeft size={12} />Process Hub
           </button>
 
@@ -3756,28 +3911,66 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             </div>
           </div>
 
-          <div className="flex items-center gap-6 mb-5 text-[12px] text-text-muted">
-            <span className="font-mono">{bp.abbr}</span>
-            <div className="flex items-center gap-2">
-              <span className="font-bold">Owner:</span>
-              <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
+          <div className="flex items-center justify-between gap-3 mb-5 text-[12px] text-text-muted">
+            <div className="flex items-center gap-6 min-w-0">
+              <span className="font-mono">{bp.abbr}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold">Owner:</span>
+                <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold">Status:</span>
+                {(() => {
+                  const s = bp.status ?? 'Active';
+                  const tone =
+                    s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                    s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                    s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                       { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                  return (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                      {s}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold">Status:</span>
-              {(() => {
-                const s = bp.status ?? 'Active';
-                const tone =
-                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                return (
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                    {s}
-                  </span>
-                );
-              })()}
+            {/* Create new dropdown — sits at the right end of the meta row. */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setCreateMenuOpen(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={createMenuOpen}
+                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
+                Create new
+                <ChevronDown size={13} />
+              </button>
+              {createMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
+                  <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
+                    {([
+                      { key: 'sop' as const,        label: 'SOP' },
+                      { key: 'racm' as const,       label: 'RACM' },
+                      { key: 'risks' as const,      label: 'Risk' },
+                      { key: 'controls' as const,   label: 'Control' },
+                      { key: 'workflows' as const,  label: 'Workflow' },
+                    ]).map(item => (
+                      <button
+                        type="button"
+                        key={item.key}
+                        role="menuitem"
+                        onClick={() => handleDropdownPick(item.key)}
+                        className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           {bp.description && (

@@ -448,11 +448,17 @@ button:focus-visible,
   border-radius: var(--radius-md);
 }
 
-/* Opt-out: suppress the focus ring on inputs/textareas tagged .no-focus-ring */
+/* Opt-out: suppress the focus ring on any element tagged .no-focus-ring */
 input.no-focus-ring:focus-visible,
 textarea.no-focus-ring:focus-visible,
-select.no-focus-ring:focus-visible {
+select.no-focus-ring:focus-visible,
+button.no-focus-ring:focus-visible,
+button.no-focus-ring:focus,
+[role="button"].no-focus-ring:focus-visible,
+[role="button"].no-focus-ring:focus,
+.no-focus-ring:focus-visible {
   box-shadow: none;
+  outline: none;
 }
 
 /* Reports: focus shows the border only — no ring/glow box-shadow. Kills both

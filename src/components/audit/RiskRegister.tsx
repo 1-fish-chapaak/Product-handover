@@ -6,6 +6,7 @@ import {
   ArrowRight, FileText, HelpCircle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import ColumnFilter from '../shared/ColumnFilter';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -320,7 +321,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-display text-[18px] font-semibold text-ink-900">{risk.name}</h2>
-              <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
             </div>
             <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
           </div>
@@ -383,11 +384,24 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
   const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
+  const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setIsLoading(false), 400);
     return () => clearTimeout(t);
+  }, []);
+
+  // Listen for header-level "Create new Risk" trigger from Process Hub.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ section?: string }>;
+      if (ce.detail?.section === 'risks') setShowCreateDrawer(true);
+    };
+    window.addEventListener('process-hub-create', handler);
+    return () => window.removeEventListener('process-hub-create', handler);
   }, []);
 
   // Apply process filter first (for embedded mode)
@@ -436,8 +450,20 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       );
     }
 
+    if (subProcessFilter.length > 0) result = result.filter(r => subProcessFilter.includes(r.subProcess));
+    if (categoryFilter.length > 0) result = result.filter(r => categoryFilter.includes(r.category));
+    if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
+
     return result;
-  }, [baseRisks, activeFilter, searchQuery]);
+  }, [baseRisks, activeFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+
+  const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
+  const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
+  const priorityOptions = useMemo(() => {
+    const order = ['Critical', 'High', 'Medium', 'Low'];
+    const set = new Set(baseRisks.map(r => r.priority));
+    return order.filter(p => set.has(p as RiskPriority));
+  }, [baseRisks]);
 
   const handleSaveRisk = (risk: RiskEntry) => {
     const exists = risks.find(r => r.id === risk.id);
@@ -457,12 +483,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setDetailRisk(updated);
   };
 
-  // Bulk archive: move selected risks to archived list (hidden from view)
-  const handleBulkArchive = () => {
-    const count = selectedRiskIds.length;
-    setArchivedRiskIds(prev => [...prev, ...selectedRiskIds]);
-    setSelectedRiskIds([]);
-    addToast({ message: `${count} risk${count !== 1 ? 's' : ''} archived`, type: 'success' });
+  // Single-row archive replaces the old sticky bulk bar.
+  const handleArchiveOne = (id: string) => {
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk archived`, type: 'success' });
+  };
+  const handleCancelOne = (id: string) => {
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
   };
 
   // Select-all helpers based on currently-visible filteredRisks
@@ -497,28 +525,20 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
-        {/* Header — standalone shows the page title; embedded shows the attention banner inline with the CTA */}
-        <div className="flex items-start justify-between gap-3">
-          {embedded ? (
-            unmappedCount > 0 ? (
-              <div className="flex-1 rounded-[8px] border border-high-700/15 bg-high-50 px-4 py-2.5 flex items-center gap-3">
-                <AlertTriangle size={14} className="text-high-700 shrink-0" />
-                <span className="text-[12px] text-high-700">
-                  <span className="font-semibold">{unmappedCount} risk{unmappedCount !== 1 ? 's' : ''}</span> {unmappedCount !== 1 ? 'are' : 'is'} not yet mapped to controls.
-                </span>
-              </div>
-            ) : <div className="flex-1" />
-          ) : (
+        {/* Toolbar — when embedded inside Process Hub, the create button lives in the
+            Process Hub header. Standalone Risk Register keeps its own title + CTA. */}
+        {!embedded && (
+          <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="font-display text-[18px] font-semibold text-ink-900">Risk Register</h1>
               <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
-          )}
-          <button type="button" onClick={() => setShowCreateDrawer(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer shrink-0">
-            <Plus size={14} />New Risk
-          </button>
-        </div>
+            <button type="button" onClick={() => setShowCreateDrawer(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+              <Plus size={13} />New Risk
+            </button>
+          </div>
+        )}
 
         {/* Insight banner — standalone only (embedded shows it in the header row) */}
         {!embedded && unmappedCount > 0 && (
@@ -543,18 +563,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         ) : (
         <>
 
-        {/* Bulk action bar — appears when any risks selected */}
-        {selectedRiskIds.length > 0 && (
-          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-brand-50 border-y border-brand-200 rounded-[8px] mb-3">
-            <span className="text-[13px] font-medium text-brand-700">{selectedRiskIds.length} selected</span>
-            <div className="flex-1" />
-            <button type="button" onClick={handleBulkArchive} className="px-3 py-1.5 rounded-[6px] bg-paper-0 border border-ink-200 text-[12px] text-ink-800 hover:bg-paper-50 inline-flex items-center gap-1.5">
-              <Archive className="w-3.5 h-3.5" />Archive
-            </button>
-            <button type="button" onClick={() => setSelectedRiskIds([])} className="px-3 py-1.5 rounded-[6px] text-[12px] text-ink-600 hover:bg-paper-100">Cancel</button>
-          </div>
-        )}
-
         {/* Filters + Search */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -577,7 +585,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         </div>
 
         {/* Risk Table */}
-        <div className="border-t border-border-light overflow-x-auto">
+        <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
             <table className="w-full border-collapse text-[12px]">
               <thead className="bg-white border-b border-border-light">
                 <tr>
@@ -595,21 +603,32 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                   {([
                     { key: 'risk-id', label: 'Risk ID' },
                     { key: 'risk-name', label: 'Risk Name' },
-                    { key: 'sub-process', label: 'Sub-process' },
-                    { key: 'category', label: 'Category' },
-                    { key: 'priority', label: 'Priority', tooltip: 'Inherent risk severity — Critical/High/Medium/Low based on likelihood × impact before any controls are applied.' },
+                    { key: 'sub-process', label: 'Sub-process', filter: 'subProcess' as const },
+                    { key: 'category', label: 'Category', filter: 'category' as const },
+                    { key: 'priority', label: 'Priority', tooltip: 'Inherent risk severity — Critical/High/Medium/Low based on likelihood × impact before any controls are applied.', filter: 'priority' as const },
                     { key: 'action', label: '' },
-                  ] as Array<{ key: string; label: string; tooltip?: string }>).map(h => (
+                  ] as Array<{ key: string; label: string; tooltip?: string; filter?: 'subProcess' | 'category' | 'priority' }>).map(h => (
                     <th key={h.key} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
-                      {h.tooltip ? (
-                        <span className="inline-flex items-center gap-1 group/tip relative">
-                          {h.label}
-                          <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
-                          <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                            {h.tooltip}
+                      <span className="inline-flex items-center gap-1">
+                        {h.tooltip ? (
+                          <span className="inline-flex items-center gap-1 group/tip relative">
+                            {h.label}
+                            <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                            <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                              {h.tooltip}
+                            </span>
                           </span>
-                        </span>
-                      ) : h.label}
+                        ) : h.label}
+                        {h.filter === 'subProcess' && (
+                          <ColumnFilter label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} />
+                        )}
+                        {h.filter === 'category' && (
+                          <ColumnFilter label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} />
+                        )}
+                        {h.filter === 'priority' && (
+                          <ColumnFilter label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} />
+                        )}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -626,7 +645,20 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     </tr>
                   ))
                 ) : filteredRisks.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-[12px] text-text-muted">No risks match your search or filters</td></tr>
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-[12px] text-text-muted">
+                      No risks match your search or filters.
+                      {(subProcessFilter.length || categoryFilter.length || priorityFilter.length) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setSubProcessFilter([]); setCategoryFilter([]); setPriorityFilter([]); }}
+                          className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 ) : filteredRisks.map((risk, i) => {
                   const isChecked = selectedRiskIds.includes(risk.id);
                   return (
@@ -658,10 +690,27 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       <span className={`text-[11px] ${PRIORITY_STYLES[risk.priority]}`}>{risk.priority}</span>
                     </td>
                     <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
-                      <button type="button" onClick={() => setDetailRisk(risk)}
-                        className="px-2 py-1 rounded-[8px] text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-100 text-ink-600 hover:bg-paper-200">
-                        View<ChevronRight size={8} />
-                      </button>
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {isChecked ? (
+                          <>
+                            <button type="button"
+                              onClick={() => handleArchiveOne(risk.id)}
+                              className="px-2 py-1 rounded-[6px] text-[10px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-0 border border-ink-200 text-ink-800 hover:bg-paper-50">
+                              <Archive size={10} />Archive
+                            </button>
+                            <button type="button"
+                              onClick={() => handleCancelOne(risk.id)}
+                              className="px-2 py-1 rounded-[6px] text-[10px] font-medium text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors">
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setDetailRisk(risk)}
+                            className="px-2 py-1 rounded-[8px] text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-100 text-ink-600 hover:bg-paper-200">
+                            View<ChevronRight size={8} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                   );

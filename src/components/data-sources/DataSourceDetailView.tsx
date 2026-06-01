@@ -195,7 +195,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       className="space-y-5"
     >
       {/* Sub-breadcrumb + back */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 font-mono">
         <button
           onClick={onBack}
           className="flex items-center gap-1 px-2 py-1 text-[12px] font-medium text-ink-500 hover:text-brand-700 hover:bg-paper-50 rounded-md transition-colors cursor-pointer"

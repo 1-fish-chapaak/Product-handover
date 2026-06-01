@@ -5,6 +5,7 @@ import {
   Archive, Unlock,
 } from 'lucide-react';
 import RacmMappingWorkspace from './RacmMappingWorkspace';
+import ColumnFilter from '../shared/ColumnFilter';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [archivedIds, setArchivedIds] = useState<string[]>([]);
   const [unfrozenIds, setUnfrozenIds] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [readinessFilter, setReadinessFilter] = useState<string[]>([]);
+  const [processColFilter, setProcessColFilter] = useState<string[]>([]);
+  const [frameworkFilter, setFrameworkFilter] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -115,7 +120,25 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   }, [initialMappingRacm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseFiltered = processFilter ? allRacms.filter(r => r.process === processFilter) : allRacms;
-  const filtered = baseFiltered.filter(r => !archivedIds.includes(r.id));
+  const preColFiltered = baseFiltered.filter(r => !archivedIds.includes(r.id));
+  const filtered = preColFiltered
+    .filter(r => {
+      if (statusFilter.length === 0) return true;
+      const s = getRacmTableStatus(r);
+      const resolved = s === 'Locked' && unfrozenIds.includes(r.id) ? 'Active' : s;
+      return statusFilter.includes(resolved);
+    })
+    .filter(r => readinessFilter.length === 0 || readinessFilter.includes(getRacmTableReadiness(r)))
+    .filter(r => processColFilter.length === 0 || processColFilter.includes(r.process))
+    .filter(r => frameworkFilter.length === 0 || frameworkFilter.includes(r.framework));
+
+  const statusOptions = Array.from(new Set(baseFiltered.map(r => {
+    const s = getRacmTableStatus(r);
+    return s === 'Locked' && unfrozenIds.includes(r.id) ? 'Active' : s;
+  }))).sort();
+  const readinessOptions = Array.from(new Set(baseFiltered.map(getRacmTableReadiness))).sort();
+  const processOptions = Array.from(new Set(baseFiltered.map(r => r.process))).sort();
+  const frameworkOptions = Array.from(new Set(baseFiltered.map(r => r.framework))).sort();
 
   // Keep selected list scoped to currently visible rows
   useEffect(() => {
@@ -161,44 +184,25 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const actionNeededCount = filtered.filter(r => getRacmTableReadiness(r) !== 'Ready').length;
   const colCount = 10; // select + col-0 + RACM + Status + Readiness + Process + Framework + Risks + Controls + Actions
 
+  // Archive a single row (replaces the previous bulk-archive sticky bar).
+  const handleArchiveOne = (id: string) => {
+    setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedIds(prev => prev.filter(s => s !== id));
+  };
+  const handleCancelOne = (id: string) => {
+    setSelectedIds(prev => prev.filter(s => s !== id));
+  };
+
   return (
     <div className="space-y-3">
-      {selectedIds.length > 0 && (
-        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-brand-50 border-y border-brand-200 rounded-[8px] mb-3">
-          <span className="text-[13px] font-medium text-brand-700">{selectedIds.length} selected</span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            onClick={handleBulkArchive}
-            className="px-3 py-1.5 rounded-[6px] bg-paper-0 border border-ink-200 text-[12px] text-ink-800 hover:bg-paper-50 inline-flex items-center gap-1.5"
-          >
-            <Archive className="w-3.5 h-3.5" />Archive
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedIds([])}
-            className="px-3 py-1.5 rounded-[6px] text-[12px] text-ink-600 hover:bg-paper-100"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {(actionNeededCount > 0 || headerAction) && (
-        <div className="flex items-center gap-3">
-          {actionNeededCount > 0 ? (
-            <div className="flex-1 rounded-[8px] border border-high-700/15 bg-high-50 px-4 py-2.5 flex items-center gap-3">
-              <AlertTriangle size={14} className="text-high-700 shrink-0" />
-              <span className="text-[12px] text-high-700">
-                <span className="font-semibold">{actionNeededCount} RACM{actionNeededCount !== 1 ? 's' : ''}</span> {actionNeededCount !== 1 ? 'require' : 'requires'} attention — complete setup before execution.
-              </span>
-            </div>
-          ) : <div className="flex-1" />}
+      {/* Toolbar — primary CTA only. */}
+      {headerAction && (
+        <div className="flex items-center justify-end gap-3 mb-3">
           {headerAction}
         </div>
       )}
 
-      {!isLoading && filtered.length === 0 && onCreate ? (
+      {!isLoading && preColFiltered.length === 0 && onCreate ? (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
             <Grid3x3 className="w-6 h-6 text-ink-500" />
@@ -208,7 +212,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           <button type="button" onClick={onCreate} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New RACM</button>
         </div>
       ) : (
-      <div className="border-t border-border-light overflow-x-auto">
+      <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
           <table className="w-full border-collapse text-[12px]">
             <thead className="bg-white border-b border-border-light">
               <tr>
@@ -226,24 +230,38 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 {([
                   { key: 'col-0', label: '' },
                   { key: 'racm', label: 'RACM' },
-                  { key: 'status', label: 'Status', tooltip: 'Current lifecycle state. Draft = in progress, Active = live, Locked = frozen for audit.' },
-                  { key: 'readiness', label: 'Readiness', tooltip: 'Whether the RACM is ready to enter active monitoring. Includes mapping, workflow, and config checks.' },
-                  { key: 'process', label: 'Process' },
-                  { key: 'framework', label: 'Framework' },
+                  { key: 'status', label: 'Status', tooltip: 'Current lifecycle state. Draft = in progress, Active = live, Locked = frozen for audit.', filter: 'status' as const },
+                  { key: 'readiness', label: 'Readiness', tooltip: 'Whether the RACM is ready to enter active monitoring. Includes mapping, workflow, and config checks.', filter: 'readiness' as const },
+                  { key: 'process', label: 'Process', filter: 'process' as const },
+                  { key: 'framework', label: 'Framework', filter: 'framework' as const },
                   { key: 'risks', label: 'Risks' },
                   { key: 'controls', label: 'Controls' },
                   { key: 'col-actions', label: '' },
-                ] as Array<{ key: string; label: string; tooltip?: string }>).map((h, idx) => (
+                ] as Array<{ key: string; label: string; tooltip?: string; filter?: 'status' | 'readiness' | 'process' | 'framework' }>).map((h, idx) => (
                   <th key={h.key} className={`px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap ${idx === 0 ? 'w-6' : ''}`}>
-                    {h.tooltip ? (
-                      <span className="inline-flex items-center gap-1 group/tip relative">
-                        {h.label}
-                        <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
-                        <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                          {h.tooltip}
+                    <span className="inline-flex items-center gap-1">
+                      {h.tooltip ? (
+                        <span className="inline-flex items-center gap-1 group/tip relative">
+                          {h.label}
+                          <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                          <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                            {h.tooltip}
+                          </span>
                         </span>
-                      </span>
-                    ) : h.label}
+                      ) : h.label}
+                      {h.filter === 'status' && (
+                        <ColumnFilter label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+                      )}
+                      {h.filter === 'readiness' && (
+                        <ColumnFilter label="Readiness" options={readinessOptions} value={readinessFilter} onChange={setReadinessFilter} />
+                      )}
+                      {h.filter === 'process' && (
+                        <ColumnFilter label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} />
+                      )}
+                      {h.filter === 'framework' && (
+                        <ColumnFilter label="Framework" options={frameworkOptions} value={frameworkFilter} onChange={setFrameworkFilter} />
+                      )}
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -263,7 +281,20 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={colCount} className="px-4 py-10 text-center text-[12px] text-text-muted">No RACMs found</td></tr>
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-10 text-center text-[12px] text-text-muted">
+                    No RACMs match your filters.
+                    {(statusFilter.length || readinessFilter.length || processColFilter.length || frameworkFilter.length) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setStatusFilter([]); setReadinessFilter([]); setProcessColFilter([]); setFrameworkFilter([]); }}
+                        className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </td>
+                </tr>
               ) : filtered.map((racm, i) => {
                 const rawStatus = getRacmTableStatus(racm);
                 const status: RacmTableStatus = rawStatus === 'Locked' && unfrozenIds.includes(racm.id) ? 'Active' : rawStatus;
@@ -302,10 +333,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </div>
                       </td>
                       <td className="px-4 py-4 align-top">
-                        <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center border ${STATUS_BADGE[status]}`}>{status}</span>
+                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center border ${STATUS_BADGE[status]}`}>{status}</span>
                       </td>
                       <td className="px-4 py-4 align-top">
-                        <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
+                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
                       </td>
                       <td className="px-4 py-4 align-top">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-paper-50 border border-canvas-border text-ink-700">{racm.process}</span>
@@ -315,33 +346,50 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                       <td className="px-4 py-4 align-top"><span className="text-[12px] text-text tabular-nums">{racm.controls}</span></td>
                       <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5 justify-end">
-                          {onOpenInEditor && (
-                            <button type="button" onClick={() => onOpenInEditor(racm)}
-                              title="Open this RACM in the full-page editor"
-                              className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary text-white hover:bg-primary/90">
-                              <Pencil size={9} />Open in editor
-                            </button>
+                          {isSelected ? (
+                            <>
+                              <button type="button"
+                                onClick={(e) => { e.stopPropagation(); handleArchiveOne(racm.id); }}
+                                className="px-2 py-1 rounded-[6px] text-[10px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-0 border border-ink-200 text-ink-800 hover:bg-paper-50">
+                                <Archive size={10} />Archive
+                              </button>
+                              <button type="button"
+                                onClick={(e) => { e.stopPropagation(); handleCancelOne(racm.id); }}
+                                className="px-2 py-1 rounded-[6px] text-[10px] font-medium text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors">
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {onOpenInEditor && (
+                                <button type="button" onClick={() => onOpenInEditor(racm)}
+                                  title="Open this RACM in the full-page editor"
+                                  className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary text-white hover:bg-primary/90">
+                                  <Pencil size={9} />Open in editor
+                                </button>
+                              )}
+                              {isDraftRacm && onEditDraft && (
+                                <button type="button" onClick={() => onEditDraft(racm)}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary/20">
+                                  <Pencil size={9} />Edit draft
+                                </button>
+                              )}
+                              {isLocked && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleReopen(racm.id); }}
+                                  className="px-2 py-1 rounded-[6px] text-[10px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-0 border border-mitigated-300 text-mitigated-700 hover:bg-mitigated-50"
+                                  aria-label={`Re-open ${racm.name}`}
+                                >
+                                  <Unlock size={10} />Re-open
+                                </button>
+                              )}
+                              <button type="button" onClick={toggleExpand}
+                                className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-100 text-ink-600 hover:bg-paper-200">
+                                {isExpanded ? 'Close' : 'View'}
+                              </button>
+                            </>
                           )}
-                          {isDraftRacm && onEditDraft && (
-                            <button type="button" onClick={() => onEditDraft(racm)}
-                              className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-primary/10 text-primary hover:bg-primary/20">
-                              <Pencil size={9} />Edit draft
-                            </button>
-                          )}
-                          {isLocked && (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleReopen(racm.id); }}
-                              className="px-2 py-1 rounded-[6px] text-[10px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-0 border border-mitigated-300 text-mitigated-700 hover:bg-mitigated-50"
-                              aria-label={`Re-open ${racm.name}`}
-                            >
-                              <Unlock size={10} />Re-open
-                            </button>
-                          )}
-                          <button type="button" onClick={toggleExpand}
-                            className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-100 text-ink-600 hover:bg-paper-200">
-                            {isExpanded ? 'Close' : 'View'}
-                          </button>
                         </div>
                       </td>
                     </motion.tr>

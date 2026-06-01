@@ -93,7 +93,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 font-mono text-[12px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
         >
           <ArrowLeft size={14} />
           Back to AI Concierge
