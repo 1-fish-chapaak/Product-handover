@@ -13,7 +13,7 @@ import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable from './RacmListTable';
-import RiskRegister from './RiskRegister';
+import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
@@ -1949,14 +1949,6 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
 
   return (
     <div className="space-y-5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
-      >
-        <ArrowLeft size={12} />Back to Controls
-      </button>
-
       <div className="bg-white border border-canvas-border rounded-[12px] p-6">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 min-w-0">
@@ -1966,15 +1958,6 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
           </div>
-          {onGoToRacm && (
-            <button
-              type="button"
-              onClick={onGoToRacm}
-              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
-            >
-              Map in RACM<ArrowRight size={13} />
-            </button>
-          )}
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{ctrl.description}</p>
@@ -2339,13 +2322,6 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                           <>
                             {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
                             <button type="button" onClick={() => setDetailControlId(ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">View</button>
-                            {onGoToRacm && (
-                              <button type="button" onClick={onGoToRacm}
-                                className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-0.5 cursor-pointer transition-colors">
-                                Map in RACM
-                                <ChevronRight size={10} />
-                              </button>
-                            )}
                           </>
                         )}
                       </div>
@@ -3677,22 +3653,112 @@ const HEALTH_LABEL: Record<SectionHealth, { label: string | null; cls: string }>
   empty:     { label: 'Empty',     cls: 'text-ink-400' },
 };
 
-// Minimal section card. Two lines, no icon tile, no pill badges, no inline CTA pill.
-// Title + count + health word (only when non-healthy) on row 1; muted breakdown on row 2.
-// Health is implied by silence for "healthy" so the eye only catches what actually matters.
+// One entity row (a single SOP / RACM / Risk / Control / Workflow) shown inside
+// a section card when that section is expanded. Mirrors the engagement-card
+// stacking from the reference screenshot (title + status pill, optional
+// description, meta, tag pills, optional right-side stat).
+type EntryData = {
+  id: string;
+  title: string;
+  status?: { label: string; tone: 'green' | 'amber' | 'red' | 'gray' };
+  description?: string;
+  meta: string;
+  tags?: string[];
+  highlight?: { primary: string; secondary?: string };
+  onOpen?: () => void;
+};
+
+const ENTRY_TONE_TEXT: Record<NonNullable<EntryData['status']>['tone'], string> = {
+  green: 'text-compliant-700',
+  amber: 'text-mitigated-700',
+  red: 'text-high-700',
+  gray: 'text-ink-500',
+};
+const ENTRY_TONE_DOT: Record<NonNullable<EntryData['status']>['tone'], string> = {
+  green: 'bg-compliant-700',
+  amber: 'bg-mitigated-700',
+  red: 'bg-high-700',
+  gray: 'bg-ink-400',
+};
+
+function SectionEntryCard({ data }: { data: EntryData }) {
+  const interactive = !!data.onOpen;
+  return (
+    <div
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? data.onOpen : undefined}
+      onKeyDown={interactive ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.onOpen?.(); }
+      } : undefined}
+      className={`w-full bg-white border border-canvas-border rounded-[10px] px-4 py-3 transition-colors ${
+        interactive ? 'cursor-pointer hover:border-brand-300 hover:bg-paper-50/30' : ''
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap mb-1">
+            <h3 className="text-[13px] font-semibold text-ink-900">{data.title}</h3>
+            {data.status && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${ENTRY_TONE_TEXT[data.status.tone]}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${ENTRY_TONE_DOT[data.status.tone]}`} />
+                {data.status.label}
+              </span>
+            )}
+          </div>
+          {data.description && (
+            <p className="text-[12px] text-ink-600 leading-snug mb-1.5">
+              {data.description}
+            </p>
+          )}
+          <div className="text-[11px] text-ink-500 font-mono leading-tight">
+            {data.meta}
+          </div>
+          {data.tags && data.tags.length > 0 && (
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              {data.tags.map((tag, i) => (
+                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full border border-canvas-border text-[10px] text-ink-600 font-mono">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {data.highlight && (
+          <div className="shrink-0 text-right min-w-[120px]">
+            <div className="text-[12px] font-semibold text-ink-800 tabular-nums">{data.highlight.primary}</div>
+            {data.highlight.secondary && (
+              <div className="text-[11px] text-ink-500 mt-0.5">{data.highlight.secondary}</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Section row in the engagement-table format:
+//   [chevron] [title + meta + (expanded: entries list)]    [health text]
+// When expanded, the data panel below lists every entry in this section as
+// an engagement-style sub-card. Clicking the centre area drills into the section.
 function SectionCard({
-  title, count, countLabel, breakdown, lastActivity, health, locked, lockedReason, onClick,
+  title, count, locked, lockedReason, onClick,
+  ratio, openCount, openLabel, healthRatioText, entries, emptyEntriesLabel,
 }: {
   title: string;
   count: number;
-  countLabel: string;
-  breakdown: string;
-  lastActivity: string;
-  health: SectionHealth;
   locked?: boolean;
   lockedReason?: string;
   onClick: () => void;
+  ratio?: number | null;
+  openCount?: number;
+  openLabel?: string;
+  healthRatioText?: string;
+  entries?: EntryData[];
+  emptyEntriesLabel?: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (locked) {
     return (
       <div className="w-full bg-paper-50/40 border border-dashed border-canvas-border rounded-[12px] px-5 py-4">
@@ -3706,33 +3772,68 @@ function SectionCard({
       </div>
     );
   }
-  const healthInfo = HEALTH_LABEL[health];
+
+  const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
+  const hasOpen = (openCount ?? 0) > 0;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group w-full bg-white border border-canvas-border rounded-[12px] hover:border-brand-200 hover:bg-paper-50/30 transition-colors cursor-pointer text-left px-5 py-4"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-3 mb-1">
-            <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-900 leading-none">{title}</h2>
-            <span className="text-[12px] text-ink-500 font-mono tabular-nums shrink-0">{count} {countLabel}</span>
-            {healthInfo.label && (
-              <span className={`text-[10px] uppercase tracking-wider font-semibold shrink-0 ${healthInfo.cls}`}>
-                {healthInfo.label}
+    <div className="space-y-2.5">
+      {/* Section heading — plain text, never card-shaped, so it visibly differs from
+          the entry cards below. When the section is expanded a thin divider line
+          appears under the header to separate it from the listed entries. */}
+      <div className={`flex items-start gap-3 px-1 ${expanded ? 'pb-3 border-b border-canvas-border' : 'py-2'}`}>
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          aria-label={expanded ? `Hide ${title} entries` : `Show ${title} entries`}
+          aria-expanded={expanded}
+          className="no-focus-ring shrink-0 mt-0.5 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-paper-100 text-ink-500 hover:text-ink-700 transition-colors cursor-pointer"
+        >
+          {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+        </button>
+
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Open ${title}`}
+          className="no-focus-ring flex-1 min-w-0 text-left cursor-pointer group"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-[12px] font-semibold text-ink-900 leading-none group-hover:text-brand-700 transition-colors">{title}</h2>
+            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-paper-100 text-ink-600 text-[11px] font-mono tabular-nums shrink-0">{count}</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-compliant-700 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-compliant-700" />
+              Active
+            </span>
+            {hasOpen && (
+              <span className="text-[11px] uppercase tracking-wider font-semibold text-mitigated-700 inline-flex items-center gap-1 shrink-0">
+                <AlertTriangle size={10} aria-hidden /> {openCount} {openLabel}
               </span>
             )}
           </div>
-          <div className="text-[12px] text-ink-500 leading-tight truncate">
-            {breakdown}
-            <span className="text-ink-300 mx-1.5">·</span>
-            {lastActivity}
-          </div>
+        </button>
+
+        <div className="shrink-0 flex flex-col items-end gap-1 min-w-[140px] text-right">
+          {hasHealth && (
+            <div className="text-[12px] tabular-nums leading-tight">
+              <span className="font-semibold text-ink-800">{Math.round((ratio as number) * 100)}%</span>
+              <span className="text-ink-400"> · </span>
+              <span className="text-ink-500">{healthRatioText}</span>
+            </div>
+          )}
         </div>
-        <ChevronRight size={14} className="text-ink-300 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
       </div>
-    </button>
+
+      {expanded && (
+        <>
+          {entries && entries.length > 0 ? (
+            entries.map(e => <SectionEntryCard key={e.id} data={e} />)
+          ) : entries && entries.length === 0 ? (
+            <div className="px-1 text-[12px] text-ink-500 italic">{emptyEntriesLabel ?? `No ${title.toLowerCase()} yet.`}</div>
+          ) : null}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -3757,8 +3858,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   const bpRisks = RISKS.filter(r => r.bpId === bp.id);
   const bpRiskIds = new Set(bpRisks.map(r => r.id));
   const bpControls = CONTROLS.filter(c => bpRiskIds.has(c.riskId));
-  const coveredRiskIds = new Set(bpControls.map(c => c.riskId));
-  const coverage = bpRisks.length ? Math.round((bpRisks.filter(r => coveredRiskIds.has(r.id)).length / bpRisks.length) * 100) : 0;
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
@@ -3775,6 +3874,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
   };
   const [drilledSection, setDrilledSection] = useState<SectionKey | null>(() => readSectionFromUrl());
+
+  // Track which risk/control detail is open (URL-driven) so the BP-level breadcrumb
+  // can add the entity name and the tab pills row can be hidden while a detail is on screen.
+  const readUrlParam = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get(key);
+  };
+  const [openDetailRiskId, setOpenDetailRiskId] = useState<string | null>(() => readUrlParam('risk'));
+  const [openDetailControlId, setOpenDetailControlId] = useState<string | null>(() => readUrlParam('control'));
+  useEffect(() => {
+    const onPop = () => {
+      setOpenDetailRiskId(readUrlParam('risk'));
+      setOpenDetailControlId(readUrlParam('control'));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openDetailRisk = openDetailRiskId ? SEED_RISKS.find(r => r.id === openDetailRiskId) : null;
+  const openDetailControl = openDetailControlId ? SEED_DESIGN_CONTROLS.find(c => c.id === openDetailControlId) : null;
+  const detailIsOpen = !!(openDetailRisk || openDetailControl);
 
   // Listen for browser back/forward so closing the drilled section via browser back works.
   // On unmount (user navigated away from this BP entirely), strip the ?section= query so it
@@ -3810,13 +3929,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     }
   }, [drilledSection]);
 
-  // Close the drilled view by going back in history so browser back/forward stays consistent.
+  // Close the drilled view and also clear any open risk/control detail so the BP-name
+  // breadcrumb always lands on the BP index page, never on a still-open detail child.
   const closeDrilledSection = () => {
-    if (typeof window !== 'undefined' && window.history.state && (window.history.state as { section?: string }).section) {
-      window.history.back();
-    } else {
-      setDrilledSection(null);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', window.location.pathname);
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
+    setDrilledSection(null);
+  };
+
+  // Close just the risk/control detail (?risk= / ?control=) without leaving the current
+  // section — used by the section-name breadcrumb segment on a detail page.
+  const closeOpenDetail = () => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('risk');
+    params.delete('control');
+    const qs = params.toString();
+    window.history.pushState({}, '', qs ? `?${qs}` : window.location.pathname);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
   const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
@@ -3834,7 +3966,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   //   breakdown   — secondary line (e.g. "1 linked · 1 standalone")
   //   lastActivity — short timestamp string
   //   ctaLabel    — pill on the card hinting at the create affordance
-  type SectionInsight = { health: SectionHealth; breakdown: string; lastActivity: string; ctaLabel: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+  type SectionInsight = {
+    health: SectionHealth;
+    breakdown: string;
+    lastActivity: string;
+    ctaLabel: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    ratio: number | null;
+    openCount: number;
+    openLabel: string;
+    description: string;
+    healthRatioText: string;
+    entries: EntryData[];
+  };
   const sectionInsights: Record<SectionKey, SectionInsight> = useMemo(() => {
     const totalRacms = bpRacms.length + createdRacms.length;
     const draftRacms = bpRacms.filter(r => r.status === 'draft').length
@@ -3850,7 +3994,88 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     const idleWfs = bpWfs.length - activeWfs;
 
     // SOP staleness — anything dated before Mar 2026 in this demo dataset is "stale".
-    const staleSops = bpSops.filter(s => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(s.at)).length;
+    const isSopStale = (at: string) => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(at);
+    const staleSops = bpSops.filter(s => isSopStale(s.at)).length;
+
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const riskTone = (r: typeof bpRisks[number]): EntryData['status'] => {
+      if (r.status === 'mitigated') return { label: 'Mitigated', tone: 'green' };
+      const sev = r.severity;
+      if (sev === 'critical' || sev === 'high') return { label: 'Open', tone: 'red' };
+      if (sev === 'medium') return { label: 'Open', tone: 'amber' };
+      return { label: 'Open', tone: 'gray' };
+    };
+
+    const sopEntries: EntryData[] = bpSops.map(s => ({
+      id: s.id,
+      title: `${s.name} ${s.version}`,
+      status: isSopStale(s.at)
+        ? { label: 'Stale', tone: 'amber' }
+        : { label: 'Processed', tone: 'green' },
+      meta: `${s.by} · ${s.at}`,
+      tags: s.racmId ? [s.racmId] : ['Standalone'],
+      highlight: { primary: `${s.risks} risks`, secondary: `${s.controls} controls` },
+      onOpen: () => openEntryDetail('sop'),
+    }));
+
+    const seedRacmEntries: EntryData[] = bpRacms.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: r.status === 'active'
+        ? { label: 'Active', tone: 'green' }
+        : { label: 'Draft', tone: 'gray' },
+      meta: `${r.owner} · ${r.fw} · ${r.lastRun === 'Never' ? 'Never run' : `Last run ${r.lastRun}`}`,
+      tags: [r.fw],
+      onOpen: () => openEntryDetail('racm'),
+    }));
+    const createdRacmEntries: EntryData[] = createdRacms.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: r.isFrozen === false
+        ? { label: 'Draft', tone: 'gray' }
+        : { label: 'Active', tone: 'green' },
+      meta: `${r.process} · ${r.framework} · ${r.risks} risks · ${r.controls} controls`,
+      tags: [r.framework],
+      onOpen: () => openEntryDetail('racm'),
+    }));
+    const racmEntries = [...seedRacmEntries, ...createdRacmEntries];
+
+    const riskEntries: EntryData[] = bpRisks.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: riskTone(r),
+      meta: `${r.id} · ${cap(r.severity)} severity · ${r.lastUpdated ? `Updated ${r.lastUpdated}` : 'Never updated'}`,
+      tags: [cap(r.severity)],
+      highlight: { primary: `${r.ctls} ${r.ctls === 1 ? 'control' : 'controls'}`, secondary: `${r.keyCtls} key` },
+      onOpen: () => openEntryDetail('risks', 'risk', r.id),
+    }));
+
+    const controlEntries: EntryData[] = bpControls.map(c => ({
+      id: c.id,
+      title: c.name,
+      status: c.status === 'effective'
+        ? { label: 'Effective', tone: 'green' }
+        : c.status === 'ineffective'
+          ? { label: 'Ineffective', tone: 'red' }
+          : { label: 'Not tested', tone: 'gray' },
+      description: c.desc,
+      meta: `${c.id} · ${c.isKey ? 'Key control' : 'Standard'} · maps ${c.riskId}`,
+      tags: c.isKey ? ['Key'] : ['Standard'],
+      onOpen: () => openEntryDetail('controls', 'control', c.id),
+    }));
+
+    const workflowEntries: EntryData[] = bpWfs.map(w => ({
+      id: w.id,
+      title: w.name,
+      status: w.status === 'active'
+        ? { label: 'Active', tone: 'green' }
+        : { label: 'Idle', tone: 'amber' },
+      description: w.desc,
+      meta: `${w.type} · Last run ${w.lastRun}`,
+      tags: [w.type],
+      highlight: { primary: `${w.runs} runs` },
+      onOpen: () => openEntryDetail('workflows'),
+    }));
 
     return {
       sop: {
@@ -3861,6 +4086,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${linkedSops} linked to RACM${standaloneSops > 0 ? ` · ${standaloneSops} standalone` : ''}`,
         lastActivity: bpSops.length === 0 ? 'No activity yet' : `Latest: ${bpSops[0].at}`,
         ctaLabel: bpSops.length === 0 ? 'Upload SOP' : 'Open',
+        ratio: bpSops.length === 0 ? null : (bpSops.length - staleSops) / bpSops.length,
+        openCount: staleSops,
+        openLabel: 'stale',
+        description: 'Standard operating procedures — the source of truth for how each step in this process runs.',
+        healthRatioText: bpSops.length === 0 ? '' : `${bpSops.length - staleSops}/${bpSops.length} fresh`,
+        entries: sopEntries,
       },
       racm: {
         icon: Grid3x3,
@@ -3872,6 +4103,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? (bpRacms[0].lastRun === 'Never' ? 'Never run' : `Last run: ${bpRacms[0].lastRun}`)
           : 'No activity yet',
         ctaLabel: totalRacms === 0 ? 'New RACM' : 'Open',
+        ratio: totalRacms === 0 ? null : activeRacms / totalRacms,
+        openCount: draftRacms,
+        openLabel: 'draft',
+        description: 'Risk-and-control matrices that map each risk in this process to one or more controls.',
+        healthRatioText: totalRacms === 0 ? '' : `${activeRacms}/${totalRacms} active`,
+        entries: racmEntries,
       },
       risks: {
         icon: AlertTriangle,
@@ -3883,6 +4120,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? 'No activity yet'
           : (bpRisks.find(r => r.lastUpdated)?.lastUpdated ? `Latest: ${bpRisks.find(r => r.lastUpdated)!.lastUpdated}` : 'No activity yet'),
         ctaLabel: bpRisks.length === 0 ? 'New Risk' : 'Open',
+        ratio: bpRisks.length === 0 ? null : mappedRisks / bpRisks.length,
+        openCount: unmappedRisks,
+        openLabel: 'unmapped',
+        description: 'Process risks identified through SOP review, control mapping, or direct entry.',
+        healthRatioText: bpRisks.length === 0 ? '' : `${mappedRisks}/${bpRisks.length} mapped`,
+        entries: riskEntries,
       },
       controls: {
         icon: Shield,
@@ -3892,6 +4135,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${keyCtls} key${ineffectiveCtls > 0 ? ` · ${ineffectiveCtls} ineffective` : ''}`,
         lastActivity: bpControls.length === 0 ? 'No activity yet' : 'Mapped via RACM',
         ctaLabel: bpControls.length === 0 ? 'Go to RACM' : 'Open',
+        ratio: bpControls.length === 0 ? null : (bpControls.length - ineffectiveCtls) / bpControls.length,
+        openCount: ineffectiveCtls,
+        openLabel: 'ineffective',
+        description: 'Controls designed to prevent or detect each risk in this process.',
+        healthRatioText: bpControls.length === 0 ? '' : `${bpControls.length - ineffectiveCtls}/${bpControls.length} effective`,
+        entries: controlEntries,
       },
       workflows: {
         icon: Workflow,
@@ -3901,6 +4150,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${activeWfs} active${idleWfs > 0 ? ` · ${idleWfs} idle` : ''}`,
         lastActivity: bpWfs[0]?.lastRun ? `Last run: ${bpWfs[0].lastRun}` : 'No activity yet',
         ctaLabel: bpWfs.length === 0 ? 'New Workflow' : 'Open',
+        ratio: bpWfs.length === 0 ? null : activeWfs / bpWfs.length,
+        openCount: idleWfs,
+        openLabel: 'idle',
+        description: 'Operational workflows that fire when a control triggers — approvals, monitors, escalations.',
+        healthRatioText: bpWfs.length === 0 ? '' : `${activeWfs}/${bpWfs.length} active`,
+        entries: workflowEntries,
       },
     };
   }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
@@ -3936,6 +4191,22 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
   const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
 
+  // Section render order on the index view: rows with open work float to the top,
+  // locked rows sink to the bottom. Within each bucket, canonical order is preserved.
+  const lockedFor = (key: SectionKey) =>
+    isFreshBP && key !== 'sop'
+      ? true
+      : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
+  const sortedIndexSections = [...sectionOrder].sort((a, b) => {
+    const aLocked = lockedFor(a);
+    const bLocked = lockedFor(b);
+    if (aLocked !== bLocked) return aLocked ? 1 : -1;
+    const aOpen = (sectionInsights[a].openCount ?? 0) > 0;
+    const bOpen = (sectionInsights[b].openCount ?? 0) > 0;
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    return 0;
+  });
+
   // Section switcher pill labels (shorter than full section titles where useful).
   const sectionPillLabel: Record<SectionKey, string> = {
     sop: 'SOP',
@@ -3951,6 +4222,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
       window.history.pushState({ section: next }, '', `?section=${next}`);
     }
     setDrilledSection(next);
+  };
+
+  // Open a specific risk or control detail from anywhere on the BP page (e.g. clicking
+  // an entry card in an expanded section). Pushes both ?section= and the detail param
+  // in one history entry, then fires popstate so the section component picks it up.
+  const openEntryDetail = (section: SectionKey, detailKey?: 'risk' | 'control', detailId?: string) => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams();
+      params.set('section', section);
+      if (detailKey && detailId) params.set(detailKey, detailId);
+      window.history.pushState({ section }, '', `?${params.toString()}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    setDrilledSection(section);
   };
 
   // Section-specific create button label rendered in the drilled-view header.
@@ -4039,44 +4324,57 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               <span className="text-ink-300">/</span>
               <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
               <span className="text-ink-300">/</span>
-              <span className="text-ink-700 truncate">{info.title}</span>
+              {detailIsOpen ? (
+                <>
+                  <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
+                  <span className="text-ink-300">/</span>
+                  <span className="text-ink-700 truncate">
+                    {openDetailRisk?.name ?? openDetailControl?.name}
+                  </span>
+                </>
+              ) : (
+                <span className="text-ink-700 truncate">{info.title}</span>
+              )}
             </div>
 
-            {/* Section switcher pills + section-specific create button — share one row. */}
-            <div className="flex items-center justify-between gap-3 mt-3">
-              <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
-              {sectionOrder.map(key => {
-                const m = sectionMeta[key];
-                const active = drilledSection === key;
-                return (
-                  <button
-                    type="button"
-                    key={key}
-                    aria-label={`Switch to ${m.title}`}
-                    aria-current={active ? 'page' : undefined}
-                    onClick={() => switchDrilledSection(key)}
-                    className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
-                      active
-                        ? 'bg-brand-600 text-paper-0'
-                        : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
-                    }`}
-                  >
-                    {sectionPillLabel[key]}
-                    {m.count > 0 && (
-                      <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Section switcher pills + section-specific create button — share one row.
+                Hidden when a risk/control detail page is open so the detail owns the screen. */}
+            {!detailIsOpen && (
+              <div className="flex items-center justify-between gap-3 mt-3">
+                <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
+                {sectionOrder.map(key => {
+                  const m = sectionMeta[key];
+                  const active = drilledSection === key;
+                  return (
+                    <button
+                      type="button"
+                      key={key}
+                      aria-label={`Switch to ${m.title}`}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => switchDrilledSection(key)}
+                      className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-brand-600 text-paper-0'
+                          : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
+                      }`}
+                    >
+                      {sectionPillLabel[key]}
+                      {m.count > 0 && (
+                        <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+                </div>
+                {/* Section-specific create button — text changes per drilled section. */}
+                <button
+                  type="button"
+                  onClick={() => triggerSectionCreate(drilledSection)}
+                  className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                  <Plus size={13} />{sectionCreateLabel[drilledSection]}
+                </button>
               </div>
-              {/* Section-specific create button — text changes per drilled section. */}
-              <button
-                type="button"
-                onClick={() => triggerSectionCreate(drilledSection)}
-                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />{sectionCreateLabel[drilledSection]}
-              </button>
-            </div>
+            )}
 
           </div>
 
@@ -4169,17 +4467,21 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          <button type="button" onClick={onBack} className="font-mono text-[12px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
-            <ArrowLeft size={12} />Process Hub
-          </button>
-
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
-            <div className="text-right shrink-0">
-              <div className="text-2xl font-bold tabular-nums text-ink-800">{coverage}%</div>
-              <div className="text-[10px] text-text-muted">Coverage</div>
-            </div>
+          <div className="font-mono text-[12px] mb-2 tracking-tight flex items-center gap-1.5 min-w-0">
+            <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+              <ArrowLeft size={12} />Process Hub
+            </button>
+            <span className="text-ink-300">/</span>
+            <span className="text-ink-700 truncate">{bp.name}</span>
           </div>
+
+          <div className="mb-2">
+            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          </div>
+
+          <p className="text-[13px] text-text-secondary mb-5 max-w-2xl leading-relaxed">
+            {bp.description ?? 'Map risks, controls, SOPs, and workflows for this process.'}
+          </p>
 
           <div className="flex items-center justify-between gap-3 mb-5 text-[12px] text-text-muted">
             <div className="flex items-center gap-6 min-w-0">
@@ -4206,15 +4508,16 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 })()}
               </div>
             </div>
-            {/* Create new dropdown — sits at the right end of the meta row. */}
-            <div className="relative shrink-0">
+            {/* Quick add dropdown — shortcut to any of the five section create flows. */}
+            <div className="shrink-0">
+              <div className="relative">
               <button
                 type="button"
                 onClick={() => setCreateMenuOpen(v => !v)}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
                 className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
-                Create new
+                Quick add
                 <ChevronDown size={13} />
               </button>
               {createMenuOpen && (
@@ -4241,11 +4544,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   </div>
                 </>
               )}
+              </div>
             </div>
           </div>
-          {bp.description && (
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl pb-5">{bp.description}</p>
-          )}
         </div>
 
         {/* Fresh-BP onboarding banner — only when nothing's set up yet. */}
@@ -4302,13 +4603,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         )}
 
         <div className="space-y-3">
-          {sectionOrder.map(key => {
+          {sortedIndexSections.map(key => {
             const m = sectionMeta[key];
             const ins = sectionInsights[key];
             // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-            const locked = isFreshBP && key !== 'sop'
-              ? true
-              : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
+            const locked = lockedFor(key);
             const lockedReason = key === 'sop'
               ? undefined
               : key === 'racm'
@@ -4319,10 +4618,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 key={key}
                 title={m.title}
                 count={m.count}
-                countLabel={m.countLabel}
-                breakdown={ins.breakdown}
-                lastActivity={ins.lastActivity}
-                health={ins.health}
+                ratio={ins.ratio}
+                openCount={ins.openCount}
+                openLabel={ins.openLabel}
+                healthRatioText={ins.healthRatioText}
+                entries={ins.entries}
                 locked={locked}
                 lockedReason={lockedReason}
                 onClick={() => switchDrilledSection(key)}
