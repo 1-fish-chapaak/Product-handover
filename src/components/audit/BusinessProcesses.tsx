@@ -8,6 +8,7 @@ import {
   FileText, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
   HelpCircle, Grid3x3, Shield, Workflow, Archive,
 } from 'lucide-react';
+import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
@@ -1183,6 +1184,154 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   );
 }
 
+// ─── SOP Detail Page (Step 4 — detail-page pattern) ───────────────────────
+
+function SOPDetailPage({ sop, onBack, onGoToRacm }: {
+  sop: LocalSOP;
+  onBack: () => void;
+  onGoToRacm?: () => void;
+}) {
+  const rels = getSopRelationships(sop.id);
+  const fields = [
+    { label: 'Version', value: sop.version, mono: true },
+    { label: 'Business Process', value: sop.businessProcess },
+    { label: 'Status', value: sop.status, pill: true },
+    { label: 'Uploaded By', value: sop.uploadedBy },
+    { label: 'Upload Date', value: sop.uploadedAt },
+    { label: 'File', value: sop.fileName, mono: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
+      >
+        <ArrowLeft size={12} />Back to SOPs
+      </button>
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+              <span className="font-mono text-[11px] text-ink-500">{sop.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
+          </div>
+          {rels.racm && onGoToRacm && (
+            <button
+              type="button"
+              onClick={onGoToRacm}
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            >
+              Go to RACM<ArrowRight size={13} />
+            </button>
+          )}
+        </div>
+
+        {sop.description && (
+          <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{sop.description}</p>
+        )}
+
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              {f.pill ? (
+                <span className={`mt-0.5 px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+              ) : (
+                <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : 'text-text'}`}>{f.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              Linked RACM
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racm ? 1 : 0}</span>
+          </div>
+          {!rels.racm ? (
+            <p className="text-[12px] text-ink-400 italic">Not linked to a RACM yet. Process the SOP to extract risks and controls into a draft RACM.</p>
+          ) : (
+            <div className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{rels.racm.name}</span>
+                <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{rels.racm.fw}</span>
+              </div>
+              <span className="text-[11px] text-ink-500 leading-snug">Owner: {rels.racm.owner} · Last run: {rels.racm.lastRun}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Extracted Risks
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.risks.length}</span>
+          </div>
+          {rels.risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks extracted yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-ink-500" />
+              Extracted Controls
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+          </div>
+          {rels.controls.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No controls extracted yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.controls.map(c => (
+                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                      </div>
+                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SOP Tab Content Component ────────────────────────────────────────────
 
 function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, onRacmCreated, onViewRacm }: {
@@ -1216,6 +1365,34 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
   const [sopStatusFilter, setSopStatusFilter] = useState<string[]>([]);
+  const [detailSopId, setDetailSopId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('sop');
+  });
+
+  // URL sync — ?sop=sop-001
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('sop');
+    if (detailSopId && current !== detailSopId) {
+      params.set('sop', detailSopId);
+      window.history.pushState({ ...window.history.state, sop: detailSopId }, '', `?${params.toString()}`);
+    } else if (!detailSopId && current) {
+      params.delete('sop');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, sop: null }, '', qs ? `?${qs}` : window.location.pathname);
+    }
+  }, [detailSopId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('sop') : null;
+      setDetailSopId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
 
@@ -1440,6 +1617,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
   const sopStatusOptions = useMemo(() => Array.from(new Set(localSops.map(s => s.status))).sort(), [localSops]);
 
+  // Detail page takeover when ?sop= is in URL
+  const detailSopFromUrl = detailSopId ? localSops.find(s => s.id === detailSopId) : null;
+  if (detailSopFromUrl) {
+    return (
+      <SOPDetailPage
+        sop={detailSopFromUrl}
+        onBack={() => setDetailSopId(null)}
+        onGoToRacm={onGoToRacm}
+      />
+    );
+  }
+
   return (
     <div>
       {/* Empty state — only after loading settles so we don't flash it. */}
@@ -1509,7 +1698,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     const showCounts = sop.status !== 'Draft' && sop.status !== 'Processing';
                     return (<React.Fragment key={sop.id}>
                       <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                        className={`border-t border-border-light transition-colors ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-surface-2/40'}`}>
+                        onClick={() => setDetailSopId(sop.id)}
+                        className={`border-t border-border-light transition-colors cursor-pointer ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-surface-2/40'}`}>
                         <td className="px-4 py-4 align-top">
                           <div className="flex flex-col gap-1">
                             <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
@@ -1546,14 +1736,14 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                             {sop.status}
                           </span>
                         </td>
-                        <td className="px-4 py-4 align-top">
+                        <td className="px-4 py-4 align-top" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
                             <button type="button" onClick={() => handleSOPActionClick(sop)}
                               className={`px-2 py-1 rounded-[8px] text-[10px] font-bold cursor-pointer transition-colors ${action.cls}`}>
                               {action.label}
                             </button>
                             {(sop.status === 'Processed' || sop.status === 'Linked') && (
-                              <button type="button" onClick={() => setPreviewingSopId(sop.id)}
+                              <button type="button" onClick={() => setDetailSopId(sop.id)}
                                 className="px-2 py-1 rounded-[8px] text-[10px] font-medium text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors">
                                 View SOP
                               </button>
@@ -1737,6 +1927,150 @@ const SEED_DESIGN_CONTROLS: DesignControl[] = [
   { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'] },
 ];
 
+// ─── Control Detail Page (Step 4) ────────────────────────────────────────
+function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
+  ctrl: DesignControl;
+  bpAbbr: string;
+  onBack: () => void;
+  onGoToRacm?: () => void;
+}) {
+  const bp = BUSINESS_PROCESSES.find(b => b.abbr === bpAbbr);
+  const risks = bp ? RISKS.filter(r => ctrl.mappedRisks.includes(r.id) && r.bpId === bp.id) : RISKS.filter(r => ctrl.mappedRisks.includes(r.id));
+  const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
+
+  const fields = [
+    { label: 'Classification', value: ctrl.classification },
+    { label: 'Nature', value: ctrl.nature },
+    { label: 'Automation', value: ctrl.automation },
+    { label: 'Frequency', value: ctrl.frequency },
+    { label: 'Assertions', value: ctrl.assertions.length > 0 ? ctrl.assertions.join(', ') : '—' },
+    { label: 'Used in RACMs', value: String(ctrl.usedInRACMs), mono: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
+      >
+        <ArrowLeft size={12} />Back to Controls
+      </button>
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
+              <span className="font-mono text-[11px] text-ink-500">{ctrl.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
+          </div>
+          {onGoToRacm && (
+            <button
+              type="button"
+              onClick={onGoToRacm}
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            >
+              Map in RACM<ArrowRight size={13} />
+            </button>
+          )}
+        </div>
+
+        <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{ctrl.description}</p>
+
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : 'text-text'}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Mapped Risks
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{risks.length}</span>
+          </div>
+          {risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks mapped yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Workflow size={13} className="text-ink-500" />
+              Linked Workflows
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.workflows.length}</span>
+          </div>
+          {ctrl.workflows.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
+          ) : (
+            <ul className="space-y-2">
+              {ctrl.workflows.map((w, i) => (
+                <li key={i} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Type: {w.type} · Status: {w.status} · Last run: {w.lastRun}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              Found in RACMs
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.usedInRACMs}</span>
+          </div>
+          {racms.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+          ) : (
+            <ul className="space-y-2">
+              {racms.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
   const { addToast } = useToast();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
@@ -1744,6 +2078,34 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const [classificationFilter, setClassificationFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
   const [designStatusFilter, setDesignStatusFilter] = useState<string[]>([]);
+  const [detailControlId, setDetailControlId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('control');
+  });
+
+  // URL sync — ?control=C-001
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('control');
+    if (detailControlId && current !== detailControlId) {
+      params.set('control', detailControlId);
+      window.history.pushState({ ...window.history.state, control: detailControlId }, '', `?${params.toString()}`);
+    } else if (!detailControlId && current) {
+      params.delete('control');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, control: null }, '', qs ? `?${qs}` : window.location.pathname);
+    }
+  }, [detailControlId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('control') : null;
+      setDetailControlId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Skeleton state — 400ms placeholder before first paint of the controls grid.
   const [isLoading, setIsLoading] = useState(true);
@@ -1790,6 +2152,19 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const handleCreateWorkflow = (ctrl: DesignControl) => {
     addToast({ message: `Opening Ask IRA to create workflow for "${ctrl.name}" (${ctrl.id})`, type: 'info' });
   };
+
+  // Detail page takeover when ?control= is in URL
+  const detailControlFromUrl = detailControlId ? controls.find(c => c.id === detailControlId) : null;
+  if (detailControlFromUrl) {
+    return (
+      <ControlDetailPage
+        ctrl={detailControlFromUrl}
+        bpAbbr={bpAbbr}
+        onBack={() => setDetailControlId(null)}
+        onGoToRacm={onGoToRacm}
+      />
+    );
+  }
 
   if (!isLoading && controls.length === 0) {
     return (
@@ -1903,7 +2278,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               return (
                 <React.Fragment key={ctrl.id}>
                   <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                    className={`border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer ${selectedControlIds.includes(ctrl.id) ? 'bg-brand-50/50' : ''}`} onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
+                    className={`border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer ${selectedControlIds.includes(ctrl.id) ? 'bg-brand-50/50' : ''}`} onClick={() => setDetailControlId(ctrl.id)}>
                     {/* Per-row checkbox — stopPropagation so it doesn't toggle the row expand. */}
                     <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>
                       <input
@@ -1963,7 +2338,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                         ) : (
                           <>
                             {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
-                            <button type="button" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
+                            <button type="button" onClick={() => setDetailControlId(ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">View</button>
                             {onGoToRacm && (
                               <button type="button" onClick={onGoToRacm}
                                 className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-0.5 cursor-pointer transition-colors">
@@ -2074,6 +2449,165 @@ const SEED_BP_WF: BPWorkflow[] = [
   { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [] },
 ];
 
+// ─── Workflow Detail Page (Step 4) ──────────────────────────────────────
+function WorkflowDetailPage({ wf, bpAbbr, allControls, onBack, onOpenWorkflowDetail }: {
+  wf: BPWorkflow;
+  bpAbbr: string;
+  allControls: DesignControl[];
+  onBack: () => void;
+  onOpenWorkflowDetail?: (workflowId: string) => void;
+}) {
+  const linkedControls = allControls.filter(c => wf.linkedControls.includes(c.id));
+  const linkedRiskIds = new Set(linkedControls.flatMap(c => c.mappedRisks));
+  const bp = BUSINESS_PROCESSES.find(b => b.abbr === bpAbbr);
+  const risks = RISKS.filter(r => linkedRiskIds.has(r.id) && (!bp || r.bpId === bp.id));
+  const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
+
+  const statusStyle =
+    wf.status === 'Active' ? 'bg-compliant-50 text-compliant-700' :
+    wf.status === 'Ready' ? 'bg-evidence-50 text-evidence-700' :
+    wf.status === 'Draft' ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400';
+
+  const fields = [
+    { label: 'Type', value: wf.type },
+    { label: 'Nature', value: wf.nature },
+    { label: 'Status', value: wf.status, pill: true },
+    { label: 'Business Process', value: bpAbbr },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
+      >
+        <ArrowLeft size={12} />Back to Workflows
+      </button>
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusStyle}`}>{wf.status}</span>
+              <span className="font-mono text-[11px] text-ink-500">{wf.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{wf.name}</h1>
+          </div>
+          {onOpenWorkflowDetail && (
+            <button
+              type="button"
+              onClick={() => onOpenWorkflowDetail(wf.id)}
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            >
+              Open in Workflow Library<ArrowRight size={13} />
+            </button>
+          )}
+        </div>
+
+        <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{wf.description}</p>
+
+        <div className="grid grid-cols-4 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              {f.pill ? (
+                <span className={`mt-0.5 px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusStyle}`}>{wf.status}</span>
+              ) : (
+                <span className="text-[13px] block text-text">{f.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Shield size={13} className="text-ink-500" />
+              Controls using this workflow
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{linkedControls.length}</span>
+          </div>
+          {linkedControls.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">Not used by any control yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {linkedControls.map(c => (
+                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.classification === 'Key' && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                      </div>
+                      <span className="text-[11px] text-ink-500 leading-snug">{c.nature} · {c.automation}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Risks covered (via controls)
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{risks.length}</span>
+          </div>
+          {risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks covered yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              RACMs in this process
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{racms.length}</span>
+          </div>
+          {racms.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No RACMs in this process.</p>
+          ) : (
+            <ul className="space-y-2">
+              {racms.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void }) {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
@@ -2084,6 +2618,34 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   const [search, setSearch] = useState('');
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [detailWorkflowId, setDetailWorkflowId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('workflow');
+  });
+
+  // URL sync — ?workflow=wf-c1
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('workflow');
+    if (detailWorkflowId && current !== detailWorkflowId) {
+      params.set('workflow', detailWorkflowId);
+      window.history.pushState({ ...window.history.state, workflow: detailWorkflowId }, '', `?${params.toString()}`);
+    } else if (!detailWorkflowId && current) {
+      params.delete('workflow');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, workflow: null }, '', qs ? `?${qs}` : window.location.pathname);
+    }
+  }, [detailWorkflowId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('workflow') : null;
+      setDetailWorkflowId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Skeleton state — 400ms placeholder so workflow list doesn't flash empty.
   const [isLoading, setIsLoading] = useState(true);
@@ -2159,6 +2721,20 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     if (skipped > 0) addToast({ message: `${skipped} workflow${skipped !== 1 ? 's' : ''} skipped (manual or draft).`, type: 'info' });
     setBulkMode(false); setSelectedIds(new Set());
   };
+
+  // Detail page takeover when ?workflow= is in URL
+  const detailWorkflowFromUrl = detailWorkflowId ? workflows.find(w => w.id === detailWorkflowId) : null;
+  if (detailWorkflowFromUrl) {
+    return (
+      <WorkflowDetailPage
+        wf={detailWorkflowFromUrl}
+        bpAbbr={bpAbbr}
+        allControls={SEED_DESIGN_CONTROLS}
+        onBack={() => setDetailWorkflowId(null)}
+        onOpenWorkflowDetail={onOpenWorkflowDetail}
+      />
+    );
+  }
 
   if (!isLoading && workflows.length === 0) {
     return (
@@ -2276,7 +2852,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                 const isSelected = selectedIds.has(wf.id);
                 return (
                 <motion.tr key={wf.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                  onClick={() => { if (bulkMode) toggleSelect(wf.id); }}
+                  onClick={() => { if (bulkMode) toggleSelect(wf.id); else setDetailWorkflowId(wf.id); }}
                   className={`border-t border-border-light transition-colors ${bulkMode ? 'cursor-pointer' : ''} ${bulkMode && isSelected ? 'bg-primary-xlight/50 hover:bg-primary-xlight/70' : 'hover:bg-surface-2/40'}`}>
                   {bulkMode && (
                     <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>

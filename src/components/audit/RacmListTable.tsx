@@ -2,10 +2,175 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronRight, ChevronDown, AlertTriangle, Lock, Pencil, HelpCircle, Grid3x3,
-  Archive, Unlock,
+  Archive, Unlock, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
 } from 'lucide-react';
 import RacmMappingWorkspace from './RacmMappingWorkspace';
 import ColumnFilter from '../shared/ColumnFilter';
+import { getRacmRelationships } from '../../data/processHubJoins';
+
+// ─── Detail Page (Step 4) ──────────────────────────────────────────────────
+function RacmDetailPage({ racm, onBack, onOpenMapping }: { racm: RacmEntry; onBack: () => void; onOpenMapping: () => void }) {
+  const rels = getRacmRelationships(racm.id);
+  const rawStatus = getRacmTableStatus(racm);
+  const readiness = getRacmTableReadiness(racm);
+
+  const fields = [
+    { label: 'Version', value: racm.version, mono: true },
+    { label: 'Process', value: racm.process },
+    { label: 'Framework', value: racm.framework },
+    { label: 'Risks', value: String(racm.risks), mono: true },
+    { label: 'Controls', value: String(racm.controls), mono: true },
+    { label: 'Key Controls', value: String(racm.keyControls), mono: true },
+    { label: 'Workflow Coverage', value: `${racm.workflowCoverage}%`, mono: true },
+    { label: 'Attributes Coverage', value: `${racm.attributesCoverage}%`, mono: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
+      >
+        <ArrowLeft size={12} />Back to RACMs
+      </button>
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_BADGE[rawStatus]}`}>{rawStatus}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
+              <span className="font-mono text-[11px] text-ink-500">{racm.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{racm.name}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenMapping}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+          >
+            Open mapping<ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-4 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700 tabular-nums' : 'text-text'}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <FileText size={13} className="text-ink-500" />
+              Source SOP
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.sop ? 1 : 0}</span>
+          </div>
+          {!rels.sop ? (
+            <p className="text-[12px] text-ink-400 italic">Built without an SOP (manual import).</p>
+          ) : (
+            <div className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{rels.sop.name}</span>
+                <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{rels.sop.version}</span>
+              </div>
+              <span className="text-[11px] text-ink-500 leading-snug">Uploaded by {rels.sop.by} · {rels.sop.at}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Risks in this RACM
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.risks.length}</span>
+          </div>
+          {rels.risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks captured.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Shield size={13} className="text-ink-500" />
+              Controls in this RACM
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+          </div>
+          {rels.controls.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No controls mapped.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.controls.map(c => (
+                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                      </div>
+                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <WorkflowIcon size={13} className="text-ink-500" />
+              Workflows linked via controls
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.workflows.length}</span>
+          </div>
+          {rels.workflows.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No workflows linked yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.workflows.map(w => (
+                <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -102,7 +267,35 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [readinessFilter, setReadinessFilter] = useState<string[]>([]);
   const [processColFilter, setProcessColFilter] = useState<string[]>([]);
   const [frameworkFilter, setFrameworkFilter] = useState<string[]>([]);
+  const [detailRacmId, setDetailRacmId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('racm');
+  });
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+
+  // URL sync — ?racm=RACM-001
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('racm');
+    if (detailRacmId && current !== detailRacmId) {
+      params.set('racm', detailRacmId);
+      window.history.pushState({ ...window.history.state, racm: detailRacmId }, '', `?${params.toString()}`);
+    } else if (!detailRacmId && current) {
+      params.delete('racm');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, racm: null }, '', qs ? `?${qs}` : window.location.pathname);
+    }
+  }, [detailRacmId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('racm') : null;
+      setDetailRacmId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setIsLoading(false), 400);
@@ -177,6 +370,22 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         racmId={mappingRacm.id} racmName={mappingRacm.name} racmProcess={mappingRacm.process}
         isEmpty={mappingRacm.risks === 0}
         onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); }}
+      />
+    );
+  }
+
+  // Detail page takeover when ?racm= is in URL
+  const detailRacmFromUrl = detailRacmId ? allRacms.find(r => r.id === detailRacmId) : null;
+  if (detailRacmFromUrl) {
+    return (
+      <RacmDetailPage
+        racm={detailRacmFromUrl}
+        onBack={() => setDetailRacmId(null)}
+        onOpenMapping={() => {
+          setMappingRacm(detailRacmFromUrl);
+          setShowMappingWorkspace(true);
+          setDetailRacmId(null);
+        }}
       />
     );
   }
@@ -309,8 +518,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 return (
                   <React.Fragment key={racm.id}>
                     <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                      onClick={toggleExpand}
-                      className={`border-t border-border-light transition-colors cursor-pointer ${isSelected ? 'bg-brand-50/60' : isExpanded ? 'bg-primary/5' : 'hover:bg-surface-2/40'}`}>
+                      onClick={() => setDetailRacmId(racm.id)}
+                      className={`border-t border-border-light transition-colors cursor-pointer ${isSelected ? 'bg-brand-50/60' : 'hover:bg-surface-2/40'}`}>
                       {/* Row checkbox */}
                       <td className="px-4 py-4 align-top w-8" onClick={e => e.stopPropagation()}>
                         <input

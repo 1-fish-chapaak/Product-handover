@@ -7,26 +7,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
-import { CONTROLS, WORKFLOWS, RACMS, BUSINESS_PROCESSES } from '../../data/mockData';
-
-/* ─── Risk relationship joins (spike C: detail page pattern) ───────────────── */
-const CONTROL_WORKFLOWS: Record<string, string[]> = {
-  'CTR-001': ['wf-007'],
-  'CTR-002': ['wf-003'],
-  'CTR-005': ['wf-001'],
-  'CTR-006': ['wf-008'],
-  'CTR-007': ['wf-004'],
-  'CTR-008': ['wf-005'],
-};
-
-function getRiskRelationships(riskId: string, businessProcess: string) {
-  const controls = CONTROLS.filter(c => c.riskId === riskId);
-  const workflowIds = new Set(controls.flatMap(c => CONTROL_WORKFLOWS[c.id] ?? []));
-  const workflows = WORKFLOWS.filter(w => workflowIds.has(w.id));
-  const bp = BUSINESS_PROCESSES.find(b => b.abbr === businessProcess);
-  const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
-  return { controls, workflows, racms };
-}
+import { getRiskRelationships } from '../../data/processHubJoins';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
