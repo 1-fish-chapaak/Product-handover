@@ -441,7 +441,7 @@ function RiskDetailPage({ risk, onBack, onEdit }: { risk: RiskEntry; onBack: () 
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="space-y-4">
         <div className="bg-white border border-canvas-border rounded-[12px] p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
