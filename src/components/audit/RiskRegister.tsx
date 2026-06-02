@@ -1,12 +1,32 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Plus, Search, X, ChevronRight, AlertTriangle,
-  CheckCircle2, Clock, Archive, Edit3, Eye,
-  ArrowRight, FileText, HelpCircle,
+  Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
+  CheckCircle2, Clock, Archive, Edit3, Eye, ArrowLeft,
+  ArrowRight, FileText, HelpCircle, Shield, Workflow as WorkflowIcon, Grid3x3,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
+import { CONTROLS, WORKFLOWS, RACMS, BUSINESS_PROCESSES } from '../../data/mockData';
+
+/* ─── Risk relationship joins (spike C: detail page pattern) ───────────────── */
+const CONTROL_WORKFLOWS: Record<string, string[]> = {
+  'CTR-001': ['wf-007'],
+  'CTR-002': ['wf-003'],
+  'CTR-005': ['wf-001'],
+  'CTR-006': ['wf-008'],
+  'CTR-007': ['wf-004'],
+  'CTR-008': ['wf-005'],
+};
+
+function getRiskRelationships(riskId: string, businessProcess: string) {
+  const controls = CONTROLS.filter(c => c.riskId === riskId);
+  const workflowIds = new Set(controls.flatMap(c => CONTROL_WORKFLOWS[c.id] ?? []));
+  const workflows = WORKFLOWS.filter(w => workflowIds.has(w.id));
+  const bp = BUSINESS_PROCESSES.find(b => b.abbr === businessProcess);
+  const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
+  return { controls, workflows, racms };
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -365,6 +385,147 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
   );
 }
 
+// ─── Detail Page (spike C) ──────────────────────────────────────────────────
+function RiskDetailPage({ risk, onBack, onEdit }: { risk: RiskEntry; onBack: () => void; onEdit: () => void }) {
+  const rels = getRiskRelationships(risk.id, risk.businessProcess);
+  const fields = [
+    { label: 'Risk ID', value: risk.id, mono: true },
+    { label: 'Business Process', value: risk.businessProcess },
+    { label: 'Sub-process', value: risk.subProcess || '—' },
+    { label: 'Category', value: risk.category },
+    { label: 'Priority', value: risk.priority, priority: true },
+    { label: 'Owner', value: risk.owner || '—' },
+    { label: 'Reviewer', value: risk.reviewer || '—' },
+    { label: 'Status', value: risk.status },
+    { label: 'Created', value: risk.createdAt },
+    { label: 'Last Reviewed', value: risk.lastReviewed },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="font-mono text-[12px] text-ink-500 hover:text-primary tracking-tight transition-colors cursor-pointer inline-flex items-center gap-1.5"
+      >
+        <ArrowLeft size={12} />Back to Risks
+      </button>
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
+              <span className="font-mono text-[11px] text-ink-500">{risk.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+          >
+            <Edit3 size={13} />Edit risk
+          </button>
+        </div>
+
+        <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
+
+        <div className="grid grid-cols-5 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : f.priority ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Shield size={13} className="text-ink-500" />
+              Mapped Controls
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+          </div>
+          {rels.controls.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No controls mapped yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.controls.map(c => (
+                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                      </div>
+                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <WorkflowIcon size={13} className="text-ink-500" />
+              Linked Workflows
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.workflows.length}</span>
+          </div>
+          {rels.workflows.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.workflows.map(w => (
+                <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              Found in RACMs
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racms.length}</span>
+          </div>
+          {rels.racms.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.racms.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 interface Props {
@@ -381,6 +542,36 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [detailRisk, setDetailRisk] = useState<RiskEntry | null>(null);
+  const [detailRiskId, setDetailRiskId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('risk');
+  });
+  const [editingRisk, setEditingRisk] = useState<RiskEntry | null>(null);
+
+  // URL sync — push ?risk=RSK-001 so browser back works
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('risk');
+    if (detailRiskId && current !== detailRiskId) {
+      params.set('risk', detailRiskId);
+      window.history.pushState({ ...window.history.state, risk: detailRiskId }, '', `?${params.toString()}`);
+    } else if (!detailRiskId && current) {
+      params.delete('risk');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, risk: null }, '', qs ? `?${qs}` : window.location.pathname);
+    }
+  }, [detailRiskId]);
+
+  // popstate listener
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('risk') : null;
+      setDetailRiskId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
   const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
@@ -521,6 +712,31 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Count risks with no mapped controls (draft status = unmapped)
   const unmappedCount = baseRisks.filter(r => r.status === 'Draft').length;
+
+  // Spike C: detail page takeover when ?risk= is in URL
+  const detailRiskFromUrl = detailRiskId ? risks.find(r => r.id === detailRiskId) : null;
+  if (detailRiskFromUrl) {
+    return (
+      <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
+        <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
+          <RiskDetailPage
+            risk={detailRiskFromUrl}
+            onBack={() => setDetailRiskId(null)}
+            onEdit={() => setEditingRisk(detailRiskFromUrl)}
+          />
+          <AnimatePresence>
+            {editingRisk && (
+              <RiskDrawer
+                risk={editingRisk}
+                onClose={() => setEditingRisk(null)}
+                onSave={(updated) => { handleUpdateRisk(updated); setEditingRisk(null); }}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
@@ -663,7 +879,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                   const isChecked = selectedRiskIds.includes(risk.id);
                   return (
                   <motion.tr key={risk.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                    onClick={() => setDetailRisk(risk)}
+                    onClick={() => setDetailRiskId(risk.id)}
                     className="border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer">
                     <td className="px-4 py-4 align-top" onClick={e => e.stopPropagation()}>
                       <input
