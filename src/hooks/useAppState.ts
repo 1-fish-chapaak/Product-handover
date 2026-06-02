@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { WorkflowTypeId } from '../data/mockData';
+import type { WorkflowRunSeed } from '../components/workflow/workflowRunSeed';
 import {
   loadPersistedNotifications,
   persistNotifications,
@@ -132,6 +133,9 @@ export interface AppState {
   workflowType: WorkflowTypeId | null;
   // Chat initial context (for workflow mode entry)
   chatInitialQuery: string | null;
+  // Completed workflow run handed off to chat as conversation history when the
+  // user asks a follow-up from the executor output. Consumed once by ChatView.
+  chatWorkflowRunSeed: WorkflowRunSeed | null;
   chatWorkflowContext: { templateId?: string; workflowId?: string } | null;
   /** Engagement name shown as a banner above the composer when building a workflow for a specific engagement. */
   workflowBuilderEngagementName: string | null;
@@ -235,6 +239,7 @@ const INITIAL_STATE: AppState = {
   workflowCanvasStage: 0,
   workflowType: null,
   chatInitialQuery: null,
+  chatWorkflowRunSeed: null,
   chatComposerDraft: null,
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
@@ -365,6 +370,24 @@ export function useAppState() {
 
   const setChatInitialQuery = useCallback((query: string | null) => {
     setState(prev => ({ ...prev, chatInitialQuery: query }));
+  }, []);
+
+  const setChatWorkflowRunSeed = useCallback((seed: WorkflowRunSeed | null) => {
+    setState(prev => ({ ...prev, chatWorkflowRunSeed: seed }));
+  }, []);
+
+  // Open chat from a completed workflow run: seed the run as conversation
+  // history and auto-submit the follow-up question, all in one atomic update
+  // so ChatView mounts with both present on the same render.
+  const openChatWithWorkflowRun = useCallback((query: string, seed: WorkflowRunSeed) => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      selectedChatId: null,
+      showChatHistory: false,
+      chatWorkflowRunSeed: seed,
+      chatInitialQuery: query,
+    }));
   }, []);
 
   const setChatComposerDraft = useCallback((draft: string | null) => {
@@ -585,6 +608,8 @@ export function useAppState() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatWorkflowRunSeed,
+    openChatWithWorkflowRun,
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,

@@ -7,7 +7,9 @@ import {
   ChevronDown, ChevronUp, X, Database, Search, Check,
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
   Link2, RefreshCw, Info, Wand2, Upload, Folder, ScanLine,
+  Sparkles, ArrowUp,
 } from 'lucide-react';
+import type { WorkflowRunSeed } from './workflowRunSeed';
 import PlanPanel, { type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -26,6 +28,10 @@ interface WorkflowExecutorProps {
   /** Fires when the simulated run reaches the 'complete' phase. App.tsx
    *  wires this to push a platform notification. */
   onRunComplete?: (workflowId: string) => void;
+  /** Fires when the user asks a follow-up question about a completed run.
+   *  App.tsx routes this into chat, seeding the run as conversation history
+   *  (via `seed`) and auto-submitting `query`. */
+  onFollowUp?: (query: string, seed: WorkflowRunSeed) => void;
 }
 
 type ExecutionPhase = 'idle' | 'running' | 'complete';
@@ -330,6 +336,18 @@ const RESULTS_DATA: ResultRow[] = [
   { invoiceNo: 'INV-2026-5515', vendor: 'Meridian Office Supply Co', amount: '$3,475.25', duplicateGroup: 'DG-004', confidence: 79 },
 ];
 
+// Suggested follow-up questions shown beneath the output CTAs. These read as
+// an auditor's natural next questions about duplicate-invoice findings — a mix
+// of analysis, drill-down, action, and prevention so the user sees the full
+// range of what they can do without leaving the result.
+const FOLLOW_UP_SUGGESTIONS: string[] = [
+  'Which vendor has the most duplicate flags?',
+  'Show only matches above 90% confidence',
+  "What's the total dollar amount at risk?",
+  'Draft a note to the AP team about these duplicates',
+  'How do I prevent these duplicates going forward?',
+];
+
 // ─── Helpers ─────────────────────────────────────────────
 
 function humanSize(bytes: number): string {
@@ -354,7 +372,7 @@ function ConfidenceChip({ value }: { value: number }) {
 
 // ─── Main Component ──────────────────────────────────────
 
-export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: WorkflowExecutorProps) {
+export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp }: WorkflowExecutorProps) {
   // Most workflow IDs resolve to the AP duplicate-detection mock. The PDF
   // tester is a dedicated sandbox whose inputs are all PDFs so the manual
   // mapping journey fires on every Execute.
@@ -428,6 +446,35 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
 
   // Right panel
   const [rightOpen, setRightOpen] = useState(true);
+
+  // Follow-up composer (output screen) — free-form question about the run.
+  const [followUpInput, setFollowUpInput] = useState('');
+
+  // Snapshot the completed run as a seed for the chat handoff. Mirrors the
+  // KPI cards and results table rendered in the 'complete' view so the chat
+  // recap matches exactly what the user just saw.
+  const buildRunSeed = useCallback((): WorkflowRunSeed => ({
+    workflowId,
+    workflowName: workflow.name,
+    category: workflow.category,
+    kpis: [
+      { label: 'Records Processed', value: '4,521' },
+      { label: 'Flags Raised', value: '8', note: '4 duplicate groups' },
+      { label: 'Execution Duration', value: '3.0s' },
+    ],
+    resultTitle: 'Duplicate Invoice Matches',
+    columns: ['Invoice #', 'Vendor', 'Amount', 'Dup. Group', 'Confidence'],
+    rows: RESULTS_DATA.map((r) => [
+      r.invoiceNo, r.vendor, r.amount, r.duplicateGroup, `${r.confidence}%`,
+    ]),
+  }), [workflowId, workflow.name, workflow.category]);
+
+  const submitFollowUp = useCallback((query: string) => {
+    const q = query.trim();
+    if (!q) return;
+    onFollowUp?.(q, buildRunSeed());
+    setFollowUpInput('');
+  }, [onFollowUp, buildRunSeed]);
 
   const hasRequired = useMemo(
     () =>
@@ -2110,6 +2157,70 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
                       Run again
                     </button>
                   </div>
+
+                  {/* Follow-up — bridge from "here are results" to a chat
+                      thread that already carries the run as context. */}
+                  {onFollowUp && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.35, duration: 0.3 }}
+                      className="mt-5 rounded-2xl border border-canvas-border bg-gradient-to-br from-brand-50/50 to-canvas-elevated p-5"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-6 h-6 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center">
+                          <Sparkles size={13} />
+                        </span>
+                        <h3 className="text-[13px] font-bold text-ink-800">Ask a follow-up</h3>
+                      </div>
+                      <p className="text-[12px] text-ink-500 mb-3.5 pl-8">
+                        Keep digging into these results with Ira — it opens a chat with this run already in context.
+                      </p>
+
+                      <div className="flex flex-wrap gap-2 mb-3.5">
+                        {FOLLOW_UP_SUGGESTIONS.map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => submitFollowUp(q)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-canvas-border bg-canvas-elevated text-[12px] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer"
+                          >
+                            {q}
+                            <ArrowRight size={12} className="text-ink-300" />
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2 rounded-xl border border-canvas-border bg-canvas-elevated pl-3.5 pr-1.5 py-1.5 focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all">
+                        <input
+                          value={followUpInput}
+                          onChange={(e) => setFollowUpInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              submitFollowUp(followUpInput);
+                            }
+                          }}
+                          placeholder="Ask anything about these results…"
+                          className="flex-1 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => submitFollowUp(followUpInput)}
+                          disabled={!followUpInput.trim()}
+                          aria-label="Send follow-up"
+                          className={[
+                            'shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                            followUpInput.trim()
+                              ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
+                              : 'bg-canvas border border-canvas-border text-ink-300 cursor-not-allowed',
+                          ].join(' ')}
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
                 </motion.section>
               )}
             </AnimatePresence>
