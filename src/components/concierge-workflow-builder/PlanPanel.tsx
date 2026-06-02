@@ -217,10 +217,7 @@ export default function PlanPanel({
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-3 bg-canvas">
         {tab === 'plan' && (
-          <>
-            <PlanSection workflow={workflow} />
-            <RACMSection />
-          </>
+          <PlanSection workflow={workflow} />
         )}
         {tab === 'input' && (
           <InputConfigSection

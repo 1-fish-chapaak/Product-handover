@@ -404,7 +404,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               {embedded ? (
                 <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
               ) : (
-                <p className="text-[14px] text-ink-500 mt-1 mb-6">Triage and resolve exceptions surfaced from audit queries.</p>
+                <p className="text-[14px] text-ink-500 mt-1 mb-6">
+                  {contextLabel
+                    ? `Triage and resolve exceptions for ${contextLabel}.`
+                    : 'Triage and resolve exceptions surfaced from audit queries.'}
+                </p>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">

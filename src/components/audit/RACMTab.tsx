@@ -25,6 +25,26 @@ import {
   type ControlType,
   type Automation,
 } from '../../data/racm';
+import { useEngagementWorkspace, type WorkspaceControl } from './engagementWorkspace';
+
+/** Adapt a user-added control into a RACM row so it renders in the matrix. */
+function customControlToRacmRow(c: WorkspaceControl, process: Engagement['process']): RACMRow {
+  return {
+    id: `${c.controlId}-row`,
+    process,
+    subProcess: c.subProcess,
+    riskId: `R-${c.controlId}`,
+    riskDescription: `Risk addressed by control ${c.controlId}.`,
+    controlId: c.controlId,
+    controlDescription: c.description,
+    attributes: c.attributes,
+    assertion: 'Accuracy',
+    frequency: c.frequency,
+    controlType: 'Preventive',
+    automation: 'Manual',
+    isKey: c.isKey,
+  };
+}
 
 interface Props {
   engagement: Engagement;
@@ -50,10 +70,15 @@ const AUTOMATION_CLS: Record<Automation, string> = {
 export default function RACMTab(props: Props): JSX.Element {
   const { engagement, onOpenFullEditor } = props;
   const { addToast } = useToast();
+  const ws = useEngagementWorkspace();
 
   const libraryRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
   const [uploadedRows, setUploadedRows] = useState<RACMRow[]>([]);
-  const allRows = uploadedRows.length > 0 ? uploadedRows : libraryRows;
+  const allRows = useMemo(() => {
+    const base = uploadedRows.length > 0 ? uploadedRows : libraryRows;
+    const custom = ws.racmControls.map(c => customControlToRacmRow(c, engagement.process));
+    return [...custom, ...base];
+  }, [uploadedRows, libraryRows, ws.racmControls, engagement.process]);
 
   const [versionId, setVersionId] = useState<string>(RACM_VERSIONS[0].id);
   const [keyOnly, setKeyOnly] = useState<boolean>(false);

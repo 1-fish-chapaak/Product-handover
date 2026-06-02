@@ -16,6 +16,8 @@ import {
   type AutomationSubtype,
   type Engagement,
   type EngType,
+  type EngStatus,
+  type ProcessCode,
 } from '../../data/engagements';
 import {
   ENGAGEMENT_ACTIVITY,
@@ -40,11 +42,12 @@ import WorkingPaperTab from './WorkingPaperTab';
 import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
+import { EngagementWorkspaceProvider, useEngagementWorkspace } from './engagementWorkspace';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper';
+type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
@@ -69,6 +72,7 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
         { id: 'workflows', label: 'Workflows', icon: Workflow },
         { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
         { id: 'trail', label: 'Action Trail', icon: Activity },
+        { id: 'config', label: 'Configuration', icon: Settings },
       ];
     case 'Compliance':
       return [
@@ -79,6 +83,7 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
         { id: 'evidence', label: 'Evidence', icon: FolderOpen },
         { id: 'working-paper', label: 'Working Paper', icon: BookOpen },
         { id: 'trail', label: 'Action Trail', icon: Activity },
+        { id: 'config', label: 'Configuration', icon: Settings },
       ];
     case 'Internal Audit':
       return [
@@ -89,6 +94,7 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
         { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
         { id: 'working-paper', label: 'Audit Report', icon: BookOpen },
         { id: 'trail', label: 'Action Trail', icon: Activity },
+        { id: 'config', label: 'Configuration', icon: Settings },
       ];
   }
 }
@@ -133,6 +139,9 @@ const MOCK_WORKFLOWS: MockWorkflow[] = [
   { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28, libraryId: 'lw-009' },
   { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-001' },
 ];
+
+/** Engagement workflow set shared with the Controls/RACM tabs via the workspace store. */
+const WORKSPACE_WORKFLOWS = MOCK_WORKFLOWS.map(w => ({ id: w.id, code: w.code, name: w.name }));
 
 function effectivenessTier(pct: number): { label: string; tone: string; bar: string } {
   if (pct >= 80) return { label: 'High', tone: 'text-compliant-700', bar: 'bg-compliant' };
@@ -289,6 +298,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const completedPct = Math.round((completedCount / checklist.length) * 100);
 
   return (
+    <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
@@ -316,11 +326,16 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-[12px] text-text-muted mt-1 flex-wrap">
+                <div className="flex items-center gap-2.5 text-[12px] text-text-muted mt-1 flex-wrap">
                   <span className="font-mono tracking-tight">{eng.code}</span>
-                  <span className="flex items-center gap-1"><User size={11} />{eng.owner}</span>
-                  <span className="flex items-center gap-1"><Calendar size={11} />{eng.periodStart} – {eng.periodEnd}</span>
-                  <span className="flex items-center gap-1"><Shield size={11} />{eng.framework}</span>
+                  <span className="text-border-light" aria-hidden="true">·</span>
+                  <button
+                    onClick={() => setActiveTab('config')}
+                    className="inline-flex items-center gap-1 text-text-muted hover:text-primary font-medium transition-colors cursor-pointer"
+                    title="Owner, planned dates, framework & more"
+                  >
+                    <Settings size={11} /> Configuration
+                  </button>
                 </div>
               </div>
             </div>
@@ -345,8 +360,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         </div>
 
-        {/* KPI strip — per-sub-tab for Automation (each tab owns its KPIs), so no shared engagement-level strip here. */}
-        {eng.type !== 'Automation' && (
+        {/* KPI strip — Internal Audit only. Automation owns per-tab KPIs; Compliance's
+            numbers live on the Overview tab, so the header stays clutter-free. */}
+        {eng.type === 'Internal Audit' && (
           <div className="grid gap-3 mb-6 grid-cols-6">
             {kpis.map((kpi, i) => (
               <motion.div
@@ -418,6 +434,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {activeTab === 'workflows' && (
               <WorkflowsBySubProcess
                 workflows={MOCK_WORKFLOWS}
+                engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
@@ -443,6 +460,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {activeTab === 'trail' && (
               <ActionTrailTab eng={eng} />
             )}
+
+            {/* ═══ CONFIGURATION (all types) — editable engagement details ═══ */}
+            {activeTab === 'config' && (
+              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => addToast({ message: 'Engagement configuration saved', type: 'success' })} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -460,6 +482,94 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           />
         )}
       </AnimatePresence>
+    </div>
+    </EngagementWorkspaceProvider>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Configuration Tab — editable engagement details (owner, planned dates, …)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const ENG_STATUS_OPTIONS: EngStatus[] = ['Active', 'In Progress', 'Planned', 'Review', 'Draft', 'Closed'];
+const ENG_PROCESS_OPTIONS: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
+const CONFIG_INPUT_CLS = 'w-full px-3 py-2 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+
+function ConfigField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function EngagementConfigTab({ eng, onSaved }: { eng: Engagement; onSaved: () => void }) {
+  const initial = {
+    name: eng.name,
+    owner: eng.owner,
+    status: eng.status,
+    process: eng.process,
+    framework: eng.framework,
+    periodStart: eng.periodStart,
+    periodEnd: eng.periodEnd,
+    description: eng.description,
+  };
+  const [form, setForm] = useState(initial);
+  const [saved, setSaved] = useState(initial);
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm(f => ({ ...f, [k]: v }));
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const ownerOptions = OWNER_LIST.includes(form.owner) ? OWNER_LIST : [form.owner, ...OWNER_LIST];
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <div className="rounded-xl border border-border-light bg-white p-5">
+        <h3 className="text-[13px] font-semibold text-text">Engagement details</h3>
+        <p className="text-[12px] text-text-muted mt-0.5 mb-4">Owner, planned schedule, and framework for this engagement.</p>
+        <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+          <ConfigField label="Name" full>
+            <input value={form.name} onChange={e => set('name', e.target.value)} className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Owner">
+            <select value={form.owner} onChange={e => set('owner', e.target.value)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Status">
+            <select value={form.status} onChange={e => set('status', e.target.value as EngStatus)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ENG_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Process">
+            <select value={form.process} onChange={e => set('process', e.target.value as ProcessCode)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ENG_PROCESS_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Framework">
+            <input value={form.framework} onChange={e => set('framework', e.target.value)} className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Planned start">
+            <input value={form.periodStart} onChange={e => set('periodStart', e.target.value)} placeholder="e.g. Apr 2025" className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Planned end">
+            <input value={form.periodEnd} onChange={e => set('periodEnd', e.target.value)} placeholder="e.g. Mar 2026" className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Description" full>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={3} className={`${CONFIG_INPUT_CLS} resize-none leading-relaxed`} />
+          </ConfigField>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-3">
+        {dirty && <span className="text-[12px] text-text-muted">Unsaved changes</span>}
+        <button
+          onClick={() => { setSaved(form); onSaved(); }}
+          disabled={!dirty}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors cursor-pointer"
+        >
+          <CheckCircle2 size={14} /> Save changes
+        </button>
+      </div>
     </div>
   );
 }
@@ -479,6 +589,13 @@ const SEV_BADGE_CLS: Record<Severity, string> = {
   High: 'bg-high-50 text-high-700',
   Medium: 'bg-mitigated-50 text-mitigated-700',
   Low: 'bg-compliant-50 text-compliant-700',
+};
+
+const SEV_DOT_CLS: Record<Severity, string> = {
+  Critical: 'bg-risk',
+  High: 'bg-high',
+  Medium: 'bg-mitigated',
+  Low: 'bg-compliant',
 };
 
 function ExceptionManagementTab({
@@ -503,20 +620,29 @@ function ExceptionManagementTab({
 
   const [wfSearch, setWfSearch] = useState('');
   const [sortByOpen, setSortByOpen] = useState(false);
+  const [sevFilter, setSevFilter] = useState<'All' | Severity>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | EngagementException['status']>('All');
+  const filtersActive = sevFilter !== 'All' || statusFilter !== 'All';
 
   /**
    * Show *every* workflow tied to this engagement — even ones that haven't fired
    * exceptions yet — so the section reads as the live exception inventory rather
    * than a partial list. Workflows with exceptions keep their breakdown; quiet
-   * ones get a clear "no exceptions yet" marker.
+   * ones get a clear "no exceptions yet" marker. Severity/status filters narrow
+   * the exceptions counted per workflow.
    */
   const allWorkflowsView = useMemo(() => {
     const byId = new Map(groups.map(g => [g.workflowId, g]));
     return MOCK_WORKFLOWS.map(wf => {
       const grp = byId.get(wf.id);
-      const exceptions = grp?.exceptions ?? [];
+      const exceptions = (grp?.exceptions ?? []).filter(e =>
+        (sevFilter === 'All' || e.severity === sevFilter) &&
+        (statusFilter === 'All' || e.status === statusFilter)
+      );
       const total = exceptions.length;
       const openCount = exceptions.filter(e => e.status !== 'Resolved').length;
+      const severityCounts: Record<Severity, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+      for (const e of exceptions) severityCounts[e.severity] += 1;
       return {
         workflowId: wf.id,
         workflowName: wf.name,
@@ -526,22 +652,24 @@ function ExceptionManagementTab({
         total,
         openCount,
         openPct: total > 0 ? Math.round((openCount / total) * 100) : 0,
-        severityCounts: grp?.severityCounts ?? { Critical: 0, High: 0, Medium: 0, Low: 0 },
+        severityCounts,
       };
     });
-  }, [groups]);
+  }, [groups, sevFilter, statusFilter]);
 
   const visibleWorkflows = useMemo(() => {
     const q = wfSearch.trim().toLowerCase();
-    const list = allWorkflowsView.filter(w =>
+    let list = allWorkflowsView.filter(w =>
       !q || w.workflowName.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
     );
+    // When a severity/status filter is active, hide workflows with no matching exceptions.
+    if (filtersActive) list = list.filter(w => w.total > 0);
     if (sortByOpen) {
       // Highest open % first; ties broken by open count.
       return [...list].sort((a, b) => b.openPct - a.openPct || b.openCount - a.openCount);
     }
     return list;
-  }, [allWorkflowsView, wfSearch, sortByOpen]);
+  }, [allWorkflowsView, wfSearch, sortByOpen, filtersActive]);
 
   return (
     <div className="space-y-4">
@@ -599,7 +727,7 @@ function ExceptionManagementTab({
           <h4 className="text-[13px] font-semibold text-text">Exceptions by workflow</h4>
           <span className="text-[11px] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
@@ -610,6 +738,35 @@ function ExceptionManagementTab({
               className="w-48 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as 'All' | EngagementException['status'])}
+            className={`py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold outline-none cursor-pointer transition-colors ${
+              statusFilter !== 'All' ? 'border-primary/40 text-primary bg-primary-xlight/30' : 'border-border bg-white text-text-secondary hover:border-primary/30'
+            }`}
+            title="Filter by status"
+            aria-label="Filter by status"
+          >
+            <option value="All">All statuses</option>
+            <option value="Open">Open</option>
+            <option value="Triaging">Triaging</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+          <select
+            value={sevFilter}
+            onChange={e => setSevFilter(e.target.value as 'All' | Severity)}
+            className={`py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold outline-none cursor-pointer transition-colors ${
+              sevFilter !== 'All' ? 'border-primary/40 text-primary bg-primary-xlight/30' : 'border-border bg-white text-text-secondary hover:border-primary/30'
+            }`}
+            title="Filter by severity"
+            aria-label="Filter by severity"
+          >
+            <option value="All">All severities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
           <button
             onClick={() => setSortByOpen(v => !v)}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-semibold transition-colors cursor-pointer ${
@@ -622,70 +779,62 @@ function ExceptionManagementTab({
             <ArrowUpDown size={12} />
             Open %
           </button>
+          {filtersActive && (
+            <button
+              onClick={() => { setSevFilter('All'); setStatusFilter('All'); }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Per-workflow breakdown — shows every workflow, including those with 0 exceptions */}
-      <div className="space-y-2.5">
+      {/* Per-workflow breakdown — one clean line per workflow */}
+      <div className="rounded-xl border border-border-light bg-white divide-y divide-border-light overflow-hidden">
         {visibleWorkflows.length === 0 ? (
-          <div className="glass-card rounded-xl px-4 py-8 text-center text-[12px] text-text-muted">
-            No workflows match “{wfSearch}”.
+          <div className="px-4 py-10 text-center text-[12px] text-text-muted">
+            {wfSearch.trim()
+              ? <>No workflows match “{wfSearch}”.</>
+              : 'No workflows match the selected filters.'}
           </div>
         ) : visibleWorkflows.map(group => {
           const hasNone = group.total === 0;
-          const openTier = group.openPct >= 50 ? 'text-risk-700' : group.openPct > 0 ? 'text-mitigated-700' : 'text-text-muted';
-          const openBar = group.openPct >= 50 ? 'bg-risk' : group.openPct > 0 ? 'bg-mitigated-500' : 'bg-surface-3';
+          const presentSevs = (['Critical', 'High', 'Medium', 'Low'] as Severity[]).filter(s => group.severityCounts[s] > 0);
           return (
             <button
               key={group.workflowId}
               onClick={() => onOpenWorkspace({ workflowId: group.workflowId })}
               disabled={hasNone}
-              className={`w-full glass-card rounded-xl px-4 py-3 flex items-center gap-4 text-left transition-colors ${
-                hasNone ? 'opacity-70 cursor-default' : 'hover:border-primary/20 cursor-pointer'
+              className={`group/row w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                hasNone ? 'cursor-default' : 'hover:bg-primary-xlight/25 cursor-pointer'
               }`}
             >
-              <div className={`p-2 rounded-lg shrink-0 ${hasNone ? 'bg-surface-2' : 'bg-brand-50'}`}>
-                <Workflow size={14} className={hasNone ? 'text-text-muted' : 'text-brand-600'} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-text">{group.workflowName}</span>
-                  <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{group.code}</span>
-                  {hasNone ? (
-                    <span className="text-[11px] text-text-muted italic">No exceptions yet</span>
-                  ) : (
-                    <span className="text-[11px] text-text-muted">
-                      <span className="font-semibold text-text">{group.total}</span> total · <span className="font-semibold text-risk-700">{group.openCount}</span> open
-                    </span>
-                  )}
-                </div>
-                {!hasNone && (
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map(sev => (
-                      group.severityCounts[sev] > 0 && (
-                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[sev]}`}>
-                          {group.severityCounts[sev]} {sev}
-                        </span>
-                      )
-                    ))}
-                  </div>
-                )}
-              </div>
+              <Workflow size={15} className={`shrink-0 ${hasNone ? 'text-text-muted/60' : 'text-brand-600'}`} />
+              <span className={`text-[13px] font-semibold truncate ${hasNone ? 'text-text-muted' : 'text-text'}`}>{group.workflowName}</span>
+              <span className="hidden md:inline px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono shrink-0">{group.code}</span>
 
-              {/* Right-aligned open % */}
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="ml-auto flex items-center gap-4 shrink-0">
                 {hasNone ? (
-                  <span className="text-[11px] text-text-muted tabular-nums w-[88px] text-right">—</span>
+                  <span className="text-[11px] text-text-muted/70 italic">No exceptions</span>
                 ) : (
-                  <div className="w-[88px] text-right">
-                    <div className={`text-[15px] font-bold tabular-nums leading-none ${openTier}`}>{group.openPct}%</div>
-                    <div className="text-[9.5px] text-text-muted uppercase tracking-wide mt-0.5">open</div>
-                    <div className="mt-1 h-1 bg-surface-3 rounded-full overflow-hidden">
-                      <div className={`h-full ${openBar} rounded-full transition-all`} style={{ width: `${group.openPct}%` }} />
+                  <>
+                    <div className="hidden sm:flex items-center gap-2.5">
+                      {presentSevs.map(sev => (
+                        <span key={sev} className="inline-flex items-center gap-1 text-[11px] text-text-secondary tabular-nums" title={`${group.severityCounts[sev]} ${sev}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${SEV_DOT_CLS[sev]}`} aria-hidden="true" />
+                          {group.severityCounts[sev]}
+                        </span>
+                      ))}
                     </div>
-                  </div>
+                    <span className="text-[12px] tabular-nums w-[78px] text-right">
+                      <span className={`font-bold ${group.openCount > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{group.openCount}</span>
+                      <span className="text-text-muted"> open</span>
+                      <span className="text-text-muted/60"> /{group.total}</span>
+                    </span>
+                  </>
                 )}
-                {!hasNone && <ArrowUpRight size={14} className="text-text-muted" aria-label="Opens in a new tab" />}
+                <ArrowUpRight size={14} className={hasNone ? 'text-transparent' : 'text-text-muted group-hover/row:text-primary transition-colors'} aria-label="Opens in a new tab" />
               </div>
             </button>
           );
@@ -1695,7 +1844,6 @@ function WorkflowConfigDrawer({
   const [retry, setRetry] = useState<string>('3x');
   const [owner, setOwner] = useState<string>(OWNER_LIST[0]);
   const [minSeverity, setMinSeverity] = useState<Severity>('Medium');
-  const [exceptionRouting, setExceptionRouting] = useState<string>('Round-robin');
 
   if (!wf) return null;
 
@@ -1823,21 +1971,6 @@ function WorkflowConfigDrawer({
             </div>
           </div>
 
-          {/* Exception routing */}
-          <div>
-            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Exception routing</label>
-            <select
-              value={exceptionRouting}
-              onChange={(e) => setExceptionRouting(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
-            >
-              <option value="Round-robin">Round-robin to team</option>
-              <option value="Owner">Always to owner</option>
-              <option value="Escalation">Escalation matrix (severity-based)</option>
-              <option value="Manual">Manual assignment</option>
-            </select>
-          </div>
-
           {/* Data source preview */}
           <div className="rounded-lg border border-border-light bg-canvas/60 p-3 flex items-start gap-2.5">
             <Database size={13} className="text-text-muted mt-0.5 shrink-0" />
@@ -1912,14 +2045,31 @@ function linkedToMockWorkflow(w: LibraryWorkflow): MockWorkflow {
   };
 }
 
+/** Parse a "2h ago" / "8m ago" / "12h ago" / "Not run yet" string to minutes-ago for sorting (older = larger). */
+function lastRunMinutes(s: string): number {
+  const m = s.match(/(\d+)\s*(m|h|d)\b/);
+  if (!m) return Number.POSITIVE_INFINITY; // "Not run yet" sorts last
+  const n = parseInt(m[1], 10);
+  return m[2] === 'm' ? n : m[2] === 'h' ? n * 60 : n * 1440;
+}
+
+type WorkflowSort = 'default' | 'open' | 'lastRun';
+const WF_SORT_OPTIONS: { value: WorkflowSort; label: string }[] = [
+  { value: 'default', label: 'Default order' },
+  { value: 'open', label: 'Open exceptions' },
+  { value: 'lastRun', label: 'Last run' },
+];
+
 function WorkflowsBySubProcess({
   workflows,
+  engagementId,
   engagementName,
   onOpenWorkflow,
   onConfigureWorkflow,
   onCreateWorkflow,
 }: {
   workflows: MockWorkflow[];
+  engagementId: string;
   engagementName: string;
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
   onConfigureWorkflow?: (workflowId: string) => void;
@@ -1927,7 +2077,40 @@ function WorkflowsBySubProcess({
 }) {
   const [linked, setLinked] = useState<MockWorkflow[]>([]);
   const allWorkflows = useMemo(() => [...workflows, ...linked], [workflows, linked]);
-  const groups = useMemo(() => groupBySubProcess(allWorkflows), [allWorkflows]);
+  const ws = useEngagementWorkspace();
+
+  /** Control-attributes linked to a workflow (shared with the Controls tab). */
+  const linkedAttributesFor = (workflowId: string): { id: string; description: string }[] =>
+    ws.attributeIdsForWorkflow(workflowId).map(id => ({ id, description: ws.attributeById(id)?.description ?? id }));
+
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<WorkflowSort>('default');
+
+  /** Open (non-resolved) exception count per workflow for this engagement — powers the count badge + "Open exceptions" sort. */
+  const openByWorkflow = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const ex of exceptionsForEngagement(engagementId)) {
+      if (ex.status === 'Resolved') continue;
+      m.set(ex.workflowId, (m.get(ex.workflowId) ?? 0) + 1);
+    }
+    return m;
+  }, [engagementId]);
+
+  const visibleWorkflows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = allWorkflows.filter(w =>
+      !q || w.name.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
+         || w.type.toLowerCase().includes(q) || w.subProcess.toLowerCase().includes(q)
+    );
+    if (sortBy === 'open') {
+      list = [...list].sort((a, b) => (openByWorkflow.get(b.id) ?? 0) - (openByWorkflow.get(a.id) ?? 0));
+    } else if (sortBy === 'lastRun') {
+      list = [...list].sort((a, b) => lastRunMinutes(a.lastRun) - lastRunMinutes(b.lastRun));
+    }
+    return list;
+  }, [allWorkflows, query, sortBy, openByWorkflow]);
+
+  const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
   const [bulkMode, setBulkMode] = useState(false);
@@ -1971,10 +2154,24 @@ function WorkflowsBySubProcess({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="text-[13px] font-semibold text-text">
-          Workflows <span className="text-text-muted font-normal">({allWorkflows.length})</span>
-          {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
-        </h3>
+        <div className="flex items-center gap-3 min-w-0">
+          <h3 className="text-[13px] font-semibold text-text shrink-0">
+            Workflows
+            {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
+          </h3>
+          {!bulkMode && (
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search workflows..."
+                className="w-52 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              />
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {bulkMode && (
             <>
@@ -2004,6 +2201,18 @@ function WorkflowsBySubProcess({
           )}
           {!bulkMode && (
             <>
+              <div className="relative flex items-center">
+                <ArrowUpDown size={13} className="absolute left-2.5 text-text-muted pointer-events-none" />
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as WorkflowSort)}
+                  className="pl-8 pr-2.5 py-1.5 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 hover:border-primary/30 cursor-pointer"
+                  title="Sort workflows"
+                  aria-label="Sort workflows"
+                >
+                  {WF_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                </select>
+              </div>
               <button
                 onClick={() => setGrouped(g => !g)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
@@ -2025,14 +2234,18 @@ function WorkflowsBySubProcess({
                 onClick={() => setLinkModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
               >
-                <Plus size={12} />Link Workflow
+                <Plus size={12} />Add Workflows
               </button>
             </>
           )}
         </div>
       </div>
 
-      {grouped ? (
+      {visibleWorkflows.length === 0 ? (
+        <div className="glass-card rounded-xl px-4 py-10 text-center text-[12px] text-text-muted">
+          No workflows match “{query}”.
+        </div>
+      ) : grouped ? (
         <div className="space-y-3">
           {groups.map(group => {
             const isCollapsed = collapsed.has(group.subProcess);
@@ -2065,6 +2278,8 @@ function WorkflowsBySubProcess({
                           <WorkflowRow
                             key={wf.id}
                             wf={wf}
+                            openCount={openByWorkflow.get(wf.id) ?? 0}
+                            linkedAttributes={linkedAttributesFor(wf.id)}
                             bulkMode={bulkMode}
                             selected={selectedIds.has(wf.id)}
                             onToggleSelect={() => toggleSelect(wf.id)}
@@ -2082,10 +2297,12 @@ function WorkflowsBySubProcess({
         </div>
       ) : (
         <div className="space-y-2">
-          {allWorkflows.map(wf => (
+          {visibleWorkflows.map(wf => (
             <WorkflowRow
               key={wf.id}
               wf={wf}
+              openCount={openByWorkflow.get(wf.id) ?? 0}
+              linkedAttributes={linkedAttributesFor(wf.id)}
               bulkMode={bulkMode}
               selected={selectedIds.has(wf.id)}
               onToggleSelect={() => toggleSelect(wf.id)}
@@ -2122,9 +2339,11 @@ function WorkflowsBySubProcess({
 }
 
 function WorkflowRow({
-  wf, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
+  wf, openCount, linkedAttributes, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
 }: {
   wf: MockWorkflow;
+  openCount: number;
+  linkedAttributes: { id: string; description: string }[];
   bulkMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
@@ -2173,6 +2392,11 @@ function WorkflowRow({
           <span className="text-border-light">·</span>
           <span className={`${tier.tone} font-semibold`}>{eff}% effective</span>
           <span className="text-text-muted/80">({wf.truePositives}/{wf.totalFires} · 90d)</span>
+          {openCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[10px] font-bold bg-risk-50 text-risk-700">
+              <AlertTriangle size={9} />{openCount} open
+            </span>
+          )}
           {/* Input source badges */}
           {wf.inputs.map(src => (
             <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
@@ -2181,6 +2405,23 @@ function WorkflowRow({
             </span>
           ))}
         </div>
+        {/* Linked control-attributes (shared with the Controls tab) */}
+        {linkedAttributes.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted shrink-0">
+              <ListChecks size={11} /> Controls
+            </span>
+            {linkedAttributes.slice(0, 4).map(a => (
+              <span key={a.id} className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-md text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-100 max-w-[220px]">
+                <span className="font-mono text-[9px] opacity-70 shrink-0">{a.id}</span>
+                <span className="truncate">{a.description}</span>
+              </span>
+            ))}
+            {linkedAttributes.length > 4 && (
+              <span className="text-[10px] font-semibold text-text-muted">+{linkedAttributes.length - 4} more</span>
+            )}
+          </div>
+        )}
       </div>
       <span className={`px-2.5 h-6 rounded-full text-[10.5px] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'

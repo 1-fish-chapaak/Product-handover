@@ -6,6 +6,8 @@
  * drawer opens the full case-management surface for one row.
  */
 
+import type { GrcException } from './mockData';
+
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 export type ExceptionStatus = 'Open' | 'Triaging' | 'Resolved';
 export type Classification = 'Control Deficiency' | 'Process Gap' | 'False Positive' | 'Other';
@@ -192,6 +194,62 @@ export function groupByWorkflow(exceptions: EngagementException[]): {
       workflowName: exs[0].workflowName,
       exceptions: exs,
       severityCounts: counts,
+    };
+  });
+}
+
+// ─── Adapter → reference case-management page (ManageExceptionsView) ──────────
+// ManageExceptionsView runs on the GrcException shape (data/mockData). The
+// engagement's case-management view reuses that same page, so we map this
+// engagement's exceptions into GrcException records.
+
+const GRC_SEVERITY: Record<Severity, GrcException['severity']> = {
+  Critical: 'High', // GrcException has no Critical tier — fold into High.
+  High: 'High',
+  Medium: 'Medium',
+  Low: 'Low',
+};
+
+const GRC_STATUS: Record<ExceptionStatus, GrcException['status']> = {
+  Open: 'Open',
+  Triaging: 'Under Review',
+  Resolved: 'Closed',
+};
+
+const GRC_CLASSIFICATION: Record<Classification, GrcException['classification']> = {
+  'Control Deficiency': 'Design Deficiency',
+  'Process Gap': 'Procedural Non-Compliance',
+  'False Positive': 'False Positive',
+  Other: 'Business as Usual',
+};
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const first = parts[0][0];
+  const second = parts.length > 1 ? parts[parts.length - 1][0] : (parts[0][1] ?? '');
+  return (first + second).toUpperCase();
+}
+
+/**
+ * Adapt one engagement's exceptions into the GrcException shape consumed by
+ * the reference ManageExceptionsView, so opening case management from an
+ * engagement shows that page scoped to the engagement's own exceptions.
+ */
+export function exceptionsForEngagementAsGrc(engagementId: string): GrcException[] {
+  return exceptionsForEngagement(engagementId).map((ex): GrcException => {
+    const resolved = ex.status === 'Resolved';
+    return {
+      id: ex.id,
+      riskCategory: ex.workflowName,
+      severity: GRC_SEVERITY[ex.severity],
+      status: GRC_STATUS[ex.status],
+      classification: ex.classification ? GRC_CLASSIFICATION[ex.classification] : 'Unclassified',
+      classificationReview: resolved ? 'Approved' : 'Pending',
+      actionReview: resolved ? 'Approved' : 'Pending',
+      lastUpdated: ex.opened,
+      title: ex.amount ? `${ex.title} · ${ex.amount}` : ex.title,
+      assignedTo: { name: ex.assignee, initials: initialsFor(ex.assignee) },
     };
   });
 }

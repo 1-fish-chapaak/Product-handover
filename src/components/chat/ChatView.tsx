@@ -30,6 +30,13 @@ import ClarificationCard from './ClarificationCard';
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
+import {
+  SectionHeader as WidgetSectionHeader,
+  KpiPreviewRow,
+  ChartPreviewRow,
+  TablePreviewRow,
+} from './WidgetPickerParts';
+import { toggleIn, setAll } from './widgetPickerHelpers';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { useDialogA11y } from './useModalA11y';
 // Workflow build runs inline inside this chat thread via rich-type messages.
@@ -1605,10 +1612,24 @@ type WorkflowFrequencyConfig = {
   retry: 'Off' | '1x' | '3x' | '5x';
 };
 
+// Configurable key the LLM detected in the saved code. The user can override
+// the value or "Remove" it (which inlines the value as a literal in the saved
+// code instead of exposing it as a runtime parameter).
+type ConfigurableKey = {
+  key: string;
+  type: 'float' | 'int' | 'str' | 'list_str' | 'bool';
+  value: string;
+  removed: boolean;
+};
+
 interface SaveAsWorkflowModalProps {
   open: boolean;
   defaultName: string;
   defaultDescription: string;
+  /** LLM-detected configurable keys to seed the Configuration section. */
+  defaultConfigurables?: { key: string; type: ConfigurableKey['type']; value: string }[];
+  /** Audit result data — drives the second-step "Choose what to add" picker. */
+  resultData: import('./AddToDashboardModal').AuditResultData;
   onCancel: () => void;
   onConfirm: (data: {
     name: string;
@@ -1616,10 +1637,17 @@ interface SaveAsWorkflowModalProps {
     subProcessId: string;
     description: string;
     frequencyConfig: WorkflowFrequencyConfig;
+    configurables: { key: string; type: ConfigurableKey['type']; value: string }[];
+    selection: import('./AddToDashboardModal').GranularSelection;
   }) => void;
 }
 
-function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
+function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultConfigurables, resultData, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
+  // Two-step flow: 1) workflow metadata (name, BP, description, configurables,
+  // frequency) → 2) "Choose what to add" granular widget picker (KPIs, charts,
+  // table) — mirrors AddToDashboard / AddToReport so the user keeps the same
+  // picker shape across all three commit paths.
+  const [step, setStep] = useState<'details' | 'pickWidgets'>('details');
   // Wire shared modal a11y: focus trap, Escape, autofocus, restore focus, scroll lock.
   // Matches AddToDashboard / AddToReport so keyboard users get one consistent contract.
   const dialogRef = useDialogA11y(open, onCancel);
@@ -1640,9 +1668,33 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
   const [triggerOn, setTriggerOn] = useState<WorkflowFrequencyConfig['triggerOn']>('Schedule');
   const [retry, setRetry] = useState<WorkflowFrequencyConfig['retry']>('3x');
 
+  // LLM-detected configurable keys. Each row carries its value + a "removed"
+  // flag (true = inline the value as a literal in the saved code; do NOT
+  // expose it as a runtime parameter on the workflow).
+  const seedConfigurables = (): ConfigurableKey[] => {
+    const seed = defaultConfigurables && defaultConfigurables.length > 0
+      ? defaultConfigurables
+      : [
+          { key: 'threshold_amount', type: 'float' as const, value: '100000' },
+          { key: 'quarter_match_keys', type: 'list_str' as const, value: '1, q1, quarter1, qtr1' },
+          { key: 'summary_top_n', type: 'int' as const, value: '3' },
+        ];
+    return seed.map(c => ({ ...c, removed: false }));
+  };
+  const [configurables, setConfigurables] = useState<ConfigurableKey[]>(seedConfigurables);
+
+  // Step-2 granular selection — initialised to "all selected" so the workflow
+  // captures the full audit result by default. The user can deselect items
+  // before committing.
+  const [selKpis, setSelKpis] = useState<Set<string>>(new Set((resultData?.kpis || []).map(k => k.label)));
+  const [selCharts, setSelCharts] = useState<Set<string>>(new Set((resultData?.charts || []).map(c => c.id)));
+  const [selCols, setSelCols] = useState<Set<string>>(new Set(resultData?.table?.columns || []));
+  const [collapsed, setCollapsed] = useState<{ kpis?: boolean; charts?: boolean; columns?: boolean }>({});
+
   // Reset form when modal opens with fresh defaults
   useEffect(() => {
     if (open) {
+      setStep('details');
       setName(defaultName);
       setDescription(defaultDescription);
       setBpId('');
@@ -1655,7 +1707,13 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
       setMonthlyDate('');
       setTriggerOn('Schedule');
       setRetry('3x');
+      setConfigurables(seedConfigurables());
+      setSelKpis(new Set((resultData?.kpis || []).map(k => k.label)));
+      setSelCharts(new Set((resultData?.charts || []).map(c => c.id)));
+      setSelCols(new Set(resultData?.table?.columns || []));
+      setCollapsed({});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultName, defaultDescription]);
 
   // Click-outside + Escape close for the two custom dropdowns
@@ -1690,7 +1748,37 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
   const selectedBp = BUSINESS_PROCESSES.find(b => b.id === bpId);
   const selectedSub = subProcessOptions.find(s => s.id === subProcessId);
 
-  const canConfirm = name.trim() && bpId && subProcessId;
+  const canAdvance = !!(name.trim() && bpId && subProcessId);
+  const totalSelected = selKpis.size + selCharts.size + selCols.size;
+  const canConfirm = canAdvance && totalSelected > 0;
+  const hasAnyResultItems =
+    (resultData?.kpis?.length || 0) + (resultData?.charts?.length || 0) + (resultData?.table?.columns?.length || 0) > 0;
+
+  const handleConfirm = () => {
+    if (!canConfirm) return;
+    onConfirm({
+      name: name.trim(),
+      bpId,
+      subProcessId,
+      description: description.trim(),
+      frequencyConfig: {
+        frequency,
+        runTime,
+        dayOfWeek: frequency === 'Weekly' ? dayOfWeek : undefined,
+        monthlyDate: frequency === 'Monthly' ? monthlyDate : undefined,
+        triggerOn,
+        retry,
+      },
+      configurables: configurables
+        .filter(c => !c.removed)
+        .map(({ key, type, value }) => ({ key, type, value })),
+      selection: {
+        kpis: [...selKpis],
+        charts: [...selCharts],
+        columns: [...selCols],
+      },
+    });
+  };
 
   if (!open) return null;
 
@@ -1719,8 +1807,14 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               <Save size={16} className="text-brand-600" />
             </div>
             <div>
-              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-ink-900">Save as workflow</h2>
-              <p className="text-[12px] text-ink-500 mt-0.5">Turn this query result into a re-runnable workflow.</p>
+              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-ink-900">
+                {step === 'details' ? 'Save as workflow' : 'Choose what to add'}
+              </h2>
+              <p className="text-[12px] text-ink-500 mt-0.5">
+                {step === 'details'
+                  ? 'Turn this query result into a re-runnable workflow.'
+                  : 'Select individual KPIs, charts, and columns to attach to this workflow.'}
+              </p>
             </div>
           </div>
           <button
@@ -1732,16 +1826,20 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
           </button>
         </div>
 
-        {/* Warning */}
-        <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200/60 flex gap-2 items-start">
-          <Lightbulb size={13} className="text-brand-600 mt-0.5 shrink-0" />
-          <p className="text-[12px] leading-relaxed text-ink-700">
-            This chat will switch to <strong className="text-brand-700">workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
-          </p>
-        </div>
+        {/* Warning — only on details step. */}
+        {step === 'details' && (
+          <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200/60 flex gap-2 items-start">
+            <Lightbulb size={13} className="text-brand-600 mt-0.5 shrink-0" />
+            <p className="text-[12px] leading-relaxed text-ink-700">
+              This chat will switch to <strong className="text-brand-700">workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
+            </p>
+          </div>
+        )}
 
         {/* Form */}
         <div className="px-6 pb-5 flex-1 overflow-y-auto space-y-4">
+          {step === 'details' && (
+          <>
           {/* Workflow name */}
           <div>
             <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">
@@ -1901,6 +1999,55 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
             <p className="text-[11px] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
           </div>
 
+          {/* Configuration — LLM-detected configurable keys. Removing a key
+              inlines its value as a literal in the saved code instead of
+              exposing it as a runtime parameter on the workflow. */}
+          {configurables.length > 0 && (
+            <div>
+              <label className="block text-[12px] font-semibold text-ink-900 mb-1">Configuration</label>
+              <p className="text-[11px] text-ink-500 mb-2.5 leading-relaxed">
+                Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code.
+              </p>
+              <div className="space-y-3">
+                {configurables.map((cfg, idx) => (
+                  <div key={cfg.key} className={`transition-opacity ${cfg.removed ? 'opacity-50' : ''}`}>
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      <div className="inline-flex items-baseline gap-2 min-w-0">
+                        <span className="text-[13px] font-semibold text-ink-900 truncate">{cfg.key}</span>
+                        <span className="text-[11px] text-ink-400 font-normal shrink-0">{cfg.type}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={cfg.value}
+                        disabled={cfg.removed}
+                        onChange={e => {
+                          const next = e.target.value;
+                          setConfigurables(prev => prev.map((c, i) => i === idx ? { ...c, value: next } : c));
+                        }}
+                        className="no-focus-ring flex-1 h-10 px-3 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors disabled:bg-paper-50 disabled:text-ink-400 disabled:cursor-not-allowed"
+                        aria-label={`Value for ${cfg.key}`}
+                      />
+                      <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[12px] text-ink-700 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={cfg.removed}
+                          onChange={e => {
+                            const checked = e.target.checked;
+                            setConfigurables(prev => prev.map((c, i) => i === idx ? { ...c, removed: checked } : c));
+                          }}
+                          className="size-4 rounded border-ink-300 text-brand-600 focus:ring-2 focus:ring-brand-300 focus:ring-offset-0 cursor-pointer"
+                        />
+                        Remove
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Audit run frequency — mirrors Workflow Library > Configuration tab */}
           <div>
             <label className="text-[12px] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
@@ -1969,36 +2116,169 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               </div>
             </div>
           </div>
+          </>
+          )}
+
+          {step === 'pickWidgets' && (
+            <div className="space-y-5">
+              {!hasAnyResultItems ? (
+                <div className="flex flex-col items-center justify-center text-center py-10 px-6">
+                  <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center text-ink-400 mb-3">
+                    <BarChart3 size={20} />
+                  </div>
+                  <p className="text-[13px] font-semibold text-ink-800">Nothing to attach</p>
+                  <p className="text-[12px] text-ink-500 mt-1 max-w-[320px]">
+                    This result has no KPIs, charts, or table columns to attach to the workflow yet.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Step-2 header — global all/none + selection count */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-ink-500" aria-live="polite">
+                      {totalSelected === 0
+                        ? 'Select at least one item to attach.'
+                        : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAll(resultData.kpis.map(k => k.label), true, setSelKpis);
+                          setAll(resultData.charts.map(c => c.id), true, setSelCharts);
+                          setAll(resultData.table.columns, true, setSelCols);
+                        }}
+                        className="text-[11px] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setSelKpis(new Set()); setSelCharts(new Set()); setSelCols(new Set()); }}
+                        className="text-[11px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* KPI Cards */}
+                  {resultData.kpis.length > 0 && (
+                    <div className="space-y-2" role="group" aria-label="KPI Cards">
+                      <WidgetSectionHeader
+                        title="KPI Cards"
+                        count={selKpis.size}
+                        total={resultData.kpis.length}
+                        collapsed={!!collapsed.kpis}
+                        onToggle={() => setCollapsed(c => ({ ...c, kpis: !c.kpis }))}
+                        onToggleAll={(all) => setAll(resultData.kpis.map(k => k.label), all, setSelKpis)}
+                      />
+                      {!collapsed.kpis && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                          {resultData.kpis.map(kpi => (
+                            <KpiPreviewRow
+                              key={kpi.label}
+                              kpi={kpi}
+                              checked={selKpis.has(kpi.label)}
+                              onChange={() => toggleIn(selKpis, kpi.label, setSelKpis)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Charts */}
+                  {resultData.charts.length > 0 && (
+                    <div className="space-y-2" role="group" aria-label="Charts">
+                      <WidgetSectionHeader
+                        title="Charts"
+                        count={selCharts.size}
+                        total={resultData.charts.length}
+                        collapsed={!!collapsed.charts}
+                        onToggle={() => setCollapsed(c => ({ ...c, charts: !c.charts }))}
+                        onToggleAll={(all) => setAll(resultData.charts.map(c => c.id), all, setSelCharts)}
+                      />
+                      {!collapsed.charts && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                          {resultData.charts.map(chart => (
+                            <ChartPreviewRow
+                              key={chart.id}
+                              chart={chart}
+                              checked={selCharts.has(chart.id)}
+                              onChange={() => toggleIn(selCharts, chart.id, setSelCharts)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Results Table */}
+                  {resultData.table.columns.length > 0 && (
+                    <div className="space-y-2" role="group" aria-label="Results Table">
+                      <WidgetSectionHeader
+                        title="Results Table"
+                        count={selCols.size}
+                        total={resultData.table.columns.length}
+                        collapsed={!!collapsed.columns}
+                        onToggle={() => setCollapsed(c => ({ ...c, columns: !c.columns }))}
+                        onToggleAll={(all) => setAll(resultData.table.columns, all, setSelCols)}
+                      />
+                      {!collapsed.columns && (
+                        <div className="pl-1">
+                          <TablePreviewRow
+                            columns={resultData.table.columns}
+                            sampleRows={resultData.table.rows || []}
+                            checked={selCols.size > 0}
+                            onChange={() => setAll(resultData.table.columns, selCols.size === 0, setSelCols)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="border-t border-canvas-border px-6 py-3.5 flex items-center justify-end gap-2 bg-canvas-elevated">
-          <button
-            onClick={onCancel}
-            className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => canConfirm && onConfirm({
-              name: name.trim(),
-              bpId,
-              subProcessId,
-              description: description.trim(),
-              frequencyConfig: {
-                frequency,
-                runTime,
-                dayOfWeek: frequency === 'Weekly' ? dayOfWeek : undefined,
-                monthlyDate: frequency === 'Monthly' ? monthlyDate : undefined,
-                triggerOn,
-                retry,
-              },
-            })}
-            disabled={!canConfirm}
-            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
-          </button>
+        <div className="border-t border-canvas-border px-6 py-3.5 flex items-center justify-between gap-2 bg-canvas-elevated">
+          {step === 'pickWidgets' ? (
+            <button
+              type="button"
+              onClick={() => setStep('details')}
+              className="inline-flex items-center h-9 px-3 rounded-lg text-[12px] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <ChevronLeft size={13} className="mr-0.5" /> Back
+            </button>
+          ) : <div />}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onCancel}
+              className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              Cancel
+            </button>
+            {step === 'details' ? (
+              <button
+                onClick={() => canAdvance && setStep('pickWidgets')}
+                disabled={!canAdvance}
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Next <ChevronRight size={13} strokeWidth={2.25} />
+              </button>
+            ) : (
+              <button
+                onClick={handleConfirm}
+                disabled={!canConfirm}
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>
@@ -2745,6 +3025,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const saveWorkflowConfigRef = useRef<{ amount: string; date: string; threshold: string }>({
     amount: '', date: '', threshold: '',
   });
+  // Save-as-workflow pre-modal clarification — captures whether the saved
+  // workflow is exception-style (severity rules) or a KPI tracker
+  // (attention thresholds + cadence). Drives the configurable keys that
+  // pre-populate the Save modal's Configuration section.
+  const saveWorkflowAnswersRef = useRef<{
+    kind: 'exception' | 'kpi';
+    pairs: { question: string; answer: string }[];
+  }>({ kind: 'exception', pairs: [] });
 
   // Data picker modal — replaces the raw file-input click on the upload buttons.
   // attachedSources are picks from existing data (files / DBs / APIs / cloud / session)
@@ -3191,6 +3479,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 80);
 
     if (flow.purpose === 'save-workflow') {
+      // Stash full answers for the new save-workflow clarification so the
+      // modal's Configuration section can pre-populate from them.
+      saveWorkflowAnswersRef.current = {
+        kind: saveWorkflowAnswersRef.current.kind,
+        pairs: consolidated,
+      };
       // Stash answers so the Save-as-Workflow modal's prefilled name/description
       // echo them. Defaults match the question's "(current)" option.
       const findAnswer = (kw: string) =>
@@ -3534,21 +3828,133 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     addToast({ type: 'info', message: 'Removed from report.' });
   };
 
-  // Path 3 entry — open the Save-as-Workflow modal from the audit-result action bar.
-  // Path 3 entry — open the metadata modal directly. The previous flow
-  // posted an inline clarification asking for tolerance / threshold config
-  // first, but those choices are already captured by the assumptions on
-  // the audit result; re-asking before every save felt repetitive. The
-  // tolerance config can be edited inside the modal's Description (or by
-  // running a new query) instead.
+  // Path 3 entry — Save-as-Workflow click on the audit-result action bar.
+  // Posts an inline clarification card BEFORE opening the metadata modal,
+  // so the saved workflow ships with explicit rules (what counts as an
+  // exception + severity thresholds, or — for KPI trackers — the
+  // attention-change threshold + refresh cadence). The same clarification
+  // infrastructure as the audit-query flow is reused; `purpose:
+  // 'save-workflow'` routes the submit handler to open the modal instead
+  // of running an audit. The captured answers seed the modal's
+  // Configuration section.
   const openSaveAsWorkflowModal = () => {
-    setShowSaveAsWfModal(true);
+    // Heuristic: scan the most recent user message for exception-style
+    // wording. If nothing matches, default to KPI tracker. Either set is
+    // 4 questions, so the card always reads the same shape.
+    const lastUserText = [...messages].reverse().find(m => m.role === 'user')?.text?.toLowerCase() || '';
+    const exceptionKeywords = ['duplicate', 'exception', 'anomal', 'outlier', 'fraud', 'mismatch', 'flag', 'irregular', 'missing'];
+    const kpiKeywords = ['kpi', 'metric', 'trend', 'rate', 'ratio', 'percentage', 'monitor', 'track'];
+    const isException = exceptionKeywords.some(k => lastUserText.includes(k));
+    const isKpi = !isException && kpiKeywords.some(k => lastUserText.includes(k));
+    const kind: 'exception' | 'kpi' = isKpi ? 'kpi' : 'exception';
+
+    // Reset; will be filled by submitClarification when the user submits.
+    saveWorkflowAnswersRef.current = { kind, pairs: [] };
+
+    const exceptionQuestions = [
+      {
+        question: 'Which scenarios should this workflow flag as exceptions?',
+        options: [
+          'Same vendor + same amount within tolerance window',
+          'Same PO referenced more than once',
+          'Amount or date matches across two invoices',
+          'All of the above',
+        ],
+      },
+      {
+        question: 'When should a row turn red (highest severity)?',
+        options: [
+          'Match ≥ 95% and amount ≥ ₹1,00,000',
+          'Match ≥ 90% (any amount)',
+          'Same vendor + exact amount + within 3 days',
+          'I’ll define this later',
+        ],
+      },
+      {
+        question: 'When should a row turn yellow (needs review)?',
+        options: [
+          'Match 80–94%',
+          'Match 70–89% or unusual amount band',
+          'Cross-checks failed but match score is mid-range',
+          'Skip yellow — only red and green',
+        ],
+      },
+      {
+        question: 'What happens to rows below your yellow threshold?',
+        options: [
+          'Auto-resolve as green (no action)',
+          'Show but de-prioritise',
+          'Hide from the exception list',
+          'Send to a low-priority queue',
+        ],
+      },
+    ];
+
+    const kpiQuestions = [
+      {
+        question: 'Which KPI should this workflow track?',
+        options: [
+          'Duplicates found (count)',
+          'Total flagged amount (₹)',
+          'Avg confidence score (%)',
+          'Vendors flagged (count)',
+        ],
+      },
+      {
+        question: 'What % change vs last run counts as needs attention?',
+        options: ['±5%', '±10%', '±20%', 'Any change'],
+      },
+      {
+        question: 'How often should this KPI refresh?',
+        options: ['Hourly', 'Daily', 'Weekly', 'On data change'],
+      },
+      {
+        question: 'Who should be notified when attention is needed?',
+        options: ['Me only', 'My team', 'Process owner', 'No one — just log it'],
+      },
+    ];
+
+    const questions = kind === 'kpi' ? kpiQuestions : exceptionQuestions;
+    const intro = kind === 'kpi'
+      ? 'Before I save this as a KPI tracker, help me lock in the alerting rules.'
+      : 'Before I save this as a workflow, help me define what counts as an exception.';
+
+    const data: ClarificationData = {
+      intro,
+      questions,
+      answers: {},
+      status: 'open',
+      purpose: 'save-workflow',
+    };
+
+    setMessages(prev => [...prev, {
+      id: `msg-save-clarify-${Date.now()}`,
+      role: 'assistant',
+      text: '',
+      thinking: [
+        kind === 'kpi'
+          ? 'Detected KPI-tracker intent from the query'
+          : 'Detected exception/anomaly intent from the query',
+        'Drafting 4 clarifications so the saved workflow carries explicit rules',
+      ],
+      timestamp: new Date(),
+      richType: 'clarification',
+      richData: data as unknown as Record<string, unknown>,
+    }]);
   };
 
   // Path 3 commit — modal confirmed. Lock the thread into workflow mode,
   // swap the IRA Workspace canvas (parent App.tsx handles the Y-spin), and
   // post the inline checkpoint message asking which params to make configurable.
-  const handleSaveAsWorkflowConfirm = (data: { name: string; bpId: string; subProcessId: string; description: string; frequencyConfig: WorkflowFrequencyConfig }) => {
+  const handleSaveAsWorkflowConfirm = (data: {
+    name: string;
+    bpId: string;
+    subProcessId: string;
+    description: string;
+    frequencyConfig: WorkflowFrequencyConfig;
+    configurables: { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string }[];
+    selection: import('./AddToDashboardModal').GranularSelection;
+  }) => {
     setShowSaveAsWfModal(false);
 
     // Lock the composer pill — visual signal that mode is irreversible per thread.
@@ -6442,11 +6848,62 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           const thresholdShort = (cfg.threshold || '≥90%').replace(/\s*\(current\)\s*/i, '').trim();
           const defaultName = `Duplicate Invoice Detection: Q1 ${dateShort}`;
           const defaultDescription = `Detects duplicate invoices in Q1 2026 with same vendor, ${amountShort} amount tolerance, and ${dateShort} date tolerance at ${thresholdShort} match threshold.`;
+          // Seed the LLM-detected configurable keys from the pre-modal
+          // clarification answers (exception scenarios + severity, or KPI
+          // metric + attention cadence). Falls back to legacy tolerance keys
+          // when no clarification answers were captured — e.g. the modal
+          // was opened directly from a deep-link or a test harness.
+          const amountDigits = (cfg.amount || '').replace(/[^\d]/g, '');
+          const clarif = saveWorkflowAnswersRef.current;
+          const findAns = (kw: string): string =>
+            clarif.pairs.find(p => p.question.toLowerCase().includes(kw.toLowerCase()))?.answer ?? '';
+
+          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
+          let defaultConfigurables: ConfigEntry[] = [];
+
+          if (clarif.kind === 'kpi' && clarif.pairs.length > 0) {
+            const kpiName = findAns('which kpi');
+            const attentionAns = findAns('% change') || findAns('attention');
+            const attentionPct = (attentionAns.match(/\d+/)?.[0]) || '10';
+            const refresh = findAns('how often') || findAns('refresh');
+            const notify = findAns('notified');
+            defaultConfigurables = [
+              ...(kpiName ? [{ key: 'kpi_metric', type: 'str' as const, value: kpiName }] : []),
+              { key: 'attention_change_pct', type: 'float' as const, value: attentionPct },
+              ...(refresh ? [{ key: 'refresh_frequency', type: 'str' as const, value: refresh }] : []),
+              ...(notify ? [{ key: 'notify_audience', type: 'str' as const, value: notify }] : []),
+            ];
+          } else if (clarif.kind === 'exception' && clarif.pairs.length > 0) {
+            const scenarios = findAns('flagged as exceptions') || findAns('scenarios');
+            const redRule = findAns('turn red');
+            const yellowRule = findAns('turn yellow');
+            const belowYellow = findAns('below your yellow') || findAns('below');
+            defaultConfigurables = [
+              ...(scenarios ? [{ key: 'exception_scenarios', type: 'str' as const, value: scenarios }] : []),
+              ...(redRule ? [{ key: 'severity_red_rule', type: 'str' as const, value: redRule }] : []),
+              ...(yellowRule ? [{ key: 'severity_yellow_rule', type: 'str' as const, value: yellowRule }] : []),
+              ...(belowYellow ? [{ key: 'below_yellow_action', type: 'str' as const, value: belowYellow }] : []),
+            ];
+          }
+
+          if (defaultConfigurables.length === 0) {
+            defaultConfigurables = [
+              { key: 'threshold_amount', type: 'float', value: amountDigits || '100000' },
+              { key: 'quarter_match_keys', type: 'list_str', value: '1, q1, quarter1, qtr1' },
+              { key: 'summary_top_n', type: 'int', value: '3' },
+            ];
+          }
           return (
             <SaveAsWorkflowModal
               open={showSaveAsWfModal}
               defaultName={defaultName}
               defaultDescription={defaultDescription}
+              defaultConfigurables={defaultConfigurables}
+              resultData={{
+                kpis: AUDIT_RESULT.kpis,
+                charts: AUDIT_RESULT.charts,
+                table: { columns: AUDIT_RESULT.table.columns, rows: AUDIT_RESULT.table.rows },
+              }}
               onCancel={() => setShowSaveAsWfModal(false)}
               onConfirm={handleSaveAsWorkflowConfirm}
             />
