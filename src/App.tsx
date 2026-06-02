@@ -557,6 +557,7 @@ function AppInner() {
           <WorkflowLibraryView
             onCreateWorkflow={() => enterWorkflowMode()}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
           />
         );
 

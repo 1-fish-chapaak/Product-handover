@@ -30,18 +30,21 @@ const REQUIRED_FILES = [
     format: 'CSV',
     required: true,
     description: 'Period export of posted invoices — invoice number, vendor, amount, date, GL account, entered-by user.',
+    usedBy: ['Invoice Duplicate Detection', 'Payment Block Review'],
   },
   {
     name: 'Vendor Master',
     format: 'CSV',
     required: true,
     description: 'Active vendor master snapshot used to validate every invoice vendor against the approved list.',
+    usedBy: ['Vendor Risk Score'],
   },
   {
     name: 'GL Trial Balance',
     format: 'CSV',
     required: true,
     description: 'Period-end trial balance export — ties AP postings back to the general ledger for reconciliation.',
+    usedBy: ['GL Anomaly Detection', 'Period-End Accrual Check'],
   },
 ];
 
@@ -228,6 +231,19 @@ function makeUploaded(files: File[]): UploadedFile[] {
   }));
 }
 
+type ConfigField = {
+  key: string;
+  type: 'str' | 'int' | 'list_str' | 'bool';
+  defaultValue: string;
+};
+
+const DEFAULT_CONFIG_FIELDS: ConfigField[] = [
+  { key: 'pdf_path', type: 'str', defaultValue: 'efe62aa1-4c4f-43ae-bc8c-06e6c9f7ed59.pdf' },
+  { key: 'table_hint', type: 'str', defaultValue: 'invoice line items, folio charges, taxes, payments, totals' },
+  { key: 'graph_top_n', type: 'int', defaultValue: '20' },
+  { key: 'missing_tokens', type: 'list_str', defaultValue: ', none, null, nan, n/a, na, not found, not detected, unreadable' },
+];
+
 const SEED_UPLOADED_FILES: UploadedFile[] = [
   { id: 'seed-gl', name: 'gl_q3_2026.csv', size: Math.round(12.4 * 1024 * 1024) },
   { id: 'seed-invoice', name: 'invoice_batch_sep2026.pdf', size: Math.round(48.1 * 1024 * 1024) },
@@ -334,6 +350,8 @@ export function BulkExecuteModal({
   // Step 2 state
   const [requiredFilesOpen, setRequiredFilesOpen] = useState(false);
   const [selectedListOpen, setSelectedListOpen] = useState(true);
+  const [configOpenIds, setConfigOpenIds] = useState<Set<string>>(new Set());
+  const [workflowConfigs, setWorkflowConfigs] = useState<Record<string, Record<string, string>>>({});
   const [uploadOpen, setUploadOpen] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>(SEED_UPLOADED_FILES);
   const [selectedUploadIds, setSelectedUploadIds] = useState<Set<string>>(new Set());
@@ -400,11 +418,15 @@ export function BulkExecuteModal({
 
   const handleSubmit = () => {
     if (!hasWorkflows || !hasAuditName) return;
+    setStep2View('upload');
+    setStep(2);
+  };
+
+  const handleUploadContinue = () => {
     setIsFetching(true);
     window.setTimeout(() => {
       setIsFetching(false);
-      setStep2View('upload');
-      setStep(2);
+      setStep2View('review');
     }, 2200);
   };
 
@@ -680,7 +702,7 @@ export function BulkExecuteModal({
         role="dialog"
         aria-modal="true"
         aria-label="Bulk Execute"
-        className="relative bg-white rounded-2xl shadow-2xl w-[800px] h-[700px] max-h-[90vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-2xl shadow-2xl w-[1080px] h-[760px] max-h-[92vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -801,30 +823,75 @@ export function BulkExecuteModal({
             </div>
 
             {selectedListOpen && (
-            <div className="border border-border-light rounded-md divide-y divide-border-light overflow-hidden max-h-[240px] overflow-y-auto">
+            <div className="border border-border-light rounded-md divide-y divide-border-light overflow-hidden max-h-[320px] overflow-y-auto">
               {combinedSelected.map(w => {
                 const checked = !modalDeselected.has(w.id);
+                const configOpen = configOpenIds.has(w.id);
+                const config = workflowConfigs[w.id] ?? Object.fromEntries(
+                  DEFAULT_CONFIG_FIELDS.map(f => [f.key, f.defaultValue])
+                );
+                const toggleConfig = () => {
+                  setConfigOpenIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(w.id)) next.delete(w.id);
+                    else next.add(w.id);
+                    return next;
+                  });
+                };
+                const updateField = (key: string, value: string) => {
+                  setWorkflowConfigs(prev => ({
+                    ...prev,
+                    [w.id]: { ...config, [key]: value },
+                  }));
+                };
                 return (
-                  <label
-                    key={w.id}
-                    className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-2/60 transition-colors"
-                  >
-                    <span className="pt-0.5">
-                      <Checkbox
-                        checked={checked}
-                        onChange={() => toggleWorkflow(w.id)}
-                        ariaLabel={`Toggle ${w.name}`}
-                      />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[13px] font-medium ${checked ? 'text-text' : 'text-text-muted line-through'}`}>
-                        {w.name}
+                  <div key={w.id}>
+                    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-2/60 transition-colors">
+                      <span className="pt-0.5">
+                        <Checkbox
+                          checked={checked}
+                          onChange={() => toggleWorkflow(w.id)}
+                          ariaLabel={`Toggle ${w.name}`}
+                        />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[13px] font-medium ${checked ? 'text-text' : 'text-text-muted line-through'}`}>
+                          {w.name}
+                        </div>
+                        <div className="text-[11px] text-text-muted mt-0.5">
+                          {w.businessProcess} · {w.controlId}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-text-muted mt-0.5">
-                        {w.businessProcess} · {w.controlId}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleConfig}
+                        aria-expanded={configOpen}
+                        className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-border-light bg-white text-[12px] font-semibold text-text-secondary hover:border-primary/30 hover:text-text transition-colors cursor-pointer shrink-0"
+                      >
+                        {configOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        Config
+                      </button>
                     </div>
-                  </label>
+                    {configOpen && (
+                      <div className="px-3 pb-3 pt-1 bg-surface-2/30">
+                        <div className="space-y-3 pl-7">
+                          {DEFAULT_CONFIG_FIELDS.map(field => (
+                            <div key={field.key}>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <label className="text-[12px] font-semibold text-text">{field.key}</label>
+                                <span className="text-[10.5px] font-mono text-text-muted">{field.type}</span>
+                              </div>
+                              <input
+                                value={config[field.key] ?? field.defaultValue}
+                                onChange={e => updateField(field.key, e.target.value)}
+                                className="w-full px-3 py-2 rounded-md border border-border-light bg-white text-[12.5px] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -1009,16 +1076,19 @@ export function BulkExecuteModal({
                     key={file.name}
                     className="p-3 rounded-md border border-border-light bg-surface-2/30"
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-[13px] font-semibold text-text">{file.name}</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border-light bg-white text-[10px] font-mono font-semibold text-ink-700">
                         {file.format}
                       </span>
-                      {file.required && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-risk">
-                          Required
+                      {file.usedBy.map(wf => (
+                        <span
+                          key={wf}
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-border-light text-[11px] text-text-secondary"
+                        >
+                          {wf}
                         </span>
-                      )}
+                      ))}
                     </div>
                     <div className="text-[12px] text-text-secondary leading-relaxed">{file.description}</div>
                   </div>
@@ -1528,7 +1598,7 @@ export function BulkExecuteModal({
                   });
                   return;
                 }
-                setStep2View('review');
+                handleUploadContinue();
               }}
               aria-disabled={!hasUpload}
               className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${

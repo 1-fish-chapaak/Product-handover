@@ -191,12 +191,21 @@ const getInitialView = (): View => {
   const v = params.get('view');
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
+  if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'engagement-detail') return 'engagement-detail';
+  if (v === 'workflow-executor') return 'workflow-executor';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
 };
 
-/** Deep-link target engagement (e.g. when Case Management is opened in a new tab). */
+const getInitialWorkflowId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'workflow-executor') return null;
+  return params.get('workflowId');
+};
+
 const getInitialEngagementId = (): string | null => {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get('eng');
@@ -210,7 +219,7 @@ const INITIAL_STATE: AppState = {
   artifactMode: 'query',
   showArtifacts: false,
   showChatHistory: false,
-  selectedWorkflowId: null,
+  selectedWorkflowId: getInitialWorkflowId(),
   workflowDetailInitialTab: 'overview',
   selectedBPId: null,
   userProcesses: [],
