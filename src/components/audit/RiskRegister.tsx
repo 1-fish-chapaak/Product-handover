@@ -759,7 +759,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               className="pl-9 pr-3 py-2 rounded-[8px] border border-border bg-white text-[12px] w-[260px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all" />
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {(statusFilter.length || subProcessFilter.length || categoryFilter.length || priorityFilter.length || searchQuery) > 0 && (
+            {(statusFilter.length || subProcessFilter.length || categoryFilter.length || priorityFilter.length || searchQuery.length) > 0 && (
               <button
                 type="button"
                 onClick={() => {

@@ -63,6 +63,7 @@ import type {
   ClarifyQuestion,
   UploadedFile,
 } from '../concierge-workflow-builder/types';
+import { type WorkflowRunSeed, buildWorkflowRunRecap } from '../workflow/workflowRunSeed';
 
 interface ChatMessage {
   id: string;
@@ -265,6 +266,12 @@ interface ChatViewProps {
   setQueryAssumptions?: (assumptions: string[]) => void;
   initialQuery?: string;
   onInitialQueryProcessed?: () => void;
+  /** A completed workflow run handed in from the Workflow Executor. When set,
+   *  ChatView replays it as conversation history (user "I ran X" + assistant
+   *  recap) on mount, so a follow-up query (carried via initialQuery) lands in
+   *  a thread that already has the run's context. */
+  workflowRunSeed?: WorkflowRunSeed | null;
+  onWorkflowRunSeedConsumed?: () => void;
   /** Pre-fill text dropped into the composer (no auto-submit). Used by the
    *  workspace panel's "Edit assumptions" affordance. */
   composerDraft?: string | null;
@@ -2837,7 +2844,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   // Workflow-build seed handoff. Non-empty string = the chat starts in
@@ -3213,6 +3220,34 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       }
     };
   }, []);
+
+  // Workflow-run handoff — when the Workflow Executor sends a follow-up, replay
+  // the completed run as conversation history (user "I ran X" + assistant
+  // recap) so the follow-up query lands inside an established thread. Defined
+  // BEFORE the initialQuery effect so its messages are queued first; the
+  // follow-up question itself flows through initialQuery below.
+  useEffect(() => {
+    if (!workflowRunSeed) return;
+    const seed = workflowRunSeed;
+    const base = Date.now();
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `msg-wfrun-user-${base}`,
+        role: 'user',
+        text: `I just ran the **${seed.workflowName}** workflow${seed.category ? ` (${seed.category})` : ''}.`,
+        timestamp: new Date(),
+      },
+      {
+        id: `msg-wfrun-recap-${base}`,
+        role: 'assistant',
+        text: buildWorkflowRunRecap(seed),
+        timestamp: new Date(),
+      },
+    ]);
+    onWorkflowRunSeedConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowRunSeed]);
 
   // Support for "Ask AI about risk" context — auto-send initialQuery when it appears
   useEffect(() => {

@@ -132,6 +132,8 @@ function AppInner() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatWorkflowRunSeed,
+    openChatWithWorkflowRun,
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
@@ -423,6 +425,8 @@ function AppInner() {
               setQueryAssumptions={setQueryAssumptions}
               initialQuery={state.chatInitialQuery ?? undefined}
               onInitialQueryProcessed={() => setChatInitialQuery(null)}
+              workflowRunSeed={state.chatWorkflowRunSeed}
+              onWorkflowRunSeedConsumed={() => setChatWorkflowRunSeed(null)}
               composerDraft={state.chatComposerDraft}
               onComposerDraftConsumed={() => setChatComposerDraft(null)}
               selectedChatId={state.selectedChatId}
@@ -566,6 +570,7 @@ function AppInner() {
           <WorkflowExecutor
             workflowId={state.selectedWorkflowId!}
             onBack={() => setSelectedWorkflow(null)}
+            onFollowUp={(query, seed) => openChatWithWorkflowRun(query, seed)}
             onRunComplete={(workflowId) => {
               // Phase 3 producer: push a notification when a workflow run
               // finishes. Same pattern as ShareModal.
