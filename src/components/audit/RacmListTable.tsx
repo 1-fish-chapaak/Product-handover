@@ -883,13 +883,15 @@ function ArRacmMappingView({ racm, onBack }: { racm: RacmEntry; onBack: () => vo
     return Object.values(e).some(v => String(v).toLowerCase().includes(q));
   });
 
-  const PER_PAGE = 25;
+  // Rows-per-page is user-adjustable (default 10); the dropdown lives in the table
+  // toolbar so it stays reachable even when a larger page size hides the pager below.
+  const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-  useEffect(() => { setPage(1); }, [query, filter]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  useEffect(() => { setPage(1); }, [query, filter, perPage]);
   const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * PER_PAGE;
-  const end = Math.min(start + PER_PAGE, filtered.length);
+  const start = (safePage - 1) * perPage;
+  const end = Math.min(start + perPage, filtered.length);
   const paged = filtered.slice(start, end);
 
   const FILTERS = [
@@ -962,18 +964,38 @@ function ArRacmMappingView({ racm, onBack }: { racm: RacmEntry; onBack: () => vo
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
         <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
           <span className="text-[11px] text-ink-400">Full RACM detail · scroll right for mapping status →</span>
-          <span className="text-[11px] text-ink-500 tabular-nums">{filtered.length} entries</span>
+          <div className="flex items-center gap-3 text-[11px]">
+            <label className="flex items-center gap-1.5 text-ink-500">
+              Rows per page
+              <select
+                value={perPage}
+                onChange={e => setPerPage(Number(e.target.value))}
+                className="rounded-[6px] border border-canvas-border bg-white pl-2 pr-1 py-1 text-[11px] font-mono tabular-nums text-ink-700 outline-none focus:border-brand-500/50 cursor-pointer transition-colors"
+              >
+                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <span className="text-ink-500 tabular-nums">{filtered.length} entries</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-max min-w-full text-[12px]">
+          {/* Fixed 200px columns so every field reads in a uniform lane; the matrix
+              stays horizontally scrollable. */}
+          <table className="text-[12px]" style={{ tableLayout: 'fixed', width: (AR_RACM_COLUMNS.length + 3) * 200 }}>
+            <colgroup>
+              {AR_RACM_COLUMNS.map(col => <col key={col.key} style={{ width: 200 }} />)}
+              <col style={{ width: 200 }} />
+              <col style={{ width: 200 }} />
+              <col style={{ width: 200 }} />
+            </colgroup>
             <thead>
               <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
                 {AR_RACM_COLUMNS.map(col => (
-                  <th key={col.key} className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom" style={col.minW ? { minWidth: col.minW } : undefined}>{col.label}</th>
+                  <th key={col.key} className="py-2 font-semibold pr-4 align-bottom">{col.label}</th>
                 ))}
-                <th className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom border-l border-canvas-border pl-4" style={{ minWidth: 130 }}>Control(s)</th>
-                <th className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom" style={{ minWidth: 120 }}>Workflow Status</th>
-                <th className="py-2 font-semibold pr-2 whitespace-nowrap align-bottom" style={{ minWidth: 100 }}>Mapping</th>
+                <th className="py-2 font-semibold pr-4 align-bottom border-l border-canvas-border pl-4">Control(s)</th>
+                <th className="py-2 font-semibold pr-4 align-bottom">Workflow Status</th>
+                <th className="py-2 font-semibold pr-2 align-bottom">Mapping</th>
               </tr>
             </thead>
             <tbody>
@@ -982,7 +1004,7 @@ function ArRacmMappingView({ racm, onBack }: { racm: RacmEntry; onBack: () => vo
               ) : paged.map(e => (
                 <tr key={`${e.riskId}-${e.controlId}`} className="border-b border-canvas-border/40 last:border-0 align-top">
                   {AR_RACM_COLUMNS.map(col => (
-                    <td key={col.key} className="py-2.5 pr-4 align-top" style={col.minW ? { minWidth: col.minW } : undefined}>{renderArCell(e, col)}</td>
+                    <td key={col.key} className="py-2.5 pr-4 align-top overflow-hidden">{renderArCell(e, col)}</td>
                   ))}
                   <td className="py-2.5 pr-4 align-top border-l border-canvas-border pl-4">
                     <span className="inline-flex items-center px-2 h-5 rounded bg-paper-100 text-ink-700 text-[10px] font-mono tabular-nums whitespace-nowrap">{e.controlId}</span>
@@ -998,7 +1020,7 @@ function ArRacmMappingView({ racm, onBack }: { racm: RacmEntry; onBack: () => vo
             </tbody>
           </table>
         </div>
-        {filtered.length > PER_PAGE && (
+        {filtered.length > perPage && (
           <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-canvas-border text-[12px]">
             <span className="text-ink-500 tabular-nums">Showing {start + 1}–{end} of {filtered.length}</span>
             <div className="flex items-center gap-2">
