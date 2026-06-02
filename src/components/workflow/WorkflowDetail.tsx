@@ -6,7 +6,7 @@ import {
   SlidersHorizontal, Database, Bell,
   ExternalLink, MessageSquare, Clock, History,
   DollarSign, Type, Plus, Minus, ChevronDown, ChevronRight, Sparkles,
-  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check
+  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check, Tag
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
@@ -880,6 +880,98 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
   return null;
 }
 
+/** Editable chip list supporting add (input + Enter / button), inline rename (pencil), and delete (×). */
+function EditableChipList({
+  items, onChange, placeholder, onAdded,
+}: {
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  onAdded?: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (items.some(i => i.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange([...items, v]);
+    onAdded?.(v);
+    setDraft('');
+  };
+  const remove = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const commitEdit = (idx: number) => {
+    const v = editVal.trim();
+    setEditingIdx(null);
+    if (!v) { remove(idx); return; }
+    onChange(items.map((it, i) => (i === idx ? v : it)));
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {items.map((it, idx) =>
+        editingIdx === idx ? (
+          <input
+            key={idx}
+            autoFocus
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onBlur={() => commitEdit(idx)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit(idx);
+              if (e.key === 'Escape') setEditingIdx(null);
+            }}
+            className="px-2.5 py-1 rounded-full text-[12px] border border-primary/50 outline-none ring-2 ring-primary/15 bg-white text-text w-36"
+          />
+        ) : (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-surface-2 border border-border-light text-[12px] font-medium text-text"
+          >
+            {it}
+            <button
+              onClick={() => { setEditingIdx(idx); setEditVal(it); }}
+              className="text-text-muted hover:text-primary cursor-pointer"
+              title="Rename"
+              aria-label={`Rename ${it}`}
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              onClick={() => remove(idx)}
+              className="text-text-muted hover:text-risk-700 cursor-pointer"
+              title="Remove"
+              aria-label={`Remove ${it}`}
+            >
+              <XIcon size={12} />
+            </button>
+          </span>
+        )
+      )}
+      <div className="inline-flex items-center gap-1">
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          className="px-3 py-1.5 rounded-full text-[12px] border border-border-light bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 w-40"
+        />
+        <button
+          onClick={add}
+          disabled={!draft.trim()}
+          className="w-7 h-7 flex items-center justify-center rounded-full bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white cursor-pointer transition-colors"
+          title="Add"
+          aria-label="Add"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
   const [tab, setTab] = useState<TabId>(initialTab);
@@ -894,6 +986,8 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
   const [tolerances, setTolerances] = useState<ToleranceRule[]>(DEFAULT_TOLERANCES);
   const [expandedTolId, setExpandedTolId] = useState<string | null>('date');
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [labels, setLabels] = useState<string[]>(['Reconciliation']);
+  const [subProcesses, setSubProcesses] = useState<string[]>(['Invoice Processing']);
   const { addToast } = useToast();
   if (!wf) return null;
 
@@ -1121,6 +1215,35 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
       {/* Configuration Tab */}
       {tab === 'config' && (
         <div className="space-y-5 pb-8">
+          <div className="rounded-2xl border border-border-light bg-white p-5">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
+              <Tag size={13} className="text-primary" />
+              Labels & Sub-process
+            </h4>
+            <div className="space-y-5">
+              <div>
+                <label className="text-[13px] font-semibold text-text block mb-1">Labels</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Tag this workflow for grouping and search — e.g. Reconciliation.</p>
+                <EditableChipList
+                  items={labels}
+                  onChange={setLabels}
+                  placeholder="Add label…"
+                  onAdded={(v) => addToast({ message: `Label “${v}” added`, type: 'success' })}
+                />
+              </div>
+              <div className="pt-4 border-t border-border-light">
+                <label className="text-[13px] font-semibold text-text block mb-1">Sub-process</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Add, rename, or remove the sub-processes this workflow belongs to.</p>
+                <EditableChipList
+                  items={subProcesses}
+                  onChange={setSubProcesses}
+                  placeholder="Add sub-process…"
+                  onAdded={(v) => addToast({ message: `Sub-process “${v}” added`, type: 'success' })}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-border-light bg-white p-5">
             <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
               <Calendar size={13} className="text-primary" />

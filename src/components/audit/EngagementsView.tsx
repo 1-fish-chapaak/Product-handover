@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
-  Play, Trash2, AlertTriangle, X,
+  Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import CreateEngagementWizard from './CreateEngagementWizard';
+import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -65,6 +66,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 }
 
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
+  const [mode, setMode] = useState<'overview' | 'list'>('overview');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | EngStatus>('All');
@@ -104,6 +106,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
   const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
   const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
 
+  /** Jump from the overview into the list, pre-filtered on a single dimension. */
+  const goToList = (filter?: ListFilter) => {
+    setTypeFilter(filter?.type ?? 'All');
+    setStatusFilter(filter?.status ?? 'All');
+    setProcessFilter(filter?.process ?? 'All');
+    setSearch('');
+    setMode('list');
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
@@ -114,7 +125,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
             <h1 className="font-display text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
             <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
-              Browse all engagements — compliance audits, internal audits, and automation programs.
+              {mode === 'overview'
+                ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
+                : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -136,51 +149,41 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
           </div>
         </div>
 
-        {/* Search row */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 max-w-xl">
+        {/* Primary view switcher — prominent, on its own row */}
+        <div className="flex items-center gap-3 mb-6 border-b border-border-light">
+          <ViewToggle mode={mode} onChange={setMode} count={all.length} />
+        </div>
+
+        {mode === 'overview' && (
+          <EngagementsOverview
+            engagements={all}
+            onOpenEngagement={onOpenEngagement}
+            onGoToList={goToList}
+          />
+        )}
+
+        {mode === 'list' && (<>
+        {/* Search + filters — one compact row, no dedicated panel */}
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
               type="text"
               placeholder="Search engagement, owner, framework, or code..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-full pl-10 pr-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
-        </div>
-
-        {/* Filters row */}
-        <div className="flex items-center gap-2 mb-5 flex-wrap rounded-xl border border-border-light bg-surface-1/40 px-3 py-2.5">
-          <FilterGroup
-            label="Type"
-            options={TYPE_FILTERS}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            counts={counts.type}
-          />
-          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
-          <FilterGroup
-            label="Status"
-            options={STATUS_FILTERS}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            counts={counts.status}
-          />
-          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
-          <FilterGroup
-            label="Process"
-            options={PROCESS_FILTERS}
-            value={processFilter}
-            onChange={setProcessFilter}
-            counts={counts.process}
-          />
+          <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
+          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} />
+          <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
           {anyFilterActive && (
             <button
               onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
             >
-              <X size={11} /> Clear filters
+              <X size={12} /> Clear
             </button>
           )}
         </div>
@@ -318,6 +321,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             </div>
           </div>
         )}
+        </>)}
       </div>
 
       <AnimatePresence>
@@ -335,40 +339,76 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
   );
 }
 
-function FilterGroup<T extends string>({
-  label, options, value, onChange, counts,
+/** Primary Overview ⇄ List view switcher — large underline tabs. */
+function ViewToggle({
+  mode, onChange, count,
+}: {
+  mode: 'overview' | 'list';
+  onChange: (m: 'overview' | 'list') => void;
+  count: number;
+}) {
+  const tabs: { id: 'overview' | 'list'; label: string; Icon: typeof List; badge?: number }[] = [
+    { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
+    { id: 'list', label: 'All Engagements', Icon: List, badge: count },
+  ];
+  return (
+    <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">
+      {tabs.map(({ id, label, Icon, badge }) => {
+        const active = mode === id;
+        return (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(id)}
+            className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
+              active
+                ? 'border-primary text-primary'
+                : 'border-transparent text-text-muted hover:text-text hover:border-border'
+            }`}
+          >
+            <Icon size={16} />
+            {label}
+            {badge != null && (
+              <span className={`tabular-nums text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                active ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-text-muted'
+              }`}>{badge}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Compact dropdown filter — replaces the old chip panel. Highlights when a non-"All" value is picked. */
+function MinimalFilter<T extends string>({
+  label, allLabel, options, value, onChange, counts,
 }: {
   label: string;
+  allLabel: string;
   options: readonly T[];
   value: T;
   onChange: (next: T) => void;
   counts: Record<string, number>;
 }) {
+  const active = value !== 'All';
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider mr-0.5">{label}</span>
-      <div className="flex gap-1 flex-wrap">
-        {options.map(opt => {
-          const active = opt === value;
-          const n = counts[opt] ?? 0;
-          return (
-            <button
-              key={opt}
-              onClick={() => onChange(opt)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
-                active
-                  ? 'bg-primary text-white shadow-sm ring-1 ring-primary/20'
-                  : 'bg-white text-text-secondary border border-border-light hover:border-primary/30 hover:text-primary hover:bg-primary/5'
-              }`}
-            >
-              <span>{opt}</span>
-              <span className={`tabular-nums text-[10px] font-bold px-1 rounded ${
-                active ? 'bg-white/20 text-white' : 'text-text-muted/80 bg-surface-2'
-              }`}>{n}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value as T)}
+      aria-label={`Filter by ${label}`}
+      className={`py-2 px-3 rounded-lg border text-[12.5px] font-semibold outline-none cursor-pointer transition-colors focus:ring-2 focus:ring-primary/10 ${
+        active
+          ? 'border-primary/40 text-primary bg-primary-xlight/30'
+          : 'border-border bg-white text-text-secondary hover:border-primary/30'
+      }`}
+    >
+      {options.map(opt => (
+        <option key={opt} value={opt}>
+          {opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}`}
+        </option>
+      ))}
+    </select>
   );
 }

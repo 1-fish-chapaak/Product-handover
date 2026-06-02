@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Search, X, ChevronRight, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye,
-  ArrowRight, FileText,
+  ArrowRight, FileText, HelpCircle,
 } from 'lucide-react';
-import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import ColumnFilter from '../shared/ColumnFilter';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -56,17 +56,17 @@ const PRIORITIES: RiskPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 // ─── Style maps ─────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<RiskLifecycleStatus, string> = {
-  Draft: 'bg-gray-100 text-gray-600',
-  Active: 'bg-emerald-50 text-emerald-700',
-  'Under Review': 'bg-amber-50 text-amber-700',
-  Archived: 'bg-gray-100 text-gray-400',
+  Draft: 'bg-paper-100 text-ink-600',
+  Active: 'bg-compliant-50 text-compliant-700',
+  'Under Review': 'bg-high-50 text-high-700',
+  Archived: 'bg-paper-100 text-ink-400',
 };
 
 const PRIORITY_STYLES: Record<RiskPriority, string> = {
-  Critical: 'text-red-600 font-bold',
-  High: 'text-amber-600 font-semibold',
-  Medium: 'text-gray-600 font-medium',
-  Low: 'text-gray-400 font-medium',
+  Critical: 'text-risk-700 font-bold',
+  High: 'text-high-700 font-semibold',
+  Medium: 'text-ink-600 font-medium',
+  Low: 'text-ink-400 font-medium',
 };
 
 // ─── Action derivation ─────────────────────────────────────────────────────
@@ -74,9 +74,9 @@ const PRIORITY_STYLES: Record<RiskPriority, string> = {
 function getRiskRegisterAction(status: RiskLifecycleStatus): { label: string; cls: string } {
   switch (status) {
     case 'Draft': return { label: 'Complete Setup', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
-    case 'Active': return { label: 'View', cls: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70' };
-    case 'Under Review': return { label: 'Review', cls: 'bg-amber-50 text-amber-700 hover:bg-amber-100/70' };
-    case 'Archived': return { label: 'View', cls: 'bg-gray-50 text-gray-400 hover:bg-gray-100' };
+    case 'Active': return { label: 'View', cls: 'bg-paper-100 text-ink-600 hover:bg-paper-200' };
+    case 'Under Review': return { label: 'Review', cls: 'bg-high-50 text-high-700 hover:bg-high-50/70' };
+    case 'Archived': return { label: 'View', cls: 'bg-paper-50 text-ink-400 hover:bg-paper-100' };
   }
 }
 
@@ -91,14 +91,58 @@ interface DrawerProps {
 
 function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
   const isEdit = !!risk;
-  const [name, setName] = useState(risk?.name || '');
-  const [description, setDescription] = useState(risk?.description || '');
-  const [businessProcess, setBusinessProcess] = useState(risk?.businessProcess || defaultProcess || '');
-  const [subProcess, setSubProcess] = useState(risk?.subProcess || '');
-  const [category, setCategory] = useState<RiskCategory | ''>(risk?.category || '');
-  const [priority, setPriority] = useState<RiskPriority | ''>(risk?.priority || '');
-  const [owner, setOwner] = useState(risk?.owner || '');
-  const [reviewer, setReviewer] = useState(risk?.reviewer || '');
+  // Capture initial values once so dirty-tracking is stable across re-renders
+  const [initial] = useState({
+    name: risk?.name || '',
+    description: risk?.description || '',
+    businessProcess: risk?.businessProcess || defaultProcess || '',
+    subProcess: risk?.subProcess || '',
+    category: (risk?.category || '') as RiskCategory | '',
+    priority: (risk?.priority || '') as RiskPriority | '',
+    owner: risk?.owner || '',
+    reviewer: risk?.reviewer || '',
+  });
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [businessProcess, setBusinessProcess] = useState(initial.businessProcess);
+  const [subProcess, setSubProcess] = useState(initial.subProcess);
+  const [category, setCategory] = useState<RiskCategory | ''>(initial.category);
+  const [priority, setPriority] = useState<RiskPriority | ''>(initial.priority);
+  const [owner, setOwner] = useState(initial.owner);
+  const [reviewer, setReviewer] = useState(initial.reviewer);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const isDirty =
+    name !== initial.name ||
+    description !== initial.description ||
+    businessProcess !== initial.businessProcess ||
+    subProcess !== initial.subProcess ||
+    category !== initial.category ||
+    priority !== initial.priority ||
+    owner !== initial.owner ||
+    reviewer !== initial.reviewer;
+
+  const requestClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const discardAndClose = () => {
+    // Reset form state then close
+    setName(initial.name);
+    setDescription(initial.description);
+    setBusinessProcess(initial.businessProcess);
+    setSubProcess(initial.subProcess);
+    setCategory(initial.category);
+    setPriority(initial.priority);
+    setOwner(initial.owner);
+    setReviewer(initial.reviewer);
+    setShowDiscardConfirm(false);
+    onClose();
+  };
 
   const isValid = name.trim() && description.trim() && businessProcess;
 
@@ -117,13 +161,13 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
     createdAt: risk?.createdAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
   });
 
-  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
 
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
@@ -134,8 +178,18 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
             <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
+
+        {/* Discard confirm strip — appears at top of body when user tries to close with unsaved changes */}
+        {showDiscardConfirm && (
+          <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[13px] shrink-0">
+            <AlertTriangle className="w-4 h-4 text-mitigated-700 shrink-0" />
+            <div className="flex-1 text-ink-800">Discard unsaved changes?</div>
+            <button type="button" onClick={discardAndClose} className="px-3 py-1 rounded-[6px] bg-paper-0 border border-mitigated-300 text-[12px] text-ink-700 hover:bg-paper-50">Discard</button>
+            <button type="button" onClick={() => setShowDiscardConfirm(false)} className="px-3 py-1 rounded-[6px] bg-mitigated-700 text-paper-0 text-[12px] hover:bg-mitigated-800">Keep editing</button>
+          </div>
+        )}
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -143,16 +197,16 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
           <div className="space-y-3">
             <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h3>
             <div>
-              <label className={labelCls}>Risk Name <span className="text-red-400">*</span></label>
+              <label className={labelCls}>Risk Name <span className="text-risk">*</span></label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Unauthorized vendor payments" className={fieldCls} autoFocus />
             </div>
             <div>
-              <label className={labelCls}>Description <span className="text-red-400">*</span></label>
+              <label className={labelCls}>Description <span className="text-risk">*</span></label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Describe the risk scenario and potential impact..." className={fieldCls + ' resize-none'} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Business Process <span className="text-red-400">*</span></label>
+                <label className={labelCls}>Business Process <span className="text-risk">*</span></label>
                 <select value={businessProcess} onChange={e => setBusinessProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
                   <option value="">Select...</option>
                   {PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -192,8 +246,8 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
             <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Priority</h3>
             <div className="flex gap-2">
               {PRIORITIES.map(p => (
-                <button key={p} onClick={() => setPriority(p)}
-                  className={`px-3 py-2 rounded-lg text-[12px] font-medium border transition-all cursor-pointer ${
+                <button type="button" key={p} onClick={() => setPriority(p)}
+                  className={`px-3 py-2 rounded-[8px] text-[12px] font-medium border transition-all cursor-pointer ${
                     priority === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted hover:border-primary/30'
                   }`}>{p}</button>
               ))}
@@ -203,9 +257,9 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
+            className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Save
           </button>
         </div>
@@ -227,16 +281,16 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
 
   const transitions: Partial<Record<RiskLifecycleStatus, { label: string; status: RiskLifecycleStatus; cls: string }[]>> = {
     Draft: [
-      { label: 'Activate', status: 'Active', cls: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-gray-100 text-gray-500 hover:bg-gray-200/70' },
+      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
+      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
     ],
     Active: [
-      { label: 'Mark Under Review', status: 'Under Review', cls: 'bg-amber-50 text-amber-700 hover:bg-amber-100/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-gray-100 text-gray-500 hover:bg-gray-200/70' },
+      { label: 'Mark Under Review', status: 'Under Review', cls: 'bg-high-50 text-high-700 hover:bg-high-50/70' },
+      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
     ],
     'Under Review': [
-      { label: 'Activate', status: 'Active', cls: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-gray-100 text-gray-500 hover:bg-gray-200/70' },
+      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
+      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
     ],
     Archived: [],
   };
@@ -267,11 +321,11 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-display text-[18px] font-semibold text-ink-900">{risk.name}</h2>
-              <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
             </div>
             <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -287,7 +341,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               {fields.map(f => (
                 <div key={f.label}>
-                  <span className="text-[10px] text-gray-400 uppercase block">{f.label}</span>
+                  <span className="text-[10px] text-ink-400 uppercase block">{f.label}</span>
                   <span className={`text-[13px] mt-0.5 block ${f.label === 'Priority' ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
                 </div>
               ))}
@@ -297,7 +351,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+          <button type="button" onClick={onClose} className="w-full px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
         </footer>
 
         {/* Edit drawer (nested) */}
@@ -327,9 +381,33 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [detailRisk, setDetailRisk] = useState<RiskEntry | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
+  const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
+  const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Listen for header-level "Create new Risk" trigger from Process Hub.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ section?: string }>;
+      if (ce.detail?.section === 'risks') setShowCreateDrawer(true);
+    };
+    window.addEventListener('process-hub-create', handler);
+    return () => window.removeEventListener('process-hub-create', handler);
+  }, []);
 
   // Apply process filter first (for embedded mode)
-  const baseRisks = processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks;
+  const embedded = !!processFilter;
+  const baseRisks = (processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks)
+    .filter(r => !archivedRiskIds.includes(r.id));
 
   // Derived KPIs
   const totalRisks = baseRisks.length;
@@ -372,8 +450,20 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       );
     }
 
+    if (subProcessFilter.length > 0) result = result.filter(r => subProcessFilter.includes(r.subProcess));
+    if (categoryFilter.length > 0) result = result.filter(r => categoryFilter.includes(r.category));
+    if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
+
     return result;
-  }, [baseRisks, activeFilter, searchQuery]);
+  }, [baseRisks, activeFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+
+  const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
+  const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
+  const priorityOptions = useMemo(() => {
+    const order = ['Critical', 'High', 'Medium', 'Low'];
+    const set = new Set(baseRisks.map(r => r.priority));
+    return order.filter(p => set.has(p as RiskPriority));
+  }, [baseRisks]);
 
   const handleSaveRisk = (risk: RiskEntry) => {
     const exists = risks.find(r => r.id === risk.id);
@@ -393,41 +483,91 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setDetailRisk(updated);
   };
 
+  // Single-row archive replaces the old sticky bulk bar.
+  const handleArchiveOne = (id: string) => {
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk archived`, type: 'success' });
+  };
+  const handleCancelOne = (id: string) => {
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+  };
+
+  // Select-all helpers based on currently-visible filteredRisks
+  const visibleIds = filteredRisks.map(r => r.id);
+  const selectedVisibleCount = visibleIds.filter(id => selectedRiskIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected;
+    }
+  }, [someVisibleSelected]);
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      // Deselect all visible
+      setSelectedRiskIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      // Select all visible (merge with existing selections from other filtered views)
+      setSelectedRiskIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const toggleSelectRisk = (id: string) => {
+    setSelectedRiskIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   // Count risks with no mapped controls (draft status = unmapped)
   const unmappedCount = baseRisks.filter(r => r.status === 'Draft').length;
 
   return (
-    <div className="relative h-full overflow-y-auto">
-      <Orb className="fixed top-[-180px] right-[-120px] w-[500px] h-[500px] opacity-20" />
-
-      <div className="relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-text">Risk Register</h1>
-            <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
+    <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
+      <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
+        {/* Toolbar — when embedded inside Process Hub, the create button lives in the
+            Process Hub header. Standalone Risk Register keeps its own title + CTA. */}
+        {!embedded && (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-display text-[18px] font-semibold text-ink-900">Risk Register</h1>
+              <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
+            </div>
+            <button type="button" onClick={() => setShowCreateDrawer(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+              <Plus size={13} />New Risk
+            </button>
           </div>
-          <button onClick={() => setShowCreateDrawer(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
-            <Plus size={14} />New Risk
-          </button>
-        </div>
+        )}
 
-        {/* Insight banner */}
-        {unmappedCount > 0 && (
-          <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-4 py-3 flex items-center gap-3">
-            <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-            <span className="text-[12px] text-amber-800 flex-1">
+        {/* Insight banner — standalone only (embedded shows it in the header row) */}
+        {!embedded && unmappedCount > 0 && (
+          <div className="rounded-[8px] border border-high-700/15 bg-high-50 px-4 py-3 flex items-center gap-3">
+            <AlertTriangle size={14} className="text-high-700 shrink-0" />
+            <span className="text-[12px] text-high-700 flex-1">
               <span className="font-semibold">{unmappedCount} risk{unmappedCount !== 1 ? 's' : ''}</span> {unmappedCount !== 1 ? 'are' : 'is'} not yet mapped to controls.
             </span>
           </div>
         )}
 
+        {/* True empty state — no risks at all (after process filter) — hidden during initial loading */}
+        {!isLoading && baseRisks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-ink-500" />
+            </div>
+            <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
+            <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
+            <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>
+          </div>
+        ) : (
+        <>
+
         {/* Filters + Search */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5 flex-wrap">
             {filters.map(f => (
-              <button key={f.key} onClick={() => setActiveFilter(f.key)}
+              <button type="button" key={f.key} onClick={() => setActiveFilter(f.key)}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
                   activeFilter === f.key ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                 }`}>
@@ -440,58 +580,146 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search risks..."
-              className="pl-9 pr-3 py-2 rounded-lg border border-border bg-white text-[12px] w-[220px] placeholder:text-ink-400 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+              className="pl-9 pr-3 py-2 rounded-[8px] border border-border bg-white text-[12px] w-[220px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all" />
           </div>
         </div>
 
         {/* Risk Table */}
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="border-b border-border bg-surface-2/50">
-                  {['Risk ID', 'Risk Name', 'Sub-process', 'Category', 'Priority', ''].map(h => (
-                    <th key={h || 'action'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+        <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
+            <table className="w-full border-collapse text-[12px]">
+              <thead className="bg-white border-b border-border-light">
+                <tr>
+                  <th className="px-4 py-3 text-left w-8">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      aria-label="Select all visible risks"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAll}
+                      disabled={isLoading || visibleIds.length === 0}
+                      className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                    />
+                  </th>
+                  {([
+                    { key: 'risk-id', label: 'Risk ID' },
+                    { key: 'risk-name', label: 'Risk Name' },
+                    { key: 'sub-process', label: 'Sub-process', filter: 'subProcess' as const },
+                    { key: 'category', label: 'Category', filter: 'category' as const },
+                    { key: 'priority', label: 'Priority', tooltip: 'Inherent risk severity — Critical/High/Medium/Low based on likelihood × impact before any controls are applied.', filter: 'priority' as const },
+                    { key: 'action', label: '' },
+                  ] as Array<{ key: string; label: string; tooltip?: string; filter?: 'subProcess' | 'category' | 'priority' }>).map(h => (
+                    <th key={h.key} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1">
+                        {h.tooltip ? (
+                          <span className="inline-flex items-center gap-1 group/tip relative">
+                            {h.label}
+                            <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
+                            <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug normal-case tracking-normal opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                              {h.tooltip}
+                            </span>
+                          </span>
+                        ) : h.label}
+                        {h.filter === 'subProcess' && (
+                          <ColumnFilter label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} />
+                        )}
+                        {h.filter === 'category' && (
+                          <ColumnFilter label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} />
+                        )}
+                        {h.filter === 'priority' && (
+                          <ColumnFilter label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} />
+                        )}
+                      </span>
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredRisks.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-10 text-center text-[12px] text-text-muted">No risks match your search or filters</td></tr>
-                ) : filteredRisks.map((risk, i) => (
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={`skel-${i}`} className="border-t border-border-light">
+                      {[...Array(7)].map((_, j) => (
+                        <td key={j} className="px-4 py-4">
+                          <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse" style={{ width: `${60 + ((i + j) * 7) % 30}%` }} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filteredRisks.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-[12px] text-text-muted">
+                      No risks match your search or filters.
+                      {(subProcessFilter.length || categoryFilter.length || priorityFilter.length) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setSubProcessFilter([]); setCategoryFilter([]); setPriorityFilter([]); }}
+                          className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ) : filteredRisks.map((risk, i) => {
+                  const isChecked = selectedRiskIds.includes(risk.id);
+                  return (
                   <motion.tr key={risk.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
                     onClick={() => setDetailRisk(risk)}
-                    className="border-b border-border/50 hover:bg-gray-50/60 transition-colors cursor-pointer">
-                    <td className="px-3 py-2.5">
-                      <span className="font-mono text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{risk.id}</span>
+                    className="border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer">
+                    <td className="px-4 py-4 align-top" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${risk.id}`}
+                        checked={isChecked}
+                        onChange={() => toggleSelectRisk(risk.id)}
+                        className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                      />
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[12px] font-medium text-text">{risk.name}</span>
+                    <td className="px-4 py-4 align-top">
+                      <span className="font-mono text-[10px] text-ink-500 bg-paper-50 border border-canvas-border px-1.5 py-0.5 rounded-[4px]">{risk.id}</span>
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[11px] text-gray-500">{risk.subProcess || '—'}</span>
+                    <td className="px-4 py-4 align-top">
+                      <span className="text-[13px] font-medium text-text leading-snug">{risk.name}</span>
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[11px] text-gray-500">{risk.category}</span>
+                    <td className="px-4 py-4 align-top">
+                      <span className="text-[11px] text-ink-500">{risk.subProcess || '—'}</span>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-4 py-4 align-top">
+                      <span className="text-[11px] text-ink-500">{risk.category}</span>
+                    </td>
+                    <td className="px-4 py-4 align-top">
                       <span className={`text-[11px] ${PRIORITY_STYLES[risk.priority]}`}>{risk.priority}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setDetailRisk(risk)}
-                        className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
-                        View<ChevronRight size={8} />
-                      </button>
+                    <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {isChecked ? (
+                          <>
+                            <button type="button"
+                              onClick={() => handleArchiveOne(risk.id)}
+                              className="px-2 py-1 rounded-[6px] text-[10px] font-medium cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-0 border border-ink-200 text-ink-800 hover:bg-paper-50">
+                              <Archive size={10} />Archive
+                            </button>
+                            <button type="button"
+                              onClick={() => handleCancelOne(risk.id)}
+                              className="px-2 py-1 rounded-[6px] text-[10px] font-medium text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors">
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setDetailRisk(risk)}
+                            className="px-2 py-1 rounded-[8px] text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-paper-100 text-ink-600 hover:bg-paper-200">
+                            View<ChevronRight size={8} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
-          </div>
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-            <span className="text-[11px] text-text-muted">{filteredRisks.length} of {baseRisks.length} risks</span>
-          </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Create Drawer */}
