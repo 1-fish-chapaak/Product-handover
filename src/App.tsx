@@ -34,7 +34,8 @@ import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
 import Vendor360View from './components/audit/Vendor360View';
 import EngagementCompareView from './components/audit/EngagementCompareView';
-import CaseManagementWorkspace from './components/audit/CaseManagementWorkspace';
+import { ENGAGEMENTS } from './data/engagements';
+import { exceptionsForEngagementAsGrc } from './data/engagement-exceptions';
 import ProgramsView from './components/audit/ProgramsView';
 // New pages
 import RACMView from './components/governance/RACMView';
@@ -754,18 +755,17 @@ function AppInner() {
         );
 
       case 'engagement-case-management': {
-        // Deep-link filters (set when drilled in from an Overview chart in a new tab).
-        const sp = new URLSearchParams(window.location.search);
-        const initialFilters = {
-          severity: sp.get('severity') ?? undefined,
-          workflow: sp.get('workflow') ?? undefined,
-          status: sp.get('status') ?? undefined,
-        };
+        // Engagement case management reuses the reference ManageExceptionsView,
+        // scoped to this engagement's own exceptions (adapted to GrcException).
+        const caseEngId = state.selectedEngagementId ?? '';
+        const caseEng = ENGAGEMENTS.find(e => e.id === caseEngId);
         return (
-          <CaseManagementWorkspace
-            engagementId={state.selectedEngagementId ?? ''}
+          <ManageExceptionsView
+            role={state.exceptionRole}
+            setRole={setExceptionRole}
             onBack={() => setView('engagement-overview')}
-            initialFilters={initialFilters}
+            exceptions={exceptionsForEngagementAsGrc(caseEngId)}
+            contextLabel={caseEng?.name}
           />
         );
       }
@@ -913,7 +913,7 @@ function AppInner() {
     <ToastProvider>
       <BulkRunProgressProvider>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
-        {!(LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') && (
+        {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (
           <Sidebar
             view={state.view}
             setView={setView}

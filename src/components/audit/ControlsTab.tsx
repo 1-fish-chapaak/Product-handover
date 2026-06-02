@@ -14,8 +14,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
-import { RACM_LIBRARY, racmRowsForProcess, type RACMRow, type ControlAttribute } from '../../data/racm';
+import { type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
+import { useEngagementWorkspace } from './engagementWorkspace';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,22 +113,6 @@ function lastTestedFor(controlId: string): string {
   return `Last tested ${days}d ago`;
 }
 
-const AI_SUGGESTIONS: AiSuggestion[] = [
-  { id: 'ai-wf-1', name: 'Three-Way Match (PO · GRN · Invoice)', confidence: 92 },
-  { id: 'ai-wf-2', name: 'Duplicate Invoice Detector',           confidence: 78 },
-  { id: 'ai-wf-3', name: 'PO Approval Threshold Scan',           confidence: 64 },
-];
-const MANUAL_WORKFLOW_LIBRARY: ManualWorkflowOption[] = [
-  { id: 'wf-l-1', name: 'Vendor Master Change Monitor',       status: 'Active' },
-  { id: 'wf-l-2', name: 'Sanctions List Screening',           status: 'Active' },
-  { id: 'wf-l-3', name: 'GRN Quantity Tolerance Check',       status: 'Active' },
-  { id: 'wf-l-4', name: 'Bank Account Change Verification',   status: 'Paused' },
-  { id: 'wf-l-5', name: 'SoD Conflict Scan — P2P Roles',      status: 'Active' },
-  { id: 'wf-l-6', name: 'Payment Run Dual Sign-off Audit',    status: 'Active' },
-  { id: 'wf-l-7', name: 'Vendor Bank Account Mismatch Alert', status: 'Draft' },
-  { id: 'wf-l-8', name: 'Tolerance Break Approver Validation',status: 'Active' },
-];
-
 function ownerForControl(controlId: string): string {
   return OWNER_NAMES[hash(controlId) % OWNER_NAMES.length] ?? OWNER_NAMES[0];
 }
@@ -151,42 +136,27 @@ function kindForFile(name: string): EvidenceKind {
   return 'IMG';
 }
 
-// ─── Distinct control list (one row per unique controlId) ────────────────────
-
-interface DistinctControl {
-  controlId: string;
-  description: string;
-  isKey: boolean;
-  subProcess: string;
-  frequency: RACMRow['frequency'];
-  attributes: ControlAttribute[];
-}
-
-function distinctControlsForEngagement(eng: Engagement): DistinctControl[] {
-  const rows = racmRowsForProcess(eng.process);
-  // Fall back to the entire library if this process has no rows yet (S2C, R2R…).
-  const usable = rows.length > 0 ? rows : RACM_LIBRARY;
-  const byId = new Map<string, DistinctControl>();
-  usable.forEach(r => {
-    if (byId.has(r.controlId)) return;
-    byId.set(r.controlId, {
-      controlId: r.controlId,
-      description: r.controlDescription,
-      isKey: r.isKey,
-      subProcess: r.subProcess,
-      frequency: r.frequency,
-      attributes: r.attributes,
-    });
-  });
-  return Array.from(byId.values());
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ControlsTab({ engagement }: Props): JSX.Element {
   const { addToast } = useToast();
+  const ws = useEngagementWorkspace();
+  const controls = ws.controls;
 
-  const controls = useMemo(() => distinctControlsForEngagement(engagement), [engagement]);
+  // Workflow link options derived from the engagement's workflow set (shared with the Workflows tab).
+  const aiSuggestions = useMemo<AiSuggestion[]>(
+    () => ws.workflows.slice(0, 3).map((w, i) => ({ id: w.id, name: w.name, confidence: 92 - i * 13 })),
+    [ws.workflows],
+  );
+  const manualOptions = useMemo<ManualWorkflowOption[]>(
+    () => ws.workflows.map(w => ({ id: w.id, name: w.name, status: 'Active' as WorkflowStatus })),
+    [ws.workflows],
+  );
+  const linkedFor = (attrId: string): LinkedWorkflow[] =>
+    ws.workflowIdsForAttribute(attrId).map(id => {
+      const w = ws.workflows.find(x => x.id === id);
+      return { id, name: w?.name ?? id, status: 'Active' as WorkflowStatus };
+    });
 
   // ── Filter state
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('All');
@@ -197,9 +167,11 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
 
   // ── Expansion state
   const [expandedControlIds, setExpandedControlIds] = useState<Set<string>>(() => new Set());
+  const [expandedAttrIds, setExpandedAttrIds] = useState<Set<string>>(() => new Set());
+  const [draftAttr, setDraftAttr] = useState<Record<string, string>>({});
+  const [addControlOpen, setAddControlOpen] = useState(false);
 
   // ── Per-attribute data stores
-  const [linkedWorkflows, setLinkedWorkflows] = useState<Record<string, LinkedWorkflow[]>>({});
   const [evidence, setEvidence] = useState<Record<string, EvidenceFile[]>>({});
   const [samples, setSamples] = useState<Record<string, Sample[]>>({});
   const [sampleMethods, setSampleMethods] = useState<Record<string, SampleMethod>>({});
@@ -277,11 +249,7 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
   });
 
   const acceptSuggestion = (attributeId: string, suggestion: AiSuggestion) => {
-    setLinkedWorkflows(prev => {
-      const list = prev[attributeId] ?? [];
-      if (list.some(w => w.id === suggestion.id)) return prev;
-      return { ...prev, [attributeId]: [...list, { id: suggestion.id, name: suggestion.name, status: 'Active' }] };
-    });
+    ws.linkWorkflow(attributeId, suggestion.id);
     addToast({ type: 'success', message: `Linked "${suggestion.name}"` });
   };
 
@@ -289,17 +257,28 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
     addToast({ type: 'info', message: `Declined "${suggestion.name}"` });
 
   const linkManualWorkflow = (attributeId: string, opt: ManualWorkflowOption) => {
-    setLinkedWorkflows(prev => {
-      const list = prev[attributeId] ?? [];
-      if (list.some(w => w.id === opt.id)) return prev;
-      return { ...prev, [attributeId]: [...list, { id: opt.id, name: opt.name, status: opt.status }] };
-    });
+    ws.linkWorkflow(attributeId, opt.id);
     addToast({ type: 'success', message: `Linked "${opt.name}"` });
   };
 
   const unlinkWorkflow = (attributeId: string, workflowId: string) => {
-    setLinkedWorkflows(prev => ({ ...prev, [attributeId]: (prev[attributeId] ?? []).filter(w => w.id !== workflowId) }));
+    ws.unlinkWorkflow(attributeId, workflowId);
     addToast({ type: 'info', message: 'Workflow unlinked' });
+  };
+
+  // ── Attribute expand + authoring
+  const toggleAttr = (attributeId: string) => setExpandedAttrIds(prev => {
+    const next = new Set(prev);
+    if (next.has(attributeId)) next.delete(attributeId); else next.add(attributeId);
+    return next;
+  });
+
+  const submitAddAttribute = (controlId: string) => {
+    const desc = (draftAttr[controlId] ?? '').trim();
+    if (!desc) return;
+    ws.addAttribute(controlId, desc);
+    setDraftAttr(prev => ({ ...prev, [controlId]: '' }));
+    addToast({ type: 'success', message: 'Attribute added' });
   };
 
   const addEvidenceFile = (attributeId: string, file: File) => {
@@ -440,6 +419,15 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
       </div>
 
       {/* ─── Controls list ─── */}
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[12px] font-semibold text-ink-600">{filteredControls.length} control{filteredControls.length === 1 ? '' : 's'}</span>
+        <button
+          onClick={() => setAddControlOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors"
+        >
+          <Plus size={13} /> New control
+        </button>
+      </div>
       <div className="space-y-2.5">
         {filteredControls.length === 0 && (
           <div className="glass-card rounded-xl p-10 text-center">
@@ -463,6 +451,11 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
                 <ChevronRight size={15} className={`text-ink-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
                 <span className="font-mono text-[12px] font-semibold text-brand-700 shrink-0">{c.controlId}</span>
                 <span className="text-[13px] font-medium text-ink-800 truncate flex-1 min-w-0">{c.description}</span>
+                {c.custom && (
+                  <span className="px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 border border-evidence-200 inline-flex items-center gap-1 shrink-0" title={c.inRacm ? 'Added here · pushed to RACM' : 'Added here'}>
+                    New{c.inRacm && ' · RACM'}
+                  </span>
+                )}
                 {c.isKey && <span className="px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 inline-flex items-center shrink-0">Key</span>}
                 <span className={`px-2 h-6 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
@@ -485,36 +478,94 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
                         <span><span className="font-semibold text-ink-600">{c.subProcess}</span> · {c.frequency} · Owner {ownerForControl(c.controlId)}</span>
                         <span className="font-mono">{c.attributes.length} attribute{c.attributes.length === 1 ? '' : 's'}</span>
                       </div>
-                      {c.attributes.map(attr => (
-                        <AttributeBlock
-                          key={attr.id}
-                          attribute={attr}
-                          linkedWorkflows={linkedWorkflows[attr.id] ?? []}
-                          evidence={evidence[attr.id] ?? []}
-                          samples={samples[attr.id] ?? []}
-                          method={getSampleMethod(attr.id)}
-                          onSetMethod={(m) => setSampleMethod(attr.id, m)}
-                          aiOpen={aiPopover.attributeId === attr.id}
-                          linkOpen={linkPopover.attributeId === attr.id}
-                          linkSearch={linkSearch}
-                          onOpenAi={() => { setLinkPopover({ attributeId: null }); setAiPopover({ attributeId: aiPopover.attributeId === attr.id ? null : attr.id }); }}
-                          onCloseAi={() => setAiPopover({ attributeId: null })}
-                          onOpenLink={() => { setAiPopover({ attributeId: null }); setLinkPopover({ attributeId: linkPopover.attributeId === attr.id ? null : attr.id }); setLinkSearch(''); }}
-                          onCloseLink={() => { setLinkPopover({ attributeId: null }); setLinkSearch(''); }}
-                          onLinkSearchChange={setLinkSearch}
-                          onAccept={(s) => acceptSuggestion(attr.id, s)}
-                          onDecline={declineSuggestion}
-                          onLinkManual={(opt) => linkManualWorkflow(attr.id, opt)}
-                          onUnlink={(wfId) => unlinkWorkflow(attr.id, wfId)}
-                          onAddEvidence={(f) => addEvidenceFile(attr.id, f)}
-                          onRemoveEvidence={(fid) => removeEvidence(attr.id, fid)}
-                          onGenerate={(method) => generateSamples(attr.id, method)}
-                          onAddManualSample={(f) => addManualSampleFile(attr.id, f)}
-                          onSetResult={(sid, r) => setSampleResult(attr.id, sid, r)}
-                          onSetRemark={(sid, r) => setSampleRemark(attr.id, sid, r)}
-                          onRemoveSample={(sid) => removeSample(attr.id, sid)}
-                        />
-                      ))}
+                      {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
+                      <div className="space-y-1.5">
+                        {c.attributes.map(attr => {
+                          const attrExpanded = expandedAttrIds.has(attr.id);
+                          const linkCount = ws.workflowIdsForAttribute(attr.id).length;
+                          return (
+                            <div key={attr.id} className="rounded-lg border border-canvas-border bg-white overflow-hidden">
+                              <button
+                                onClick={() => toggleAttr(attr.id)}
+                                aria-expanded={attrExpanded}
+                                className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-canvas/50 transition-colors cursor-pointer"
+                              >
+                                <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${attrExpanded ? 'bg-brand-600' : 'bg-ink-300'}`} />
+                                <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attr.id}</span>
+                                <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0">{attr.description}</span>
+                                {linkCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-500 shrink-0 mt-0.5" title={`${linkCount} linked workflow${linkCount === 1 ? '' : 's'}`}>
+                                    <WorkflowIcon size={11} />{linkCount}
+                                  </span>
+                                )}
+                                <ChevronRight size={14} className={`text-ink-400 shrink-0 mt-0.5 transition-transform duration-200 ${attrExpanded ? 'rotate-90' : ''}`} />
+                              </button>
+                              <AnimatePresence initial={false}>
+                                {attrExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                    className="overflow-hidden border-t border-canvas-border bg-canvas/30"
+                                  >
+                                    <div className="p-3">
+                                      <AttributeBlock
+                                        compact
+                                        attribute={attr}
+                                        aiSuggestions={aiSuggestions}
+                                        manualOptions={manualOptions}
+                                        linkedWorkflows={linkedFor(attr.id)}
+                                        evidence={evidence[attr.id] ?? []}
+                                        samples={samples[attr.id] ?? []}
+                                        method={getSampleMethod(attr.id)}
+                                        onSetMethod={(m) => setSampleMethod(attr.id, m)}
+                                        aiOpen={aiPopover.attributeId === attr.id}
+                                        linkOpen={linkPopover.attributeId === attr.id}
+                                        linkSearch={linkSearch}
+                                        onOpenAi={() => { setLinkPopover({ attributeId: null }); setAiPopover({ attributeId: aiPopover.attributeId === attr.id ? null : attr.id }); }}
+                                        onCloseAi={() => setAiPopover({ attributeId: null })}
+                                        onOpenLink={() => { setAiPopover({ attributeId: null }); setLinkPopover({ attributeId: linkPopover.attributeId === attr.id ? null : attr.id }); setLinkSearch(''); }}
+                                        onCloseLink={() => { setLinkPopover({ attributeId: null }); setLinkSearch(''); }}
+                                        onLinkSearchChange={setLinkSearch}
+                                        onAccept={(s) => acceptSuggestion(attr.id, s)}
+                                        onDecline={declineSuggestion}
+                                        onLinkManual={(opt) => linkManualWorkflow(attr.id, opt)}
+                                        onUnlink={(wfId) => unlinkWorkflow(attr.id, wfId)}
+                                        onAddEvidence={(f) => addEvidenceFile(attr.id, f)}
+                                        onRemoveEvidence={(fid) => removeEvidence(attr.id, fid)}
+                                        onGenerate={(method) => generateSamples(attr.id, method)}
+                                        onAddManualSample={(f) => addManualSampleFile(attr.id, f)}
+                                        onSetResult={(sid, r) => setSampleResult(attr.id, sid, r)}
+                                        onSetRemark={(sid, r) => setSampleRemark(attr.id, sid, r)}
+                                        onRemoveSample={(sid) => removeSample(attr.id, sid)}
+                                      />
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
+
+                        {/* Add attribute */}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <input
+                            value={draftAttr[c.controlId] ?? ''}
+                            onChange={e => setDraftAttr(prev => ({ ...prev, [c.controlId]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAddAttribute(c.controlId); } }}
+                            placeholder="Add an attribute to this control…"
+                            className="flex-1 px-3 py-2 text-[12px] border border-dashed border-canvas-border rounded-lg bg-transparent text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:bg-white transition-colors"
+                          />
+                          <button
+                            onClick={() => submitAddAttribute(c.controlId)}
+                            disabled={!(draftAttr[c.controlId] ?? '').trim()}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[11.5px] font-semibold cursor-pointer transition-colors"
+                          >
+                            <Plus size={13} /> Attribute
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -523,7 +574,131 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
           );
         })}
       </div>
+
+      <AnimatePresence>
+        {addControlOpen && (
+          <AddControlModal
+            subProcesses={subProcesses}
+            onClose={() => setAddControlOpen(false)}
+            onCreate={(input) => {
+              ws.addControl(input);
+              setAddControlOpen(false);
+              addToast({ type: 'success', message: input.inRacm ? 'Control added & pushed to RACM' : 'Control added' });
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Add control modal ───────────────────────────────────────────────────────
+
+function AddControlModal({
+  subProcesses, onClose, onCreate,
+}: {
+  subProcesses: string[];
+  onClose: () => void;
+  onCreate: (input: { description: string; isKey: boolean; subProcess: string; attributes: string[]; inRacm: boolean }) => void;
+}): JSX.Element {
+  const [description, setDescription] = useState('');
+  const [subProcess, setSubProcess] = useState(subProcesses[0] ?? 'New controls');
+  const [isKey, setIsKey] = useState(true);
+  const [inRacm, setInRacm] = useState(true);
+  const [attrs, setAttrs] = useState<string[]>(['']);
+
+  const setAttr = (i: number, v: string) => setAttrs(prev => prev.map((a, idx) => (idx === i ? v : a)));
+  const addAttrRow = () => setAttrs(prev => [...prev, '']);
+  const removeAttrRow = (i: number) => setAttrs(prev => prev.filter((_, idx) => idx !== i));
+  const valid = description.trim().length > 0;
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[520px] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
+        role="dialog" aria-label="Add control"
+      >
+        <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield size={16} className="text-brand-600" />
+            <h2 className="font-display text-[16px] font-semibold text-ink-900">New control</h2>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer" aria-label="Close"><X size={15} /></button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Control description</label>
+            <textarea
+              autoFocus value={description} onChange={e => setDescription(e.target.value)} rows={2}
+              placeholder="e.g. Bank account changes require independent verification before payment."
+              className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[13px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Sub-process</label>
+              <input
+                value={subProcess} onChange={e => setSubProcess(e.target.value)} list="control-subprocesses"
+                className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[13px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+              />
+              <datalist id="control-subprocesses">{subProcesses.map(s => <option key={s} value={s} />)}</datalist>
+            </div>
+            <div className="flex items-end gap-4 pb-0.5">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-[12.5px] text-ink-700 font-medium">
+                <input type="checkbox" checked={isKey} onChange={e => setIsKey(e.target.checked)} className="accent-brand-600 w-4 h-4" />
+                Key control
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Attributes</label>
+            <div className="space-y-2">
+              {attrs.map((a, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" />
+                  <input
+                    value={a} onChange={e => setAttr(i, e.target.value)}
+                    placeholder={`Attribute ${i + 1}`}
+                    className="flex-1 px-3 py-1.5 border border-canvas-border rounded-lg text-[12.5px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+                  />
+                  {attrs.length > 1 && (
+                    <button onClick={() => removeAttrRow(i)} className="w-7 h-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer" aria-label="Remove attribute"><X size={13} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={addAttrRow} className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">
+              <Plus size={12} /> Add attribute
+            </button>
+          </div>
+        </div>
+
+        <footer className="shrink-0 px-5 py-3.5 border-t border-canvas-border flex items-center justify-between gap-3">
+          <label className="inline-flex items-center gap-2 cursor-pointer text-[12.5px] text-ink-700 font-medium">
+            <input type="checkbox" checked={inRacm} onChange={e => setInRacm(e.target.checked)} className="accent-brand-600 w-4 h-4" />
+            Also add to RACM
+          </label>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
+            <button
+              onClick={() => onCreate({ description, isKey, subProcess, attributes: attrs, inRacm })}
+              disabled={!valid}
+              className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[13px] font-semibold cursor-pointer transition-colors"
+            >
+              Create control
+            </button>
+          </div>
+        </footer>
+      </motion.div>
+    </>
   );
 }
 
@@ -548,6 +723,9 @@ function KeyDot({ active }: { active: boolean }): JSX.Element {
 
 interface AttributeBlockProps {
   attribute: ControlAttribute;
+  compact?: boolean;
+  aiSuggestions: AiSuggestion[];
+  manualOptions: ManualWorkflowOption[];
   linkedWorkflows: LinkedWorkflow[]; evidence: EvidenceFile[]; samples: Sample[];
   method: SampleMethod; onSetMethod: (m: SampleMethod) => void;
   aiOpen: boolean; linkOpen: boolean; linkSearch: string;
@@ -569,21 +747,27 @@ function AttributeBlock(p: AttributeBlockProps): JSX.Element {
   const wp = workingPaperFor(p.attribute.id);
   return (
     <div className="rounded-xl border border-canvas-border bg-white overflow-hidden">
-      {/* Header strip */}
-      <div className="px-4 py-3 border-b border-canvas-border bg-canvas/60">
-        <div className="flex items-start gap-3">
-          <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{p.attribute.id}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-ink-800 leading-snug">{p.attribute.description}</p>
-            <p className="text-[11.5px] italic text-ink-500 mt-0.5 leading-snug">{p.attribute.testProcedure}</p>
+      {/* Header strip — hidden in compact mode (the bullet already shows id + description). */}
+      {!p.compact && (
+        <div className="px-4 py-3 border-b border-canvas-border bg-canvas/60">
+          <div className="flex items-start gap-3">
+            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{p.attribute.id}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-ink-800 leading-snug">{p.attribute.description}</p>
+              <p className="text-[11.5px] italic text-ink-500 mt-0.5 leading-snug">{p.attribute.testProcedure}</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Single column — Workflows mapping; Evidence + sampling live in the Evidence tab. */}
-      <div className="p-4">
+      <div className="p-4 space-y-3">
+        {p.compact && (
+          <p className="text-[11.5px] italic text-ink-500 leading-snug">{p.attribute.testProcedure}</p>
+        )}
         <WorkflowsCard
           linked={p.linkedWorkflows}
+          aiSuggestions={p.aiSuggestions} manualOptions={p.manualOptions}
           aiOpen={p.aiOpen} linkOpen={p.linkOpen} linkSearch={p.linkSearch}
           onOpenAi={p.onOpenAi} onCloseAi={p.onCloseAi}
           onOpenLink={p.onOpenLink} onCloseLink={p.onCloseLink}
@@ -611,6 +795,8 @@ function AttributeBlock(p: AttributeBlockProps): JSX.Element {
 
 interface WorkflowsCardProps {
   linked: LinkedWorkflow[];
+  aiSuggestions: AiSuggestion[];
+  manualOptions: ManualWorkflowOption[];
   aiOpen: boolean; linkOpen: boolean; linkSearch: string;
   onOpenAi: () => void; onCloseAi: () => void;
   onOpenLink: () => void; onCloseLink: () => void;
@@ -623,9 +809,9 @@ interface WorkflowsCardProps {
 function WorkflowsCard(p: WorkflowsCardProps): JSX.Element {
   const filteredManual = useMemo(() => {
     const q = p.linkSearch.trim().toLowerCase();
-    if (q.length === 0) return MANUAL_WORKFLOW_LIBRARY;
-    return MANUAL_WORKFLOW_LIBRARY.filter(w => w.name.toLowerCase().includes(q));
-  }, [p.linkSearch]);
+    if (q.length === 0) return p.manualOptions;
+    return p.manualOptions.filter(w => w.name.toLowerCase().includes(q));
+  }, [p.linkSearch, p.manualOptions]);
 
   const isLinked = (id: string) => p.linked.some(l => l.id === id);
 
@@ -694,7 +880,7 @@ function WorkflowsCard(p: WorkflowsCardProps): JSX.Element {
               </button>
             </div>
             <ul className="divide-y divide-canvas-border">
-              {AI_SUGGESTIONS.map(s => {
+              {p.aiSuggestions.map(s => {
                 const tone = confidenceTone(s.confidence);
                 const already = isLinked(s.id);
                 return (
