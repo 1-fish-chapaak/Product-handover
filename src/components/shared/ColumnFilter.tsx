@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Filter, Check } from 'lucide-react';
+import { Filter, Check, ChevronDown } from 'lucide-react';
 
 interface Props {
   label: string;
@@ -7,9 +7,12 @@ interface Props {
   value: string[];
   onChange: (next: string[]) => void;
   align?: 'start' | 'end';
+  /** Trigger style. `icon` (default) is a tiny funnel button used inside column
+      headers. `button` renders a full CTA-style pill with label + chevron. */
+  variant?: 'icon' | 'button';
 }
 
-export default function ColumnFilter({ label, options, value, onChange, align = 'start' }: Props) {
+export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon' }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const hasFilter = value.length > 0;
@@ -34,21 +37,43 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
 
   return (
     <span ref={wrapRef} className="relative inline-flex">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-        className={`w-5 h-5 inline-flex items-center justify-center rounded-[4px] cursor-pointer transition-colors ${
-          hasFilter ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-brand-700 hover:bg-paper-100'
-        }`}
-        aria-label={`Filter ${label}`}
-        aria-haspopup="true"
-        aria-expanded={open}
-      >
-        <Filter size={11} strokeWidth={2} />
-        {hasFilter && (
-          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-brand-600" />
-        )}
-      </button>
+      {variant === 'button' ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] border text-[12px] font-medium cursor-pointer transition-colors ${
+            hasFilter
+              ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-50/80'
+              : 'border-border bg-white text-ink-700 hover:bg-paper-50'
+          }`}
+          aria-haspopup="true"
+          aria-expanded={open}
+        >
+          <span>{label}</span>
+          {hasFilter && (
+            <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-brand-600 text-paper-0 text-[10px] font-mono tabular-nums">
+              {value.length}
+            </span>
+          )}
+          <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+          className={`w-5 h-5 inline-flex items-center justify-center rounded-[4px] cursor-pointer transition-colors ${
+            hasFilter ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-brand-700 hover:bg-paper-100'
+          }`}
+          aria-label={`Filter ${label}`}
+          aria-haspopup="true"
+          aria-expanded={open}
+        >
+          <Filter size={11} strokeWidth={2} />
+          {hasFilter && (
+            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-brand-600" />
+          )}
+        </button>
+      )}
       {open && (
         <div
           className={`absolute top-full mt-1.5 z-50 w-[200px] bg-white border border-border-light rounded-[8px] shadow-lg normal-case tracking-normal ${align === 'end' ? 'right-0' : 'left-0'}`}
