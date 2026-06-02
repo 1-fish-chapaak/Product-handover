@@ -532,10 +532,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (detailRiskId && current !== detailRiskId) {
       params.set('risk', detailRiskId);
       window.history.pushState({ ...window.history.state, risk: detailRiskId }, '', `?${params.toString()}`);
+      // pushState doesn't fire popstate; dispatch one so the BP-level listener
+      // (which hides the tab pills + updates the breadcrumb) reacts to the URL.
+      window.dispatchEvent(new PopStateEvent('popstate'));
     } else if (!detailRiskId && current) {
       params.delete('risk');
       const qs = params.toString();
       window.history.pushState({ ...window.history.state, risk: null }, '', qs ? `?${qs}` : window.location.pathname);
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   }, [detailRiskId]);
 
