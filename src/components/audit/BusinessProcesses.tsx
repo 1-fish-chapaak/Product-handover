@@ -1,18 +1,19 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search, Plus, Upload, Sparkles,
   ChevronRight, ChevronDown,
   ArrowLeft, ArrowRight,
   Building2,
-  FileText, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
+  FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
   HelpCircle, Grid3x3, Shield, Workflow, Archive,
 } from 'lucide-react';
+import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
-import RacmListTable from './RacmListTable';
-import RiskRegister from './RiskRegister';
+import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
+import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
@@ -1183,6 +1184,147 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   );
 }
 
+// ─── SOP Detail Page (Step 4 — detail-page pattern) ───────────────────────
+
+function SOPDetailPage({ sop, onGoToRacm }: {
+  sop: LocalSOP;
+  onBack: () => void;
+  onGoToRacm?: () => void;
+}) {
+  const rels = getSopRelationships(sop.id);
+  const fields = [
+    { label: 'Version', value: sop.version, mono: true },
+    { label: 'Business Process', value: sop.businessProcess },
+    { label: 'Status', value: sop.status, pill: true },
+    { label: 'Uploaded By', value: sop.uploadedBy },
+    { label: 'Upload Date', value: sop.uploadedAt },
+    { label: 'File', value: sop.fileName, mono: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+              <span className="font-mono text-[11px] text-ink-500">{sop.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
+          </div>
+          {rels.racm && onGoToRacm && (
+            <button
+              type="button"
+              onClick={onGoToRacm}
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            >
+              Go to RACM<ArrowRight size={13} />
+            </button>
+          )}
+        </div>
+
+        {sop.description && (
+          <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{sop.description}</p>
+        )}
+
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              {f.pill ? (
+                <span className={`mt-0.5 px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+              ) : (
+                <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : 'text-text'}`}>{f.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              Linked RACM
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racm ? 1 : 0}</span>
+          </div>
+          {!rels.racm ? (
+            <p className="text-[12px] text-ink-400 italic">Not linked to a RACM yet. Process the SOP to extract risks and controls into a draft RACM.</p>
+          ) : (
+            <div className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{rels.racm.name}</span>
+                <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{rels.racm.fw}</span>
+              </div>
+              <span className="text-[11px] text-ink-500 leading-snug">Owner: {rels.racm.owner} · Last run: {rels.racm.lastRun}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Extracted Risks
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.risks.length}</span>
+          </div>
+          {rels.risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks extracted yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-ink-500" />
+              Extracted Controls
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+          </div>
+          {rels.controls.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No controls extracted yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {rels.controls.map(c => (
+                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                      </div>
+                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SOP Tab Content Component ────────────────────────────────────────────
 
 function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, onRacmCreated, onViewRacm }: {
@@ -1216,8 +1358,48 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
   const [sopStatusFilter, setSopStatusFilter] = useState<string[]>([]);
+  const [detailSopId, setDetailSopId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('sop');
+  });
+  const [fileTypeFilter, setFileTypeFilter] = useState<string[]>([]);
+  const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // URL sync — ?sop=sop-001
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('sop');
+    if (detailSopId && current !== detailSopId) {
+      params.set('sop', detailSopId);
+      window.history.pushState({ ...window.history.state, sop: detailSopId }, '', `?${params.toString()}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } else if (!detailSopId && current) {
+      params.delete('sop');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, sop: null }, '', qs ? `?${qs}` : window.location.pathname);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [detailSopId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('sop') : null;
+      setDetailSopId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
+
+  // Derive a friendly file type label from the filename extension (e.g. "PDF").
+  const getFileType = useCallback((sop: LocalSOP) => {
+    const m = sop.fileName.match(/\.([a-z0-9]+)$/i);
+    return m ? m[1].toUpperCase() : 'FILE';
+  }, []);
 
   // Skeleton state — short 400ms placeholder so SOP list never paints into a flash of "empty" / "no SOPs".
   const [isLoading, setIsLoading] = useState(true);
@@ -1422,23 +1604,185 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     );
   }
 
-  // Sort: latest version first (higher version number = first), then newest upload date
+  // Sort: latest version first (higher version number = first), then newest upload date.
+  // Apply search + status + file type + uploader filters on top of the sorted list.
   const sortedSops = useMemo(() => {
     const sorted = [...localSops].sort((a, b) => {
-      // Parse version numbers for comparison
       const parseVer = (v: string) => {
         const m = v.match(/v(\d+)\.(\d+)/);
         return m ? parseInt(m[1]) * 1000 + parseInt(m[2]) : 0;
       };
       const vDiff = parseVer(b.version) - parseVer(a.version);
       if (vDiff !== 0) return vDiff;
-      // Newer uploads first (by id — newer IDs are larger timestamps)
       return b.id.localeCompare(a.id);
     });
-    return sopStatusFilter.length > 0 ? sorted.filter(s => sopStatusFilter.includes(s.status)) : sorted;
-  }, [localSops, sopStatusFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    return sorted.filter(s => {
+      if (sopStatusFilter.length > 0 && !sopStatusFilter.includes(s.status)) return false;
+      if (fileTypeFilter.length > 0 && !fileTypeFilter.includes(getFileType(s))) return false;
+      if (uploaderFilter.length > 0 && !uploaderFilter.includes(s.uploadedBy)) return false;
+      if (q) {
+        const hay = `${s.name} ${s.id} ${s.uploadedBy}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [localSops, sopStatusFilter, fileTypeFilter, uploaderFilter, searchQuery, getFileType]);
 
-  const sopStatusOptions = useMemo(() => Array.from(new Set(localSops.map(s => s.status))).sort(), [localSops]);
+  const sopStatusOptions = useMemo<SOPStatus[]>(
+    () => ['Draft', 'Processing', 'Processed', 'Linked', 'Archived'],
+    []
+  );
+  const fileTypeOptions = useMemo(
+    () => Array.from(new Set(localSops.map(s => getFileType(s)))).sort(),
+    [localSops, getFileType]
+  );
+  const uploaderOptions = useMemo(
+    () => Array.from(new Set(localSops.map(s => s.uploadedBy))).sort(),
+    [localSops]
+  );
+
+  // Selection helpers — keyed off the currently visible (filtered) cards.
+  const visibleIds = sortedSops.map(s => s.id);
+  const selectedVisibleCount = selectedIds.filter(id => visibleIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    else setSelectedIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+  };
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const clearSelection = () => setSelectedIds([]);
+
+  const archiveSop = (id: string) => {
+    const target = localSops.find(s => s.id === id);
+    setLocalSops(prev => prev.map(s => s.id === id ? { ...s, status: 'Archived' as SOPStatus } : s));
+    setSelectedIds(prev => prev.filter(x => x !== id));
+    if (target) addToast({ message: `"${target.name}" archived`, type: 'info' });
+  };
+
+  const hasAnyFilter =
+    searchQuery.trim().length > 0 ||
+    sopStatusFilter.length > 0 ||
+    fileTypeFilter.length > 0 ||
+    uploaderFilter.length > 0;
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSopStatusFilter([]);
+    setFileTypeFilter([]);
+    setUploaderFilter([]);
+  };
+
+  // CTA-pill filter dropdown — right-aligned panel, multi-select with count badge.
+  // Defined inline so we don't have to extend the shared ColumnFilter component.
+  function FilterCTA({
+    label,
+    options,
+    value,
+    onChange,
+  }: {
+    label: string;
+    options: string[];
+    value: string[];
+    onChange: (next: string[]) => void;
+  }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement | null>(null);
+    const hasFilter = value.length > 0;
+
+    useEffect(() => {
+      if (!open) return;
+      const onDoc = (e: MouseEvent) => {
+        if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+      };
+      const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+      document.addEventListener('mousedown', onDoc);
+      document.addEventListener('keydown', onEsc);
+      return () => {
+        document.removeEventListener('mousedown', onDoc);
+        document.removeEventListener('keydown', onEsc);
+      };
+    }, [open]);
+
+    const toggle = (opt: string) => {
+      onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt]);
+    };
+
+    return (
+      <div ref={wrapRef} className="relative inline-flex">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border text-[11px] font-medium cursor-pointer transition-colors ${
+            hasFilter
+              ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+              : 'border-border bg-white text-ink-700 hover:bg-paper-50'
+          }`}
+          aria-haspopup="true"
+          aria-expanded={open}
+        >
+          {label}
+          {hasFilter && (
+            <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">
+              {value.length}
+            </span>
+          )}
+          <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && (
+          <div className="absolute top-full right-0 mt-1.5 z-50 w-[220px] bg-white border border-border-light rounded-[8px] shadow-lg normal-case tracking-normal">
+            <div className="px-3 py-2 border-b border-border-light flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-500">Filter {label}</span>
+              {hasFilter && (
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  className="text-[10px] text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <ul className="py-1 max-h-[260px] overflow-y-auto">
+              {options.length === 0 ? (
+                <li className="px-3 py-2 text-[12px] text-ink-400 italic">No options</li>
+              ) : options.map(opt => {
+                const checked = value.includes(opt);
+                return (
+                  <li key={opt}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(opt)}
+                      className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
+                    >
+                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                        {checked && <CheckCircle2 size={9} className="text-white" strokeWidth={3} />}
+                      </span>
+                      <span className="truncate">{opt}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Detail page takeover when ?sop= is in URL
+  const detailSopFromUrl = detailSopId ? localSops.find(s => s.id === detailSopId) : null;
+  if (detailSopFromUrl) {
+    return (
+      <SOPDetailPage
+        sop={detailSopFromUrl}
+        onBack={() => setDetailSopId(null)}
+        onGoToRacm={onGoToRacm}
+      />
+    );
+  }
 
   return (
     <div>
@@ -1457,139 +1801,233 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </div>
       ) : (
         <>
-          {/* SOP Table — Workflow-table chrome, now with version, linked RACM, and extracted counts. */}
-          <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
-              <table className="w-full border-collapse text-[12px]">
-                <thead className="bg-white border-b border-border-light">
-                  <tr>
-                    {['SOP Name', 'Version', 'Linked to', 'Extracted', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
-                        {h === 'Status' ? (
-                          <span className="inline-flex items-center gap-1">
-                            Status
-                            <ColumnFilter label="Status" options={sopStatusOptions} value={sopStatusFilter} onChange={setSopStatusFilter} />
-                          </span>
-                        ) : h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    /* 5 skeleton rows during 400ms placeholder. Headers always render above. */
-                    [...Array(5)].map((_, i) => (
-                      <tr key={`skel-sop-${i}`} className="border-t border-border-light">
-                        {[...Array(6)].map((_, j) => (
-                          <td key={j} className="px-4 py-4">
-                            <div
-                              className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
-                              style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : sortedSops.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-[12px] text-text-muted">
-                        No SOPs match your filters.
-                        <button
-                          type="button"
-                          onClick={() => setSopStatusFilter([])}
-                          className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
-                        >
-                          Clear filters
-                        </button>
-                      </td>
-                    </tr>
-                  ) : (
-                  sortedSops.map((sop, i) => {
-                    const isProcessing = sop.status === 'Processing';
-                    const action = getSOPAction(sop.status, !!sop.racmId, false);
-                    const showCounts = sop.status !== 'Draft' && sop.status !== 'Processing';
-                    return (<React.Fragment key={sop.id}>
-                      <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                        className={`border-t border-border-light transition-colors ${sop.status === 'Archived' ? 'opacity-50' : 'hover:bg-surface-2/40'}`}>
-                        <td className="px-4 py-4 align-top">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
-                            <span className="text-[11px] text-ink-500">{sop.uploadedBy} · {sop.uploadedAt}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          <span className="font-mono text-[11px] text-ink-700 tabular-nums">{sop.version}</span>
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          {sop.racmId ? (
-                            <div className="flex flex-col gap-0.5 min-w-0">
-                              <span className="text-[12px] text-ink-800 leading-snug truncate max-w-[200px]">{sop.racmName ?? sop.racmId}</span>
-                              <span className="font-mono text-[10px] text-ink-400 tabular-nums">{sop.racmId}</span>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-ink-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          {showCounts ? (
-                            <span className="text-[12px] text-ink-700 leading-snug">
-                              <span className="tabular-nums font-medium">{sop.risks}</span> risks
-                              <span className="text-ink-300 mx-1">·</span>
-                              <span className="tabular-nums font-medium">{sop.controls}</span> controls
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-ink-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
-                            {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
-                            {sop.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          <div className="flex items-center gap-1.5">
-                            <button type="button" onClick={() => handleSOPActionClick(sop)}
-                              className={`px-2 py-1 rounded-[8px] text-[10px] font-bold cursor-pointer transition-colors ${action.cls}`}>
-                              {action.label}
-                            </button>
-                            {(sop.status === 'Processed' || sop.status === 'Linked') && (
-                              <button type="button" onClick={() => setPreviewingSopId(sop.id)}
-                                className="px-2 py-1 rounded-[8px] text-[10px] font-medium text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors">
-                                View SOP
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </motion.tr>
-                      {/* Processing stepper */}
-                      <AnimatePresence>
-                        {isProcessing && (
-                          <tr><td colSpan={6} className="p-0"><ProcessingStepperPanel sop={sop} /></td></tr>
-                        )}
-                      </AnimatePresence>
-                      {/* Failed state */}
-                      {sop.status === 'Draft' && (
-                        <tr>
-                          <td colSpan={6} className="p-0">
-                            <div className="px-4 py-3 bg-paper-50 border-t border-canvas-border">
-                              <div className="flex items-center gap-3">
-                                <span className="text-[11px] text-risk-700 flex-1">{sop.failureReason || 'An unexpected error occurred.'}</span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button type="button" onClick={() => handleStartProcessing(sop.id)} className="px-2.5 py-1 rounded-[8px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">Retry</button>
-                                  <button type="button" onClick={() => setShowUploadDrawer(true)} className="px-2.5 py-1 rounded-[8px] text-[10px] font-medium border border-canvas-border text-ink-500 hover:bg-paper-50 cursor-pointer transition-colors">Re-upload</button>
-                                  <button type="button" onClick={() => { setLocalSops(prev => prev.map(s => s.id === sop.id ? { ...s, status: 'Archived' as SOPStatus } : s)); addToast({ message: `"${sop.name}" archived`, type: 'info' }); }}
-                                    className="px-2.5 py-1 rounded-[8px] text-[10px] font-medium text-ink-400 hover:bg-paper-100 cursor-pointer transition-colors">Archive</button>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+          {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT. */}
+          <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-border-light">
+            <div className="relative shrink-0">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search SOPs..."
+                className="pl-9 pr-3 py-2 rounded-[8px] border border-border bg-white text-[12px] w-[260px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {hasAnyFilter && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="text-[11px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer px-2 py-1"
+                >
+                  Clear all
+                </button>
+              )}
+              <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
+              <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
+              <FilterCTA label="Uploader" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+            </div>
+          </div>
+
+          {/* Bulk-select strip — only renders when ≥1 card is selected. */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 px-6 py-2.5 bg-brand-50/40 border-t border-border-light">
+              <input
+                type="checkbox"
+                aria-label="Select all visible SOPs"
+                checked={allVisibleSelected}
+                onChange={toggleSelectAll}
+                className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+              />
+              <span className="text-[11px] text-ink-700">
+                <span className="font-semibold tabular-nums">{selectedVisibleCount}</span>
+                <span className="text-ink-500"> of </span>
+                <span className="font-semibold tabular-nums">{visibleIds.length}</span>
+                <span className="text-ink-500"> selected</span>
+              </span>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="ml-auto text-[11px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+
+          {/* Card stack */}
+          <div className="border-t border-border-light min-h-[calc(100vh-280px)] px-6 py-4 space-y-2">
+            {isLoading ? (
+              [...Array(5)].map((_, i) => (
+                <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+                  <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 items-start">
+                    <div className="h-3.5 w-3.5 rounded-[4px] bg-paper-100 animate-pulse" />
+                    <div className="space-y-2">
+                      <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3" />
+                      <div className="h-2.5 bg-paper-100 rounded-[4px] animate-pulse w-5/6" />
+                      <div className="h-2.5 bg-paper-100 rounded-[4px] animate-pulse w-1/2" />
+                    </div>
+                    <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-3/4" />
+                    <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-1/2" />
+                    <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse" />
+                  </div>
+                </div>
+              ))
+            ) : sortedSops.length === 0 ? (
+              <div className="px-6 py-12 text-center text-[12px] text-text-muted">
+                No SOPs match your search or filters.
+                {hasAnyFilter && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+            ) : (
+              sortedSops.map((sop, i) => {
+                const isProcessing = sop.status === 'Processing';
+                const isChecked = selectedIds.includes(sop.id);
+                const extractedRiskCount = sop.extractedRisks?.length ?? 0;
+                const extractedControlCount = sop.extractedControls?.length ?? 0;
+                const hasExtraction = extractedRiskCount > 0 || extractedControlCount > 0;
+                const fileType = getFileType(sop);
+                const currentStep = PROCESSING_STEPS[sop.processingStep] ?? PROCESSING_STEPS[0];
+
+                return (
+                  <motion.div
+                    key={sop.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.02 }}
+                    onClick={() => setDetailSopId(sop.id)}
+                    className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                      isChecked
+                        ? 'border-primary/40 ring-1 ring-primary/20'
+                        : sop.status === 'Archived'
+                          ? 'border-border-light opacity-60'
+                          : 'border-border-light'
+                    }`}
+                  >
+                    {/* Col 1 — select checkbox */}
+                    <div onClick={e => e.stopPropagation()} className="pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelectOne(sop.id)}
+                        className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                        aria-label={`Select ${sop.name}`}
+                      />
+                    </div>
+
+                    {/* Col 2 — title + status + summary + meta + tags */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
+                        <span className="font-mono text-[10px] text-ink-500 bg-paper-50 border border-canvas-border px-2 py-0.5 rounded-full tabular-nums">v{sop.version.replace(/^v/i, '')}</span>
+                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
+                          {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
+                          {sop.status}
+                        </span>
+                      </div>
+                      {(sop.description || '').trim() && (
+                        <p className="line-clamp-2 text-[12px] text-text-secondary mb-1.5">{sop.description}</p>
                       )}
-                    </React.Fragment>);
-                  })
-                  )}
-                </tbody>
-              </table>
+                      <div className="text-[11px] text-text-muted mb-1.5">
+                        <span className="font-mono">{sop.id}</span>
+                        <span className="mx-1">·</span>
+                        uploaded by {sop.uploadedBy}
+                        <span className="mx-1">·</span>
+                        {sop.uploadedAt}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
+                          {fileType}
+                        </span>
+                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
+                          {sop.racmId ? `linked to ${sop.racmId}` : 'Standalone'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Col 3 — extraction summary */}
+                    <div className="pt-0.5">
+                      {hasExtraction || sop.status === 'Draft' ? (
+                        <span className="inline-flex items-center px-2 h-5 rounded-[6px] text-[11px] bg-paper-100 text-ink-700 border border-border-light tabular-nums">
+                          {extractedRiskCount} risks · {extractedControlCount} controls
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-text-muted italic">Not extracted</span>
+                      )}
+                    </div>
+
+                    {/* Col 4 — processing readiness */}
+                    <div className="pt-0.5">
+                      {sop.status === 'Processing' ? (
+                        <span className="text-[11px] text-text-secondary inline-flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin text-brand-600" />
+                          {currentStep.label}
+                        </span>
+                      ) : sop.status === 'Draft' ? (
+                        <span className="text-[11px] text-mitigated-700 italic inline-flex items-center gap-1">
+                          <AlertTriangle size={11} className="text-mitigated-700" />
+                          Pending upload
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-compliant-700 italic inline-flex items-center gap-1">
+                          <CheckCircle2 size={11} className="text-compliant-700" />
+                          Ready
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Col 5 — actions */}
+                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1">
+                      {isChecked ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => archiveSop(sop.id)}
+                            aria-label={`Archive ${sop.name}`}
+                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
+                          >
+                            <Archive size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectOne(sop.id)}
+                            aria-label={`Cancel selection of ${sop.name}`}
+                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingSopId(sop.id)}
+                            aria-label={`Open ${sop.name}`}
+                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
+                          >
+                            <Play size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => archiveSop(sop.id)}
+                            aria-label={`Archive ${sop.name}`}
+                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 hover:text-risk-700 cursor-pointer transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </>
       )}
@@ -1737,58 +2175,261 @@ const SEED_DESIGN_CONTROLS: DesignControl[] = [
   { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'] },
 ];
 
+// ─── Control Detail Page (Step 4) ────────────────────────────────────────
+function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
+  ctrl: DesignControl;
+  bpAbbr: string;
+  onBack: () => void;
+  onGoToRacm?: () => void;
+}) {
+  const bp = BUSINESS_PROCESSES.find(b => b.abbr === bpAbbr);
+  const risks = bp ? RISKS.filter(r => ctrl.mappedRisks.includes(r.id) && r.bpId === bp.id) : RISKS.filter(r => ctrl.mappedRisks.includes(r.id));
+  const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
+
+  const fields = [
+    { label: 'Classification', value: ctrl.classification },
+    { label: 'Nature', value: ctrl.nature },
+    { label: 'Automation', value: ctrl.automation },
+    { label: 'Frequency', value: ctrl.frequency },
+    { label: 'Assertions', value: ctrl.assertions.length > 0 ? ctrl.assertions.join(', ') : '—' },
+    { label: 'Used in RACMs', value: String(ctrl.usedInRACMs), mono: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
+              <span className="font-mono text-[11px] text-ink-500">{ctrl.id}</span>
+            </div>
+            <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
+          </div>
+        </div>
+
+        <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{ctrl.description}</p>
+
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
+              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : 'text-text'}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <AlertTriangle size={13} className="text-ink-500" />
+              Mapped Risks
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{risks.length}</span>
+          </div>
+          {risks.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks mapped yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {risks.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Workflow size={13} className="text-ink-500" />
+              Linked Workflows
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.workflows.length}</span>
+          </div>
+          {ctrl.workflows.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
+          ) : (
+            <ul className="space-y-2">
+              {ctrl.workflows.map((w, i) => (
+                <li key={i} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Type: {w.type} · Status: {w.status} · Last run: {w.lastRun}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-500" />
+              Found in RACMs
+            </h2>
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.usedInRACMs}</span>
+          </div>
+          {racms.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+          ) : (
+            <ul className="space-y-2">
+              {racms.map(r => (
+                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                  </div>
+                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
+  // `onGoToRacm` and `bpAbbr` are part of the public tab signature but are no
+  // longer consumed inside the cards — "Map in RACM" was removed intentionally.
+  void onGoToRacm; void bpAbbr;
   const { addToast } = useToast();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
-  const [designStatusFilter, setDesignStatusFilter] = useState<string[]>([]);
+  const [automationFilter, setAutomationFilter] = useState<string[]>([]);
+  const [frequencyFilter, setFrequencyFilter] = useState<string[]>([]);
 
-  // Skeleton state — 400ms placeholder before first paint of the controls grid.
+  // Detail-page state synced with ?control= URL param so deep links + browser
+  // back/forward work, and so the BP-level breadcrumb knows a detail is open.
+  const [detailControlId, setDetailControlId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('control');
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const current = params.get('control');
+    if (detailControlId && current !== detailControlId) {
+      params.set('control', detailControlId);
+      window.history.pushState({ ...window.history.state, control: detailControlId }, '', `?${params.toString()}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } else if (!detailControlId && current) {
+      params.delete('control');
+      const qs = params.toString();
+      window.history.pushState({ ...window.history.state, control: null }, '', qs ? `?${qs}` : window.location.pathname);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [detailControlId]);
+  useEffect(() => {
+    const onPop = () => {
+      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('control') : null;
+      setDetailControlId(param);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Skeleton state — 400ms placeholder before first paint of the controls list.
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setIsLoading(false), 400);
     return () => clearTimeout(t);
   }, []);
 
-  const getDesignStatus = (ctrl: DesignControl): 'Complete' | 'Incomplete' => {
-    return ctrl.workflows.length > 0 && ctrl.mappedRisks.length > 0 ? 'Complete' : 'Incomplete';
+  const matchesSearch = (c: DesignControl) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.id.toLowerCase().includes(q) ||
+      c.description.toLowerCase().includes(q)
+    );
   };
 
   const filteredControls = controls.filter(c => {
+    if (!matchesSearch(c)) return false;
     if (classificationFilter.length > 0 && !classificationFilter.includes(c.classification)) return false;
     if (natureFilter.length > 0 && !natureFilter.includes(c.nature)) return false;
-    if (designStatusFilter.length > 0 && !designStatusFilter.includes(getDesignStatus(c))) return false;
+    if (automationFilter.length > 0 && !automationFilter.includes(c.automation)) return false;
+    if (frequencyFilter.length > 0 && !frequencyFilter.includes(c.frequency)) return false;
     return true;
   });
+
+  // Options for the filter dropdowns. Classification is derived directly from
+  // the data — current seed values are 'Key' | 'Non-Key'. The remaining three
+  // pull unique values from the controls list so filters always reflect what
+  // can actually appear in the cards below.
   const classificationOptions = Array.from(new Set(controls.map(c => c.classification))).sort();
   const natureOptions = Array.from(new Set(controls.map(c => c.nature))).sort();
-  const designStatusOptions = ['Complete', 'Incomplete'];
+  const automationOptions = Array.from(new Set(controls.map(c => c.automation))).sort();
+  const frequencyOptions = Array.from(new Set(controls.map(c => c.frequency))).sort();
 
   // Bulk select + bulk archive (in-memory archive — removes from list, no API).
-  const [selectedControlIds, setSelectedControlIds] = useState<string[]>([]);
-  const allVisibleIds = filteredControls.map(c => c.id);
-  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedControlIds.includes(id));
-  const someSelected = selectedControlIds.length > 0 && !allSelected;
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const visibleIds = filteredControls.map(c => c.id);
+  const selectedVisibleCount = visibleIds.filter(id => selectedIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
   const toggleSelectAll = () => {
-    if (allSelected) setSelectedControlIds([]);
-    else setSelectedControlIds(allVisibleIds);
+    if (allVisibleSelected) setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    else setSelectedIds(prev => Array.from(new Set([...prev, ...visibleIds])));
   };
   const toggleSelectOne = (id: string) => {
-    setSelectedControlIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
   const handleArchiveOne = (id: string) => {
     setControls(prev => prev.filter(c => c.id !== id));
-    setSelectedControlIds(prev => prev.filter(s => s !== id));
+    setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control archived`, type: 'success' });
   };
   const handleCancelOne = (id: string) => {
-    setSelectedControlIds(prev => prev.filter(s => s !== id));
+    setSelectedIds(prev => prev.filter(s => s !== id));
+  };
+  const handleOpenDetail = (id: string) => {
+    setDetailControlId(id);
   };
 
-  const handleCreateWorkflow = (ctrl: DesignControl) => {
-    addToast({ message: `Opening Ask IRA to create workflow for "${ctrl.name}" (${ctrl.id})`, type: 'info' });
+  const hasActiveFilter =
+    classificationFilter.length > 0 ||
+    natureFilter.length > 0 ||
+    automationFilter.length > 0 ||
+    frequencyFilter.length > 0 ||
+    searchQuery.length > 0;
+
+  const clearAll = () => {
+    setClassificationFilter([]);
+    setNatureFilter([]);
+    setAutomationFilter([]);
+    setFrequencyFilter([]);
+    setSearchQuery('');
+  };
+
+  // Pill style helper for the Nature column (Col 3). Falls back to a neutral
+  // paper pill for any nature value outside the three documented ones.
+  const naturePillCls = (nature: string): string => {
+    if (nature === 'Preventive') return 'bg-compliant-50 text-compliant-700 border-compliant-50';
+    if (nature === 'Detective') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-50';
+    if (nature === 'Corrective') return 'bg-high-50 text-high-700 border-high-50';
+    return 'bg-paper-100 text-ink-600 border-canvas-border';
   };
 
   if (!isLoading && controls.length === 0) {
@@ -1799,258 +2440,337 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No controls yet</h3>
         <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Controls live inside a RACM. Open RACM to map risks to controls — they'll appear here.</p>
-        {onGoToRacm && (
-          <button
-            type="button"
-            onClick={onGoToRacm}
-            className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
-            Go to RACM
-          </button>
-        )}
       </div>
     );
   }
 
-  const incompleteCount = controls.filter(c => getDesignStatus(c) === 'Incomplete').length;
+  // Detail-page takeover — when ?control= is in URL, render the full-page
+  // ControlDetailPage instead of the list. Matches the Risk-detail pattern.
+  const detailControlFromUrl = detailControlId ? controls.find(c => c.id === detailControlId) : null;
+  if (detailControlFromUrl) {
+    return (
+      <ControlDetailPage
+        ctrl={detailControlFromUrl}
+        bpAbbr={bpAbbr}
+        onBack={() => setDetailControlId(null)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
 
-      {/* "Map controls in RACM" link moved to per-row Actions cell, beside View. */}
+      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right. */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="relative shrink-0">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search controls..."
+            className="pl-9 pr-3 py-2 rounded-[8px] border border-border bg-white text-[12px] w-[260px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all"
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {hasActiveFilter && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="mr-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+            >
+              Clear all
+            </button>
+          )}
+          <ControlFilterPill label="Classification" options={classificationOptions} value={classificationFilter} onChange={setClassificationFilter} />
+          <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
+          <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
+          <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
+        </div>
+      </div>
 
-      <div className="border-t border-border-light overflow-x-auto min-h-[calc(100vh-280px)]">
-        <table className="w-full border-collapse text-[12px]">
-          <thead className="bg-white border-b border-border-light">
-            <tr>
-              {/* Select-all checkbox — first column. */}
-              <th className="pl-4 pr-2 py-3 w-[44px]">
+      {/* Bulk-select strip — only renders once at least one card is ticked. */}
+      {!isLoading && selectedIds.length > 0 && (
+        <div className="flex items-center gap-2 text-[11px] text-text-muted">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            aria-label="Select all visible controls"
+            checked={allVisibleSelected}
+            onChange={toggleSelectAll}
+            className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+          />
+          <span>{selectedVisibleCount} of {visibleIds.length} selected</span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="ml-2 text-brand-700 hover:text-brand-600 font-medium cursor-pointer"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
+      {/* Card stack — engagement-style list, one card per control. Clicking the
+          card opens the Control detail (URL syncs `?control=<id>`). Checkbox +
+          action buttons stopPropagation so they don't fire the card click. */}
+      <div className="space-y-2 min-h-[calc(100vh-280px)]">
+        {isLoading ? (
+          [...Array(5)].map((_, i) => (
+            <div key={`skel-ctrl-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+              <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3 mb-2.5" />
+              <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-1/2" />
+            </div>
+          ))
+        ) : filteredControls.length === 0 ? (
+          <div className="px-6 py-10 text-center text-[12px] text-text-muted rounded-xl border border-border-light bg-white">
+            No controls match your search or filters.
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        ) : filteredControls.map((ctrl, i) => {
+          const isChecked = selectedIds.includes(ctrl.id);
+          const isKey = ctrl.classification === 'Key';
+          const riskCount = ctrl.mappedRisks.length;
+          const wfCount = ctrl.workflows.length;
+          const extraAssertions = ctrl.assertions.length > 1 ? ctrl.assertions.length - 1 : 0;
+          return (
+            <motion.div
+              key={ctrl.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.02 }}
+              onClick={() => handleOpenDetail(ctrl.id)}
+              className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
+              }`}
+            >
+              {/* Col 1 — select checkbox */}
+              <div onClick={e => e.stopPropagation()} className="pt-0.5">
                 <input
                   type="checkbox"
-                  checked={allSelected}
-                  ref={el => { if (el) el.indeterminate = someSelected; }}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer"
-                  aria-label="Select all controls"
+                  aria-label={`Select ${ctrl.id}`}
+                  checked={isChecked}
+                  onChange={() => toggleSelectOne(ctrl.id)}
+                  className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
                 />
-              </th>
-              {([
-                { label: 'Control' },
-                { label: 'Classification', tip: 'Marked as Key for SOX or regulatory reporting; Non-Key is supportive but not externally tested.', filter: 'classification' as const },
-                { label: 'Nature', filter: 'nature' as const },
-                { label: 'Workflows' },
-                { label: 'Mapped Risks' },
-                { label: 'RACMs' },
-                { label: 'Design Status', tip: 'Whether the control has both linked workflows and mapped risks. Incomplete controls cannot be tested.', filter: 'designStatus' as const },
-                { label: '' },
-              ] as { label: string; tip?: string; filter?: 'classification' | 'nature' | 'designStatus' }[]).map(h => (
-                <th key={h.label || 'act'} className="px-4 py-3 text-left text-[11px] font-semibold text-text-muted uppercase tracking-wider whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
-                    {h.tip ? (
-                      <span className="inline-flex items-center gap-1 group/tip relative">
-                        {h.label}
-                        <HelpCircle className="w-3 h-3 text-ink-400" aria-label={`What is ${h.label}?`} />
-                        <span className="absolute top-full left-0 mt-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                          {h.tip}
-                        </span>
-                      </span>
-                    ) : h.label}
-                    {h.filter === 'classification' && (
-                      <ColumnFilter label="Classification" options={classificationOptions} value={classificationFilter} onChange={setClassificationFilter} />
-                    )}
-                    {h.filter === 'nature' && (
-                      <ColumnFilter label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
-                    )}
-                    {h.filter === 'designStatus' && (
-                      <ColumnFilter label="Design Status" options={designStatusOptions} value={designStatusFilter} onChange={setDesignStatusFilter} />
-                    )}
+              </div>
+
+              {/* Col 2 — title + classification pill, description, meta, tags */}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{ctrl.name}</h3>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${
+                    isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
+                  }`}>
+                    {isKey ? 'Key' : 'Standard'}
                   </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              /* 5 skeleton rows — column count is 9 (1 checkbox + 8 data cols). */
-              [...Array(5)].map((_, i) => (
-                <tr key={`skel-ctrl-${i}`} className="border-t border-border-light">
-                  {[...Array(9)].map((_, j) => (
-                    <td key={j} className="px-4 py-4">
-                      <div
-                        className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
-                        style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : filteredControls.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-text-muted">
-                  No controls match your filters.
+                </div>
+                <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
+                  {ctrl.description}
+                </p>
+                <div className="flex items-center gap-2 mt-2 text-[11px] text-text-muted flex-wrap">
+                  <span className="font-mono tracking-tight">{ctrl.id}</span>
+                  <span className="text-border">·</span>
+                  <span>{ctrl.classification}</span>
+                  <span className="text-border">·</span>
+                  <span>{ctrl.automation}</span>
+                  <span className="text-border">·</span>
+                  <span>{ctrl.frequency}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${naturePillCls(ctrl.nature)}`}>
+                    {ctrl.nature}
+                  </span>
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                    {ctrl.assertions[0] || 'No assertions'}
+                  </span>
+                  {extraAssertions > 0 && (
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-paper-100 text-ink-500 border border-border-light">
+                      +{extraAssertions} more
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Col 3 — nature type badge (coloured) */}
+              <div className="flex flex-col items-start gap-1.5">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${naturePillCls(ctrl.nature)}`}>
+                  {ctrl.nature}
+                </span>
+              </div>
+
+              {/* Col 4 — usage stats: risks mapped + workflows / RACMs */}
+              <div className="flex flex-col gap-1.5 min-w-0">
+                {riskCount === 0 ? (
+                  <div className="text-[11px] text-high-700 italic inline-flex items-center gap-1">
+                    <AlertTriangle size={11} className="text-high-700" /> Not mapped
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    <span className="text-[15px] font-bold tabular-nums leading-none text-text">{riskCount}</span>
+                    <span className="text-[11px] text-text-secondary">
+                      risk{riskCount !== 1 ? 's' : ''} mapped
+                    </span>
+                  </div>
+                )}
+                <div className="text-[11px] text-text-muted">
+                  <span className="font-semibold text-text">{wfCount}</span> workflow{wfCount !== 1 ? 's' : ''}
+                  <span className="text-border mx-1">·</span>
+                  used in {ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}
+                </div>
+              </div>
+
+              {/* Col 5 — row actions. While selected: archive + cancel. Default: open + delete. */}
+              <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
+                {isChecked ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleArchiveOne(ctrl.id)}
+                      title="Archive"
+                      className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                    >
+                      <Archive size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelOne(ctrl.id)}
+                      title="Cancel selection"
+                      className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetail(ctrl.id)}
+                      title="Open control"
+                      className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                    >
+                      <Play size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleArchiveOne(ctrl.id)}
+                      title="Delete"
+                      className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── ControlFilterPill ───────────────────────────────────────────────────────
+// CTA-style multi-select dropdown rendered inline. Mirrors the shared
+// ColumnFilter `variant="button"` look (label + count pill + chevron) so the
+// Controls filter row reads consistently with other Process Hub sections.
+function ControlFilterPill({ label, options, value, onChange }: {
+  label: string;
+  options: string[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const hasFilter = value.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  const toggle = (opt: string) => {
+    onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt]);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] border text-[12px] font-medium cursor-pointer transition-colors ${
+          hasFilter
+            ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-50/80'
+            : 'border-border bg-white text-ink-700 hover:bg-paper-50'
+        }`}
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        <span>{label}</span>
+        {hasFilter && (
+          <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-brand-600 text-paper-0 text-[10px] font-mono tabular-nums">
+            {value.length}
+          </span>
+        )}
+        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <div
+          className="absolute top-full right-0 mt-1.5 z-50 w-[220px] bg-white border border-border-light rounded-[8px] shadow-lg normal-case tracking-normal"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border-light flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-500">Filter {label}</span>
+            {hasFilter && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-[10px] text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <ul className="py-1 max-h-[240px] overflow-y-auto">
+            {options.map(opt => {
+              const checked = value.includes(opt);
+              return (
+                <li key={opt}>
                   <button
                     type="button"
-                    onClick={() => { setClassificationFilter([]); setNatureFilter([]); setDesignStatusFilter([]); }}
-                    className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
+                    onClick={() => toggle(opt)}
+                    className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
                   >
-                    Clear filters
+                    <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                      {checked && <Check size={10} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <span className="truncate">{opt}</span>
                   </button>
-                </td>
-              </tr>
-            ) : (
-            filteredControls.map((ctrl, i) => {
-              const isExpanded = expandedId === ctrl.id;
-              const hasBound = ctrl.workflows.length > 0;
-              return (
-                <React.Fragment key={ctrl.id}>
-                  <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                    className={`border-t border-border-light hover:bg-surface-2/40 transition-colors cursor-pointer ${selectedControlIds.includes(ctrl.id) ? 'bg-brand-50/50' : ''}`} onClick={() => setExpandedId(isExpanded ? null : ctrl.id)}>
-                    {/* Per-row checkbox — stopPropagation so it doesn't toggle the row expand. */}
-                    <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedControlIds.includes(ctrl.id)}
-                        onChange={() => toggleSelectOne(ctrl.id)}
-                        className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer"
-                        aria-label={`Select ${ctrl.name}`}
-                      />
-                    </td>
-                    <td className="px-4 py-4 align-top">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[13px] font-medium text-text leading-snug">{ctrl.name}</span>
-                        <span className="font-mono text-[11px] text-ink-500 tracking-tight">{ctrl.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 align-top">
-                      <span className={`px-1.5 h-4 rounded-[4px] text-[10px] font-bold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
-                    </td>
-                    <td className="px-4 py-4 align-top"><span className="text-[11px] text-ink-500">{ctrl.nature}</span></td>
-                    <td className="px-4 py-4 align-top">
-                      {ctrl.workflows.length === 0 ? (
-                        <span className="text-[11px] text-mitigated-700 font-medium">No workflow mapped</span>
-                      ) : ctrl.workflows.length === 1 ? (
-                        <span className="text-[11px] text-compliant-700 font-medium">{ctrl.workflows[0].name}</span>
-                      ) : ctrl.workflows.length <= 2 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {ctrl.workflows.map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded-[4px] text-[10px] font-medium bg-compliant-50 text-compliant-700">{w.name.length > 15 ? w.name.slice(0, 14) + '…' : w.name}</span>))}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          {ctrl.workflows.slice(0, 2).map((w, wi) => (<span key={wi} className="px-1.5 h-4 rounded-[4px] text-[10px] font-medium bg-compliant-50 text-compliant-700">{w.name.length > 12 ? w.name.slice(0, 11) + '…' : w.name}</span>))}
-                          <span className="px-1.5 h-4 rounded-[4px] text-[10px] font-medium bg-paper-100 text-ink-500">+{ctrl.workflows.length - 2}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 align-top"><span className="text-[12px] text-text tabular-nums">{ctrl.mappedRisks.length}</span></td>
-                    <td className="px-4 py-4 align-top"><span className="text-[12px] text-text tabular-nums">{ctrl.usedInRACMs}</span></td>
-                    <td className="px-4 py-4 align-top">
-                      {(() => { const ds = getDesignStatus(ctrl); return <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ds === 'Complete' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{ds}</span>; })()}
-                    </td>
-                    <td className="px-4 py-4 align-top text-right" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1 justify-end">
-                        {selectedControlIds.includes(ctrl.id) ? (
-                          <>
-                            <button type="button"
-                              onClick={() => handleArchiveOne(ctrl.id)}
-                              className="px-2 py-1 rounded-[4px] text-[10px] font-medium inline-flex items-center gap-1 bg-paper-0 border border-ink-200 text-ink-800 hover:bg-paper-50 cursor-pointer transition-colors">
-                              <Archive size={10} />Archive
-                            </button>
-                            <button type="button"
-                              onClick={() => handleCancelOne(ctrl.id)}
-                              className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors">
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {ctrl.workflows.length === 0 && <button type="button" onClick={() => handleCreateWorkflow(ctrl)} className="px-2 py-1 rounded-[4px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">New Workflow</button>}
-                            <button type="button" onClick={() => setExpandedId(isExpanded ? null : ctrl.id)} className="px-2 py-1 rounded-[4px] text-[10px] font-bold bg-paper-100 text-ink-600 hover:bg-paper-200 cursor-pointer">{isExpanded ? 'Close' : 'View'}</button>
-                            {onGoToRacm && (
-                              <button type="button" onClick={onGoToRacm}
-                                className="px-2 py-1 rounded-[4px] text-[10px] font-medium text-brand-700 hover:bg-brand-50 inline-flex items-center gap-0.5 cursor-pointer transition-colors">
-                                Map in RACM
-                                <ChevronRight size={10} />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </motion.tr>
-
-                  {isExpanded && (
-                    <tr>
-                      <td colSpan={9} className="p-0">
-                        <div className="px-5 py-4 bg-surface-2/20 border-t border-canvas-border space-y-3">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div><span className="text-[10px] text-ink-400 uppercase block">Description</span><p className="text-[11px] text-text mt-0.5">{ctrl.description}</p></div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div><span className="text-[10px] text-ink-400 uppercase block">Automation</span><p className="text-[11px] text-text">{ctrl.automation}</p></div>
-                              <div><span className="text-[10px] text-ink-400 uppercase block">Frequency</span><p className="text-[11px] text-text">{ctrl.frequency}</p></div>
-                            </div>
-                          </div>
-                          {ctrl.assertions.length > 0 && (
-                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Assertions</span>
-                              <div className="flex flex-wrap gap-1">{ctrl.assertions.map(a => (<span key={a} className="px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-paper-50 text-ink-600 border border-canvas-border">{a}</span>))}</div>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Linked Risks</span>
-                              {ctrl.mappedRisks.length > 0 ? ctrl.mappedRisks.map(r => (<div key={r} className="text-[10px] font-mono text-ink-500">{r}</div>)) : <span className="text-[10px] text-ink-300">None</span>}
-                            </div>
-                            <div><span className="text-[10px] text-ink-400 uppercase block mb-1">Used in RACMs</span>
-                              <span className="text-[10px] text-text">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
-                            </div>
-                          </div>
-
-                          {/* Workflow bindings detail */}
-                          <div>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[10px] text-ink-400 uppercase font-bold">Workflows ({ctrl.workflows.length})</span>
-                              <button type="button" onClick={e => { e.stopPropagation(); handleCreateWorkflow(ctrl); }} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">+ New Workflow</button>
-                            </div>
-                            {ctrl.workflows.length === 0 ? (
-                              <div className="text-[10px] text-mitigated-700 py-2">No workflows mapped. Add a new workflow to enable testing.</div>
-                            ) : (
-                              <div className="bg-white rounded-lg border border-canvas-border overflow-hidden">
-                                <table className="w-full text-[11px]">
-                                  <thead><tr className="border-b border-canvas-border bg-paper-50">
-                                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-ink-400 uppercase">Workflow</th>
-                                    <th className="px-3 py-1.5 text-center text-[10px] font-semibold text-ink-400 uppercase">Type</th>
-                                    <th className="px-3 py-1.5 text-center text-[10px] font-semibold text-ink-400 uppercase">Status</th>
-                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Runs</th>
-                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Last Run</th>
-                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-ink-400 uppercase">Actions</th>
-                                  </tr></thead>
-                                  <tbody>{ctrl.workflows.map((w, wi) => (
-                                    <tr key={wi} className="border-b border-canvas-border">
-                                      <td className="px-3 py-1.5 text-text font-medium">{w.name}</td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded-[4px] text-[10px] font-bold inline-flex items-center ${w.type === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-paper-100 text-ink-600'}`}>{w.type}</span></td>
-                                      <td className="px-3 py-1.5 text-center"><span className={`px-1.5 h-4 rounded-[4px] text-[10px] font-bold inline-flex items-center ${w.status === 'Completed' ? 'bg-compliant-50 text-compliant-700' : w.status === 'Ready' ? 'bg-compliant-50 text-compliant-700' : 'bg-paper-100 text-ink-500'}`}>{w.status}</span></td>
-                                      <td className="px-3 py-1.5 text-right tabular-nums text-ink-500">{w.runs}</td>
-                                      <td className="px-3 py-1.5 text-right text-ink-400">{w.lastRun}</td>
-                                      <td className="px-3 py-1.5 text-right">
-                                        <div className="flex items-center gap-1 justify-end">
-                                          <button type="button" onClick={e => { e.stopPropagation(); addToast({ message: `Viewing "${w.name}"`, type: 'info' }); }} className="text-[10px] font-medium text-primary hover:underline cursor-pointer">View</button>
-                                          {w.type === 'Automated' && <button type="button" onClick={e => { e.stopPropagation(); addToast({ message: `Running "${w.name}"...`, type: 'info' }); }} className="text-[10px] font-medium text-primary hover:underline cursor-pointer">Run</button>}
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}</tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                </li>
               );
-            })
+            })}
+            {options.length === 0 && (
+              <li className="px-3 py-2 text-[12px] text-ink-400 italic">No options</li>
             )}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -2078,12 +2798,15 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
-  const [usageFilter, setUsageFilter] = useState<'All' | 'Used' | 'Unused'>('All');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [natureFilter, setNatureFilter] = useState<string[]>([]);
+  const [usageFilter2, setUsageFilter2] = useState<string[]>([]);
   const [showLinkedControls, setShowLinkedControls] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [bulkMode, setBulkMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Per-row filter dropdown state (which filter button is open, if any).
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
 
   // Skeleton state — 400ms placeholder so workflow list doesn't flash empty.
   const [isLoading, setIsLoading] = useState(true);
@@ -2102,26 +2825,41 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     return () => window.removeEventListener('process-hub-create', handler);
   }, []);
 
-  const searched = search.trim() ? workflows.filter(w => w.name.toLowerCase().includes(search.toLowerCase()) || w.description.toLowerCase().includes(search.toLowerCase())) : workflows;
-  const usageScoped = usageFilter === 'All' ? searched
-    : usageFilter === 'Used' ? searched.filter(w => w.linkedControls.length > 0)
-    : searched.filter(w => w.linkedControls.length === 0);
-  const filtered = typeFilter.length > 0
-    ? usageScoped.filter(w => typeFilter.includes(w.type) || typeFilter.includes(w.nature))
-    : usageScoped;
-  const typeOptions = [
-    ...Array.from(new Set(workflows.map(w => w.type))).sort(),
-    ...Array.from(new Set(workflows.map(w => w.nature))).sort(),
-  ];
+  const searched = searchQuery.trim() ? workflows.filter(w => {
+    const q = searchQuery.toLowerCase();
+    return w.name.toLowerCase().includes(q)
+      || w.id.toLowerCase().includes(q)
+      || w.description.toLowerCase().includes(q);
+  }) : workflows;
+  const filtered = searched
+    .filter(w => statusFilter.length === 0 || statusFilter.includes(w.status))
+    .filter(w => typeFilter.length === 0 || typeFilter.includes(w.type))
+    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature))
+    .filter(w => {
+      if (usageFilter2.length === 0) return true;
+      const usage = w.linkedControls.length > 0 ? 'Used' : 'Unused';
+      return usageFilter2.includes(usage);
+    });
+  const statusOptions = Array.from(new Set(workflows.map(w => w.status))).sort();
+  const typeOptions = Array.from(new Set(workflows.map(w => w.type))).sort();
+  const natureOptions = Array.from(new Set(workflows.map(w => w.nature))).sort();
+  const usageOptions = ['Used', 'Unused'];
 
-  const usedCount = workflows.filter(w => w.linkedControls.length > 0).length;
-  const unusedCount = workflows.filter(w => w.linkedControls.length === 0).length;
+  const anyFilterActive = searchQuery.trim().length > 0 || statusFilter.length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || usageFilter2.length > 0;
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setStatusFilter([]);
+    setTypeFilter([]);
+    setNatureFilter([]);
+    setUsageFilter2([]);
+  };
 
   const handleDelete = (id: string) => {
     const idx = workflows.findIndex(w => w.id === id);
     if (idx === -1) return;
     const wf = workflows[idx];
     setWorkflows(prev => prev.filter(w => w.id !== id));
+    setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({
       message: `Workflow "${wf.name}" deleted.`,
       type: 'info',
@@ -2142,22 +2880,33 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     addToast({ message: `Workflow "${data.name}" created.`, type: 'success' });
   };
 
-  const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const allVisibleSelected = filtered.length > 0 && filtered.every(w => selectedIds.has(w.id));
-  const someVisibleSelected = filtered.some(w => selectedIds.has(w.id));
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map(w => w.id)));
-  };
+  // Bulk-select helpers — mirrors RiskRegister pattern.
+  const visibleIds = filtered.map(w => w.id);
+  const selectedVisibleCount = visibleIds.filter(id => selectedIds.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
 
-  const handleBulkRun = () => {
-    const selected = workflows.filter(w => selectedIds.has(w.id));
-    const runnable = selected.filter(w => w.type === 'Automated' && w.status === 'Active');
-    const skipped = selected.length - runnable.length;
-    if (runnable.length === 0) { addToast({ message: 'No runnable workflows selected. Only Live + Automated workflows can be run.', type: 'warning' }); return; }
-    runnable.forEach(w => addToast({ message: `Running "${w.name}"...`, type: 'info' }));
-    if (skipped > 0) addToast({ message: `${skipped} workflow${skipped !== 1 ? 's' : ''} skipped (manual or draft).`, type: 'info' });
-    setBulkMode(false); setSelectedIds(new Set());
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+  const clearSelection = () => setSelectedIds([]);
+
+  const handleArchiveOne = (id: string) => {
+    const wf = workflows.find(w => w.id === id);
+    if (!wf) return;
+    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'Archived' as const } : w));
+    setSelectedIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
   };
 
   if (!isLoading && workflows.length === 0) {
@@ -2176,181 +2925,289 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     );
   }
 
-  return (
-    <div className="space-y-5">
-      {/* Search + Filters + CTA */}
-      <div className="flex items-center gap-3">
-        <div className="relative w-[320px]">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workflow..."
-            className="w-full pl-10 pr-4 h-10 rounded-[6px] border border-border bg-white text-[13px] outline-none focus:border-primary/40 transition-all" />
-        </div>
-        <div className="flex items-center gap-1.5">
-          {([
-            { id: 'All' as const, label: 'All', count: workflows.length },
-            { id: 'Used' as const, label: 'Used', count: usedCount },
-            { id: 'Unused' as const, label: 'Unused', count: unusedCount },
-          ]).map(f => (
-            <button type="button" key={f.id} onClick={() => setUsageFilter(f.id)}
-              className={`px-2.5 py-1.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${usageFilter === f.id ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10'}`}>
-              {f.label} ({f.count})
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          {bulkMode ? (
-            <>
-              <span className="text-[13px] text-text-secondary"><span className="font-semibold text-text">{selectedIds.size}</span> selected</span>
-              <button type="button" onClick={handleBulkRun} disabled={selectedIds.size === 0}
-                className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-primary text-white text-[13px] font-semibold hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                <Play size={14} />Run Selected
-              </button>
-              <button type="button" onClick={() => { setBulkMode(false); setSelectedIds(new Set()); }}
-                className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer">
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              {/* "New Workflow" CTA moved to the Process Hub drilled-view header. */}
-              <button type="button" onClick={() => setBulkMode(true)}
-                className="flex items-center gap-2 px-4 h-10 rounded-[6px] bg-white text-text border border-border text-[13px] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]">
-                <Play size={14} />Bulk Run
-              </button>
-            </>
+  // Inline CTA filter pill — opens a checkbox popover. Matches the visual
+  // language of the new card-stack pattern; reuses ColumnFilter's option logic
+  // but renders as a button + chevron instead of a small icon.
+  const FilterPill = ({ filterKey, label, options, value, onChange }: { filterKey: string; label: string; options: string[]; value: string[]; onChange: (next: string[]) => void }) => {
+    const ref = useRef<HTMLDivElement | null>(null);
+    const open = openFilterKey === filterKey;
+    useEffect(() => {
+      if (!open) return;
+      const onDocClick = (e: MouseEvent) => {
+        if (!ref.current?.contains(e.target as Node)) setOpenFilterKey(null);
+      };
+      const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenFilterKey(null); };
+      document.addEventListener('mousedown', onDocClick);
+      document.addEventListener('keydown', onEsc);
+      return () => {
+        document.removeEventListener('mousedown', onDocClick);
+        document.removeEventListener('keydown', onEsc);
+      };
+    }, [open]);
+    const active = value.length > 0;
+    const toggle = (opt: string) => onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt]);
+    return (
+      <div ref={ref} className="relative inline-flex">
+        <button
+          type="button"
+          onClick={() => setOpenFilterKey(open ? null : filterKey)}
+          aria-haspopup="true"
+          aria-expanded={open}
+          className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-[8px] text-[12px] font-semibold border transition-colors cursor-pointer ${
+            active
+              ? 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'
+              : 'bg-white border-border text-text-secondary hover:border-primary/40 hover:text-text'
+          }`}
+        >
+          {label}
+          {active && (
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">
+              {value.length}
+            </span>
           )}
+          <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && (
+          <div className="absolute top-full right-0 mt-1.5 z-50 w-[220px] bg-white border border-border-light rounded-[8px] shadow-lg">
+            <div className="px-3 py-2 border-b border-border-light flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-500">Filter {label}</span>
+              {active && (
+                <button type="button" onClick={() => onChange([])}
+                  className="text-[10px] text-brand-700 hover:text-brand-600 cursor-pointer font-medium">Clear</button>
+              )}
+            </div>
+            <ul className="py-1 max-h-[240px] overflow-y-auto">
+              {options.length === 0 && (
+                <li className="px-3 py-2 text-[12px] text-ink-400 italic">No options</li>
+              )}
+              {options.map(opt => {
+                const checked = value.includes(opt);
+                return (
+                  <li key={opt}>
+                    <button type="button" onClick={() => toggle(opt)}
+                      className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer">
+                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                        {checked && <CheckCircle2 size={10} className="text-white" strokeWidth={3} />}
+                      </span>
+                      <span className="truncate">{opt}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search (LEFT) + Clear all + Filter pills (RIGHT) */}
+      <div className="flex items-center gap-3">
+        <div className="relative w-[260px]">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search workflows..."
+            className="pl-9 pr-3 h-9 rounded-[8px] border border-border bg-white text-[12px] w-full placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all" />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {anyFilterActive && (
+            <button type="button" onClick={clearAllFilters}
+              className="text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer px-2 py-1">
+              Clear all
+            </button>
+          )}
+          <FilterPill filterKey="status" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+          <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
+          <FilterPill filterKey="nature" label="Trigger" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
+          <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
         </div>
       </div>
 
-      {/* Table */}
-      {!isLoading && filtered.length === 0 ? (
+      {/* Bulk-select strip — only when ≥1 card is ticked */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-[10px] bg-brand-50 border border-brand-100">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            aria-label="Select all visible workflows"
+            checked={allVisibleSelected}
+            onChange={toggleSelectAllVisible}
+            className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+          />
+          <span className="text-[12px] text-ink-700">
+            <span className="font-semibold text-text">{selectedVisibleCount}</span> of <span className="font-semibold text-text">{visibleIds.length}</span> selected
+          </span>
+          <button type="button" onClick={clearSelection}
+            className="ml-auto text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
+            Clear selection
+          </button>
+        </div>
+      )}
+
+      {/* Card stack */}
+      {isLoading ? (
+        <div className="space-y-2.5">
+          {[...Array(5)].map((_, i) => (
+            <div key={`skel-wf-${i}`} className="rounded-xl border border-border-light bg-white px-6 py-5">
+              <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 items-start">
+                <div className="h-4 w-4 rounded-[4px] bg-paper-100 animate-pulse" />
+                <div className="space-y-2">
+                  <div className="h-3.5 w-3/5 bg-paper-100 rounded animate-pulse" />
+                  <div className="h-3 w-4/5 bg-paper-100 rounded animate-pulse" />
+                  <div className="h-2.5 w-1/2 bg-paper-100 rounded animate-pulse" />
+                </div>
+                <div className="h-5 w-20 bg-paper-100 rounded animate-pulse" />
+                <div className="h-5 w-28 bg-paper-100 rounded animate-pulse" />
+                <div className="h-6 w-16 bg-paper-100 rounded animate-pulse justify-self-end" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <div className="w-12 h-12 rounded-[12px] bg-paper-100 flex items-center justify-center mb-4">
             <Search className="w-6 h-6 text-ink-500" />
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No matching workflows</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">
-            Nothing matched <span className="font-mono">"{search || usageFilter}"</span>{typeFilter.length > 0 ? <> with Type <span className="font-mono">{typeFilter.join(', ')}</span></> : null}. Try a different search or filter.
+            Nothing matched your search or filters. Try a different combination.
           </p>
+          {anyFilterActive && (
+            <button type="button" onClick={clearAllFilters}
+              className="px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-brand-700 hover:bg-brand-50 cursor-pointer">
+              Clear all filters
+            </button>
+          )}
         </div>
       ) : (
-        <div className="border-t border-border-light min-h-[calc(100vh-280px)]">
-          <table className="w-full border-collapse">
-            <thead className="bg-white sticky top-0 z-10 border-b border-border-light">
-              <tr>
-                {bulkMode && (
-                  <th className="pl-4 pr-2 py-3 w-[44px]">
-                    <input type="checkbox" checked={allVisibleSelected} ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
-                      onChange={toggleSelectAll} className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer" aria-label="Select all" />
-                  </th>
-                )}
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[280px]">Workflow Name</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">Description</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[160px]">
-                  <span className="inline-flex items-center gap-1">
-                    Type
-                    <ColumnFilter label="Type" options={typeOptions} value={typeFilter} onChange={setTypeFilter} />
-                  </span>
-                </th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[150px]">Usage</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[120px]" aria-label="Actions"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                /* 5 skeleton rows — column count is 5 base + 1 if bulkMode (checkbox). */
-                [...Array(5)].map((_, i) => (
-                  <tr key={`skel-wf-${i}`} className="border-t border-border-light">
-                    {[...Array(bulkMode ? 6 : 5)].map((_, j) => (
-                      <td key={j} className="px-4 py-4">
-                        <div
-                          className="h-3 bg-paper-100 rounded-[4px] animate-pulse"
-                          style={{ width: `${60 + ((i + j) * 7) % 30}%` }}
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-              filtered.map((wf, i) => {
-                const isSelected = selectedIds.has(wf.id);
-                return (
-                <motion.tr key={wf.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.015 }}
-                  onClick={() => { if (bulkMode) toggleSelect(wf.id); }}
-                  className={`border-t border-border-light transition-colors ${bulkMode ? 'cursor-pointer' : ''} ${bulkMode && isSelected ? 'bg-primary-xlight/50 hover:bg-primary-xlight/70' : 'hover:bg-surface-2/40'}`}>
-                  {bulkMode && (
-                    <td className="pl-4 pr-2 py-4 align-top" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(wf.id)}
-                        className="w-4 h-4 rounded-[4px] border-canvas-border accent-primary cursor-pointer" />
-                    </td>
+        <div className="space-y-2.5">
+          {filtered.map((wf, i) => {
+            const isSelected = selectedIds.includes(wf.id);
+            const statusStyle =
+              wf.status === 'Active'   ? 'bg-compliant-50 text-compliant-700 border border-compliant-100'
+              : wf.status === 'Ready'  ? 'bg-evidence-50 text-evidence-700 border border-evidence-100'
+              : wf.status === 'Archived' ? 'bg-paper-50 text-ink-400 border border-canvas-border'
+              :                          'bg-paper-100 text-ink-500 border border-canvas-border';
+            // Workflow "type" badge styling — Preventive uses compliant; Detective uses mitigated.
+            const natureStyle =
+              wf.nature === 'Preventive' ? 'bg-compliant-50 text-compliant-700 border-compliant-100'
+              : wf.nature === 'Detective' ? 'bg-mitigated-50 text-mitigated-700 border-mitigated-100'
+              :                             'bg-paper-100 text-ink-700 border-border-light';
+            const openDetail = () => {
+              if (onOpenWorkflowDetail) onOpenWorkflowDetail(wf.id);
+              else addToast({ message: `Opening "${wf.name}"...`, type: 'info' });
+            };
+            return (
+              <motion.div
+                key={wf.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.02 }}
+                onClick={openDetail}
+                className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                  isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
+                }`}
+              >
+                {/* Col 1 — select checkbox */}
+                <div onClick={e => e.stopPropagation()} className="pt-0.5">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${wf.name}`}
+                    checked={isSelected}
+                    onChange={() => toggleSelect(wf.id)}
+                    className="w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                  />
+                </div>
+
+                {/* Col 2 — title + status, description, meta, tag pills */}
+                <div className="min-w-0">
+                  <div className="flex items-start gap-2">
+                    <h3 className="text-[14px] font-semibold text-text leading-snug truncate">{wf.name}</h3>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 mt-0.5 ${statusStyle}`}>
+                      {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-compliant" />}
+                      {wf.status}
+                    </span>
+                  </div>
+                  {wf.description && (
+                    <p className="mt-1 line-clamp-2 text-[12px] text-text-secondary leading-snug">{wf.description}</p>
                   )}
-                  {/* Workflow Name + Live/Draft badge + ID */}
-                  <td className="px-4 py-4 align-top w-[280px]">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-start gap-2">
-                        {onOpenWorkflowDetail ? (
-                          <button type="button" onClick={(e) => { e.stopPropagation(); onOpenWorkflowDetail(wf.id); }}
-                            className="text-[13px] text-text font-medium leading-snug hover:text-primary hover:underline cursor-pointer transition-colors text-left bg-transparent border-none p-0">{wf.name}</button>
-                        ) : (
-                          <span className="text-[13px] text-text font-medium leading-snug">{wf.name}</span>
-                        )}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 mt-0.5 ${
-                          wf.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : wf.status === 'Ready' ? 'bg-evidence-50 text-evidence-700' : wf.status === 'Archived' ? 'bg-paper-50 text-ink-400' : 'bg-paper-100 text-ink-500'
-                        }`}>
-                          {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-compliant" />}
-                          {wf.status}
-                        </span>
+                  <div className="mt-1.5 text-[11px] text-text-muted">
+                    <span className="font-mono">{wf.id.toUpperCase()}</span>
+                    <span className="mx-1.5">·</span>
+                    <span>linked to {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[10px] font-medium">{wf.nature}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[10px] font-medium">{wf.type}</span>
+                  </div>
+                </div>
+
+                {/* Col 3 — workflow nature badge */}
+                <div className="pt-0.5">
+                  <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${natureStyle}`}>
+                    {wf.nature}
+                  </span>
+                </div>
+
+                {/* Col 4 — usage / linked-controls metric */}
+                <div className="pt-0.5">
+                  {wf.linkedControls.length > 0 ? (
+                    <>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-[15px] font-bold tabular-nums leading-none text-text">{wf.linkedControls.length}</span>
+                        <span className="text-[11px] text-text-muted">control{wf.linkedControls.length !== 1 ? 's' : ''}</span>
                       </div>
-                      <span className="text-[11px] font-mono text-ink-500 tracking-tight">{wf.id.toUpperCase()}</span>
-                    </div>
-                  </td>
-                  {/* Description */}
-                  <td className="px-4 py-4 align-top">
-                    <span className="text-[13px] text-text-secondary line-clamp-2">{wf.description}</span>
-                  </td>
-                  {/* Type — tags */}
-                  <td className="px-4 py-4 align-top">
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[11px] font-medium">{wf.nature}</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[11px] font-medium">{wf.type}</span>
-                    </div>
-                  </td>
-                  {/* Usage */}
-                  <td className="px-4 py-4 align-top">
-                    {wf.linkedControls.length > 0 ? (
-                      <button type="button" onClick={() => setShowLinkedControls(showLinkedControls === wf.id ? null : wf.id)}
-                        className="text-[12px] font-medium text-primary hover:underline cursor-pointer">
-                        Used in {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowLinkedControls(showLinkedControls === wf.id ? null : wf.id); }}
+                        className="mt-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                      >
+                        View linked controls
                       </button>
-                    ) : (
-                      <span className="text-[12px] text-ink-400">Not used</span>
-                    )}
-                  </td>
-                  {/* Actions */}
-                  <td className={`px-4 py-4 align-top ${bulkMode ? 'pointer-events-none opacity-40' : ''}`}>
-                    <div className="flex items-center justify-end gap-0.5">
-                      {wf.type === 'Automated' && wf.status === 'Active' && (
-                        <button type="button" aria-label="Run" onClick={() => addToast({ message: `Running "${wf.name}"...`, type: 'info' })}
-                          className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors" title="Run">
-                          <Play size={14} />
-                        </button>
-                      )}
-                      <button type="button" aria-label="Edit" onClick={() => addToast({ message: `Editing "${wf.name}"...`, type: 'info' })}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors" title="Edit">
-                        <Pencil size={14} />
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] italic text-mitigated-700">
+                      <AlertTriangle size={11} className="text-mitigated-700" />
+                      Not yet linked
+                    </span>
+                  )}
+                </div>
+
+                {/* Col 5 — actions (80px) */}
+                <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
+                  {isSelected ? (
+                    <>
+                      <button type="button" aria-label="Archive" title="Archive"
+                        onClick={() => handleArchiveOne(wf.id)}
+                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
+                        <Archive size={14} />
                       </button>
-                      <button type="button" aria-label="Delete" onClick={() => handleDelete(wf.id)}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors" title="Delete">
+                      <button type="button" aria-label="Cancel selection" title="Cancel selection"
+                        onClick={() => toggleSelect(wf.id)}
+                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
+                        <X size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" aria-label="Open workflow" title="Open workflow"
+                        onClick={openDetail}
+                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
+                        <Play size={14} />
+                      </button>
+                      <button type="button" aria-label="Delete" title="Delete"
+                        onClick={() => handleDelete(wf.id)}
+                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
                         <Trash2 size={14} />
                       </button>
-                    </div>
-                  </td>
-                </motion.tr>
-                );
-              })
-              )}
-            </tbody>
-          </table>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -3101,22 +3958,112 @@ const HEALTH_LABEL: Record<SectionHealth, { label: string | null; cls: string }>
   empty:     { label: 'Empty',     cls: 'text-ink-400' },
 };
 
-// Minimal section card. Two lines, no icon tile, no pill badges, no inline CTA pill.
-// Title + count + health word (only when non-healthy) on row 1; muted breakdown on row 2.
-// Health is implied by silence for "healthy" so the eye only catches what actually matters.
+// One entity row (a single SOP / RACM / Risk / Control / Workflow) shown inside
+// a section card when that section is expanded. Mirrors the engagement-card
+// stacking from the reference screenshot (title + status pill, optional
+// description, meta, tag pills, optional right-side stat).
+type EntryData = {
+  id: string;
+  title: string;
+  status?: { label: string; tone: 'green' | 'amber' | 'red' | 'gray' };
+  description?: string;
+  meta: string;
+  tags?: string[];
+  highlight?: { primary: string; secondary?: string };
+  onOpen?: () => void;
+};
+
+const ENTRY_TONE_TEXT: Record<NonNullable<EntryData['status']>['tone'], string> = {
+  green: 'text-compliant-700',
+  amber: 'text-mitigated-700',
+  red: 'text-high-700',
+  gray: 'text-ink-500',
+};
+const ENTRY_TONE_DOT: Record<NonNullable<EntryData['status']>['tone'], string> = {
+  green: 'bg-compliant-700',
+  amber: 'bg-mitigated-700',
+  red: 'bg-high-700',
+  gray: 'bg-ink-400',
+};
+
+function SectionEntryCard({ data }: { data: EntryData }) {
+  const interactive = !!data.onOpen;
+  return (
+    <div
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? data.onOpen : undefined}
+      onKeyDown={interactive ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.onOpen?.(); }
+      } : undefined}
+      className={`w-full bg-white border border-canvas-border rounded-[10px] px-4 py-3 transition-colors ${
+        interactive ? 'cursor-pointer hover:border-brand-300 hover:bg-paper-50/30' : ''
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap mb-1">
+            <h3 className="text-[13px] font-semibold text-ink-900">{data.title}</h3>
+            {data.status && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${ENTRY_TONE_TEXT[data.status.tone]}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${ENTRY_TONE_DOT[data.status.tone]}`} />
+                {data.status.label}
+              </span>
+            )}
+          </div>
+          {data.description && (
+            <p className="text-[12px] text-ink-600 leading-snug mb-1.5">
+              {data.description}
+            </p>
+          )}
+          <div className="text-[11px] text-ink-500 font-mono leading-tight">
+            {data.meta}
+          </div>
+          {data.tags && data.tags.length > 0 && (
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              {data.tags.map((tag, i) => (
+                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full border border-canvas-border text-[10px] text-ink-600 font-mono">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {data.highlight && (
+          <div className="shrink-0 text-right min-w-[120px]">
+            <div className="text-[12px] font-mono font-semibold text-ink-800 tabular-nums">{data.highlight.primary}</div>
+            {data.highlight.secondary && (
+              <div className="text-[11px] font-mono text-ink-500 tabular-nums mt-0.5">{data.highlight.secondary}</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Section row in the engagement-table format:
+//   [chevron] [title + meta + (expanded: entries list)]    [health text]
+// When expanded, the data panel below lists every entry in this section as
+// an engagement-style sub-card. Clicking the centre area drills into the section.
 function SectionCard({
-  title, count, countLabel, breakdown, lastActivity, health, locked, lockedReason, onClick,
+  title, count, locked, lockedReason, onClick,
+  ratio, healthRatioText, entries, emptyEntriesLabel,
 }: {
   title: string;
   count: number;
-  countLabel: string;
-  breakdown: string;
-  lastActivity: string;
-  health: SectionHealth;
   locked?: boolean;
   lockedReason?: string;
   onClick: () => void;
+  ratio?: number | null;
+  openCount?: number;
+  openLabel?: string;
+  healthRatioText?: string;
+  entries?: EntryData[];
+  emptyEntriesLabel?: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (locked) {
     return (
       <div className="w-full bg-paper-50/40 border border-dashed border-canvas-border rounded-[12px] px-5 py-4">
@@ -3130,69 +4077,86 @@ function SectionCard({
       </div>
     );
   }
-  const healthInfo = HEALTH_LABEL[health];
+
+  const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
+  const pct = hasHealth ? Math.round((ratio as number) * 100) : null;
+  // Split the health fraction so the numeric token ("5/6") wears JetBrains Mono —
+  // the auditor's data register — while the word ("mapped") stays in the body face.
+  const ratioNum = healthRatioText ? healthRatioText.split(' ')[0] : '';
+  const ratioWord = healthRatioText ? healthRatioText.split(' ').slice(1).join(' ') : '';
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group w-full bg-white border border-canvas-border rounded-[12px] hover:border-brand-200 hover:bg-paper-50/30 transition-colors cursor-pointer text-left px-5 py-4"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-3 mb-1">
-            <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-900 leading-none">{title}</h2>
-            <span className="text-[12px] text-ink-500 font-mono tabular-nums shrink-0">{count} {countLabel}</span>
-            {healthInfo.label && (
-              <span className={`text-[10px] uppercase tracking-wider font-semibold shrink-0 ${healthInfo.cls}`}>
-                {healthInfo.label}
+    <div className="space-y-2.5">
+      {/* Scorecard row — one calm line per section: title + count, then the section's
+          own health as a coverage meter + fraction. The cross-section "needs attention"
+          rollup lives once, in the summary line above the list — never restated here.
+          When expanded a thin divider separates the header from the entries below. */}
+      <div className={`group/row flex items-center gap-3 px-1 ${expanded ? 'pb-3 border-b border-canvas-border' : 'py-2.5'}`}>
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          aria-label={expanded ? `Hide ${title} entries` : `Show ${title} entries`}
+          aria-expanded={expanded}
+          className="no-focus-ring shrink-0 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-paper-100 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"
+        >
+          {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+        </button>
+
+        {/* The whole right area is one drill target → opens the section. The title lane is
+            a fixed width so the meters line up down the column; the count sits beside the
+            name as a quiet mono annotation, and a chevron slides in from the right on hover.
+            Inner elements are spans (a button may only contain phrasing content). */}
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Open ${title}`}
+          className="no-focus-ring flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+        >
+          <span className="flex items-baseline gap-1.5 w-[120px] shrink-0">
+            <span className="text-[13px] font-semibold text-ink-900 leading-none group-hover/row:text-brand-700 transition-colors">{title}</span>
+            <span className="text-[12px] font-mono tabular-nums text-ink-400 shrink-0">· {count}</span>
+          </span>
+
+          {hasHealth ? (
+            <span className="flex items-center gap-2.5 min-w-0">
+              <span className="block h-1.5 w-24 rounded-full bg-paper-100 overflow-hidden shrink-0" role="img" aria-label={`${pct}% — ${healthRatioText}`}>
+                <span className="block h-full rounded-full bg-ink-400 transition-[width]" style={{ width: `${pct}%` }} />
               </span>
-            )}
-          </div>
-          <div className="text-[12px] text-ink-500 leading-tight truncate">
-            {breakdown}
-            <span className="text-ink-300 mx-1.5">·</span>
-            {lastActivity}
-          </div>
-        </div>
-        <ChevronRight size={14} className="text-ink-300 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
+              <span className="text-[12px] text-ink-500 whitespace-nowrap">
+                <span className="font-mono tabular-nums text-ink-600">{ratioNum}</span> {ratioWord}
+              </span>
+            </span>
+          ) : null}
+
+          <ChevronRight
+            size={15}
+            aria-hidden
+            className="ml-auto shrink-0 text-ink-300 opacity-0 -translate-x-1 group-hover/row:opacity-100 group-hover/row:translate-x-0 transition-all duration-150"
+          />
+        </button>
       </div>
-    </button>
+
+      {/* Expanded entries — nested under the section with a left rail + indent so they
+          read as belonging to it, not as peers of the section headers. */}
+      {expanded && entries && (
+        <div className="ml-3 pl-5 border-l border-canvas-border/70 space-y-2.5">
+          {entries.length > 0 ? (
+            entries.map(e => <SectionEntryCard key={e.id} data={e} />)
+          ) : (
+            <div className="text-[12px] text-ink-500 italic">{emptyEntriesLabel ?? `No ${title.toLowerCase()} yet.`}</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-// LEGACY (chevron-collapsible): used only when USE_LEGACY_COLLAPSIBLE = true inside BPDetailView.
-function SectionHeader({ title, count, countLabel, warning, open, onToggle }: {
-  title: string;
-  count: number;
-  countLabel: string;
-  warning?: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className="group w-full flex items-baseline justify-between gap-6 pb-4 border-b border-canvas-border text-left cursor-pointer"
-    >
-      <div className="flex items-baseline gap-3">
-        <ChevronDown
-          size={16}
-          className={`text-ink-500 shrink-0 self-center transition-transform duration-200 group-hover:text-ink-700 ${open ? '' : '-rotate-90'}`}
-          aria-hidden
-        />
-        <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-none">{title}</h2>
-        {warning && (
-          <span className="text-[11px] font-mono text-mitigated-700 tracking-tight">{warning}</span>
-        )}
-      </div>
-      <span className="text-[11px] font-mono text-ink-500 tabular-nums tracking-tight shrink-0">
-        {count} {countLabel}
-      </span>
-    </button>
-  );
-}
+// Exponential ease-out (≈ expo) for the overview's first-paint reveal. Typed as a
+// bezier tuple so it satisfies motion's Easing type without casts.
+const OVERVIEW_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+// Animate the overview in only once per session — auditors switch back and forth all
+// day; a first-impression stagger is a moment, not something to replay every navigation.
+let overviewHasAnimated = false;
 
 function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   bp: UserProcess; onBack: () => void;
@@ -3205,15 +4169,10 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   /** Tracks which RACM is open in the Excel review editor. Stores the racmId. */
   const [reviewingRacmId, setReviewingRacmId] = useState<string | null>(null);
   const reviewingRacm = reviewingRacmId ? createdRacms.find(r => r.id === reviewingRacmId) : null;
-
-  const racmSectionRef = useRef<HTMLElement | null>(null);
-  const scrollToRacms = () => racmSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const reduceMotion = useReducedMotion();
+  const [animateOverviewIn] = useState(() => { const first = !overviewHasAnimated; overviewHasAnimated = true; return first; });
 
   type SectionKey = 'sop' | 'racm' | 'risks' | 'controls' | 'workflows';
-  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    sop: true, racm: true, risks: true, controls: true, workflows: true,
-  });
-  const toggleSection = (k: SectionKey) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }));
 
   // ─── Data: single query per entity, filtered by business_process_id ───
   const bpRacms = RACMS.filter(r => r.bpId === bp.id);
@@ -3222,8 +4181,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   const bpRisks = RISKS.filter(r => r.bpId === bp.id);
   const bpRiskIds = new Set(bpRisks.map(r => r.id));
   const bpControls = CONTROLS.filter(c => bpRiskIds.has(c.riskId));
-  const coveredRiskIds = new Set(bpControls.map(c => c.riskId));
-  const coverage = bpRisks.length ? Math.round((bpRisks.filter(r => coveredRiskIds.has(r.id)).length / bpRisks.length) * 100) : 0;
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
@@ -3241,12 +4198,46 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   };
   const [drilledSection, setDrilledSection] = useState<SectionKey | null>(() => readSectionFromUrl());
 
+  // Track which risk/control detail is open (URL-driven) so the BP-level breadcrumb
+  // can add the entity name and the tab pills row can be hidden while a detail is on screen.
+  const readUrlParam = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get(key);
+  };
+  const [openDetailRiskId, setOpenDetailRiskId] = useState<string | null>(() => readUrlParam('risk'));
+  const [openDetailControlId, setOpenDetailControlId] = useState<string | null>(() => readUrlParam('control'));
+  const [openDetailRacmId, setOpenDetailRacmId] = useState<string | null>(() => readUrlParam('racm'));
+  const [openDetailSopId, setOpenDetailSopId] = useState<string | null>(() => readUrlParam('sop'));
+  useEffect(() => {
+    const onPop = () => {
+      setOpenDetailRiskId(readUrlParam('risk'));
+      setOpenDetailControlId(readUrlParam('control'));
+      setOpenDetailRacmId(readUrlParam('racm'));
+      setOpenDetailSopId(readUrlParam('sop'));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openDetailRisk = openDetailRiskId ? SEED_RISKS.find(r => r.id === openDetailRiskId) : null;
+  const openDetailControl = openDetailControlId ? SEED_DESIGN_CONTROLS.find(c => c.id === openDetailControlId) : null;
+  const openDetailRacm = openDetailRacmId ? RACM_SEED_DATA.find(r => r.id === openDetailRacmId) : null;
+  const openDetailSop = openDetailSopId ? SOPS.find(s => s.id === openDetailSopId) : null;
+  // RacmListTable manages RACM detail/mapping takeovers internally; mirror that state
+  // up so the section-pills row can hide while a RACM owns the screen.
+  const [racmTakeover, setRacmTakeover] = useState(false);
+  const detailIsOpen = !!(openDetailRisk || openDetailControl || openDetailRacm || openDetailSop);
+
   // Listen for browser back/forward so closing the drilled section via browser back works.
+  // Reads ?section= from the URL rather than e.state, so synthetic popstate events
+  // dispatched by child components (RiskRegister / ControlDesignTab after pushState) don't
+  // accidentally drop us out of the drilled view by passing a stateless event.
   // On unmount (user navigated away from this BP entirely), strip the ?section= query so it
   // doesn't leak into a different BP later. We use replaceState — never push/clobber history.
   useEffect(() => {
-    const onPop = (e: PopStateEvent) => {
-      const raw = (e.state && (e.state as { section?: string }).section) ?? null;
+    const onPop = () => {
+      const raw = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('section')
+        : null;
       const next = raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
       setDrilledSection(next);
     };
@@ -3275,13 +4266,28 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     }
   }, [drilledSection]);
 
-  // Close the drilled view by going back in history so browser back/forward stays consistent.
+  // Close the drilled view and also clear any open risk/control detail so the BP-name
+  // breadcrumb always lands on the BP index page, never on a still-open detail child.
   const closeDrilledSection = () => {
-    if (typeof window !== 'undefined' && window.history.state && (window.history.state as { section?: string }).section) {
-      window.history.back();
-    } else {
-      setDrilledSection(null);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', window.location.pathname);
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
+    setDrilledSection(null);
+  };
+
+  // Close any open detail (?risk= / ?control= / ?racm= / ?sop=) without leaving the current
+  // section — used by the section-name breadcrumb segment on a detail page.
+  const closeOpenDetail = () => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('risk');
+    params.delete('control');
+    params.delete('racm');
+    params.delete('sop');
+    const qs = params.toString();
+    window.history.pushState({}, '', qs ? `?${qs}` : window.location.pathname);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
   const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
@@ -3299,7 +4305,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   //   breakdown   — secondary line (e.g. "1 linked · 1 standalone")
   //   lastActivity — short timestamp string
   //   ctaLabel    — pill on the card hinting at the create affordance
-  type SectionInsight = { health: SectionHealth; breakdown: string; lastActivity: string; ctaLabel: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+  type SectionInsight = {
+    health: SectionHealth;
+    breakdown: string;
+    lastActivity: string;
+    ctaLabel: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    ratio: number | null;
+    openCount: number;
+    openLabel: string;
+    description: string;
+    healthRatioText: string;
+    entries: EntryData[];
+  };
   const sectionInsights: Record<SectionKey, SectionInsight> = useMemo(() => {
     const totalRacms = bpRacms.length + createdRacms.length;
     const draftRacms = bpRacms.filter(r => r.status === 'draft').length
@@ -3315,7 +4333,88 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     const idleWfs = bpWfs.length - activeWfs;
 
     // SOP staleness — anything dated before Mar 2026 in this demo dataset is "stale".
-    const staleSops = bpSops.filter(s => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(s.at)).length;
+    const isSopStale = (at: string) => /Dec 2025|Nov 2025|Oct 2025|Jan|Feb/.test(at);
+    const staleSops = bpSops.filter(s => isSopStale(s.at)).length;
+
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const riskTone = (r: typeof bpRisks[number]): EntryData['status'] => {
+      if (r.status === 'mitigated') return { label: 'Mitigated', tone: 'green' };
+      const sev = r.severity;
+      if (sev === 'critical' || sev === 'high') return { label: 'Open', tone: 'red' };
+      if (sev === 'medium') return { label: 'Open', tone: 'amber' };
+      return { label: 'Open', tone: 'gray' };
+    };
+
+    const sopEntries: EntryData[] = bpSops.map(s => ({
+      id: s.id,
+      title: `${s.name} ${s.version}`,
+      status: isSopStale(s.at)
+        ? { label: 'Stale', tone: 'amber' }
+        : { label: 'Processed', tone: 'green' },
+      meta: `${s.by} · ${s.at}`,
+      tags: s.racmId ? [s.racmId] : ['Standalone'],
+      highlight: { primary: `${s.risks} risks`, secondary: `${s.controls} controls` },
+      onOpen: () => openEntryDetail('sop'),
+    }));
+
+    const seedRacmEntries: EntryData[] = bpRacms.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: r.status === 'active'
+        ? { label: 'Active', tone: 'green' as const }
+        : { label: 'Draft', tone: 'gray' as const },
+      meta: `${r.owner} · ${r.fw} · ${r.lastRun === 'Never' ? 'Never run' : `Last run ${r.lastRun}`}`,
+      tags: [r.fw],
+      onOpen: () => openEntryDetail('racm'),
+    }));
+    const createdRacmEntries: EntryData[] = createdRacms.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: r.isFrozen === false
+        ? { label: 'Draft', tone: 'gray' }
+        : { label: 'Active', tone: 'green' },
+      meta: `${r.process} · ${r.framework} · ${r.risks} risks · ${r.controls} controls`,
+      tags: [r.framework],
+      onOpen: () => openEntryDetail('racm'),
+    }));
+    const racmEntries = [...seedRacmEntries, ...createdRacmEntries];
+
+    const riskEntries: EntryData[] = bpRisks.map(r => ({
+      id: r.id,
+      title: r.name,
+      status: riskTone(r),
+      meta: `${r.id} · ${cap(r.severity)} severity · ${r.lastUpdated ? `Updated ${r.lastUpdated}` : 'Never updated'}`,
+      tags: [cap(r.severity)],
+      highlight: { primary: `${r.ctls} ${r.ctls === 1 ? 'control' : 'controls'}`, secondary: `${r.keyCtls} key` },
+      onOpen: () => openEntryDetail('risks', 'risk', r.id),
+    }));
+
+    const controlEntries: EntryData[] = bpControls.map(c => ({
+      id: c.id,
+      title: c.name,
+      status: c.status === 'effective'
+        ? { label: 'Effective', tone: 'green' }
+        : c.status === 'ineffective'
+          ? { label: 'Ineffective', tone: 'red' }
+          : { label: 'Not tested', tone: 'gray' },
+      description: c.desc,
+      meta: `${c.id} · ${c.isKey ? 'Key control' : 'Standard'} · maps ${c.riskId}`,
+      tags: c.isKey ? ['Key'] : ['Standard'],
+      onOpen: () => openEntryDetail('controls', 'control', c.id),
+    }));
+
+    const workflowEntries: EntryData[] = bpWfs.map(w => ({
+      id: w.id,
+      title: w.name,
+      status: w.status === 'active'
+        ? { label: 'Active', tone: 'green' }
+        : { label: 'Idle', tone: 'amber' },
+      description: w.desc,
+      meta: `${w.type} · Last run ${w.lastRun}`,
+      tags: [w.type],
+      highlight: { primary: `${w.runs} runs` },
+      onOpen: () => openEntryDetail('workflows'),
+    }));
 
     return {
       sop: {
@@ -3326,6 +4425,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${linkedSops} linked to RACM${standaloneSops > 0 ? ` · ${standaloneSops} standalone` : ''}`,
         lastActivity: bpSops.length === 0 ? 'No activity yet' : `Latest: ${bpSops[0].at}`,
         ctaLabel: bpSops.length === 0 ? 'Upload SOP' : 'Open',
+        ratio: bpSops.length === 0 ? null : (bpSops.length - staleSops) / bpSops.length,
+        openCount: staleSops,
+        openLabel: 'stale',
+        description: 'Standard operating procedures — the source of truth for how each step in this process runs.',
+        healthRatioText: bpSops.length === 0 ? '' : `${bpSops.length - staleSops}/${bpSops.length} fresh`,
+        entries: sopEntries,
       },
       racm: {
         icon: Grid3x3,
@@ -3337,6 +4442,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? (bpRacms[0].lastRun === 'Never' ? 'Never run' : `Last run: ${bpRacms[0].lastRun}`)
           : 'No activity yet',
         ctaLabel: totalRacms === 0 ? 'New RACM' : 'Open',
+        ratio: totalRacms === 0 ? null : activeRacms / totalRacms,
+        openCount: draftRacms,
+        openLabel: 'draft',
+        description: 'Risk-and-control matrices that map each risk in this process to one or more controls.',
+        healthRatioText: totalRacms === 0 ? '' : `${activeRacms}/${totalRacms} active`,
+        entries: racmEntries,
       },
       risks: {
         icon: AlertTriangle,
@@ -3348,6 +4459,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? 'No activity yet'
           : (bpRisks.find(r => r.lastUpdated)?.lastUpdated ? `Latest: ${bpRisks.find(r => r.lastUpdated)!.lastUpdated}` : 'No activity yet'),
         ctaLabel: bpRisks.length === 0 ? 'New Risk' : 'Open',
+        ratio: bpRisks.length === 0 ? null : mappedRisks / bpRisks.length,
+        openCount: unmappedRisks,
+        openLabel: 'unmapped',
+        description: 'Process risks identified through SOP review, control mapping, or direct entry.',
+        healthRatioText: bpRisks.length === 0 ? '' : `${mappedRisks}/${bpRisks.length} mapped`,
+        entries: riskEntries,
       },
       controls: {
         icon: Shield,
@@ -3357,6 +4474,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${keyCtls} key${ineffectiveCtls > 0 ? ` · ${ineffectiveCtls} ineffective` : ''}`,
         lastActivity: bpControls.length === 0 ? 'No activity yet' : 'Mapped via RACM',
         ctaLabel: bpControls.length === 0 ? 'Go to RACM' : 'Open',
+        ratio: bpControls.length === 0 ? null : (bpControls.length - ineffectiveCtls) / bpControls.length,
+        openCount: ineffectiveCtls,
+        openLabel: 'ineffective',
+        description: 'Controls designed to prevent or detect each risk in this process.',
+        healthRatioText: bpControls.length === 0 ? '' : `${bpControls.length - ineffectiveCtls}/${bpControls.length} effective`,
+        entries: controlEntries,
       },
       workflows: {
         icon: Workflow,
@@ -3366,6 +4489,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           : `${activeWfs} active${idleWfs > 0 ? ` · ${idleWfs} idle` : ''}`,
         lastActivity: bpWfs[0]?.lastRun ? `Last run: ${bpWfs[0].lastRun}` : 'No activity yet',
         ctaLabel: bpWfs.length === 0 ? 'New Workflow' : 'Open',
+        ratio: bpWfs.length === 0 ? null : activeWfs / bpWfs.length,
+        openCount: idleWfs,
+        openLabel: 'idle',
+        description: 'Operational workflows that fire when a control triggers — approvals, monitors, escalations.',
+        healthRatioText: bpWfs.length === 0 ? '' : `${activeWfs}/${bpWfs.length} active`,
+        entries: workflowEntries,
       },
     };
   }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
@@ -3398,8 +4527,47 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return items;
   }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
 
+  // Overall health for the summary line — share of items in good standing across
+  // every section (weighted by item count, so it's an honest single number).
+  const overallCoverage = useMemo(() => {
+    let good = 0, total = 0;
+    for (const k of sectionOrder) {
+      const ins = sectionInsights[k];
+      if (ins.ratio === null || ins.ratio === undefined) continue;
+      total += sectionMeta[k].count;
+      good += sectionMeta[k].count - (ins.openCount ?? 0);
+    }
+    return total === 0 ? null : Math.round((good / total) * 100);
+  }, [sectionInsights, sectionMeta]);
+  const firstFixSection = attentionItems[0]?.section ?? null;
+
+  // Staggered first-paint: summary first, then each section row 40ms apart. Exponential
+  // ease-out, 8px rise — a single crafted page-load moment, gated to once per session.
+  const doStagger = animateOverviewIn && !reduceMotion;
+  const revealProps = (i: number) => doStagger ? {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.18, ease: OVERVIEW_EASE, delay: i * 0.04 },
+  } : {};
+
   // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
   const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
+
+  // Section render order on the index view: rows with open work float to the top,
+  // locked rows sink to the bottom. Within each bucket, canonical order is preserved.
+  const lockedFor = (key: SectionKey) =>
+    isFreshBP && key !== 'sop'
+      ? true
+      : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
+  const sortedIndexSections = [...sectionOrder].sort((a, b) => {
+    const aLocked = lockedFor(a);
+    const bLocked = lockedFor(b);
+    if (aLocked !== bLocked) return aLocked ? 1 : -1;
+    const aOpen = (sectionInsights[a].openCount ?? 0) > 0;
+    const bOpen = (sectionInsights[b].openCount ?? 0) > 0;
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    return 0;
+  });
 
   // Section switcher pill labels (shorter than full section titles where useful).
   const sectionPillLabel: Record<SectionKey, string> = {
@@ -3416,6 +4584,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
       window.history.pushState({ section: next }, '', `?section=${next}`);
     }
     setDrilledSection(next);
+  };
+
+  // Open a specific risk or control detail from anywhere on the BP page (e.g. clicking
+  // an entry card in an expanded section). Pushes both ?section= and the detail param
+  // in one history entry, then fires popstate so the section component picks it up.
+  const openEntryDetail = (section: SectionKey, detailKey?: 'risk' | 'control', detailId?: string) => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams();
+      params.set('section', section);
+      if (detailKey && detailId) params.set(detailKey, detailId);
+      window.history.pushState({ section }, '', `?${params.toString()}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    setDrilledSection(section);
   };
 
   // Section-specific create button label rendered in the drilled-view header.
@@ -3454,271 +4636,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     // Defer trigger to next tick so the section component has mounted.
     setTimeout(() => triggerSectionCreate(section), 50);
   };
-
-  // ============================================================
-  // LEGACY chevron-collapsible view — flip USE_LEGACY_COLLAPSIBLE to true to restore.
-  // The entire old return JSX is preserved verbatim inside this guarded block.
-  // ============================================================
-  const USE_LEGACY_COLLAPSIBLE = false;
-  if (USE_LEGACY_COLLAPSIBLE) {
-  return (
-    <div className="h-full overflow-y-auto bg-canvas">
-      <div className="px-[124px] py-8">
-        {/* Header — full-bleed white strip, matches Reports */}
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          {/* Breadcrumb (back) */}
-          <button type="button" onClick={onBack} className="font-mono text-[12px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
-            <ArrowLeft size={12} />
-            Process Hub
-          </button>
-
-          {/* Title row */}
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
-            <div className="text-right shrink-0">
-              <div className="text-2xl font-bold tabular-nums text-ink-800">{coverage}%</div>
-              <div className="text-[10px] text-text-muted">Coverage</div>
-            </div>
-          </div>
-
-          {/* Process Metadata */}
-          <div className="flex items-center gap-6 mb-5 text-[12px] text-text-muted">
-            <span className="font-mono">{bp.abbr}</span>
-            <div className="flex items-center gap-2">
-              <span className="font-bold">Owner:</span>
-              <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold">Status:</span>
-              {(() => {
-                const s = bp.status ?? 'Active';
-                const tone =
-                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                return (
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                    {s}
-                  </span>
-                );
-              })()}
-            </div>
-          </div>
-          {bp.description && (
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl pb-5">{bp.description}</p>
-          )}
-        </div>
-
-        {reviewingRacm ? (
-          /* RACM editor takeover — replaces all sections while editing */
-          <ReviewImportWorkspace
-            racmName={reviewingRacm.name}
-            bpAbbr={bp.abbr}
-            fileName={reviewingRacm.sourceFileName || 'imported.xlsx'}
-            onBack={() => setReviewingRacmId(null)}
-            onFreeze={(importedRows) => {
-              const uniqueRisks = new Set(importedRows.filter(r => r.riskId.trim()).map(r => r.riskId));
-              const uniqueControls = new Set(importedRows.filter(r => r.controlId.trim()).map(r => r.controlId));
-              const keyControlIds = new Set(importedRows.filter(r => r.keyControl && r.controlId.trim()).map(r => r.controlId));
-              const mappings = new Set(importedRows.filter(r => r.riskId.trim() && r.controlId.trim()).map(r => `${r.riskId}::${r.controlId}`));
-              const framework = importedRows.find(r => r.framework.trim())?.framework || reviewingRacm.framework;
-              setCreatedRacms(prev => prev.map(r => r.id === reviewingRacm.id ? {
-                ...r, isFrozen: true,
-                risks: uniqueRisks.size, controls: uniqueControls.size,
-                mappedRisks: uniqueRisks.size, unmappedRisks: 0,
-                keyControls: keyControlIds.size, framework,
-                workflowCoverage: 0, attributesCoverage: 0, isValidated: true,
-              } : r));
-              setReviewingRacmId(null);
-              addToast({
-                message: `RACM "${reviewingRacm.name}" frozen — ${uniqueRisks.size} risks, ${uniqueControls.size} controls, ${mappings.size} mappings created.`,
-                type: 'success',
-              });
-            }}
-          />
-        ) : (
-          <div className="space-y-14">
-            {/* SOPs */}
-            <section>
-              <SectionHeader
-                title="SOPs"
-                count={bpSops.length}
-                countLabel="documents"
-                warning={bpSops.length === 0 ? 'no SOPs uploaded' : undefined}
-                open={openSections.sop}
-                onToggle={() => toggleSection('sop')}
-              />
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.sop ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                  <div className="pt-6">
-              <SOPTabContent
-                bpId={bp.id}
-                bpAbbr={bp.abbr}
-                existingSops={bpSops}
-                existingRacms={bpRacms}
-                onGoToRacm={scrollToRacms}
-                onRacmCreated={(racmId, racmName, process, framework) => {
-                  setCreatedRacms(prev => [...prev, {
-                    id: racmId, name: racmName, version: 'v1.0', process, framework,
-                    risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                    workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                    isFrozen: false,
-                  }]);
-                }}
-                onViewRacm={(racmId) => {
-                  const exists = createdRacms.some(r => r.id === racmId);
-                  if (!exists) {
-                    setCreatedRacms(prev => [...prev, {
-                      id: racmId, name: `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                      risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                      workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                      isFrozen: false,
-                    }]);
-                  }
-                  setReviewingRacmId(racmId);
-                }}
-              />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* RACMs */}
-            <section ref={racmSectionRef}>
-              <SectionHeader
-                title="RACMs"
-                count={bpRacms.length + createdRacms.length}
-                countLabel="matrices"
-                warning={(bpRacms.length + createdRacms.length) === 0 ? 'no RACMs yet' : undefined}
-                open={openSections.racm}
-                onToggle={() => toggleSection('racm')}
-              />
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.racm ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                  <div className="pt-6 space-y-4">
-                <RacmListTable
-                  processFilter={bp.abbr}
-                  extraRacms={createdRacms}
-                  onCreate={() => setShowCreateRacm(true)}
-                  headerAction={
-                    <button type="button" onClick={() => setShowCreateRacm(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                      <Plus size={13} />New RACM
-                    </button>
-                  }
-                  onEditDraft={(racm) => {
-                    const exists = createdRacms.some(r => r.id === racm.id);
-                    if (!exists) {
-                      setCreatedRacms(prev => [...prev, { ...racm, isFrozen: false }]);
-                    }
-                    setReviewingRacmId(racm.id);
-                  }}
-                  onOpenInEditor={onOpenRacmEditor}
-                />
-                <AnimatePresence>
-                  {showCreateRacm && (
-                    <CreateRacmFromSOPModal
-                      sopName=""
-                      bpAbbr={bp.abbr}
-                      onClose={() => setShowCreateRacm(false)}
-                      onStartReview={(racmName, fileName) => {
-                        const racmId = `racm-${Date.now()}`;
-                        setCreatedRacms(prev => [...prev, {
-                          id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                          risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                          workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                          isFrozen: false, sourceFileName: fileName,
-                        }]);
-                        setReviewingRacmId(racmId);
-                        setShowCreateRacm(false);
-                      }}
-                      onCreate={(racmName, framework) => {
-                        const racmId = `racm-${Date.now()}`;
-                        setCreatedRacms(prev => [...prev, {
-                          id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework,
-                          risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                          workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                          isFrozen: true,
-                        }]);
-                        setShowCreateRacm(false);
-                      }}
-                    />
-                  )}
-                </AnimatePresence>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Risks */}
-            <section>
-              <SectionHeader
-                title="Risks"
-                count={bpRisks.length}
-                countLabel="risks"
-                warning={bpRisks.length === 0 ? 'no risks captured' : undefined}
-                open={openSections.risks}
-                onToggle={() => toggleSection('risks')}
-              />
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.risks ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                  <div className="pt-6">
-                    <RiskRegister processFilter={bp.abbr} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Controls */}
-            <section>
-              <SectionHeader
-                title="Controls"
-                count={bpControls.length}
-                countLabel="controls"
-                warning={bpControls.length === 0 ? 'no controls defined' : undefined}
-                open={openSections.controls}
-                onToggle={() => toggleSection('controls')}
-              />
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.controls ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                  <div className="pt-6">
-                    <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={scrollToRacms} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Workflows */}
-            <section>
-              <SectionHeader
-                title="Workflows"
-                count={bpWfs.length}
-                countLabel="workflows"
-                warning={bpWfs.length === 0 ? 'no workflows linked' : undefined}
-                open={openSections.workflows}
-                onToggle={() => toggleSection('workflows')}
-              />
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${openSections.workflows ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                  <div className="pt-6">
-                    <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
-  }
-
-  // ============================================================
-  // DRILL-IN view — current active pattern.
-  // ============================================================
 
   // RACM editor takeover — full-screen replaces all views while editing
   if (reviewingRacm) {
@@ -3769,44 +4686,57 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               <span className="text-ink-300">/</span>
               <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
               <span className="text-ink-300">/</span>
-              <span className="text-ink-700 truncate">{info.title}</span>
+              {detailIsOpen ? (
+                <>
+                  <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
+                  <span className="text-ink-300">/</span>
+                  <span className="text-ink-700 truncate">
+                    {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
+                  </span>
+                </>
+              ) : (
+                <span className="text-ink-700 truncate">{info.title}</span>
+              )}
             </div>
 
-            {/* Section switcher pills + section-specific create button — share one row. */}
-            <div className="flex items-center justify-between gap-3 mt-3">
-              <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
-              {sectionOrder.map(key => {
-                const m = sectionMeta[key];
-                const active = drilledSection === key;
-                return (
-                  <button
-                    type="button"
-                    key={key}
-                    aria-label={`Switch to ${m.title}`}
-                    aria-current={active ? 'page' : undefined}
-                    onClick={() => switchDrilledSection(key)}
-                    className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
-                      active
-                        ? 'bg-brand-600 text-paper-0'
-                        : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
-                    }`}
-                  >
-                    {sectionPillLabel[key]}
-                    {m.count > 0 && (
-                      <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Section switcher pills + section-specific create button — share one row.
+                Hidden when a risk/control detail page is open so the detail owns the screen. */}
+            {!detailIsOpen && !(drilledSection === 'racm' && racmTakeover) && (
+              <div className="flex items-center justify-between gap-3 mt-3">
+                <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
+                {sectionOrder.map(key => {
+                  const m = sectionMeta[key];
+                  const active = drilledSection === key;
+                  return (
+                    <button
+                      type="button"
+                      key={key}
+                      aria-label={`Switch to ${m.title}`}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => switchDrilledSection(key)}
+                      className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-brand-600 text-paper-0'
+                          : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
+                      }`}
+                    >
+                      {sectionPillLabel[key]}
+                      {m.count > 0 && (
+                        <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+                </div>
+                {/* Section-specific create button — text changes per drilled section. */}
+                <button
+                  type="button"
+                  onClick={() => triggerSectionCreate(drilledSection)}
+                  className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                  <Plus size={13} />{sectionCreateLabel[drilledSection]}
+                </button>
               </div>
-              {/* Section-specific create button — text changes per drilled section. */}
-              <button
-                type="button"
-                onClick={() => triggerSectionCreate(drilledSection)}
-                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />{sectionCreateLabel[drilledSection]}
-              </button>
-            </div>
+            )}
 
           </div>
 
@@ -3853,6 +4783,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   setReviewingRacmId(racm.id);
                 }}
                 onOpenInEditor={onOpenRacmEditor}
+                onTakeoverChange={setRacmTakeover}
               />
               <AnimatePresence>
                 {showCreateRacm && (
@@ -3899,17 +4830,21 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          <button type="button" onClick={onBack} className="font-mono text-[12px] text-ink-500 hover:text-primary mb-2 tracking-tight transition-colors cursor-pointer flex items-center gap-1.5">
-            <ArrowLeft size={12} />Process Hub
-          </button>
-
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
-            <div className="text-right shrink-0">
-              <div className="text-2xl font-bold tabular-nums text-ink-800">{coverage}%</div>
-              <div className="text-[10px] text-text-muted">Coverage</div>
-            </div>
+          <div className="font-mono text-[12px] mb-2 tracking-tight flex items-center gap-1.5 min-w-0">
+            <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+              <ArrowLeft size={12} />Process Hub
+            </button>
+            <span className="text-ink-300">/</span>
+            <span className="text-ink-700 truncate">{bp.name}</span>
           </div>
+
+          <div className="mb-2">
+            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          </div>
+
+          <p className="text-[13px] text-text-secondary mb-5 max-w-2xl leading-relaxed">
+            {bp.description ?? 'Map risks, controls, SOPs, and workflows for this process.'}
+          </p>
 
           <div className="flex items-center justify-between gap-3 mb-5 text-[12px] text-text-muted">
             <div className="flex items-center gap-6 min-w-0">
@@ -3936,15 +4871,16 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 })()}
               </div>
             </div>
-            {/* Create new dropdown — sits at the right end of the meta row. */}
-            <div className="relative shrink-0">
+            {/* Quick add dropdown — shortcut to any of the five section create flows. */}
+            <div className="shrink-0">
+              <div className="relative">
               <button
                 type="button"
                 onClick={() => setCreateMenuOpen(v => !v)}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
                 className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
-                Create new
+                Quick add
                 <ChevronDown size={13} />
               </button>
               {createMenuOpen && (
@@ -3971,11 +4907,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   </div>
                 </>
               )}
+              </div>
             </div>
           </div>
-          {bp.description && (
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl pb-5">{bp.description}</p>
-          )}
         </div>
 
         {/* Fresh-BP onboarding banner — only when nothing's set up yet. */}
@@ -4000,63 +4934,57 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           </div>
         )}
 
-        {/* Attention card — white interior like the section cards below, but
-            outlined in a warmer border so it differs by OUTLINE not by FILL. */}
-        {!isFreshBP && attentionItems.length > 0 && (
-          <div className="mb-5 bg-white border border-mitigated/25 rounded-[12px] overflow-hidden" aria-label="Items needing attention">
-            <div className="flex items-center gap-2 px-5 pt-3.5 pb-2">
-              <AlertTriangle size={11} className="text-mitigated-700" aria-hidden />
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-mitigated-700">
-                Needs attention
-              </span>
-              <span className="text-[10px] uppercase tracking-wider font-mono text-ink-400 tabular-nums">
-                · {attentionItems.length}
-              </span>
-            </div>
-            <ul className="divide-y divide-canvas-border/60">
-              {attentionItems.map((item, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => switchDrilledSection(item.section)}
-                    aria-label={`Open ${item.section}: ${item.text}`}
-                    className="w-full flex items-center gap-3 px-5 py-2.5 text-left hover:bg-paper-50/40 transition-colors cursor-pointer group"
-                  >
-                    <span className="text-[13px] text-ink-800 leading-snug flex-1 min-w-0">{item.text}</span>
-                    <ChevronRight size={13} className="text-ink-300 group-hover:text-mitigated-700 transition-colors shrink-0" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {/* Summary line — one honest health number for the whole process, plus a
+            jump to the first thing to fix. Replaces the old "needs attention" list:
+            the per-section issues now live on their own rows, so nothing's said twice. */}
+        {!isFreshBP && overallCoverage !== null && (
+          <motion.div className="mb-4 flex items-center justify-between gap-3 px-1" {...revealProps(0)}>
+            <p className="text-[13px] leading-none">
+              <span className="font-semibold text-ink-900"><span className="font-mono tabular-nums">{overallCoverage}%</span> healthy</span>
+              {attentionItems.length > 0 ? (
+                <span className="text-ink-500"> · {attentionItems.length} item{attentionItems.length !== 1 ? 's' : ''} need{attentionItems.length === 1 ? 's' : ''} attention</span>
+              ) : (
+                <span className="text-compliant-700"> · all clear</span>
+              )}
+            </p>
+            {attentionItems.length > 0 && firstFixSection && (
+              <button
+                type="button"
+                onClick={() => switchDrilledSection(firstFixSection)}
+                className="no-focus-ring shrink-0 inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+              >
+                Fix first <ChevronRight size={13} aria-hidden />
+              </button>
+            )}
+          </motion.div>
         )}
 
         <div className="space-y-3">
-          {sectionOrder.map(key => {
+          {sortedIndexSections.map((key, i) => {
             const m = sectionMeta[key];
             const ins = sectionInsights[key];
             // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-            const locked = isFreshBP && key !== 'sop'
-              ? true
-              : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
+            const locked = lockedFor(key);
             const lockedReason = key === 'sop'
               ? undefined
               : key === 'racm'
                 ? 'Available after the first SOP is uploaded.'
                 : 'Available after the first RACM is created.';
             return (
-              <SectionCard
-                key={key}
-                title={m.title}
-                count={m.count}
-                countLabel={m.countLabel}
-                breakdown={ins.breakdown}
-                lastActivity={ins.lastActivity}
-                health={ins.health}
-                locked={locked}
-                lockedReason={lockedReason}
-                onClick={() => switchDrilledSection(key)}
-              />
+              <motion.div key={key} {...revealProps(i + 1)}>
+                <SectionCard
+                  title={m.title}
+                  count={m.count}
+                  ratio={ins.ratio}
+                  openCount={ins.openCount}
+                  openLabel={ins.openLabel}
+                  healthRatioText={ins.healthRatioText}
+                  entries={ins.entries}
+                  locked={locked}
+                  lockedReason={lockedReason}
+                  onClick={() => switchDrilledSection(key)}
+                />
+              </motion.div>
             );
           })}
         </div>
