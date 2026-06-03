@@ -16,7 +16,7 @@
  * Generic attributes do not consume samples.
  */
 
-import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, FileText, Upload, Sparkles, CheckCircle2, XCircle,
@@ -37,6 +37,10 @@ interface Props {
   engagement: Engagement;
   /** Hand off a seed prompt to the AI Concierge workflow builder (chat). */
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
+  /** When set (from Controls → "Test evidence"), auto-open this control at Attribute Testing. */
+  openControlId?: string | null;
+  /** Called once the openControlId has been consumed, so the parent can clear it. */
+  onOpened?: () => void;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -315,7 +319,7 @@ function seedFor(controls: DistinctControl[]): SeedBundle {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Props): JSX.Element {
+export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openControlId, onOpened }: Props): JSX.Element {
   const { addToast } = useToast();
   const ws = useEngagementWorkspace();
   const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
@@ -534,6 +538,21 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
   };
   const setSelectedAttr = (controlId: string, attrId: string) => setExpandedAttrByCtrl(prev => ({ ...prev, [controlId]: attrId }));
 
+  // Consume an external "open this control at Attribute Testing" request (Controls → Test evidence).
+  useEffect(() => {
+    if (!openControlId) return;
+    const ctrl = allControls.find(c => c.controlId === openControlId);
+    if (ctrl) {
+      setSelectedControlId(openControlId);
+      setActiveCheckpoint(3);
+      if (ctrl.attributes.length > 0) setExpandedAttrByCtrl(prev => ({ ...prev, [openControlId]: ctrl.attributes[0]!.id }));
+    }
+    onOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openControlId]);
+
+  const allAttrsBulkRef = useRef<HTMLInputElement | null>(null);
+
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const onUploadPopulation = (ctrl: DistinctControl) => {
@@ -595,6 +614,61 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
       ...prev,
       [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => s.id !== sampleId ? s : { ...s, evidence: { ...s.evidence, [attr.id]: { ...(s.evidence[attr.id] || {}), [evidenceType]: null } } }),
     }));
+  };
+  /** Bulk-attach evidence for every in-scope sample at once (fills only the gaps). */
+  const onBulkUploadSampleEvidence = (ctrl: DistinctControl, attr: ControlAttribute) => {
+    const round = roundsByCtrlAttr[`${ctrl.controlId}::${attr.id}`] || [];
+    const active = round[round.length - 1];
+    let filled = 0;
+    setSamplesByCtrl(prev => ({
+      ...prev,
+      [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => {
+        const inScope = !active || active.sampleIds.includes(s.id) || round.length <= 1;
+        if (!inScope) return s;
+        const ev = { ...(s.evidence[attr.id] || {}) };
+        attr.requiredEvidence.forEach(et => {
+          if (!ev[et]) { ev[et] = { filename: mockFilename(et, s.id), size: mockFileSize(`${s.id}-${et}`) }; filled += 1; }
+        });
+        return { ...s, evidence: { ...s.evidence, [attr.id]: ev } };
+      }),
+    }));
+    const sampleCount = (samplesByCtrl[ctrl.controlId] || []).length;
+    pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} for ${attr.id} across ${sampleCount} samples` });
+    addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across ${sampleCount} samples` : 'All samples already have their evidence.' });
+  };
+  /** Control-level bulk: attach required evidence across every attribute (all samples + generic) at once. */
+  const onBulkUploadAllAttrs = (ctrl: DistinctControl) => {
+    const sb = sampleBasedAttrs(ctrl);
+    const gens = genericAttrs(ctrl);
+    let filled = 0;
+    if (sb.length > 0) {
+      setSamplesByCtrl(prev => ({
+        ...prev,
+        [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => {
+          const byAttr = { ...s.evidence };
+          sb.forEach(attr => {
+            const ev = { ...(byAttr[attr.id] || {}) };
+            attr.requiredEvidence.forEach(et => { if (!ev[et]) { ev[et] = { filename: mockFilename(et, s.id), size: mockFileSize(`${s.id}-${et}`) }; filled += 1; } });
+            byAttr[attr.id] = ev;
+          });
+          return { ...s, evidence: byAttr };
+        }),
+      }));
+    }
+    if (gens.length > 0) {
+      setGenericByCtrl(prev => {
+        const map = { ...(prev[ctrl.controlId] || {}) };
+        gens.forEach(attr => {
+          const cur = map[attr.id] || { evidence: {}, useAi: true, humanVerdict: 'Pass' as HumanVerdict, humanRemark: '', aiVerdict: null, aiConfidence: 0, aiRationale: '' };
+          const ev = { ...cur.evidence };
+          attr.requiredEvidence.forEach(et => { if (!ev[et]) { ev[et] = { filename: mockFilename(et, `${ctrl.controlId}-${attr.id}`), size: mockFileSize(`${ctrl.controlId}-${attr.id}-${et}`) }; filled += 1; } });
+          map[attr.id] = { ...cur, evidence: ev };
+        });
+        return { ...prev, [ctrl.controlId]: map };
+      });
+    }
+    pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` });
+    addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` : 'All attributes already have their evidence.' });
   };
 
   const onRunAttrAi = (ctrl: DistinctControl, attr: ControlAttribute) => {
@@ -778,9 +852,29 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
 
                 {activeCheckpoint === 3 && (
                   <div className="rounded-2xl border border-canvas-border bg-white">
-                    <div className="px-6 py-4 border-b border-canvas-border">
-                      <h5 className="text-[14px] font-bold text-text">Attribute Testing</h5>
-                      <p className="text-[11px] text-text-muted mt-0.5">Pick an attribute on the left. Each one carries its own evidence + validation workflow.</p>
+                    <div className="px-6 py-4 border-b border-canvas-border flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h5 className="text-[14px] font-bold text-text">Attribute Testing</h5>
+                        <p className="text-[11px] text-text-muted mt-0.5">Pick an attribute on the left, or upload evidence for every attribute at once.</p>
+                      </div>
+                      {ctrl.attributes.length > 0 && (
+                        <>
+                          <input
+                            ref={allAttrsBulkRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => { if (e.target.files && e.target.files.length > 0) onBulkUploadAllAttrs(ctrl); e.target.value = ''; }}
+                          />
+                          <button
+                            onClick={() => allAttrsBulkRef.current?.click()}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold cursor-pointer transition-colors"
+                            title="Upload evidence and apply it across every attribute and sample on this control"
+                          >
+                            <Upload size={12} /> Upload evidence for all attributes
+                          </button>
+                        </>
+                      )}
                     </div>
                     {ctrl.attributes.length === 0 ? (
                       <div className="px-6 py-12 text-center">
@@ -843,6 +937,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
                                 onBuildWorkflow={() => onBuildAttrWorkflow(ctrl, selectedAttr)}
                                 onUploadEvidence={(sid, et) => onUploadSampleEvidence(ctrl, selectedAttr, sid, et)}
                                 onRemoveEvidence={(sid, et) => onRemoveSampleEvidence(ctrl, selectedAttr, sid, et)}
+                                onBulkUpload={() => onBulkUploadSampleEvidence(ctrl, selectedAttr)}
                                 onRunAi={() => onRunAttrAi(ctrl, selectedAttr)}
                                 onOverride={(sid, patch) => onOverrideSample(ctrl, selectedAttr, sid, patch)}
                                 onStartRound={() => onStartRound(ctrl, selectedAttr)}
@@ -1258,7 +1353,7 @@ function ValidationWorkflowsSection({ ctrl, workflows, onAdd, onRemove }: {
 
 // ─── Section: Sample-based attribute ─────────────────────────────────────────
 
-function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, rounds, disabled, running, evidenceReady, allTested, passCount, failCount, validationWorkflow, pickerOpen, onTogglePicker, onSelectWorkflow, onClearWorkflow, onBuildWorkflow, onUploadEvidence, onRemoveEvidence, onRunAi, onOverride, onStartRound }: {
+function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, rounds, disabled, running, evidenceReady, allTested, passCount, failCount, validationWorkflow, pickerOpen, onTogglePicker, onSelectWorkflow, onClearWorkflow, onBuildWorkflow, onUploadEvidence, onRemoveEvidence, onBulkUpload, onRunAi, onOverride, onStartRound }: {
   ctrl: DistinctControl; attr: ControlAttribute;
   expanded: boolean; onToggle: () => void;
   samples: GeneratedSample[]; rounds: AttributeRound[];
@@ -1273,12 +1368,15 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
   onBuildWorkflow: () => void;
   onUploadEvidence: (sid: string, et: string) => void;
   onRemoveEvidence: (sid: string, et: string) => void;
+  onBulkUpload: () => void;
   onRunAi: () => void;
   onOverride: (sid: string, patch: Partial<AttrVerdict>) => void;
   onStartRound: () => void;
 }): JSX.Element {
   const activeRound = rounds[rounds.length - 1];
   void ctrl;
+  const bulkRef = useRef<HTMLInputElement | null>(null);
+  const samplesWithEvidence = samples.filter(s => attr.requiredEvidence.every(et => !!s.evidence[attr.id]?.[et])).length;
 
   return (
     <div className={`rounded-xl border ${expanded ? 'border-brand-200 bg-white' : 'border-canvas-border bg-white'} overflow-hidden`}>
@@ -1316,6 +1414,34 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           {/* Validation workflow selector */}
           <WorkflowPicker workflow={validationWorkflow} open={pickerOpen} onToggle={onTogglePicker}
             onSelect={onSelectWorkflow} onClear={onClearWorkflow} onBuild={onBuildWorkflow} />
+
+          {/* Bulk evidence upload — attach the required evidence to every sample at once */}
+          {samples.length > 0 && (
+            <div className="rounded-lg border border-brand-100 bg-brand-50/30 px-3.5 py-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-md bg-brand-50 shrink-0"><Upload size={13} className="text-brand-600" /></div>
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-semibold text-text">Bulk evidence upload</div>
+                  <div className="text-[10px] text-text-muted">Attach the required evidence to every sample in one go · <span className="tabular-nums font-medium">{samplesWithEvidence}/{samples.length}</span> samples have all evidence</div>
+                </div>
+              </div>
+              <input
+                ref={bulkRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files && e.target.files.length > 0) onBulkUpload(); e.target.value = ''; }}
+              />
+              <button
+                onClick={() => bulkRef.current?.click()}
+                disabled={evidenceReady}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[11.5px] font-semibold cursor-pointer transition-colors"
+                title="Upload evidence files and apply them across all samples"
+              >
+                <Upload size={12} /> {evidenceReady ? 'All evidence uploaded' : 'Bulk upload for all samples'}
+              </button>
+            </div>
+          )}
 
           {/* Per-sample table */}
           <div className="rounded-lg border border-canvas-border overflow-hidden">
