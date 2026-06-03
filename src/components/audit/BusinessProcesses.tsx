@@ -4991,7 +4991,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-10 h-10 rounded-[12px] bg-brand-600 grid place-items-center shrink-0">
+                  <span className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 grid place-items-center shrink-0">
                     <Zap size={18} className="text-paper-0" />
                   </span>
                   <div className="min-w-0">
@@ -5002,7 +5002,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   </div>
                 </div>
                 <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden shrink-0">
-                  <div className="h-full bg-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -5012,11 +5012,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   return (
                     <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant-50 bg-compliant-50/40' : 'border-canvas-border bg-white'}`}>
                       {done ? (
-                        <span className="w-7 h-7 rounded-full bg-compliant grid place-items-center shrink-0">
-                          <Check size={15} className="text-paper-0" strokeWidth={3} />
+                        <span className="w-6 h-6 rounded-full bg-compliant grid place-items-center shrink-0">
+                          <CheckCircle2 size={16} className="text-paper-0" strokeWidth={2.5} />
                         </span>
                       ) : (
-                        <span className="w-7 h-7 rounded-full bg-paper-100 grid place-items-center shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">{i + 1}</span>
+                        <span className="w-6 h-6 rounded-full bg-paper-100 grid place-items-center shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">{i + 1}</span>
                       )}
                       <div className="min-w-0 flex-1">
                         <h4 className={`text-[14px] font-semibold leading-tight ${done ? 'text-compliant-700' : 'text-ink-900'}`}>{step.title}</h4>
