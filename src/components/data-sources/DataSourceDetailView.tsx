@@ -1428,18 +1428,15 @@ function PreviewPane({ file }: { file: DatasetFile }) {
           <p className="text-[0.75rem] text-ink-500">This file couldn’t be processed — the format may not be supported.</p>
         </div>
       ) : file.pages != null ? (
-        /* PDF — the page viewer is already tall; flow it + details. */
+        /* PDF — the page viewer is already tall; flow it as-is. */
         <div className="flex-1 min-h-0 overflow-auto p-4">
           <FilePreviewBlock file={file} />
         </div>
       ) : (
         /* Sheet — stretch the preview card to fill the pane so a short file
-           leaves no dead zone; Details pinned beneath. */
-        <div className="flex-1 min-h-0 p-4 flex flex-col gap-4">
-          <div className="flex-1 min-h-0">
-            <FilePreviewBody key={file.id} file={file} fill />
-          </div>
-          <PreviewDetails file={file} />
+           leaves no dead zone below it. */
+        <div className="flex-1 min-h-0 p-4">
+          <FilePreviewBody key={file.id} file={file} fill />
         </div>
       )}
     </>
