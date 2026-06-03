@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
@@ -4963,6 +4963,79 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 footer={<span className="text-[11px] text-ink-400"><span className="font-semibold text-ink-600 tabular-nums">{risksMapped}</span> mapped</span>}
               />
             </div>
+          );
+        })()}
+
+        {/* Setup checklist — guided steps to populate this process, one per section.
+            Each step is "done" once that section has content; the buttons reuse the
+            same create flows as the Quick add menu. */}
+        {!isFreshBP && (() => {
+          const SETUP_STEPS = [
+            { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
+            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: Grid3x3 },
+            { key: 'risks' as const,     title: 'Create Risks',    desc: 'Identify and document risks relevant to this business process.',                      cta: 'Create Risk',            icon: AlertTriangle },
+            { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
+            { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
+          ];
+          // Showcase states: O2C is pinned to a mid-setup checklist (only RACM
+          // done, the rest still to do — matches the reference design); every
+          // other process derives done-state from real section content (P2P = 5/5).
+          const SETUP_DEMO_OVERRIDE: Partial<Record<string, Record<SectionKey, boolean>>> = {
+            o2c: { sop: false, racm: true, risks: false, controls: false, workflows: false },
+          };
+          const demoOverride = SETUP_DEMO_OVERRIDE[bp.id];
+          const isStepDone = (k: SectionKey) => demoOverride ? demoOverride[k] : sectionMeta[k].count > 0;
+          const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
+          const pct = Math.round((completed / SETUP_STEPS.length) * 100);
+          return (
+            <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-10 h-10 rounded-[12px] bg-brand-600 grid place-items-center shrink-0">
+                    <Zap size={18} className="text-paper-0" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold text-ink-900 leading-tight">Set up this business process</h3>
+                    <p className="text-[12px] text-ink-400 mt-0.5">
+                      <span className="font-mono tabular-nums">{completed}</span> of <span className="font-mono tabular-nums">{SETUP_STEPS.length}</span> steps complete
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden shrink-0">
+                  <div className="h-full bg-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                {SETUP_STEPS.map((step, i) => {
+                  const done = isStepDone(step.key);
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant-50 bg-compliant-50/40' : 'border-canvas-border bg-white'}`}>
+                      {done ? (
+                        <span className="w-7 h-7 rounded-full bg-compliant grid place-items-center shrink-0">
+                          <Check size={15} className="text-paper-0" strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="w-7 h-7 rounded-full bg-paper-100 grid place-items-center shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">{i + 1}</span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`text-[14px] font-semibold leading-tight ${done ? 'text-compliant-700' : 'text-ink-900'}`}>{step.title}</h4>
+                        <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">{step.desc}</p>
+                      </div>
+                      {!done && (
+                        <button
+                          type="button"
+                          onClick={() => handleDropdownPick(step.key)}
+                          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-brand-50 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer"
+                        >
+                          <Icon size={13} />{step.cta}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.section>
           );
         })()}
 
