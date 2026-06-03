@@ -29,6 +29,7 @@ import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, type RACMRow, type ControlAttribute } from '../../data/racm';
 import { CURRENT_USER } from '../../data/grc-domain';
+import { useEngagementWorkspace } from './engagementWorkspace';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ type HumanVerdict = 'Pass' | 'Fail' | 'Hold';
 type Verdict = AiVerdict | null;
 type SampleMethod = 'Random' | 'Statistical' | 'Column-filter' | 'Workflow';
 type StatusFilter = 'All' | 'Complete' | 'In progress' | 'Not started';
+type GroupBy = 'none' | 'subProcess';
 type ControlStatus = 'Not started' | 'In progress' | 'Validated' | 'Working paper ready';
 type Operator = '=' | '>' | '<' | 'contains';
 
@@ -315,6 +317,7 @@ function seedFor(controls: DistinctControl[]): SeedBundle {
 
 export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Props): JSX.Element {
   const { addToast } = useToast();
+  const ws = useEngagementWorkspace();
   const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
   const groupsBySub = useMemo(() => buildControlGroups(allRows), [allRows]);
   const subProcessNames = useMemo(() => Array.from(groupsBySub.keys()), [groupsBySub]);
@@ -328,6 +331,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
   // ─── State (control-level) ─────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [subProcessFilter, setSubProcessFilter] = useState<string>('All');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [search, setSearch] = useState<string>('');
   const [expandedSub, setExpandedSub] = useState<Set<string>>(() => new Set(subProcessNames.slice(0, 1)));
   /** When set, the tab switches from list mode to focused detail mode for that control. */
@@ -429,6 +433,25 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
     return 'In progress';
   };
 
+  // Workflow-link readiness carried over from the Controls tab (shared workspace store):
+  // the distinct workflow codes linked to any of this control's attributes.
+  const workflowCodesForControl = useCallback((ctrl: DistinctControl): string[] => {
+    const ids = new Set<string>();
+    ctrl.attributes.forEach(a => ws.workflowIdsForAttribute(a.id).forEach(id => ids.add(id)));
+    return Array.from(ids)
+      .map(id => ws.workflows.find(w => w.id === id)?.code)
+      .filter((c): c is string => !!c);
+  }, [ws]);
+
+  // Per-row derived props, shared by the flat and grouped renderers.
+  const rowPropsFor = (ctrl: DistinctControl) => {
+    const attrsTotal = ctrl.attributes.length;
+    const aDone = ctrl.attributes.filter(a => attrDone(ctrl, a)).length;
+    const pct = attrsTotal === 0 ? 0 : Math.round((aDone / attrsTotal) * 100);
+    const stepCompletion: [boolean, boolean, boolean] = [controlStepDone(ctrl, 1), controlStepDone(ctrl, 2), controlStepDone(ctrl, 3)];
+    return { attrsTotal, pct, stepCompletion, status: controlStatus(ctrl), codes: workflowCodesForControl(ctrl) };
+  };
+
   // ─── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     let totalAttrs = 0, withPopulation = 0, samplesGenerated = 0, validated = 0, passes = 0, fails = 0;
@@ -492,6 +515,9 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupsBySub, statusFilter, subProcessFilter, search, populationsByCtrl, samplingByCtrl, samplesByCtrl, genericByCtrl]);
+
+  // Flat (ungrouped) control list — the default view; grouping is opt-in via the Group-by control.
+  const flatControls = useMemo(() => visibleGroups.flatMap(g => g.controls), [visibleGroups]);
 
   const toggleSub = (key: string) => setExpandedSub(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const openControl = (controlId: string) => {
@@ -867,16 +893,22 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
   // ─── LIST MODE ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* KPI strip */}
-      <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
-        <KpiTile label="Controls" value={allControls.length} sub="in scope" />
-        <KpiTile label="Attributes" value={kpis.totalAttrs} sub="across controls" />
-        <KpiTile label="Population up" value={`${Object.keys(populationsByCtrl).length}/${allControls.length}`} sub="controls" />
-        <KpiTile label="Samples" value={kpis.samplesGenerated} sub="generated" />
-        <KpiTile label="Validated" value={kpis.validated} sub={`${kpis.passes}P · ${kpis.fails}F`} tone={kpis.fails > 0 ? 'text-risk-700' : 'text-text'} />
-        <KpiTile label="Pass rate" value={`${kpis.passRate}%`} sub={kpis.validated === 0 ? '—' : `of ${kpis.validated}`} tone={kpis.passRate >= 90 ? 'text-compliant-700' : kpis.passRate >= 70 ? 'text-mitigated-700' : 'text-risk-700'} />
-        <KpiTile label="Pending" value={kpis.evPending} sub="evidence gaps" tone={kpis.evPending > 0 ? 'text-mitigated-700' : 'text-text'} />
-        <KpiTile label="Completion" value={`${kpis.overall}%`} sub="overall" tone={kpis.overall >= 80 ? 'text-compliant-700' : kpis.overall >= 50 ? 'text-mitigated-700' : 'text-text'} />
+      {/* KPI row — borderless inline stats (out of the box), trimmed to the essentials */}
+      <div className="flex flex-wrap items-center gap-y-3 px-1">
+        {([
+          { label: 'Controls', value: allControls.length, sub: 'in scope', tone: 'text-text' },
+          { label: 'Attributes', value: kpis.totalAttrs, sub: 'across controls', tone: 'text-text' },
+          { label: 'Validated', value: kpis.validated, sub: `${kpis.passes}P · ${kpis.fails}F`, tone: kpis.fails > 0 ? 'text-risk-700' : 'text-text' },
+          { label: 'Pass rate', value: `${kpis.passRate}%`, sub: kpis.validated === 0 ? '—' : `of ${kpis.validated}`, tone: kpis.passRate >= 90 ? 'text-compliant-700' : kpis.passRate >= 70 ? 'text-mitigated-700' : 'text-risk-700' },
+          { label: 'Pending', value: kpis.evPending, sub: 'evidence gaps', tone: kpis.evPending > 0 ? 'text-mitigated-700' : 'text-text' },
+          { label: 'Completion', value: `${kpis.overall}%`, sub: 'overall', tone: kpis.overall >= 80 ? 'text-compliant-700' : kpis.overall >= 50 ? 'text-mitigated-700' : 'text-text' },
+        ] as { label: string; value: string | number; sub: string; tone: string }[]).map(s => (
+          <div key={s.label} className="pl-5 ml-5 border-l border-canvas-border first:pl-0 first:ml-0 first:border-l-0">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{s.label}</div>
+            <div className={`text-[19px] font-bold tabular-nums leading-tight ${s.tone}`}>{s.value}</div>
+            <div className="text-[10.5px] text-text-muted">{s.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -899,7 +931,18 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
                   : 'border border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{sp}</button>
             ))}
           </div>
-          <div className="relative w-[320px] max-w-full ml-auto">
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">Group by</span>
+            <div className="inline-flex rounded-md border border-canvas-border overflow-hidden">
+              {([['none', 'None'], ['subProcess', 'Sub-process']] as [GroupBy, string][]).map(([val, label]) => (
+                <button key={val} onClick={() => setGroupBy(val)}
+                  className={`px-2.5 h-7 text-[11.5px] font-medium transition-colors cursor-pointer ${groupBy === val
+                    ? 'bg-ink-800 text-white'
+                    : 'bg-white text-ink-600 hover:bg-canvas'}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="relative w-[320px] max-w-full">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search control id, attribute, or evidence type…"
@@ -908,74 +951,121 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
         </div>
       </div>
 
-      {/* Dense control list grouped by sub-process */}
-      <div className="space-y-3">
-        {visibleGroups.length === 0 && (
-          <div className="glass-card rounded-xl p-10 text-center">
-            <p className="text-[13px] font-semibold text-text mb-1">No controls match these filters</p>
-            <p className="text-[12px] text-text-muted">Try clearing a filter or broadening your search.</p>
+      {/* Control list — flat by default; grouped by sub-process only when opted in. */}
+      {flatControls.length === 0 ? (
+        <div className="glass-card rounded-xl p-10 text-center">
+          <p className="text-[13px] font-semibold text-text mb-1">No controls match these filters</p>
+          <p className="text-[12px] text-text-muted">Try clearing a filter or broadening your search.</p>
+        </div>
+      ) : groupBy === 'none' ? (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-canvas-border flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">Controls</span>
+            <span className="text-[11px] text-text-muted tabular-nums">{flatControls.length} total</span>
           </div>
-        )}
-        {visibleGroups.map(group => {
-          const isOpen = expandedSub.has(group.subProcess);
-          const counts = subProcessCounts(group.controls, controlStatus);
-          return (
-            <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
-              <button onClick={() => toggleSub(group.subProcess)} aria-expanded={isOpen}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-canvas/40 transition-colors cursor-pointer text-left">
-                <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
-                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-[13.5px] font-semibold text-text">{group.subProcess}</span>
-                  <span className="text-[11px] text-text-muted tabular-nums">
-                    {group.controls.length} control{group.controls.length === 1 ? '' : 's'}
-                    <span className="text-border mx-1.5">·</span>
-                    <span className="text-compliant-700 font-semibold">{counts.complete} ready</span>
-                    <span className="text-border mx-1.5">·</span>
-                    <span className="text-evidence-700 font-semibold">{counts.inProgress} in progress</span>
-                  </span>
-                </div>
-                <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
-              </button>
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-                    className="overflow-hidden border-t border-canvas-border">
-                    <div className="py-1 bg-canvas/30">
-                      {group.controls.map(ctrl => {
-                        const status = controlStatus(ctrl);
-                        const stepCompletion: [boolean, boolean, boolean] = [controlStepDone(ctrl, 1), controlStepDone(ctrl, 2), controlStepDone(ctrl, 3)];
-                        const attrsTotal = ctrl.attributes.length;
-                        const aDone = ctrl.attributes.filter(a => attrDone(ctrl, a)).length;
-                        const pct = attrsTotal === 0 ? 0 : Math.round((aDone / attrsTotal) * 100);
-                        return (
-                          <button key={ctrl.controlId} onClick={() => openControl(ctrl.controlId)}
-                            className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-white transition-colors cursor-pointer text-left border-l-2 border-transparent hover:border-brand-300">
-                            <Shield size={12} className="text-brand-600 shrink-0" />
-                            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 w-[80px]">{ctrl.controlId}</span>
-                            {ctrl.isKey && <span className="px-1 h-4 inline-flex items-center rounded text-[8.5px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-100 shrink-0">Key</span>}
-                            <span className="text-[12px] text-text truncate flex-1 min-w-0">{ctrl.description}</span>
-                            <span className="text-[10.5px] text-text-muted shrink-0 tabular-nums w-[60px] text-right">{attrsTotal} attr</span>
-                            <div className="shrink-0 w-[80px]">
-                              <div className="h-1.5 bg-canvas rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-compliant-500' : pct > 0 ? 'bg-brand-500' : 'bg-canvas-border'}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <span className="text-[8.5px] text-text-muted tabular-nums mt-0.5 block">{pct}%</span>
-                            </div>
-                            <MiniStepIndicator stepCompletion={stepCompletion} />
-                            <ControlStatusPill status={status} />
-                            <ChevronRight size={12} className="text-text-muted shrink-0" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
+          <div className="py-1">
+            {flatControls.map(ctrl => (
+              <ControlRow key={ctrl.controlId} ctrl={ctrl} {...rowPropsFor(ctrl)} onOpen={() => openControl(ctrl.controlId)} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleGroups.map(group => {
+            const isOpen = expandedSub.has(group.subProcess);
+            const counts = subProcessCounts(group.controls, controlStatus);
+            return (
+              <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+                <button onClick={() => toggleSub(group.subProcess)} aria-expanded={isOpen}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-canvas/40 transition-colors cursor-pointer text-left">
+                  <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
+                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-text">{group.subProcess}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums">
+                      {group.controls.length} control{group.controls.length === 1 ? '' : 's'}
+                      <span className="text-border mx-1.5">·</span>
+                      <span className="text-compliant-700 font-semibold">{counts.complete} ready</span>
+                      <span className="text-border mx-1.5">·</span>
+                      <span className="text-evidence-700 font-semibold">{counts.inProgress} in progress</span>
+                    </span>
+                  </div>
+                  <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden border-t border-canvas-border">
+                      <div className="py-1 bg-canvas/30">
+                        {group.controls.map(ctrl => (
+                          <ControlRow key={ctrl.controlId} ctrl={ctrl} {...rowPropsFor(ctrl)} onOpen={() => openControl(ctrl.controlId)} />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Control list row (shared by flat + grouped renderers) ────────────────────
+
+function ControlRow({ ctrl, status, stepCompletion, attrsTotal, pct, codes, onOpen }: {
+  ctrl: DistinctControl;
+  status: ControlStatus;
+  stepCompletion: [boolean, boolean, boolean];
+  attrsTotal: number;
+  pct: number;
+  codes: string[];
+  onOpen: () => void;
+}): JSX.Element {
+  return (
+    <button onClick={onOpen}
+      className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-white transition-colors cursor-pointer text-left border-l-2 border-transparent hover:border-brand-300">
+      <Shield size={12} className="text-brand-600 shrink-0" />
+      <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 w-[80px]">{ctrl.controlId}</span>
+      {ctrl.isKey && <span className="px-1 h-4 inline-flex items-center rounded text-[8.5px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-100 shrink-0">Key</span>}
+      <span className="text-[12px] text-text truncate flex-1 min-w-0">{ctrl.description}</span>
+      <WorkflowReadiness codes={codes} />
+      <span className="text-[10.5px] text-text-muted shrink-0 tabular-nums w-[52px] text-right">{attrsTotal} attr</span>
+      <div className="shrink-0 w-[72px]">
+        <div className="h-1.5 bg-canvas rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-compliant-500' : pct > 0 ? 'bg-brand-500' : 'bg-canvas-border'}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[8.5px] text-text-muted tabular-nums mt-0.5 block">{pct}%</span>
+      </div>
+      <MiniStepIndicator stepCompletion={stepCompletion} />
+      <ControlStatusPill status={status} />
+      <ChevronRight size={12} className="text-text-muted shrink-0" />
+    </button>
+  );
+}
+
+/** Validation-readiness badge — carries the attribute→workflow links mapped on the Controls tab. */
+function WorkflowReadiness({ codes }: { codes: string[] }): JSX.Element {
+  if (codes.length === 0) {
+    return (
+      <span title="No validation workflow linked — tested manually"
+        className="inline-flex items-center px-1.5 h-5 rounded-full text-[9.5px] font-semibold border bg-canvas text-text-muted border-canvas-border shrink-0">
+        Manual
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 shrink-0">
+      <span title={codes.join(', ')}
+        className="inline-flex items-center gap-1 px-1.5 h-5 rounded-md bg-brand-50 border border-brand-100 text-[9.5px] font-mono font-semibold text-brand-700">
+        <WorkflowIcon size={9} />{codes[0]}{codes.length > 1 ? ` +${codes.length - 1}` : ''}
+      </span>
+      <span title="Validation workflow linked in Controls"
+        className="inline-flex items-center gap-1 px-1.5 h-5 rounded-full text-[9.5px] font-semibold bg-compliant-50 text-compliant-700 border border-compliant-50">
+        <CheckCircle2 size={9} />Validation ready
+      </span>
+    </span>
   );
 }
 
@@ -989,16 +1079,6 @@ function subProcessCounts(controls: DistinctControl[], statusFn: (c: DistinctCon
     else if (s !== 'Not started') inProgress += 1;
   });
   return { complete, inProgress };
-}
-
-function KpiTile({ label, value, sub, tone = 'text-text' }: { label: string; value: number | string; sub: string; tone?: string }): JSX.Element {
-  return (
-    <div className="rounded-xl border border-canvas-border bg-white px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1 truncate">{label}</div>
-      <div className={`text-[20px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
-      <div className="text-[10.5px] text-text-muted mt-1 truncate">{sub}</div>
-    </div>
-  );
 }
 
 function MiniStepIndicator({ stepCompletion }: { stepCompletion: [boolean, boolean, boolean] }): JSX.Element {

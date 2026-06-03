@@ -23,6 +23,8 @@ import ControlsTab from '../audit/ControlsTab';
 import EvidenceTab from '../audit/EvidenceTab';
 import WorkingPaperTab from '../audit/WorkingPaperTab';
 import { HealthOverviewTab, ActionTrailTab } from '../audit/EngagementOverviewView';
+import { EngagementTabBar } from '../audit/EngagementTabBar';
+import { EngagementWorkspaceProvider } from '../audit/engagementWorkspace';
 import type { Engagement as RACMEngagement } from '../../data/engagements';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -975,6 +977,14 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
 
 interface TabDef { id: string; label: string }
 
+/** Workflow set shared with the audit Controls/RACM/Evidence tabs via the workspace provider. */
+const FINAL_WORKSPACE_WORKFLOWS = [
+  { id: 'wf1', code: 'WF-P2P-001', name: 'Three-Way Match (PO · GRN · Invoice)' },
+  { id: 'wf2', code: 'WF-P2P-002', name: 'Duplicate Invoice Detector' },
+  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan' },
+  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor' },
+];
+
 const ALL_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'scope', label: 'Scope' },
@@ -1116,18 +1126,7 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {AUTOMATION_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={AUTOMATION_TABS} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-automation:${card.id}`} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -1643,18 +1642,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {visibleTabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={visibleTabs} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-ia:${card.id}`} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -1693,11 +1681,13 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       )}
 
       {activeTab === 'racm' && (
-        <RACMTab engagement={racmEngagement} onOpenFullEditor={onOpenRacmFullEditor ? () => onOpenRacmFullEditor({
-          racmId: 'racm-procurement-fy26',
-          racmName: `${racmEngagement.process} Internal Audit RACM`,
-          processLabel: racmEngagement.process,
-        }) : undefined} />
+        <EngagementWorkspaceProvider engagement={racmEngagement} workflows={FINAL_WORKSPACE_WORKFLOWS}>
+          <RACMTab engagement={racmEngagement} onOpenFullEditor={onOpenRacmFullEditor ? () => onOpenRacmFullEditor({
+            racmId: 'racm-procurement-fy26',
+            racmName: `${racmEngagement.process} Internal Audit RACM`,
+            processLabel: racmEngagement.process,
+          }) : undefined} />
+        </EngagementWorkspaceProvider>
       )}
 
       {activeTab === 'controls' && (
@@ -1924,20 +1914,10 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {COMPLIANCE_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={COMPLIANCE_TABS} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-compliance:${card.id}`} />
 
-      {/* Tab Content */}
+      {/* Tab Content — wrapped so the audit RACM/Controls/Evidence tabs get the shared workspace store */}
+      <EngagementWorkspaceProvider engagement={complianceEngagement} workflows={FINAL_WORKSPACE_WORKFLOWS}>
       {activeTab === 'overview' && (
         <HealthOverviewTab
           eng={complianceEngagement}
@@ -1971,6 +1951,7 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       {activeTab === 'trail' && (
         <ActionTrailTab eng={complianceEngagement} />
       )}
+      </EngagementWorkspaceProvider>
     </div>
   );
 }
