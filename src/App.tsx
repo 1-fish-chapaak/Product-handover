@@ -886,6 +886,9 @@ function AppInner() {
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
 
+      case 'platform-usage':
+        return <PlatformUsageView />;
+
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':
       case 'engagement-config':

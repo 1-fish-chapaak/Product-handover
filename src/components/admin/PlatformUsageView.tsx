@@ -145,7 +145,7 @@ function ActivityBar({ label, values, accent }: { label: string; values: number[
       </div>
       <div className="flex items-end gap-1 h-12 mt-2">
         {values.map((v, i) => (
-          <div key={i} className={`flex-1 rounded-sm ${accent} opacity-${20 + Math.min(80, Math.round((v / max) * 80))}`}
+          <div key={i} className={`flex-1 rounded-sm ${accent}`}
             style={{ height: `${Math.max(8, (v / max) * 100)}%`, opacity: 0.4 + (v / max) * 0.6 }} />
         ))}
       </div>
