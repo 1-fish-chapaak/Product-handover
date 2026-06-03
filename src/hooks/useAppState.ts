@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { WorkflowTypeId } from '../data/mockData';
+import type { WorkflowRunSeed } from '../components/workflow/workflowRunSeed';
 import {
   loadPersistedNotifications,
   persistNotifications,
@@ -82,6 +83,26 @@ export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'pre
 export type ArtifactMode = 'query' | 'workflow';
 export type ExecutionPanel = 'working-paper' | 'workflow-execution' | 'traceability' | null;
 
+/** A business process the user created in Process Hub. Superset of the seed
+ *  BUSINESS_PROCESSES shape, so the same detail page renders both. */
+export interface UserProcess {
+  id: string;
+  name: string;
+  abbr: string;
+  color: string;
+  risks: number;
+  controls: number;
+  coverage: number;
+  sops: number;
+  workflows: number;
+  status?: 'Draft' | 'Active' | 'Archived';
+  department?: string;
+  owner?: string;
+  fy?: string;
+  description?: string;
+  subProcesses?: { name: string; description: string }[];
+}
+
 export interface AppState {
   view: View;
   sidebarExpanded: boolean;
@@ -94,6 +115,8 @@ export interface AppState {
   /** Which tab WorkflowDetail should open on (e.g. 'runs' when drilled in from an engagement). */
   workflowDetailInitialTab: 'overview' | 'runs' | 'config';
   selectedBPId: string | null;
+  /** Business processes created by the user in Process Hub (persisted across navigation). */
+  userProcesses: UserProcess[];
   selectedEngagementId: string | null;
   selectedRiskId: string | null;
   // Modal states
@@ -110,6 +133,9 @@ export interface AppState {
   workflowType: WorkflowTypeId | null;
   // Chat initial context (for workflow mode entry)
   chatInitialQuery: string | null;
+  // Completed workflow run handed off to chat as conversation history when the
+  // user asks a follow-up from the executor output. Consumed once by ChatView.
+  chatWorkflowRunSeed: WorkflowRunSeed | null;
   chatWorkflowContext: { templateId?: string; workflowId?: string } | null;
   /** Engagement name shown as a banner above the composer when building a workflow for a specific engagement. */
   workflowBuilderEngagementName: string | null;
@@ -169,12 +195,21 @@ const getInitialView = (): View => {
   const v = params.get('view');
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
+  if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'engagement-detail') return 'engagement-detail';
+  if (v === 'workflow-executor') return 'workflow-executor';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
 };
 
-/** Deep-link target engagement (e.g. when Case Management is opened in a new tab). */
+const getInitialWorkflowId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'workflow-executor') return null;
+  return params.get('workflowId');
+};
+
 const getInitialEngagementId = (): string | null => {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get('eng');
@@ -188,9 +223,10 @@ const INITIAL_STATE: AppState = {
   artifactMode: 'query',
   showArtifacts: false,
   showChatHistory: false,
-  selectedWorkflowId: null,
+  selectedWorkflowId: getInitialWorkflowId(),
   workflowDetailInitialTab: 'overview',
   selectedBPId: null,
+  userProcesses: [],
   selectedEngagementId: getInitialEngagementId(),
   selectedRiskId: null,
   showExceptionModal: false,
@@ -203,6 +239,7 @@ const INITIAL_STATE: AppState = {
   workflowCanvasStage: 0,
   workflowType: null,
   chatInitialQuery: null,
+  chatWorkflowRunSeed: null,
   chatComposerDraft: null,
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
@@ -281,6 +318,10 @@ export function useAppState() {
     setState(prev => ({ ...prev, selectedBPId: id, view: id ? 'bp-detail' : 'programs' }));
   }, []);
 
+  const addUserProcess = useCallback((process: UserProcess) => {
+    setState(prev => ({ ...prev, userProcesses: [...prev.userProcesses, process] }));
+  }, []);
+
   const setSelectedEngagement = useCallback((id: string | null) => {
     setState(prev => ({ ...prev, selectedEngagementId: id }));
   }, []);
@@ -329,6 +370,24 @@ export function useAppState() {
 
   const setChatInitialQuery = useCallback((query: string | null) => {
     setState(prev => ({ ...prev, chatInitialQuery: query }));
+  }, []);
+
+  const setChatWorkflowRunSeed = useCallback((seed: WorkflowRunSeed | null) => {
+    setState(prev => ({ ...prev, chatWorkflowRunSeed: seed }));
+  }, []);
+
+  // Open chat from a completed workflow run: seed the run as conversation
+  // history and auto-submit the follow-up question, all in one atomic update
+  // so ChatView mounts with both present on the same render.
+  const openChatWithWorkflowRun = useCallback((query: string, seed: WorkflowRunSeed) => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      selectedChatId: null,
+      showChatHistory: false,
+      chatWorkflowRunSeed: seed,
+      chatInitialQuery: query,
+    }));
   }, []);
 
   const setChatComposerDraft = useCallback((draft: string | null) => {
@@ -446,11 +505,12 @@ export function useAppState() {
     setState(prev => ({ ...prev, exceptionRole: role }));
   }, []);
 
-  // Hand off a prompt typed in chat (with the "Build a workflow" toggle on)
-  // to the AI Concierge workflow builder. Sets the seed and routes to the
-  // builder view in a single transition; the journey consumes the seed on
-  // mount, generates the workflow, and lands the user on the clarification
-  // screen — skipping the prompt page entirely.
+  // Hand off a prompt with the "Build a workflow" intent. Routes to the
+  // dedicated WorkflowBuilderJourney view (Stepper + StepWritePrompt +
+  // AIAssistantPanel + ClarificationPanel etc.) and seeds the initial
+  // prompt so the journey can skip Step 1 and land on clarification when
+  // a non-empty prompt is provided. Empty string opens the journey at
+  // Step 1.
   const launchWorkflowBuilderWithPrompt = useCallback((prompt: string) => {
     setState(prev => ({
       ...prev,
@@ -539,6 +599,7 @@ export function useAppState() {
     toggleChatHistory,
     setSelectedWorkflow,
     setSelectedBP,
+    addUserProcess,
     setShowExceptionModal,
     setShowEmailPreviewModal,
     setShowShareModal,
@@ -547,6 +608,8 @@ export function useAppState() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatWorkflowRunSeed,
+    openChatWithWorkflowRun,
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,

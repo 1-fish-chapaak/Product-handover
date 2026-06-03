@@ -35,7 +35,7 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-medium rounded-full whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -47,22 +47,22 @@ function ExceptionCard({ ex }: { ex: GrcException }) {
     <article className="border border-canvas-border rounded-[12px] p-4 hover:border-brand-200 transition-colors cursor-pointer">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-[0.75rem] font-semibold text-brand-700 whitespace-nowrap">{ex.id}</span>
+          <span className="font-mono text-[12.5px] font-semibold text-brand-700 whitespace-nowrap">{ex.id}</span>
           {isBulk && (
-            <span className="inline-flex items-center h-5 px-2 text-[0.75rem] font-medium bg-brand-50 text-brand-700 rounded-full">
+            <span className="inline-flex items-center h-5 px-2 text-[10.5px] font-medium bg-brand-50 text-brand-700 rounded-full">
               Bulk
             </span>
           )}
         </div>
         <Pill className={SEVERITY_STYLE[ex.severity]}>{ex.severity}</Pill>
       </div>
-      <h4 className="text-[0.875rem] font-semibold text-ink-900 leading-snug mb-2.5">{ex.title}</h4>
+      <h4 className="text-[14px] font-semibold text-ink-900 leading-snug mb-2.5">{ex.title}</h4>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
           <Pill className={CLASSIFICATION_STYLE[ex.classification]}>{ex.classification}</Pill>
         </div>
-        <span className="text-[0.75rem] text-ink-700 shrink-0">{ex.assignedTo?.name ?? '—'}</span>
+        <span className="text-[12px] text-ink-700 shrink-0">{ex.assignedTo?.name ?? 'Unassigned'}</span>
       </div>
     </article>
   );
@@ -100,8 +100,8 @@ export default function ExceptionListDrawer({
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">{title}</h2>
-            <p className="text-[0.75rem] text-ink-500 mt-0.5">{subtitle}</p>
+            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">{subtitle}</p>
           </div>
           <button
             onClick={onClose}
@@ -113,12 +113,12 @@ export default function ExceptionListDrawer({
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
           {exceptions.length === 0 ? (
-            <div className="text-[0.8125rem] text-ink-500 text-center py-12">No exceptions match this filter.</div>
+            <div className="text-[13px] text-ink-500 text-center py-12">No exceptions match this filter.</div>
           ) : (
             exceptions.map(ex => <ExceptionCard key={ex.id} ex={ex} />)
           )}
         </div>
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[0.75rem] text-ink-500 tabular-nums">
+        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[11.5px] text-ink-500 tabular-nums">
           {exceptions.length} {exceptions.length === 1 ? 'exception' : 'exceptions'} shown
         </footer>
       </motion.aside>

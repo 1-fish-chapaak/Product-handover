@@ -13,7 +13,7 @@ interface BreadcrumbsProps {
 
 export default function Breadcrumbs({ items, onNavigate }: BreadcrumbsProps) {
   return (
-    <nav className="flex items-center gap-1.5 text-[0.8125rem] mb-4">
+    <nav className="flex items-center gap-1.5 font-mono text-[12px] mb-4">
       <button
         onClick={() => onNavigate('home')}
         className="text-ink-500 hover:text-ink-800 transition-colors cursor-pointer p-1 rounded hover:bg-brand-50"

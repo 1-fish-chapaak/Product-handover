@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import type { WorkflowDraft, JourneyFiles, UploadedFile, InputSpec } from './types';
 import { DATA_SOURCES } from '../../data/mockData';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
+import { cn } from '../../lib/cn';
 
 interface Props {
   workflow: WorkflowDraft;
@@ -151,10 +154,10 @@ export default function StepUploadFiles({
             <UploadCloud size={14} />
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-[0.8125rem] font-semibold text-ink-800">
+            <span className="block text-[13px] font-semibold text-ink-800">
               Open upload window
             </span>
-            <span className="block text-[0.75rem] text-ink-500">
+            <span className="block text-[13px] text-ink-500">
               Add files or link a data source to continue.
             </span>
           </span>
@@ -182,14 +185,14 @@ export default function StepUploadFiles({
           className="w-full flex items-start justify-between gap-4 px-5 py-4 cursor-pointer text-left"
         >
           <div className="min-w-0">
-            <div className="text-[0.875rem] font-semibold text-ink-900">
+            <div className="text-[15px] font-semibold text-ink-900">
               Upload data files
             </div>
-            <p className="text-[0.75rem] text-ink-500 mt-0.5">
+            <p className="text-[13px] text-ink-500 mt-0.5">
               Upload the files required for this workflow, then hit Execute.
             </p>
           </div>
-          <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1 shrink-0 mt-0.5">
+          <span className="text-[13px] text-ink-500 inline-flex items-center gap-1 shrink-0 mt-0.5">
             {uploadOpen ? 'Click to collapse' : 'Click to expand'}
             {uploadOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </span>
@@ -215,13 +218,13 @@ export default function StepUploadFiles({
                   <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center">
                     <UploadCloud size={20} />
                   </div>
-                  <div className="text-[0.75rem] font-semibold text-ink-800 mt-1">
+                  <div className="text-[13px] font-semibold text-ink-800 mt-1">
                     Drop files here or click to upload
                   </div>
-                  <div className="text-[0.75rem] text-ink-500">
+                  <div className="text-[13px] text-ink-500">
                     CSV, PDF, images — any data files for this workflow
                   </div>
-                  <div className="text-[0.75rem] text-ink-400 mt-1">
+                  <div className="text-[12px] text-ink-400 mt-1">
                     Auto-mapped to required inputs
                   </div>
                 </button>
@@ -238,20 +241,21 @@ export default function StepUploadFiles({
 
                 {/* Existing data sources */}
                 <div className="rounded-xl border border-canvas-border bg-canvas p-3 flex flex-col min-h-0">
-                  <div className="text-center text-[0.75rem] font-bold uppercase tracking-[0.14em] text-ink-400 mb-2.5">
+                  <div className="text-center text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400 mb-2.5">
                     Or link from existing data source
                   </div>
                   <div className="relative mb-2.5">
                     <Search
                       size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 z-10"
                     />
-                    <input
+                    <Input
+                      sizeVariant="sm"
                       type="text"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search data sources…"
-                      className="w-full rounded-full border border-canvas-border bg-canvas-elevated pl-8 pr-3 py-2 text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/15 focus:border-brand-400/50 transition-all"
+                      className="rounded-full pl-8"
                     />
                   </div>
                   <ul className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto pr-0.5">
@@ -263,35 +267,35 @@ export default function StepUploadFiles({
                             type="button"
                             onClick={() => toggleSource(s.name)}
                             aria-pressed={selected}
-                            className={[
+                            className={cn(
                               'w-full text-left flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors cursor-pointer',
                               selected
                                 ? 'border-brand-400 bg-brand-50/60'
                                 : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30',
-                            ].join(' ')}
+                            )}
                           >
                             <div className="w-7 h-7 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
                               <Database size={13} className="text-brand-600" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
+                              <div className="text-[13px] font-semibold text-ink-800 truncate">
                                 {s.name}
                               </div>
-                              <div className="text-[0.75rem] text-ink-400 truncate">
+                              <div className="text-[12px] text-ink-400 truncate tabular-nums">
                                 {s.records} records · last sync {s.lastSync}
                               </div>
                             </div>
                             <span
-                              className={[
+                              className={cn(
                                 'w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all',
                                 selected
                                   ? 'border-brand-600 bg-brand-600'
                                   : 'border-canvas-border bg-canvas-elevated',
-                              ].join(' ')}
+                              )}
                               aria-hidden="true"
                             >
                               {selected && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-canvas-elevated" />
                               )}
                             </span>
                           </button>
@@ -299,8 +303,8 @@ export default function StepUploadFiles({
                       );
                     })}
                     {filteredSources.length === 0 && (
-                      <li className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[0.75rem] text-ink-400">
-                        No data sources match “{search}”.
+                      <li className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[12px] text-ink-400">
+                        No data sources match &ldquo;{search}&rdquo;.
                       </li>
                     )}
                   </ul>
@@ -317,22 +321,23 @@ export default function StepUploadFiles({
         <section>
           <div className="flex items-center gap-2 mb-3">
             <UploadCloud size={14} className="text-brand-600" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800">Data added</span>
-            <span className="text-[0.75rem] text-ink-400 rounded-full bg-canvas px-2 py-0.5 border border-canvas-border tabular-nums">
+            <span className="text-[13px] font-semibold text-ink-800">Data added</span>
+            <span className="text-[12px] text-ink-400 rounded-full bg-canvas px-2 py-0.5 border border-canvas-border tabular-nums">
               {totalCount}
             </span>
             {(view === 'list-only' && onOpenUploadModal) || view === 'full' ? (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   if (view === 'list-only') onOpenUploadModal?.();
                   else fileInputRef.current?.click();
                 }}
-                className="ml-auto inline-flex items-center gap-1 rounded-full border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 text-[0.75rem] font-semibold text-ink-600 px-2.5 py-1 transition-colors cursor-pointer"
+                className="ml-auto rounded-full"
+                leadingIcon={<Plus size={11} />}
               >
-                <Plus size={11} />
                 Add more
-              </button>
+              </Button>
             ) : null}
           </div>
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -349,14 +354,14 @@ export default function StepUploadFiles({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
+                  <div className="text-[13px] font-semibold text-ink-800 truncate">
                     {file.name}
                   </div>
-                  <div className="text-[0.75rem] text-ink-400 truncate">
+                  <div className="text-[12px] text-ink-400 truncate tabular-nums">
                     {file.linkedSource ? 'Linked from data source' : humanSize(file.size)}
                   </div>
                 </div>
-                <span className="text-[0.75rem] font-semibold uppercase tracking-wide rounded-md bg-canvas-elevated border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0 max-w-[130px] truncate">
+                <span className="text-[12px] font-semibold uppercase tracking-wide rounded-md bg-canvas-elevated border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0 max-w-[130px] truncate">
                   {inputName}
                 </span>
                 <button
@@ -371,14 +376,14 @@ export default function StepUploadFiles({
             ))}
           </ul>
           <div className="mt-3 pt-3 border-t border-canvas-border flex items-center justify-end">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => onViewWorkspace?.()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 px-3 py-1.5 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
+              leadingIcon={<Shapes size={13} />}
             >
-              <Shapes size={13} />
               View Workspace
-            </button>
+            </Button>
           </div>
         </section>
       )}

@@ -82,7 +82,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
     setBulkRunning(true);
     addToast({ message: `Running ${selectedWfs.size} workflows...`, type: 'success' });
     setTimeout(() => {
-      addToast({ message: 'All workflows completed successfully', type: 'success' });
+      addToast({ message: 'All workflows completed', type: 'success' });
       setTimeout(() => {
         addToast({ message: 'Consolidated report generated — view in Reports', type: 'success' });
         setBulkRunning(false);

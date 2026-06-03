@@ -26,6 +26,11 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   expandable?: (item: T) => ReactNode;
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
+  /** Fully custom empty-state body. When provided, replaces the default
+   *  icon + message + clear-search chrome with this node. Caller owns layout.
+   *  Can be a function that receives the table's internal search state so the
+   *  caller can render a Clear-search affordance alongside other filter clears. */
+  emptyContent?: ReactNode | ((ctx: { search: string; clearSearch: () => void }) => ReactNode);
   className?: string;
   headerExtra?: ReactNode;
   animateRows?: boolean;
@@ -33,6 +38,13 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
+  hideResultCount?: boolean;
+  /** Background utility class for the search input. Defaults to 'bg-white';
+   *  pass e.g. 'bg-paper-50' to match an adjacent filter control. */
+  searchBg?: string;
+  /** Show the resting sort-hint icon on sortable column headers even in the
+   *  'modern' variant (which otherwise hides it until a column is active). */
+  showSortHint?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -62,10 +74,14 @@ export default function SmartTable<T extends Record<string, unknown>>({
   expandable,
   onRowClick,
   emptyMessage = 'No results found',
+  emptyContent,
   className = '',
   headerExtra,
   animateRows = true,
   variant = 'default',
+  hideResultCount = false,
+  searchBg = 'bg-white',
+  showSortHint = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -145,7 +161,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                className={`w-full pl-8 pr-8 py-1.5 border border-border ${searchBg} text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all`} style={{ borderRadius: '8px' }}
               />
               {search && (
                 <button
@@ -158,8 +174,8 @@ export default function SmartTable<T extends Record<string, unknown>>({
             </div>
           )}
           {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
-          {paginated && (
-            <div className="text-[0.75rem] text-text-muted shrink-0">
+          {paginated && !hideResultCount && (
+            <div className="text-[12px] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
             </div>
           )}
@@ -168,7 +184,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className={`w-full ${isModern ? 'text-[0.8125rem]' : 'text-[0.75rem]'}`}>
+        <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
             <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
               {expandable && <th className="w-8" />}
@@ -177,7 +193,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   key={col.key}
                   className={[
                     isModern
-                      ? `py-3 text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      ? `py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
@@ -188,7 +204,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   <span className="inline-flex items-center gap-1.5">
                     {col.label}
                     {col.sortable !== false && (
-                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern} />
+                      <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
                     )}
                   </span>
                 </th>
@@ -199,17 +215,23 @@ export default function SmartTable<T extends Record<string, unknown>>({
             <tbody>
               <tr>
                 <td colSpan={columns.length + (expandable ? 1 : 0)} className="px-4 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
-                      <Search size={18} className="text-text-muted/50" />
+                  {emptyContent ? (
+                    typeof emptyContent === 'function'
+                      ? emptyContent({ search, clearSearch: () => setSearch('') })
+                      : emptyContent
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center mb-1">
+                        <Search size={18} className="text-text-muted/50" />
+                      </div>
+                      <div className="text-[13px] font-medium text-text-secondary">{emptyMessage}</div>
+                      {search && (
+                        <button onClick={() => setSearch('')} className="text-[12px] text-primary font-medium hover:underline cursor-pointer mt-1">
+                          Clear search
+                        </button>
+                      )}
                     </div>
-                    <div className="text-[0.8125rem] font-medium text-text-secondary">{emptyMessage}</div>
-                    {search && (
-                      <button onClick={() => setSearch('')} className="text-[0.75rem] text-primary font-medium hover:underline cursor-pointer mt-1">
-                        Clear search
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </td>
               </tr>
             </tbody>
@@ -284,7 +306,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Pagination */}
       {paginated && totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-          <div className="text-[0.75rem] text-text-muted">
+          <div className="text-[12px] text-text-muted">
             Showing {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sorted.length)} of {sorted.length}
           </div>
           <div className="flex items-center gap-1">
@@ -299,7 +321,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
               <button
                 key={i}
                 onClick={() => setPage(i)}
-                className={`w-7 h-7 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                className={`w-7 h-7 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${
                   i === safePage
                     ? 'bg-primary text-white'
                     : 'text-text-secondary hover:bg-gray-100'

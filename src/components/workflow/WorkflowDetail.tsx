@@ -1,4 +1,3 @@
-import DatePicker from '../shared/DatePicker';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -7,7 +6,7 @@ import {
   SlidersHorizontal, Database, Bell,
   ExternalLink, MessageSquare, Clock, History,
   DollarSign, Type, Plus, Minus, ChevronDown, ChevronRight, Sparkles,
-  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check
+  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check, Tag
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
@@ -369,7 +368,7 @@ function defaultColumnsFor(type: TolType): { source: ColumnRef; target: ColumnRe
 
 function ScoreChip({ score }: { score: number }) {
   const bg = score >= 85 ? 'bg-primary-xlight text-primary' : score >= 70 ? 'bg-mitigated-50 text-mitigated-700' : 'bg-risk-50 text-risk-700';
-  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.75rem] font-bold font-mono ${bg}`}>{score}</span>;
+  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-bold font-mono ${bg}`}>{score}</span>;
 }
 
 function SeverityBadge({ severity }: { severity: 'Strict' | 'Moderate' | 'Loose' }) {
@@ -379,7 +378,7 @@ function SeverityBadge({ severity }: { severity: 'Strict' | 'Moderate' | 'Loose'
     Loose: 'bg-compliant-50 text-compliant-700',
   } as const;
   return (
-    <span className={`text-[0.625rem] font-bold uppercase tracking-tight px-1.5 py-0.5 rounded ${styles[severity]}`}>
+    <span className={`text-[10px] font-bold uppercase tracking-tight px-1.5 py-0.5 rounded ${styles[severity]}`}>
       {severity}
     </span>
   );
@@ -387,7 +386,7 @@ function SeverityBadge({ severity }: { severity: 'Strict' | 'Moderate' | 'Loose'
 
 function FieldPill({ children, dot = 'bg-primary' }: { children: React.ReactNode; dot?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-border-light text-[0.75rem] font-medium text-text">
+    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-border-light text-[12px] font-medium text-text">
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
       {children}
     </span>
@@ -404,7 +403,7 @@ function FieldPicker({ value, options, onChange }: {
     <div className="relative inline-flex">
       <button
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-border-light text-[0.75rem] font-medium text-text hover:border-primary/40 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-border-light text-[12px] font-medium text-text hover:border-primary/40 transition-colors cursor-pointer"
       >
         <span className={`w-1.5 h-1.5 rounded-full ${TOL_FILE_DOT[value.file]}`} />
         {value.column}
@@ -416,7 +415,7 @@ function FieldPicker({ value, options, onChange }: {
           <div className="absolute top-full left-0 mt-1 z-50 w-64 max-h-72 overflow-y-auto rounded-lg border border-border bg-white shadow-lg p-1">
             {options.map(group => (
               <div key={group.file} className="mb-1 last:mb-0">
-                <div className="flex items-center gap-1.5 px-2 py-1.5 text-[0.625rem] font-mono uppercase tracking-tight text-ink-500">
+                <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-mono uppercase tracking-tight text-ink-500">
                   <span className={`w-1.5 h-1.5 rounded-full ${TOL_FILE_DOT[group.file]}`} />
                   {TOL_FILE_LABEL[group.file]}
                 </div>
@@ -426,7 +425,7 @@ function FieldPicker({ value, options, onChange }: {
                     <button
                       key={col}
                       onClick={() => { onChange({ file: group.file, column: col }); setOpen(false); }}
-                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[0.75rem] text-left transition-colors cursor-pointer ${
+                      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-colors cursor-pointer ${
                         selected ? 'bg-primary-xlight text-primary font-medium' : 'text-text hover:bg-surface-2'
                       }`}
                     >
@@ -458,7 +457,7 @@ function AddToleranceMenu({ onAddPreconfigured, onOpenBuilder }: {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className={`w-full mt-3 py-3 rounded-xl border border-dashed text-[0.75rem] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+        className={`w-full mt-3 py-3 rounded-xl border border-dashed text-[12px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
           open
             ? 'border-primary/40 text-primary bg-primary-xlight/30'
             : 'border-border text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary-xlight/30'
@@ -477,11 +476,11 @@ function AddToleranceMenu({ onAddPreconfigured, onOpenBuilder }: {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search parameters..."
-                className="flex-1 outline-none text-[0.75rem] text-text placeholder:text-text-muted bg-transparent"
+                className="flex-1 outline-none text-[12px] text-text placeholder:text-text-muted bg-transparent"
                 autoFocus
               />
             </div>
-            <div className="text-[0.625rem] font-mono uppercase tracking-tight text-ink-500 px-2 py-1.5">Preconfigured</div>
+            <div className="text-[10px] font-mono uppercase tracking-tight text-ink-500 px-2 py-1.5">Preconfigured</div>
             <div className="space-y-0.5">
               {filtered.map(p => {
                 const Icon = TOL_ICON[p.iconKey].icon;
@@ -491,13 +490,13 @@ function AddToleranceMenu({ onAddPreconfigured, onOpenBuilder }: {
                       <Icon size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[0.8125rem] font-semibold text-text">{p.label}</div>
-                      <div className="text-[0.6875rem] text-text-muted truncate">{p.desc}</div>
+                      <div className="text-[13px] font-semibold text-text">{p.label}</div>
+                      <div className="text-[11px] text-text-muted truncate">{p.desc}</div>
                     </div>
-                    <span className="text-[0.6875rem] font-mono text-text-muted shrink-0">±{p.thresholdValue}{p.thresholdUnit === '$' ? '' : p.thresholdUnit === 'K $' ? 'K' : p.thresholdUnit}</span>
+                    <span className="text-[11px] font-mono text-text-muted shrink-0">±{p.thresholdValue}{p.thresholdUnit === '$' ? '' : p.thresholdUnit === 'K $' ? 'K' : p.thresholdUnit}</span>
                     <button
                       onClick={() => { onAddPreconfigured(p); setOpen(false); }}
-                      className="px-3 h-7 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.6875rem] font-semibold transition-colors cursor-pointer shrink-0"
+                      className="px-3 h-7 rounded-md bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold transition-colors cursor-pointer shrink-0"
                     >
                       Add
                     </button>
@@ -505,10 +504,10 @@ function AddToleranceMenu({ onAddPreconfigured, onOpenBuilder }: {
                 );
               })}
               {filtered.length === 0 && (
-                <div className="text-[0.75rem] text-text-muted px-2 py-3 text-center">No matches.</div>
+                <div className="text-[12px] text-text-muted px-2 py-3 text-center">No matches.</div>
               )}
             </div>
-            <div className="text-[0.625rem] font-mono uppercase tracking-tight text-ink-500 px-2 py-1.5 mt-2 border-t border-border-light pt-3">Custom rule</div>
+            <div className="text-[10px] font-mono uppercase tracking-tight text-ink-500 px-2 py-1.5 mt-2 border-t border-border-light pt-3">Custom rule</div>
             <button
               onClick={() => { onOpenBuilder(); setOpen(false); }}
               className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-surface-2 transition-colors cursor-pointer"
@@ -517,8 +516,8 @@ function AddToleranceMenu({ onAddPreconfigured, onOpenBuilder }: {
                 <Pencil size={14} />
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <div className="text-[0.8125rem] font-semibold text-text">Build custom rule</div>
-                <div className="text-[0.6875rem] text-text-muted">Pick type, columns, and threshold</div>
+                <div className="text-[13px] font-semibold text-text">Build custom rule</div>
+                <div className="text-[11px] text-text-muted">Pick type, columns, and threshold</div>
               </div>
               <ChevronRight size={14} className="text-text-muted shrink-0" />
             </button>
@@ -592,8 +591,8 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
       <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-border-light">
           <div>
-            <div className="text-[0.9375rem] font-semibold text-text">Build custom tolerance rule</div>
-            <div className="text-[0.75rem] text-text-muted mt-0.5">Step {step + 1} of 4</div>
+            <div className="text-[15px] font-semibold text-text">Build custom tolerance rule</div>
+            <div className="text-[12px] text-text-muted mt-0.5">Step {step + 1} of 4</div>
           </div>
           <button onClick={handleClose} className="w-8 h-8 rounded-md hover:bg-surface-2 flex items-center justify-center text-text-muted cursor-pointer">
             <XIcon size={16} />
@@ -610,8 +609,8 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
         <div className="p-5 overflow-y-auto flex-1">
           {step === 0 && (
             <div>
-              <div className="text-[0.8125rem] font-semibold text-text mb-1">What type of comparison?</div>
-              <div className="text-[0.75rem] text-text-muted mb-4">This determines which columns and threshold formats are available.</div>
+              <div className="text-[13px] font-semibold text-text mb-1">What type of comparison?</div>
+              <div className="text-[12px] text-text-muted mb-4">This determines which columns and threshold formats are available.</div>
               <div className="grid grid-cols-2 gap-2">
                 {TYPE_OPTIONS.map(t => {
                   const Icon = t.icon;
@@ -628,8 +627,8 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
                         <Icon size={14} />
                       </div>
                       <div>
-                        <div className="text-[0.8125rem] font-semibold text-text">{t.label}</div>
-                        <div className="text-[0.6875rem] text-text-muted">{t.desc}</div>
+                        <div className="text-[13px] font-semibold text-text">{t.label}</div>
+                        <div className="text-[11px] text-text-muted">{t.desc}</div>
                       </div>
                     </button>
                   );
@@ -640,15 +639,15 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
 
           {step === 1 && type && source && target && (
             <div>
-              <div className="text-[0.8125rem] font-semibold text-text mb-1">Which columns to compare?</div>
-              <div className="text-[0.75rem] text-text-muted mb-4">AI suggested defaults based on your data sources — adjust as needed.</div>
+              <div className="text-[13px] font-semibold text-text mb-1">Which columns to compare?</div>
+              <div className="text-[12px] text-text-muted mb-4">AI suggested defaults based on your data sources — adjust as needed.</div>
               <div className="space-y-3">
                 <div>
-                  <div className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-1.5">Source</div>
+                  <div className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-1.5">Source</div>
                   <FieldPicker value={source} options={TOL_COLUMNS_BY_TYPE[type].source} onChange={setSource} />
                 </div>
                 <div>
-                  <div className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-1.5">Target</div>
+                  <div className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-1.5">Target</div>
                   <FieldPicker value={target} options={TOL_COLUMNS_BY_TYPE[type].target} onChange={setTarget} />
                 </div>
               </div>
@@ -657,14 +656,14 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
 
           {step === 2 && (
             <div>
-              <div className="text-[0.8125rem] font-semibold text-text mb-1">Set the threshold</div>
-              <div className="text-[0.75rem] text-text-muted mb-4">How much variance is acceptable before a record is flagged?</div>
+              <div className="text-[13px] font-semibold text-text mb-1">Set the threshold</div>
+              <div className="text-[12px] text-text-muted mb-4">How much variance is acceptable before a record is flagged?</div>
               <div className="flex items-center gap-3 mb-4">
                 <Stepper value={threshold} onDec={() => setThreshold(v => Math.max(0, v - 1))} onInc={() => setThreshold(v => v + 1)} unit={unit} />
                 <select
                   value={unit}
                   onChange={e => setUnit(e.target.value)}
-                  className="px-3 h-8 rounded-md border border-border-light bg-white text-[0.75rem] text-text cursor-pointer"
+                  className="px-3 h-8 rounded-md border border-border-light bg-white text-[12px] text-text cursor-pointer"
                 >
                   {type === 'date' ? (
                     <><option>days</option><option>hours</option></>
@@ -675,13 +674,13 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
                   )}
                 </select>
               </div>
-              <div className="text-[0.75rem] font-semibold text-text mb-1.5">Severity</div>
+              <div className="text-[12px] font-semibold text-text mb-1.5">Severity</div>
               <div className="flex gap-1.5">
                 {(['Strict', 'Moderate', 'Loose'] as const).map(s => (
                   <button
                     key={s}
                     onClick={() => setSeverity(s)}
-                    className={`px-3 py-1.5 rounded-md text-[0.75rem] font-medium transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
                       severity === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:text-text'
                     }`}
                   >
@@ -694,13 +693,13 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
 
           {step === 3 && (
             <div>
-              <div className="text-[0.8125rem] font-semibold text-text mb-1">Name this rule</div>
-              <div className="text-[0.75rem] text-text-muted mb-4">A short label that describes what this checks.</div>
+              <div className="text-[13px] font-semibold text-text mb-1">Name this rule</div>
+              <div className="text-[12px] text-text-muted mb-4">A short label that describes what this checks.</div>
               <input
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Vendor name fuzzy match"
-                className="w-full px-3 py-2 rounded-md border border-border-light text-[0.8125rem] text-text outline-none focus:border-primary"
+                className="w-full px-3 py-2 rounded-md border border-border-light text-[13px] text-text outline-none focus:border-primary"
                 autoFocus
               />
             </div>
@@ -710,7 +709,7 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
         <div className="flex items-center justify-between p-5 border-t border-border-light">
           <button
             onClick={step === 0 ? handleClose : prevStep}
-            className="px-4 h-9 rounded-md text-[0.75rem] font-semibold text-text-muted hover:text-text cursor-pointer"
+            className="px-4 h-9 rounded-md text-[12px] font-semibold text-text-muted hover:text-text cursor-pointer"
           >
             {step === 0 ? 'Cancel' : 'Back'}
           </button>
@@ -718,7 +717,7 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
             <button
               onClick={nextStep}
               disabled={!canProceed()}
-              className={`px-4 h-9 rounded-md text-[0.75rem] font-semibold transition-colors ${
+              className={`px-4 h-9 rounded-md text-[12px] font-semibold transition-colors ${
                 canProceed() ? 'bg-primary hover:bg-primary-hover text-white cursor-pointer' : 'bg-surface-3 text-text-muted cursor-not-allowed'
               }`}
             >
@@ -728,7 +727,7 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
             <button
               onClick={handleSave}
               disabled={!canProceed()}
-              className={`px-4 h-9 rounded-md text-[0.75rem] font-semibold transition-colors ${
+              className={`px-4 h-9 rounded-md text-[12px] font-semibold transition-colors ${
                 canProceed() ? 'bg-primary hover:bg-primary-hover text-white cursor-pointer' : 'bg-surface-3 text-text-muted cursor-not-allowed'
               }`}
             >
@@ -747,11 +746,11 @@ function Stepper({ value, onDec, onInc, unit }: { value: number | string; onDec:
       <button onClick={onDec} className="w-8 h-8 rounded-md bg-white border border-border-light flex items-center justify-center text-text-muted hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
         <Minus size={14} />
       </button>
-      <span className="font-display text-[1.25rem] font-[420] text-primary min-w-[24px] text-center">{value}</span>
+      <span className="font-display text-[20px] font-[420] text-primary min-w-[24px] text-center">{value}</span>
       <button onClick={onInc} className="w-8 h-8 rounded-md bg-white border border-border-light flex items-center justify-center text-text-muted hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
         <Plus size={14} />
       </button>
-      <span className="text-[0.75rem] text-text-muted ml-1">{unit}</span>
+      <span className="text-[12px] text-text-muted ml-1">{unit}</span>
     </div>
   );
 }
@@ -781,9 +780,9 @@ function ToleranceRuleCard({
             {icon}
           </div>
           <div className={`flex-1 min-w-0 ${dim ? 'opacity-50' : ''}`}>
-            <div className="text-[0.9375rem] font-semibold text-text leading-tight">{label}</div>
+            <div className="text-[15px] font-semibold text-text leading-tight">{label}</div>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[0.75rem] text-text-muted">{value}</span>
+              <span className="text-[12px] text-text-muted">{value}</span>
               <SeverityBadge severity={severity} />
             </div>
             {summary}
@@ -881,6 +880,98 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
   return null;
 }
 
+/** Editable chip list supporting add (input + Enter / button), inline rename (pencil), and delete (×). */
+function EditableChipList({
+  items, onChange, placeholder, onAdded,
+}: {
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  onAdded?: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (items.some(i => i.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange([...items, v]);
+    onAdded?.(v);
+    setDraft('');
+  };
+  const remove = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const commitEdit = (idx: number) => {
+    const v = editVal.trim();
+    setEditingIdx(null);
+    if (!v) { remove(idx); return; }
+    onChange(items.map((it, i) => (i === idx ? v : it)));
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {items.map((it, idx) =>
+        editingIdx === idx ? (
+          <input
+            key={idx}
+            autoFocus
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onBlur={() => commitEdit(idx)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit(idx);
+              if (e.key === 'Escape') setEditingIdx(null);
+            }}
+            className="px-2.5 py-1 rounded-full text-[12px] border border-primary/50 outline-none ring-2 ring-primary/15 bg-white text-text w-36"
+          />
+        ) : (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-surface-2 border border-border-light text-[12px] font-medium text-text"
+          >
+            {it}
+            <button
+              onClick={() => { setEditingIdx(idx); setEditVal(it); }}
+              className="text-text-muted hover:text-primary cursor-pointer"
+              title="Rename"
+              aria-label={`Rename ${it}`}
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              onClick={() => remove(idx)}
+              className="text-text-muted hover:text-risk-700 cursor-pointer"
+              title="Remove"
+              aria-label={`Remove ${it}`}
+            >
+              <XIcon size={12} />
+            </button>
+          </span>
+        )
+      )}
+      <div className="inline-flex items-center gap-1">
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          className="px-3 py-1.5 rounded-full text-[12px] border border-border-light bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 w-40"
+        />
+        <button
+          onClick={add}
+          disabled={!draft.trim()}
+          className="w-7 h-7 flex items-center justify-center rounded-full bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white cursor-pointer transition-colors"
+          title="Add"
+          aria-label="Add"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
   const [tab, setTab] = useState<TabId>(initialTab);
@@ -895,6 +986,8 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
   const [tolerances, setTolerances] = useState<ToleranceRule[]>(DEFAULT_TOLERANCES);
   const [expandedTolId, setExpandedTolId] = useState<string | null>('date');
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [labels, setLabels] = useState<string[]>(['Reconciliation']);
+  const [subProcesses, setSubProcesses] = useState<string[]>(['Invoice Processing']);
   const { addToast } = useToast();
   if (!wf) return null;
 
@@ -903,7 +996,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
   const addRule = (rule: ToleranceRule) => setTolerances(prev => [...prev, rule]);
 
   const pillCls = (active: boolean) =>
-    `px-4 py-1.5 rounded-full text-[0.75rem] font-medium border transition-all cursor-pointer ${
+    `px-4 py-1.5 rounded-full text-[12px] font-medium border transition-all cursor-pointer ${
       active
         ? 'bg-primary border-primary text-white'
         : 'bg-white border-border-light text-text-muted hover:border-primary/40 hover:text-text'
@@ -920,7 +1013,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
       <div className="pt-8 pb-4 shrink-0">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500 hover:text-primary transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-primary transition-colors cursor-pointer"
         >
           <ArrowLeft size={14} />
           Workflows
@@ -932,23 +1025,23 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         {/* Top row: status badge (left) + utility actions (right) */}
         <div className="flex items-center justify-between gap-6 mb-5">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-success">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-success">
               <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
               ACTIVE
             </div>
-            <span className="font-mono text-[0.6875rem] text-ink-500 tracking-tight">{wf.code}</span>
+            <span className="font-mono text-[11px] text-ink-500 tracking-tight">{wf.code}</span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => onViewVersionHistory ? onViewVersionHistory() : addToast({ message: 'Opening version history...', type: 'info' })}
-              className="flex items-center gap-1.5 px-2.5 h-9 rounded-md text-[0.75rem] font-semibold text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 h-9 rounded-md text-[12px] font-semibold text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <History size={13} />
               Version history
             </button>
             <button
               onClick={() => onEditInChat ? onEditInChat() : addToast({ message: 'Opening workflow in chat...', type: 'info' })}
-              className="flex items-center gap-1.5 px-3 h-9 rounded-md bg-white border border-border text-[0.75rem] font-semibold text-text hover:bg-surface-2 transition-colors cursor-pointer ml-1"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-md bg-white border border-border text-[12px] font-semibold text-text hover:bg-surface-2 transition-colors cursor-pointer ml-1"
             >
               <MessageSquare size={13} />
               Edit in Chat
@@ -957,19 +1050,19 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         </div>
 
         {/* Title */}
-        <h1 className="font-display text-[1.75rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="font-display text-[28px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
           {wf.name}
         </h1>
 
         {/* Bottom row: schedule meta (left) + primary CTA (right) */}
         <div className="flex items-center justify-between gap-6 mt-3">
-          <div className="flex items-center gap-1.5 text-[0.75rem] text-text-muted min-w-0">
+          <div className="flex items-center gap-1.5 text-[12px] text-text-muted min-w-0">
             <Clock size={13} className="shrink-0" />
             <span className="truncate">Next run on May 19, 6:00 PM</span>
           </div>
           <button
             onClick={() => onOpenExecutor ? onOpenExecutor() : addToast({ message: 'Opening executor...', type: 'info' })}
-            className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
           >
             <ExternalLink size={13} />
             Open Executor
@@ -987,14 +1080,14 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
               tab === t.id ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
             }`}
           >
             <span className="flex items-center gap-2">
               {t.label}
               {t.count != null && (
-                <span className={`text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-ink-500'}`}>{t.count}</span>
+                <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-ink-500'}`}>{t.count}</span>
               )}
             </span>
           </button>
@@ -1006,7 +1099,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         <div className="space-y-5 pb-8">
           {/* Steps */}
           <div>
-            <h4 className="text-[0.875rem] font-semibold text-ink-900 mb-3">Steps</h4>
+            <h4 className="text-[14px] font-semibold text-ink-900 mb-3">Steps</h4>
             <div className="space-y-2.5">
               {wf.steps.map((step, i) => {
                 const meta = deriveStepMeta(step);
@@ -1021,17 +1114,17 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                     className="rounded-xl border border-border-light bg-white p-4"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="w-7 h-7 rounded-full bg-ink-900 text-white text-[0.75rem] font-semibold flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-7 h-7 rounded-full bg-ink-900 text-white text-[12px] font-semibold flex items-center justify-center shrink-0 mt-0.5">
                         {i + 1}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <h5 className="text-[0.875rem] font-semibold text-ink-900">{step}</h5>
-                          <span className={`text-[0.625rem] font-bold uppercase tracking-tight px-1.5 py-0.5 rounded ${TYPE_BADGE[meta.type]}`}>
+                          <h5 className="text-[14px] font-semibold text-ink-900">{step}</h5>
+                          <span className={`text-[10px] font-bold uppercase tracking-tight px-1.5 py-0.5 rounded ${TYPE_BADGE[meta.type]}`}>
                             {meta.type}
                           </span>
                         </div>
-                        <p className="text-[0.8125rem] text-text-secondary mb-3">{meta.desc}</p>
+                        <p className="text-[13px] text-text-secondary mb-3">{meta.desc}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {meta.datasets.map(ds => {
                             const isActive = activeDs === ds.name;
@@ -1039,7 +1132,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                               <button
                                 key={ds.name}
                                 onClick={() => setExpandedDataset(isActive ? null : { stepIdx: i, dsName: ds.name })}
-                                className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[0.75rem] cursor-pointer transition-colors ${
+                                className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[12px] cursor-pointer transition-colors ${
                                   isActive
                                     ? 'bg-primary-xlight border-primary/30 text-primary'
                                     : 'bg-surface-2 border-border-light text-text hover:bg-surface-3'
@@ -1063,13 +1156,13 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                               className="overflow-hidden"
                             >
                               <div className="mt-3 rounded-lg bg-surface-2/60 border border-border-light p-3">
-                                <div className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-2 flex items-center gap-1.5">
+                                <div className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-2 flex items-center gap-1.5">
                                   <Database size={11} className="text-primary" />
                                   {activeDs} · columns used
                                 </div>
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                                   {activeColumns.map(col => (
-                                    <div key={col.name} className="flex items-center justify-between text-[0.75rem]">
+                                    <div key={col.name} className="flex items-center justify-between text-[12px]">
                                       <span className="font-mono text-text">{col.name}</span>
                                       <span className="font-mono text-text-muted">{col.type}</span>
                                     </div>
@@ -1094,7 +1187,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         <div className="bg-white rounded-xl border border-border-light overflow-hidden mb-8">
           <div className="grid grid-cols-[80px_1fr_80px_100px_80px_80px_70px] gap-3 px-5 py-3 bg-surface-2 border-b border-border-light">
             {['Run', 'Date', 'Trigger', 'Duration', 'Flags', 'Score', 'Status'].map(h => (
-              <span key={h} className="text-[0.6875rem] font-semibold uppercase tracking-tight text-ink-500">{h}</span>
+              <span key={h} className="text-[11px] font-semibold uppercase tracking-tight text-ink-500">{h}</span>
             ))}
           </div>
           {RUN_HISTORY.map((run, i) => (
@@ -1105,13 +1198,13 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               transition={{ delay: i * 0.04 }}
               className="grid grid-cols-[80px_1fr_80px_100px_80px_80px_70px] gap-3 px-5 py-4 border-b border-border-light last:border-0 hover:bg-surface-2/50 transition-colors items-center cursor-pointer"
             >
-              <span className="text-[0.75rem] font-mono text-primary font-medium">{run.id}</span>
-              <span className="text-[0.75rem] font-mono text-text-secondary">{run.date}</span>
-              <span className="text-[0.75rem] text-text-muted">{run.trigger}</span>
-              <span className="text-[0.75rem] font-mono text-text font-medium">{run.duration}</span>
-              <span className="text-[0.75rem] font-mono text-text font-medium">{run.flags}</span>
+              <span className="text-[12px] font-mono text-primary font-medium">{run.id}</span>
+              <span className="text-[12px] font-mono text-text-secondary">{run.date}</span>
+              <span className="text-[12px] text-text-muted">{run.trigger}</span>
+              <span className="text-[12px] font-mono text-text font-medium">{run.duration}</span>
+              <span className="text-[12px] font-mono text-text font-medium">{run.flags}</span>
               <ScoreChip score={run.score} />
-              <span className="text-[0.75rem] font-bold text-success bg-compliant-50 px-2 py-0.5 rounded text-center">
+              <span className="text-[12px] font-bold text-success bg-compliant-50 px-2 py-0.5 rounded text-center">
                 {run.status === 'ok' ? 'PASS' : 'WARN'}
               </span>
             </motion.div>
@@ -1123,13 +1216,42 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
       {tab === 'config' && (
         <div className="space-y-5 pb-8">
           <div className="rounded-2xl border border-border-light bg-white p-5">
-            <h4 className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
+              <Tag size={13} className="text-primary" />
+              Labels & Sub-process
+            </h4>
+            <div className="space-y-5">
+              <div>
+                <label className="text-[13px] font-semibold text-text block mb-1">Labels</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Tag this workflow for grouping and search — e.g. Reconciliation.</p>
+                <EditableChipList
+                  items={labels}
+                  onChange={setLabels}
+                  placeholder="Add label…"
+                  onAdded={(v) => addToast({ message: `Label “${v}” added`, type: 'success' })}
+                />
+              </div>
+              <div className="pt-4 border-t border-border-light">
+                <label className="text-[13px] font-semibold text-text block mb-1">Sub-process</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Add, rename, or remove the sub-processes this workflow belongs to.</p>
+                <EditableChipList
+                  items={subProcesses}
+                  onChange={setSubProcesses}
+                  placeholder="Add sub-process…"
+                  onAdded={(v) => addToast({ message: `Sub-process “${v}” added`, type: 'success' })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border-light bg-white p-5">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
               <Calendar size={13} className="text-primary" />
               Audit run frequency
             </h4>
             <div className="grid grid-cols-2 gap-x-6 gap-y-5">
               <div>
-                <label className="text-[0.8125rem] font-semibold text-text block mb-2">Frequency</label>
+                <label className="text-[13px] font-semibold text-text block mb-2">Frequency</label>
                 <div className="flex flex-wrap gap-2">
                   {(['Hourly', 'Daily', 'Weekly', 'Monthly'] as const).map(f => (
                     <button
@@ -1143,20 +1265,20 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                 </div>
               </div>
               <div>
-                <label className="text-[0.8125rem] font-semibold text-text block mb-2">Run Time</label>
+                <label className="text-[13px] font-semibold text-text block mb-2">Run Time</label>
                 <div className="relative">
                   <input
                     type="time"
                     value={runTime}
                     onChange={e => setRunTime(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-border-light text-[0.875rem] bg-white text-text focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all"
+                    className="w-full h-11 px-3.5 rounded-xl border border-border-light text-[14px] bg-white text-text focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15 transition-all"
                   />
                 </div>
               </div>
 
               {frequency === 'Weekly' && (
                 <div className="col-span-2">
-                  <label className="text-[0.8125rem] font-semibold text-text block mb-2">Select day of the week</label>
+                  <label className="text-[13px] font-semibold text-text block mb-2">Select day of the week</label>
                   <div className="flex flex-wrap gap-2">
                     {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(d => (
                       <button
@@ -1173,17 +1295,19 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
 
               {frequency === 'Monthly' && (
                 <div>
-                  <label className="text-[0.8125rem] font-semibold text-text block mb-2">Select date</label>
-                  <DatePicker value={monthlyDate}
+                  <label className="text-[13px] font-semibold text-text block mb-2">Select date</label>
+                  <input
+                    type="date"
+                    value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
                     placeholder="dd/mm/yyyy"
-                    className="w-full h-11 px-3.5 rounded-xl border border-primary/40 text-[0.875rem] bg-white text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
+                    className="w-full h-11 px-3.5 rounded-xl border border-primary/40 text-[14px] bg-white text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-[0.8125rem] font-semibold text-text block mb-2">Trigger On</label>
+                <label className="text-[13px] font-semibold text-text block mb-2">Trigger On</label>
                 <div className="flex flex-wrap gap-2">
                   {(['Schedule', 'Data Change', 'Manual'] as const).map(t => (
                     <button
@@ -1197,7 +1321,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                 </div>
               </div>
               <div>
-                <label className="text-[0.8125rem] font-semibold text-text block mb-2">Retry on Failure</label>
+                <label className="text-[13px] font-semibold text-text block mb-2">Retry on Failure</label>
                 <div className="flex flex-wrap gap-2">
                   {(['Off', '1x', '3x', '5x'] as const).map(r => (
                     <button
@@ -1215,11 +1339,11 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
 
           <div className="rounded-2xl border border-border-light bg-white p-5">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-[0.875rem] font-semibold text-ink-900 flex items-center gap-2">
+              <h4 className="text-[14px] font-semibold text-ink-900 flex items-center gap-2">
                 <SlidersHorizontal size={14} className="text-primary" />
                 Tolerance rules
               </h4>
-              <span className="text-[0.75rem] text-text-muted">
+              <span className="text-[12px] text-text-muted">
                 {tolerances.filter(r => r.active).length} active
               </span>
             </div>
@@ -1255,7 +1379,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                       rule.active && !isExpanded ? (
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <FieldPill dot={TOL_FILE_DOT[rule.source.file]}>{rule.source.column}</FieldPill>
-                          <span className="text-[0.6875rem] text-text-muted font-mono">vs</span>
+                          <span className="text-[11px] text-text-muted font-mono">vs</span>
                           <FieldPill dot={TOL_FILE_DOT[rule.target.file]}>{rule.target.column}</FieldPill>
                         </div>
                       ) : null
@@ -1263,9 +1387,9 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                   >
                     <div className="space-y-3">
                       <div>
-                        <div className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-1.5 flex items-center gap-1.5">
+                        <div className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-1.5 flex items-center gap-1.5">
                           Applied to
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-xlight text-primary text-[0.625rem] font-bold">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary-xlight text-primary text-[10px] font-bold">
                             <Sparkles size={9} /> AI
                           </span>
                         </div>
@@ -1275,7 +1399,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                             options={cols.source}
                             onChange={(next) => updateRule(rule.id, { source: next })}
                           />
-                          <span className="text-[0.6875rem] text-text-muted font-mono">vs</span>
+                          <span className="text-[11px] text-text-muted font-mono">vs</span>
                           <FieldPicker
                             value={rule.target}
                             options={cols.target}
@@ -1298,7 +1422,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                             <button
                               key={m}
                               onClick={() => updateRule(rule.id, { mode: m })}
-                              className={`px-4 py-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                              className={`px-4 py-1.5 rounded-md text-[12px] font-semibold transition-colors cursor-pointer ${
                                 rule.mode === m ? 'bg-primary text-white' : 'text-text-muted hover:text-text'
                               }`}
                             >
@@ -1340,7 +1464,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
 
             {/* Impact preview */}
             <div className="mt-5 pt-5 border-t border-border-light">
-              <div className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-3">
+              <div className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-3">
                 Impact preview — sample matches
               </div>
               <div className="space-y-2">
@@ -1349,7 +1473,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                   { left: 'Mar 15', right: 'Mar 19', delta: '4 days', kind: 'DATE', pass: false },
                   { left: '$8,920', right: '$9,500', delta: '6.1%', kind: 'AMT', pass: false },
                 ].map((s, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 text-[0.75rem]">
+                  <div key={i} className="flex items-center justify-between py-1.5 text-[12px]">
                     <div className="flex items-center gap-2 font-mono">
                       <span className="text-text">{s.left}</span>
                       <span className="text-text-muted">vs</span>
@@ -1357,10 +1481,10 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                       <span className="text-text-muted">{s.delta}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[0.625rem] font-mono font-bold px-1.5 py-0.5 rounded ${
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
                         s.kind === 'AMT' ? 'bg-compliant-50 text-compliant-700' : 'bg-primary-xlight text-primary'
                       }`}>{s.kind}</span>
-                      <span className={`text-[0.75rem] font-bold ${s.pass ? 'text-success' : 'text-risk-700'}`}>
+                      <span className={`text-[12px] font-bold ${s.pass ? 'text-success' : 'text-risk-700'}`}>
                         {s.pass ? 'Pass' : 'Flag'}
                       </span>
                     </div>
@@ -1371,7 +1495,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
           </div>
 
           <div className="rounded-2xl border border-border-light bg-white p-5">
-            <h4 className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-3 flex items-center gap-2">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-3 flex items-center gap-2">
               <Database size={13} className="text-primary" />
               Connected Sources
             </h4>
@@ -1395,21 +1519,21 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{src.name}</div>
-                            <div className="text-[0.75rem] text-text-muted truncate mt-0.5">{src.desc}</div>
+                            <div className="text-[14px] font-semibold text-ink-900 leading-tight">{src.name}</div>
+                            <div className="text-[12px] text-text-muted truncate mt-0.5">{src.desc}</div>
                           </div>
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            <span className={`text-[0.625rem] font-mono font-bold uppercase tracking-tight px-2 py-0.5 rounded ${SOURCE_TYPE_BADGE[src.type]}`}>
+                            <span className={`text-[10px] font-mono font-bold uppercase tracking-tight px-2 py-0.5 rounded ${SOURCE_TYPE_BADGE[src.type]}`}>
                               {src.type}
                             </span>
-                            <span className="text-[0.625rem] font-mono text-text-muted">{src.records} records</span>
+                            <span className="text-[10px] font-mono text-text-muted">{src.records} records</span>
                           </div>
                         </div>
 
                         {!isExpanded && (
                           <div className="flex flex-wrap gap-1.5 mt-3">
                             {src.columns.map(col => (
-                              <span key={col.name} className="font-mono text-[0.6875rem] px-2 py-1 rounded border border-border-light bg-white text-text">
+                              <span key={col.name} className="font-mono text-[11px] px-2 py-1 rounded border border-border-light bg-white text-text">
                                 {col.name}
                               </span>
                             ))}
@@ -1428,8 +1552,8 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                               <div className="mt-3 space-y-1.5">
                                 {src.columns.map(col => (
                                   <div key={col.name} className="rounded-lg border border-border-light bg-white px-3 py-2">
-                                    <div className="font-mono text-[0.75rem] font-semibold text-ink-900">{col.name}</div>
-                                    <div className="text-[0.75rem] text-text-muted mt-0.5">{col.desc}</div>
+                                    <div className="font-mono text-[12px] font-semibold text-ink-900">{col.name}</div>
+                                    <div className="text-[12px] text-text-muted mt-0.5">{col.desc}</div>
                                   </div>
                                 ))}
                               </div>
@@ -1439,7 +1563,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
 
                         <button
                           onClick={toggle}
-                          className="flex items-center gap-1 mt-3 text-[0.75rem] font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
+                          className="flex items-center gap-1 mt-3 text-[12px] font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
                         >
                           {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                           {isExpanded ? 'Hide column details' : 'Show column details'}
@@ -1453,7 +1577,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
           </div>
 
           <div className="rounded-2xl border border-border-light bg-white p-5">
-            <h4 className="text-[0.6875rem] font-mono uppercase tracking-tight text-ink-500 mb-3 flex items-center gap-2">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-3 flex items-center gap-2">
               <Bell size={13} className="text-primary" />
               Notifications
             </h4>
@@ -1465,7 +1589,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
                 { label: 'Weekly summary digest', enabled: true },
               ].map(n => (
                 <div key={n.label} className="flex items-center justify-between py-2">
-                  <span className="text-[0.75rem] text-text">{n.label}</span>
+                  <span className="text-[12px] text-text">{n.label}</span>
                   <div className={`w-9 h-5 rounded-full cursor-pointer transition-colors ${n.enabled ? 'bg-primary' : 'bg-surface-3'}`}>
                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-0.5 ${n.enabled ? 'translate-x-4.5 ml-0.5' : 'translate-x-0.5'}`} />
                   </div>

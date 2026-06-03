@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { motion } from 'motion/react';
 import {
   Search,
   FolderClosed,
@@ -28,6 +29,10 @@ import {
   Workflow as WorkflowIcon,
   Code2,
   Copy,
+  ListChecks,
+  MessageSquare,
+  FileCode,
+  Check,
   ExternalLink,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
@@ -152,7 +157,7 @@ function describeColumn(name: string): string {
   return COLUMN_DESCRIPTIONS[name] ?? 'Source field';
 }
 
-type PanelTab = 'input' | 'plan' | 'output' | 'preview';
+type PanelTab = 'input' | 'plan' | 'preview';
 
 const STEP_BADGE: Record<
   StepSpec['type'],
@@ -378,7 +383,7 @@ export default function DataSourcePanel({
     if (result && !resultLandedRef.current) {
       resultLandedRef.current = true;
       if (!previewRevealed) {
-        setTab('output');
+        setTab('preview');
       }
     }
     if (!result) resultLandedRef.current = false;
@@ -529,11 +534,11 @@ export default function DataSourcePanel({
     label: string;
     badge?: string;
     tone: 'ok' | 'warn' | 'idle';
+    icon: typeof Database;
   }[] = [
-    { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone },
-    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone },
-    { id: 'output', label: 'Output Config', badge: outputBadge, tone: outputTone },
-    { id: 'preview', label: 'Preview', tone: previewTone },
+    { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone, icon: Database },
+    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: Sparkles },
+    { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
   ];
 
   const totalColumnsInUse = workflow.inputs.reduce(
@@ -542,39 +547,71 @@ export default function DataSourcePanel({
   );
 
   return (
-    <aside className="flex flex-col h-full w-full bg-canvas border-l border-canvas-border min-h-0">
-      {/* Tabs — outlined buttons, no header rule */}
-      <div className="px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
+    <aside className="flex flex-col h-full w-full bg-canvas-elevated min-h-0">
+      {/* Tab strip — matches the query ArtifactPanel: icon + label + count
+          chip, with an animated gradient underline on the active tab. Same
+          h-12 chrome height + bottom hairline border so the two side
+          panels read as variants of the same surface. */}
+      <div className="@container h-12 shrink-0 px-2 sm:px-4 border-b border-canvas-border flex items-end gap-2 bg-canvas-elevated">
+        <div
+          role="tablist"
+          aria-label="Workflow workspace"
+          className="relative flex items-end gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {TABS.map((t) => {
             const active = tab === t.id;
+            const Icon = t.icon;
             return (
-              <button
+              <motion.button
                 key={t.id}
                 type="button"
+                role="tab"
                 onClick={() => setTab(t.id)}
-                aria-pressed={active}
-                className={[
-                  'inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer',
+                aria-selected={active}
+                whileHover={!active ? { y: -1 } : undefined}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                title={t.label}
+                className={`group relative flex items-center gap-1.5 h-9 px-2.5 @[480px]:px-3 rounded-t-lg text-[13px] shrink-0 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                   active
-                    ? 'bg-brand-600 text-white border-brand-600 hover:bg-brand-500'
-                    : 'bg-white text-ink-700 border-paper-200 hover:bg-paper-50 hover:text-ink-800',
-                ].join(' ')}
+                    ? 'text-brand-700 font-semibold'
+                    : 'text-ink-500 font-medium hover:text-brand-700 hover:bg-brand-50'
+                }`}
               >
-                <span>{t.label}</span>
+                <motion.span
+                  animate={{ scale: active ? 1.06 : 1 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                  className="inline-flex"
+                >
+                  <Icon
+                    size={14}
+                    strokeWidth={active ? 2.25 : 2}
+                    className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-brand-600 transition-colors'}
+                  />
+                </motion.span>
+                <span className={`leading-none tracking-tight ${active ? 'inline' : 'hidden @[360px]:inline'}`}>
+                  {t.label}
+                </span>
                 {t.badge && (
                   <span
-                    className={[
-                      'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[0.75rem] font-bold tabular-nums',
+                    className={`hidden @[440px]:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-mono tabular-nums leading-none transition-colors ${
                       active
-                        ? 'bg-white/20 text-white'
-                        : 'bg-canvas-elevated text-ink-500 border border-canvas-border',
-                    ].join(' ')}
+                        ? 'bg-brand-100 text-brand-700'
+                        : 'bg-paper-100 text-ink-500 group-hover:bg-brand-100 group-hover:text-brand-700'
+                    }`}
                   >
                     {t.badge}
                   </span>
                 )}
-              </button>
+                {active && (
+                  <motion.span
+                    layoutId="workflow-tab-underline"
+                    aria-hidden="true"
+                    className="absolute left-2 right-2 -bottom-px h-[2px] rounded-full bg-gradient-to-r from-brand-500 via-brand-600 to-brand-500"
+                    transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.55 }}
+                  />
+                )}
+              </motion.button>
             );
           })}
         </div>
@@ -589,48 +626,89 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <FolderClosed size={14} />
               </div>
-              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
                 Folders
               </span>
-              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {INPUT_FILE_FOLDERS.length} folder{INPUT_FILE_FOLDERS.length === 1 ? '' : 's'}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 items-start mb-4">
+            {/* Folder rows — same shape as the Files section: primary row
+                + footer with file-count + Open / Chat actions. */}
+            <div
+              className="grid gap-3 mb-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
+            >
               {INPUT_FILE_FOLDERS.map((folder) => {
                 const expanded = expandedInputFolderIds.has(folder.id);
                 return (
                   <div
                     key={folder.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 transition-colors"
+                    className="group w-full rounded-lg bg-canvas-elevated border border-canvas-border hover:border-brand-200 transition-colors"
                   >
-                    {/* Header row */}
-                    <div className="flex items-start gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
-                        {expanded ? <FolderOpen size={14} /> : <FolderClosed size={14} />}
+                    {/* Primary row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleInputFolderExpansion(folder.id)}
+                      aria-expanded={expanded}
+                      className="w-full flex items-center gap-3 px-4 h-16 rounded-t-lg hover:bg-brand-50/30 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                      aria-label={expanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
+                    >
+                      <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                        {expanded ? <FolderOpen size={16} /> : <FolderClosed size={16} />}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[0.8125rem] font-semibold text-ink-800 leading-tight truncate">
-                          {folder.name}
-                        </div>
-                        <div className="text-[0.75rem] text-ink-400 leading-tight truncate mt-0.5">
-                          {folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold text-ink-900 truncate">{folder.name}</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                          PDF · <span className="text-ink-400">{folder.fileCount} file{folder.fileCount === 1 ? '' : 's'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass('pdf'),
                         ].join(' ')}
                       >
                         PDF
                       </span>
+                    </button>
+
+                    {/* Footer row */}
+                    <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
+                      <span className="text-[11px] text-ink-500 shrink-0">
+                        <span className="font-mono tabular-nums text-ink-700">{folder.fileCount}</span> file{folder.fileCount === 1 ? '' : 's'}:
+                      </span>
+                      <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={folder.files.map(f => f.name).join(', ')}>
+                        {folder.files.map(f => f.name).join(', ') || '(empty)'}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleInputFolderExpansion(folder.id)}
+                          aria-label={expanded ? `Hide files in ${folder.name}` : `Show files in ${folder.name}`}
+                          title={expanded ? 'Hide files' : 'Show files'}
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          {expanded ? <ChevronDown size={11} strokeWidth={2.25} /> : <ChevronRight size={11} strokeWidth={2.25} />}
+                          {expanded ? 'Hide' : 'Show'}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Discuss ${folder.name} in chat`}
+                          title="Describe in chat"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          <MessageSquare size={11} strokeWidth={2.25} />
+                          Chat
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Expanded file list */}
                     {expanded && (
                       folder.files.length > 0 ? (
-                        <ul className="flex flex-col gap-1.5">
+                        <ul className="flex flex-col gap-1.5 border-t border-canvas-border/70 px-4 py-3">
                           {folder.files.map((f) => {
                             const Icon = typeIcon(f.type);
                             return (
@@ -641,7 +719,7 @@ export default function DataSourcePanel({
                                 <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(f.type)}`}>
                                   <Icon size={10} />
                                 </div>
-                                <span className="text-[0.6875rem] font-medium text-ink-800 truncate flex-1">
+                                <span className="text-[12px] font-medium text-ink-800 truncate flex-1">
                                   {f.name}
                                 </span>
                               </li>
@@ -649,31 +727,13 @@ export default function DataSourcePanel({
                           })}
                         </ul>
                       ) : (
-                        <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[0.6875rem] text-ink-400">
-                          Empty folder
+                        <div className="border-t border-canvas-border/70 px-4 py-3">
+                          <div className="rounded-md bg-canvas border border-dashed border-canvas-border px-2 py-2 text-center text-[12px] text-ink-400">
+                            Empty folder
+                          </div>
                         </div>
                       )
                     )}
-
-                    <button
-                      type="button"
-                      onClick={() => toggleInputFolderExpansion(folder.id)}
-                      aria-expanded={expanded}
-                      aria-label={expanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
-                      className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
-                    >
-                      {expanded ? (
-                        <>
-                          <ChevronDown size={12} />
-                          Hide files
-                        </>
-                      ) : (
-                        <>
-                          <ChevronRight size={12} />
-                          Show files
-                        </>
-                      )}
-                    </button>
                   </div>
                 );
               })}
@@ -684,100 +744,105 @@ export default function DataSourcePanel({
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <Database size={14} />
               </div>
-              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
                 Files
               </span>
-              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
+              <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'}
               </span>
             </div>
 
-            {/* Input source cards */}
-            <div className="grid grid-cols-2 gap-2 items-start mb-4">
+            {/* Input source rows — match the query SourcesTab card shape:
+                primary row (icon + name + meta + format badge) on top, a
+                footer with "Using N of M: cols…" + Pick + Chat actions. */}
+            <div
+              className="grid gap-3 mb-4"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
+            >
               {workflow.inputs.map((input) => {
-                const expanded = expandedInputCardIds.has(input.id);
                 const cols = input.columns ?? [];
                 return (
                   <div
                     key={input.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated p-3 transition-colors"
+                    className="group w-full rounded-lg bg-canvas-elevated border border-canvas-border hover:border-brand-200 transition-colors"
                   >
-                    {/* Header row */}
-                    <div className="flex items-start gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
-                        <Database size={14} />
+                    {/* Primary row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleInputCardExpansion(input.id)}
+                      className="w-full flex items-center gap-3 px-4 h-16 rounded-t-lg hover:bg-brand-50/30 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                      aria-label={`Open ${input.name}`}
+                    >
+                      <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                        <Database size={16} />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[0.8125rem] font-semibold text-ink-800 leading-tight truncate">
-                          {input.name}
-                        </div>
-                        <div className="text-[0.75rem] text-ink-400 leading-tight truncate mt-0.5">
-                          {input.description || 'Data source'}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold text-ink-900 truncate">{input.name}</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums truncate">
+                          {input.type.toUpperCase()} · <span className="text-ink-400">{input.description || 'Data source'}</span>
                         </div>
                       </div>
                       <span
                         className={[
-                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
+                          'text-[11px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 shrink-0',
                           formatBadgeClass(input.type),
                         ].join(' ')}
                       >
                         {input.type}
                       </span>
-                    </div>
+                    </button>
 
-                    {/* Columns — chips when collapsed, descriptions when expanded */}
+                    {/* Columns footer */}
                     {cols.length > 0 && (
-                      expanded ? (
-                        <ul className="flex flex-col gap-1.5">
-                          {cols.map((col) => (
-                            <li
-                              key={col}
-                              className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
-                            >
-                              <div className="text-[0.6875rem] font-mono font-semibold text-ink-800 truncate">
-                                {col}
-                              </div>
-                              <div className="text-[0.75rem] text-ink-500 leading-snug mt-0.5">
-                                {describeColumn(col)}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {cols.map((col) => (
-                            <span
-                              key={col}
-                              className="inline-flex items-center rounded-md bg-canvas border border-canvas-border px-1.5 py-0.5 text-[0.75rem] text-ink-600 font-mono"
-                            >
-                              {col}
-                            </span>
-                          ))}
+                      <div className="border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] text-ink-500 shrink-0">
+                          Using <span className="font-mono tabular-nums text-ink-700">{cols.length}</span> of{' '}
+                          <span className="font-mono tabular-nums text-ink-700">{cols.length}</span>:
+                        </span>
+                        <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={cols.join(', ')}>
+                          {cols.join(', ')}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleInputCardExpansion(input.id)}
+                            aria-label={`Pick columns from ${input.name}`}
+                            title="Pick columns"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <ListChecks size={11} strokeWidth={2.25} />
+                            Pick
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Describe column change for ${input.name} in chat`}
+                            title="Describe in chat"
+                            className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <MessageSquare size={11} strokeWidth={2.25} />
+                            Chat
+                          </button>
                         </div>
-                      )
+                      </div>
                     )}
 
-                    {/* Expand / collapse trigger */}
-                    {cols.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => toggleInputCardExpansion(input.id)}
-                        aria-expanded={expanded}
-                        aria-label={expanded ? `Collapse ${input.name}` : `Expand ${input.name}`}
-                        className="mt-2 w-full inline-flex items-center justify-center gap-1 rounded-md text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 hover:bg-canvas py-1 transition-colors cursor-pointer"
-                      >
-                        {expanded ? (
-                          <>
-                            <ChevronDown size={12} />
-                            Hide column details
-                          </>
-                        ) : (
-                          <>
-                            <ChevronRight size={12} />
-                            Show column details
-                          </>
-                        )}
-                      </button>
+                    {/* Expanded column details (kept from original) */}
+                    {expandedInputCardIds.has(input.id) && cols.length > 0 && (
+                      <ul className="flex flex-col gap-1.5 border-t border-canvas-border/70 px-4 py-3">
+                        {cols.map((col) => (
+                          <li
+                            key={col}
+                            className="rounded-md bg-canvas border border-canvas-border px-2 py-1.5 min-w-0"
+                          >
+                            <div className="text-[12px] font-mono font-semibold text-ink-800 truncate">
+                              {col}
+                            </div>
+                            <div className="text-[12px] text-ink-500 leading-snug mt-0.5">
+                              {describeColumn(col)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 );
@@ -786,166 +851,12 @@ export default function DataSourcePanel({
           </div>
         )}
 
-        {tab === 'output' && (
-          <div className="flex flex-col gap-3">
-            {/* Header */}
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-                <ArrowRight size={14} />
-              </div>
-              <span className="text-[0.8125rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">
-                Output Configuration
-              </span>
-              <span className="text-[0.6875rem] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
-                {visibleColumnCount} column{visibleColumnCount === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <p className="text-[0.75rem] text-ink-500 px-1 -mt-1">
-              Each output column shows the input it's mapped to or the rule that derives it.
-            </p>
-
-            {/* Column list — each row carries its input mapping. */}
-            <ul className="grid grid-cols-2 gap-2 items-start">
-              {outputColumns.map((col) => {
-                const resolved = resolveSources(col.sources, workflow);
-                return (
-                  <li
-                    key={col.id}
-                    className="rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5 hover:border-brand-200 transition-colors min-w-0"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-ink-300 shrink-0 cursor-grab" aria-hidden>
-                        <GripVertical size={13} />
-                      </span>
-                      <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">
-                        {col.name}
-                      </span>
-                      <span
-                        className={[
-                          'text-[0.625rem] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 border shrink-0',
-                          typeBadgeClasses(col.type),
-                        ].join(' ')}
-                      >
-                        {col.type}
-                      </span>
-                      {col.required && (
-                        <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold rounded-md px-1.5 py-0.5 bg-brand-50 text-brand-700 border border-brand-200/70 shrink-0">
-                          <Lock size={9} />
-                          Required
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => !col.required && toggleColumnVisibility(col.id)}
-                        aria-label={col.visible ? `Hide ${col.name}` : `Show ${col.name}`}
-                        aria-pressed={col.visible}
-                        disabled={col.required}
-                        className={[
-                          'ml-auto w-7 h-7 rounded-md flex items-center justify-center transition-colors shrink-0',
-                          col.required
-                            ? 'text-ink-300 cursor-not-allowed'
-                            : col.visible
-                              ? 'text-brand-600 hover:bg-brand-50 cursor-pointer'
-                              : 'text-ink-400 hover:bg-canvas hover:text-ink-700 cursor-pointer',
-                        ].join(' ')}
-                      >
-                        {col.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                      </button>
-                    </div>
-
-                    {(resolved.length > 0 || col.formula) && (
-                      <div className="mt-1.5 ml-[18px] flex items-start gap-1.5 flex-wrap">
-                        <ArrowRight
-                          size={11}
-                          className="text-ink-400 mt-[3px] shrink-0 -scale-x-100"
-                        />
-                        {resolved.map((s, i) => (
-                          <span
-                            key={`${s.inputName}-${s.column}-${i}`}
-                            className="inline-flex items-center gap-1 text-[0.6875rem] rounded-md px-1.5 py-0.5 bg-canvas border border-canvas-border text-ink-600"
-                          >
-                            <span className="font-semibold text-ink-700">
-                              {s.inputName}
-                            </span>
-                            <span className="text-ink-400">·</span>
-                            <span>{s.column}</span>
-                          </span>
-                        ))}
-                        {col.formula && (
-                          <span className="text-[0.6875rem] text-ink-500 italic leading-snug">
-                            {resolved.length > 0 ? '· ' : ''}
-                            {col.formula}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/* AI Suggestions */}
-            <section className="rounded-xl border border-brand-200/70 bg-brand-50/40 p-3 mt-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-7 h-7 rounded-lg bg-white text-brand-600 flex items-center justify-center shrink-0 border border-brand-200/70">
-                  <Sparkles size={13} />
-                </span>
-                <span className="text-[0.8125rem] font-semibold text-ink-800">AI Suggestions</span>
-                <span className="text-[0.625rem] font-bold tracking-wider rounded-md px-1.5 py-0.5 bg-brand-100 text-brand-700 shrink-0">
-                  SMART
-                </span>
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {AI_OUTPUT_SUGGESTIONS.map((s) => {
-                  const accepted = acceptedSuggestions.has(s.id);
-                  return (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleSuggestion(s.id)}
-                        aria-pressed={accepted}
-                        className={[
-                          'w-full text-left flex items-start gap-2.5 rounded-lg px-3 py-2 border transition-colors cursor-pointer',
-                          accepted
-                            ? 'bg-white border-brand-300 shadow-[0_4px_14px_-10px_rgba(106,18,205,0.4)]'
-                            : 'bg-white/60 border-transparent hover:border-brand-200 hover:bg-white',
-                        ].join(' ')}
-                      >
-                        <span
-                          className={[
-                            'mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors',
-                            accepted
-                              ? 'bg-brand-600 border-brand-600 text-white'
-                              : 'bg-white border-canvas-border text-transparent',
-                          ].join(' ')}
-                          aria-hidden
-                        >
-                          <CheckCircle2 size={10} />
-                        </span>
-                        <span
-                          className={[
-                            'text-[0.75rem] leading-snug',
-                            accepted ? 'font-semibold text-brand-700' : 'text-ink-700',
-                          ].join(' ')}
-                        >
-                          {s.label}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          </div>
-        )}
-
         {tab === 'preview' && (
           <div>
             {running && !result ? (
               <div className="flex flex-col items-center justify-center text-center py-12 px-4">
                 <Loader2 size={20} className="animate-spin text-brand-600 mb-2" />
-                <div className="text-[0.75rem] font-semibold text-ink-800">
+                <div className="text-[13px] font-semibold text-ink-800">
                   Running {workflow.name}…
                 </div>
               </div>
@@ -954,10 +865,10 @@ export default function DataSourcePanel({
                 <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
                   <FileOutput size={18} />
                 </div>
-                <div className="text-[0.8125rem] font-semibold text-ink-800 mb-1">
+                <div className="text-[13px] font-semibold text-ink-800 mb-1">
                   No output yet
                 </div>
-                <div className="text-[0.75rem] text-ink-500 max-w-[220px] leading-snug">
+                <div className="text-[12px] text-ink-500 max-w-[220px] leading-snug">
                   Run the workflow to see KPIs and the audit report here.
                 </div>
               </div>
@@ -969,19 +880,19 @@ export default function DataSourcePanel({
                     <Zap size={16} className="text-brand-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[0.875rem] font-semibold text-ink-900 leading-tight truncate">
+                    <div className="text-[15px] font-semibold text-ink-900 leading-tight truncate">
                       {workflow.name}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-1">
-                      <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
+                      <span className="inline-flex items-center gap-1 text-[12px] font-bold text-compliant-700 bg-compliant-50 rounded-full px-2 py-0.5">
                         <CheckCircle2 size={10} />
                         RUN SUCCESSFUL
                       </span>
-                      <span className="text-[0.75rem] text-ink-400">
+                      <span className="text-[12px] text-ink-400">
                         RUN ID: RWF-4407-B
                       </span>
                     </div>
-                    <div className="text-[0.75rem] text-ink-400 mt-0.5">
+                    <div className="text-[12px] text-ink-400 mt-0.5">
                       {(28_345_840).toLocaleString()} records
                     </div>
                   </div>
@@ -1026,21 +937,21 @@ export default function DataSourcePanel({
 
                 {/* Audit Report */}
                 <div className="mt-1">
-                  <h2 className="text-[0.8125rem] font-semibold text-ink-900 mb-2 px-1">
+                  <h2 className="text-[13px] font-semibold text-ink-900 mb-2 px-1">
                     Audit Report
                   </h2>
 
                   <div className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
                     <div className="flex items-baseline justify-between gap-2 px-3 pt-2.5 pb-1.5">
-                      <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
+                      <div className="text-[13px] font-semibold text-ink-800 truncate">
                         {result.title}
                       </div>
-                      <span className="text-[0.625rem] text-ink-400 font-bold uppercase tracking-wider shrink-0">
+                      <span className="text-[12px] text-ink-400 font-bold uppercase tracking-wider shrink-0">
                         {result.outputType}
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-[0.75rem]">
+                      <table className="w-full text-[12px]">
                         <thead className="bg-canvas text-ink-500 border-y border-canvas-border">
                           <tr>
                             <th className="w-6"></th>
@@ -1111,164 +1022,148 @@ export default function DataSourcePanel({
 
         {tab === 'plan' && (
           <div className="flex flex-col gap-3">
-            {/* Workflow / Code toggle */}
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setCodeOpen(false)}
-                aria-pressed={!codeOpen}
-                className={[
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[0.75rem] font-semibold transition-colors cursor-pointer',
-                  !codeOpen
-                    ? 'border border-canvas-border bg-white text-ink-800 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-                    : 'border border-transparent text-ink-500 hover:text-ink-800 hover:bg-canvas-elevated',
-                ].join(' ')}
+            {/* Tab intro — title + summary chip + Workflow|Code segmented
+                control. Replaces the floating left-aligned toggle so the
+                Plan tab leads with a clear hierarchy. */}
+            <div className="flex items-center gap-2 px-1">
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold tracking-tight text-ink-900 leading-tight">
+                  Plan
+                </div>
+                <div className="text-[12px] text-ink-500 mt-0.5">
+                  {workflow.steps.length} step{workflow.steps.length === 1 ? '' : 's'} · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
+                </div>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Plan view"
+                className="inline-flex items-center rounded-full bg-canvas p-0.5 border border-canvas-border shrink-0"
               >
-                <WorkflowIcon size={12} />
-                Workflow
-              </button>
-              <button
-                type="button"
-                onClick={() => setCodeOpen(true)}
-                aria-pressed={codeOpen}
-                className={[
-                  'inline-flex items-center gap-1.5 px-2.5 py-1 text-[0.75rem] font-mono font-semibold rounded-md transition-colors cursor-pointer',
-                  codeOpen
-                    ? 'text-brand-700 bg-brand-50 border border-brand-200/70'
-                    : 'text-ink-500 hover:text-brand-700 hover:bg-canvas-elevated border border-transparent',
-                ].join(' ')}
-              >
-                <Code2 size={12} />
-                Code
-              </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!codeOpen}
+                  onClick={() => setCodeOpen(false)}
+                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
+                    !codeOpen
+                      ? 'bg-brand-600 text-white'
+                      : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  <WorkflowIcon size={11} />
+                  Workflow
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={codeOpen}
+                  onClick={() => setCodeOpen(true)}
+                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
+                    codeOpen
+                      ? 'bg-brand-600 text-white'
+                      : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  <Code2 size={11} />
+                  Code
+                </button>
+              </div>
             </div>
 
-            {/* References */}
-            <section className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setReferencesOpen((v) => !v)}
-                aria-expanded={referencesOpen}
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-canvas/40 transition-colors cursor-pointer"
-              >
-                <FileText size={12} className="text-ink-500 shrink-0" />
-                <span className="text-[0.75rem] font-bold tracking-[0.14em] text-ink-700 uppercase">
-                  References
-                </span>
-                <span className="text-[0.75rem] text-ink-500 truncate">
-                  · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
-                </span>
-                <span className="ml-auto text-ink-400 shrink-0">
-                  {referencesOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </span>
-              </button>
+            {/* References — matches the Generated Code CollapsibleSection
+                chrome (rounded-xl border + hover shadow, icon + title +
+                chevron header, border-top separator on the body). */}
+            <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+              <div className="flex items-center px-4 py-3 hover:bg-paper-50/60 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setReferencesOpen((v) => !v)}
+                  aria-expanded={referencesOpen}
+                  className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <FileText size={14} className="text-primary shrink-0" />
+                  <span className="flex-1 text-left">References</span>
+                  <span className="text-[12px] font-normal text-ink-500">
+                    {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReferencesOpen((v) => !v)}
+                  aria-label={referencesOpen ? 'Collapse references' : 'Expand references'}
+                  aria-expanded={referencesOpen}
+                  className="ml-1 p-1 text-ink-400 hover:text-ink-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <ChevronDown size={14} className={`transition-transform duration-150 ${referencesOpen ? '' : '-rotate-90'}`} />
+                </button>
+              </div>
               {referencesOpen && (
-                <div className="px-3 pb-3 pt-0 flex flex-col gap-2.5 border-t border-canvas-border">
-                  {workflow.inputs.map((input) => {
-                    const Icon = typeIcon(input.type);
-                    return (
-                      <div key={input.id} className="min-w-0 pt-2.5">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div
-                            className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}
-                          >
-                            <Icon size={10} />
+                <div className="px-4 pb-4 border-t border-canvas-border">
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {workflow.inputs.map((input) => {
+                      const Icon = typeIcon(input.type);
+                      return (
+                        <div key={input.id} className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div
+                              className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}
+                            >
+                              <Icon size={10} />
+                            </div>
+                            <span className="text-[13px] font-semibold text-ink-800 truncate">
+                              {input.name}
+                            </span>
+                            <span className="text-[12px] text-ink-400 truncate">
+                              {inputMeta(input)}
+                            </span>
                           </div>
-                          <span className="text-[0.75rem] font-semibold text-ink-800 truncate">
-                            {input.name}
-                          </span>
-                          <span className="text-[0.6875rem] text-ink-400 truncate">
-                            {inputMeta(input)}
-                          </span>
+                          {(input.columns?.length ?? 0) > 0 && (
+                            <div className="flex flex-wrap gap-1 ml-[26px]">
+                              {input.columns!.map((col) => (
+                                <span
+                                  key={col}
+                                  className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[12px] text-brand-700 font-mono"
+                                >
+                                  {col}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {(input.columns?.length ?? 0) > 0 && (
-                          <div className="flex flex-wrap gap-1 ml-[26px]">
-                            {input.columns!.map((col) => (
-                              <span
-                                key={col}
-                                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[0.75rem] text-brand-700 font-mono"
-                              >
-                                {col}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-            </section>
+            </div>
 
             {codeOpen ? (
-              /* Generated code view */
-              <section className="flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-2 px-1">
-                  <div className="min-w-0">
-                    <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">
-                      Generated code
-                    </div>
-                    <div className="text-[0.6875rem] text-ink-500 mt-0.5">
-                      Python · pandas · ira utils
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
-                    >
-                      <Copy size={11} />
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 px-2 py-1 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
-                    >
-                      <ExternalLink size={11} />
-                      Open
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-canvas-border overflow-hidden bg-[#0f1115]">
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/5">
-                    <span className="text-[0.6875rem] font-mono text-white/70">
-                      workflow.py
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-mono text-emerald-400/90">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      synced
-                    </span>
-                  </div>
-                  <pre className="text-[0.75rem] leading-[1.55] font-mono text-white/90 px-3 py-3 overflow-x-auto">
-                    <code>
-                      {SAMPLE_CODE_LINES.map((line, i) => (
-                        <div key={i} className="flex">
-                          <span className="select-none text-white/30 pr-3 tabular-nums w-6 text-right shrink-0">
-                            {i + 1}
-                          </span>
-                          <span className="whitespace-pre">
-                            {highlightPython(line)}
-                          </span>
-                        </div>
-                      ))}
-                    </code>
-                  </pre>
-                </div>
-              </section>
+              /* Generated code view — matches the query CodeTab's
+                 CollapsibleSection chrome (header row with icon + title +
+                 chevron, dark code block with Copy/Download icon buttons
+                 anchored top-right). */
+              <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
             ) : (
-              /* Steps list */
-              <section>
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[0.8125rem] font-semibold text-ink-800">Steps</span>
+              /* Steps card — wraps the step list in the same chrome as
+                 References + Generated Code so the Plan tab reads as
+                 three cohesive sections (Plan intro, References, Steps). */
+              <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+                <div className="flex items-center px-4 py-3">
+                  <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
+                    <Sparkles size={14} className="text-primary shrink-0" />
+                    <span className="flex-1 text-left">Steps</span>
+                    <span className="text-[12px] font-normal text-ink-500">
+                      {workflow.steps.length} total
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+                    className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
                   >
                     Reorder
                   </button>
                 </div>
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col border-t border-canvas-border">
                   {workflow.steps.map((step, idx) => {
                     const badge = STEP_BADGE[step.type];
                     const relevant = workflow.inputs.filter((i) =>
@@ -1277,37 +1172,29 @@ export default function DataSourcePanel({
                     return (
                       <li
                         key={step.id}
-                        className="rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-3 hover:border-brand-200 transition-colors"
+                        className={`px-4 py-3 hover:bg-brand-50/30 transition-colors ${idx > 0 ? 'border-t border-canvas-border/70' : ''}`}
                       >
                         <div className="flex items-start gap-3">
-                          <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[0.75rem] font-bold shrink-0 mt-0.5 tabular-nums">
+                          <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[12px] font-bold shrink-0 mt-0.5 tabular-nums">
                             {idx + 1}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-[0.75rem] font-semibold text-ink-800">
+                              <h3 className="text-[13px] font-semibold text-ink-900">
                                 {step.name}
                               </h3>
                               <span
-                                className={`text-[0.625rem] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
+                                className={`text-[11px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
                               >
                                 {badge.label}
                               </span>
                             </div>
-                            <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5">
+                            <p className="text-[12px] text-ink-500 leading-relaxed mt-0.5">
                               {step.description}
                             </p>
                             {relevant.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {relevant.map((input) => (
-                                  <span
-                                    key={input.id}
-                                    className="inline-flex items-center gap-1.5 rounded-md bg-canvas border border-canvas-border px-2 py-0.5 text-[0.6875rem] text-ink-700"
-                                  >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0" />
-                                    {input.name}
-                                  </span>
-                                ))}
+                              <div className="mt-2">
+                                <StepFilesAndColumns inputs={relevant} />
                               </div>
                             )}
                           </div>
@@ -1316,7 +1203,7 @@ export default function DataSourcePanel({
                     );
                   })}
                 </ul>
-              </section>
+              </div>
             )}
           </div>
         )}
@@ -1343,6 +1230,186 @@ const PY_KEYWORDS = new Set([
   'False',
   'None',
 ]);
+
+// Generated-code section — mirrors the query ArtifactPanel's CodeTab UI:
+// CollapsibleSection-style header (icon + title + chevron) over a dark
+// code block with Copy / Download icon buttons anchored top-right.
+// Per-step files + columns block. Scales for "so many files and columns
+// used": each input is its own row with file icon + name + chip count,
+// and a collapsible column list with show-more if the column count is
+// large. Collapsed by default to keep step rows compact; user expands
+// any file they care about.
+function StepFilesAndColumns({ inputs }: { inputs: { id: string; name: string; type: string; columns?: string[] }[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [showAllExpanded, setShowAllExpanded] = useState<Set<string>>(new Set());
+  const COLLAPSED_COLUMN_CAP = 6;
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleShowAll = (id: string) => setShowAllExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  return (
+    <div className="rounded-lg border border-canvas-border bg-canvas/40 overflow-hidden">
+      <ul className="flex flex-col">
+        {inputs.map((input, i) => {
+          const cols = input.columns ?? [];
+          const isExpanded = expanded.has(input.id);
+          const isShowAll = showAllExpanded.has(input.id);
+          const Icon = typeIcon(input.type);
+          const visibleCols = isShowAll ? cols : cols.slice(0, COLLAPSED_COLUMN_CAP);
+          const hiddenCount = cols.length - visibleCols.length;
+          return (
+            <li
+              key={input.id}
+              className={i > 0 ? 'border-t border-canvas-border/60' : ''}
+            >
+              <button
+                type="button"
+                onClick={() => toggle(input.id)}
+                aria-expanded={isExpanded}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-canvas-elevated transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+              >
+                <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}>
+                  <Icon size={11} />
+                </div>
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink-800 truncate">{input.name}</span>
+                  <span className="text-[11px] font-mono text-ink-500 tabular-nums shrink-0">
+                    {cols.length} col{cols.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400 shrink-0">
+                  {input.type}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={`text-ink-400 shrink-0 transition-transform duration-150 ${isExpanded ? '' : '-rotate-90'}`}
+                />
+              </button>
+              {isExpanded && cols.length > 0 && (
+                <div className="px-3 pb-2.5 pt-0.5">
+                  <div className="flex flex-wrap gap-1">
+                    {visibleCols.map(col => (
+                      <span
+                        key={col}
+                        className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
+                      >
+                        {col}
+                      </span>
+                    ))}
+                    {hiddenCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleShowAll(input.id)}
+                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                      >
+                        +{hiddenCount} more
+                      </button>
+                    )}
+                    {isShowAll && cols.length > COLLAPSED_COLUMN_CAP && (
+                      <button
+                        type="button"
+                        onClick={() => toggleShowAll(input.id)}
+                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function CodeSection({ code, filename }: { code: string; filename: string }) {
+  const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard denied — silent */ }
+  };
+  const handleDownload = () => {
+    try {
+      const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* download failed — silent */ }
+  };
+  return (
+    <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+      <div className="flex items-center px-4 py-3 hover:bg-paper-50/60 transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <FileCode size={14} className="text-primary shrink-0" />
+          <span className="flex-1 text-left">Generated Code</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? 'Collapse section' : 'Expand section'}
+          aria-expanded={open}
+          className="ml-1 p-1 text-ink-400 hover:text-ink-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <ChevronDown size={14} className={`transition-transform duration-150 ${open ? '' : '-rotate-90'}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="px-4 pb-4 border-t border-canvas-border">
+          <div className="mt-3 relative">
+            <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[12px] font-mono overflow-x-auto leading-relaxed">
+              <code>{code}</code>
+            </pre>
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleDownload}
+                aria-label="Download code"
+                title={`Download as ${filename}`}
+                className="p-1.5 bg-ink-700 hover:bg-ink-600 text-paper-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+              >
+                <Download size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                aria-label={copied ? 'Copied!' : 'Copy code'}
+                title={copied ? 'Copied!' : 'Copy to clipboard'}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                  copied ? 'bg-brand-600 text-white' : 'bg-ink-700 hover:bg-ink-600 text-paper-50'
+                }`}
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function highlightPython(line: string): ReactNode {
   if (line.length === 0) return ' ';
@@ -1394,14 +1461,14 @@ function OutputKPICard({
         : 'text-ink-500 bg-canvas';
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-2.5">
-      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider">{label}</div>
+      <div className="text-[12px] font-bold text-ink-400 tracking-wider">{label}</div>
       <div className="flex items-baseline gap-1.5 mt-0.5">
-        <div className={`text-[1.125rem] font-bold ${valueColor} leading-none tabular-nums`}>
+        <div className={`text-[18px] font-bold ${valueColor} leading-none tabular-nums`}>
           {value}
         </div>
         {delta && (
           <span
-            className={`text-[0.75rem] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
+            className={`text-[12px] font-bold rounded-md px-1.5 py-0.5 ${deltaColor}`}
           >
             {delta}
           </span>
@@ -1424,7 +1491,7 @@ function FlagDistributionCard() {
   let offsetAccum = 0;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[0.75rem] font-bold text-ink-400 tracking-wider mb-2">
+      <div className="text-[12px] font-bold text-ink-400 tracking-wider mb-2">
         FLAG DISTRIBUTION
       </div>
       <div className="flex items-center gap-3">
@@ -1458,7 +1525,7 @@ function FlagDistributionCard() {
         </svg>
         <ul className="flex flex-col gap-1.5 min-w-0 flex-1">
           {FLAG_DISTRIBUTION.map((seg) => (
-            <li key={seg.label} className="flex items-center gap-2 text-[0.75rem]">
+            <li key={seg.label} className="flex items-center gap-2 text-[12px]">
               <span
                 className="w-3 h-3 rounded-sm shrink-0"
                 style={{ background: seg.color }}
@@ -1487,7 +1554,7 @@ function MonthlyInvoiceVolumeCard() {
   const chartHeight = 56;
   return (
     <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-      <div className="text-[0.75rem] font-semibold text-ink-900 mb-3">
+      <div className="text-[13px] font-semibold text-ink-900 mb-3">
         Monthly Invoice Volume
       </div>
       <div className="grid grid-cols-6 gap-2 items-end" style={{ height: chartHeight + 32 }}>
@@ -1495,7 +1562,7 @@ function MonthlyInvoiceVolumeCard() {
           const h = Math.max(4, (m.value / max) * chartHeight);
           return (
             <div key={m.month} className="flex flex-col items-center gap-1 min-w-0">
-              <div className="text-[0.75rem] font-semibold text-ink-500 tabular-nums">
+              <div className="text-[12px] font-semibold text-ink-500 tabular-nums">
                 {m.label}
               </div>
               <div
@@ -1503,7 +1570,7 @@ function MonthlyInvoiceVolumeCard() {
                 style={{ height: `${h}px` }}
                 aria-label={`${m.month}: ${m.label}`}
               />
-              <div className="text-[0.75rem] text-ink-400">{m.month}</div>
+              <div className="text-[12px] text-ink-400">{m.month}</div>
             </div>
           );
         })}

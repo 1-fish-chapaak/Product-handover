@@ -44,6 +44,7 @@ interface Props {
   setSelectedWorkflow: (id: string | null) => void;
   openAuditExecution: (engagementId: string) => void;
   setSelectedBP: (id: string | null) => void;
+  onLaunchWorkflowBuilder?: (prompt: string) => void;
 }
 
 // ─── Onboarding checklist ────────────────────────────────────────────────────
@@ -1916,7 +1917,7 @@ function OpenExceptionsSection({ setView, rangeDays }: { setView: Props['setView
                     <div className="text-ink-900 line-clamp-1">{e.title}</div>
                     <div className="text-xs text-ink-500 mt-0.5">{e.riskCategory} · {e.status}</div>
                   </td>
-                  <td className="px-2 text-ink-700">{e.assignedTo?.name ?? '—'}</td>
+                  <td className="px-2 text-ink-700">{e.assignedTo?.name ?? <span className="text-ink-500 italic">Unassigned</span>}</td>
                   <td className="px-4 text-right text-ink-500">{e.lastUpdated}</td>
                 </tr>
               ))}
@@ -2227,7 +2228,7 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
           <Layers size={14} className="text-ink-500 shrink-0" />
           <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">Business processes</h3>
         </div>
-        <button onClick={() => setView('business-processes')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
+        <button onClick={() => setView('programs')} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">View all →</button>
       </div>
       <div className="flex-1 overflow-auto p-4 grid grid-cols-2 gap-3 auto-rows-min">
         {BUSINESS_PROCESSES.map(bp => (
@@ -2337,13 +2338,17 @@ function RecentReportsSection({
 // Distinct from Recent Ask IRA — Concierge is the specialized-tool surface
 // (forensics, table extraction, workflow building).
 
-const CONCIERGE_TOOLS: { view: View; label: string; description: string; icon: React.ElementType; tone: string }[] = [
+type ConciergeTool =
+  | { view: View; label: string; description: string; icon: React.ElementType; tone: string }
+  | { launchWorkflow: true; label: string; description: string; icon: React.ElementType; tone: string };
+
+const CONCIERGE_TOOLS: ConciergeTool[] = [
   { view: 'ai-concierge-forensics',        label: 'Document Forensics', description: 'Investigate exceptions and trace anomalies',  icon: Search,           tone: 'bg-risk-50 text-risk-700' },
   { view: 'ai-concierge-table-extractor',  label: 'Table Extractor',    description: 'Pull structured data from PDFs and scans',    icon: TableProperties,  tone: 'bg-brand-50 text-brand-700' },
-  { view: 'ai-concierge-workflow-builder', label: 'Workflow Builder',   description: 'Compose new automations from a description',  icon: Wand2,            tone: 'bg-compliant-50 text-compliant-700' },
+  { launchWorkflow: true,                  label: 'Workflow Builder',   description: 'Compose new automations from a description',  icon: Wand2,            tone: 'bg-compliant-50 text-compliant-700' },
 ];
 
-function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; rangeDays: number | null }) {
+function ConciergeSection({ setView, rangeDays, onLaunchWorkflowBuilder }: { setView: Props['setView']; rangeDays: number | null; onLaunchWorkflowBuilder?: Props['onLaunchWorkflowBuilder'] }) {
   const scale = scaleForRange(rangeDays);
   // Mock baseline: ~84 tool invocations YTD across the 3 tools.
   const usedInRange = Math.max(0, Math.round(84 * scale));
@@ -2364,10 +2369,15 @@ function ConciergeSection({ setView, rangeDays }: { setView: Props['setView']; r
       <div className="flex-1 overflow-auto divide-y divide-canvas-border/60">
         {CONCIERGE_TOOLS.map(tool => {
           const Icon = tool.icon;
+          const key = 'view' in tool ? tool.view : 'workflow-launcher';
+          const handleClick = () => {
+            if ('launchWorkflow' in tool) onLaunchWorkflowBuilder?.('');
+            else setView(tool.view);
+          };
           return (
             <button
-              key={tool.view}
-              onClick={() => setView(tool.view)}
+              key={key}
+              onClick={handleClick}
               className="w-full flex items-center gap-3 px-5 py-3 hover:bg-brand-50/40 cursor-pointer text-left transition-colors group"
             >
               <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${tool.tone}`}>
@@ -4122,7 +4132,7 @@ function CompactLayout({
 }
 
 export default function HomeView({
-  setView, notifications, onSelectNotification, onOpenNotificationDrawer, setChatInitialQuery, setSelectedWorkflow, openAuditExecution, setSelectedBP,
+  setView, notifications, onSelectNotification, onOpenNotificationDrawer, setChatInitialQuery, setSelectedWorkflow, openAuditExecution, setSelectedBP, onLaunchWorkflowBuilder,
 }: Props) {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1');
 
@@ -4273,7 +4283,7 @@ export default function HomeView({
       case 'sources':       return <ConnectedSourcesSection setView={setView} rangeDays={rangeDays} />;
       case 'processes':     return <BusinessProcessesSection setView={setView} rangeDays={rangeDays} setSelectedBP={setSelectedBP} />;
       case 'reports-list':  return <RecentReportsSection setView={setView} rangeDays={rangeDays} isPinned={pinnedStore.isPinned} togglePin={pinnedStore.toggle} />;
-      case 'concierge':     return <ConciergeSection setView={setView} rangeDays={rangeDays} />;
+      case 'concierge':     return <ConciergeSection setView={setView} rangeDays={rangeDays} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />;
       case 'calendar':      return <AuditCalendarSection setView={setView} rangeDays={rangeDays} openAuditExecution={openAuditExecution} />;
       case 'pinned':        return <PinnedSection setView={setView} setSelectedWorkflow={setSelectedWorkflow} openAuditExecution={openAuditExecution} pinned={pinnedStore.pinned} isPinned={pinnedStore.isPinned} toggle={pinnedStore.toggle} />;
     }

@@ -1,36 +1,32 @@
-import React from 'react';
 import type { WorkspaceTab } from '../engagementPatterns';
+import { EngagementTabBar } from '../../audit/EngagementTabBar';
 
 interface Props {
   tabs: WorkspaceTab[];
   activeTabId: string;
   onTabChange: (tabId: string) => void;
   hiddenTabIds?: string[];
+  /** Per-engagement key so tab order / user-hidden state persists distinctly. */
+  storageKey?: string;
 }
 
-export default function WorkspaceTabs({ tabs, activeTabId, onTabChange, hiddenTabIds = [] }: Props) {
-  const visibleTabs = tabs.filter(t => !hiddenTabIds.includes(t.id));
+/**
+ * Configurable-engagement workspace tabs. Delegates to the shared EngagementTabBar
+ * so the Config page gets the same colorful icons, drag-to-reorder, and show/hide
+ * menu as the Engagements and Engagement Final pages. `hiddenTabIds` (scope-driven)
+ * are filtered out up-front; the bar's menu controls user-level show/hide on top.
+ */
+export default function WorkspaceTabs({ tabs, activeTabId, onTabChange, hiddenTabIds = [], storageKey = 'config' }: Props) {
+  const visibleTabs = tabs
+    .filter(t => !hiddenTabIds.includes(t.id))
+    .map(t => ({ id: t.id, label: t.label }));
 
   return (
-    <div className="border-b border-border-light mb-4">
-      <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-        {visibleTabs.map(tab => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`px-3 py-2 text-[0.6875rem] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <EngagementTabBar
+      tabs={visibleTabs}
+      activeTab={activeTabId}
+      onSelect={onTabChange}
+      storageKey={storageKey}
+    />
   );
 }

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   ArrowLeft, ArrowUpRight, AlertTriangle, Calendar,
   CheckCircle2, Clock, FileText, FolderOpen, Layers, Play,
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
@@ -16,6 +17,8 @@ import {
   type AutomationSubtype,
   type Engagement,
   type EngType,
+  type EngStatus,
+  type ProcessCode,
 } from '../../data/engagements';
 import {
   ENGAGEMENT_ACTIVITY,
@@ -40,18 +43,19 @@ import WorkingPaperTab from './WorkingPaperTab';
 import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
+import { EngagementWorkspaceProvider, useEngagementWorkspace } from './engagementWorkspace';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper';
+type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
   onBack: () => void;
   onOpenExecution: (engagementId: string) => void;
   onOpenCaseManagement: (engagementId: string) => void;
-  onOpenRacmFullEditor?: () => void;
+  onOpenRacmFullEditor?: (override?: { racmName?: string; processLabel?: string }) => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   /** Open a workflow's detail page (same route the Workflow Library uses). */
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
@@ -61,36 +65,53 @@ interface Props {
 
 // ─── Tabs per engagement type ─────────────────────────────────────────────────
 
+/**
+ * Per-sub-page icon + a bright, business-colorful chip class. The chip is a
+ * literal Tailwind string (no interpolation) so the classes survive purge.
+ */
+const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
+  overview:        { icon: LayoutDashboard, chip: 'bg-blue-50 text-blue-600' },
+  racm:            { icon: Table2,          chip: 'bg-violet-50 text-violet-600' },
+  controls:        { icon: ShieldCheck,     chip: 'bg-emerald-50 text-emerald-600' },
+  workflows:       { icon: Workflow,        chip: 'bg-cyan-50 text-cyan-600' },
+  evidence:        { icon: FolderOpen,      chip: 'bg-amber-50 text-amber-600' },
+  exceptions:      { icon: AlertTriangle,   chip: 'bg-rose-50 text-rose-600' },
+  'working-paper': { icon: BookOpen,        chip: 'bg-teal-50 text-teal-600' },
+  trail:           { icon: Activity,        chip: 'bg-fuchsia-50 text-fuchsia-600' },
+  config:          { icon: Settings,        chip: 'bg-slate-100 text-slate-600' },
+};
+
 function tabsForType(type: EngType): { id: TabId; label: string; icon: React.ElementType }[] {
+  const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-      ];
+      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'racm', label: 'RACM', icon: FileText },
-        { id: 'controls', label: 'Controls', icon: Shield },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'evidence', label: 'Evidence', icon: FolderOpen },
-        { id: 'working-paper', label: 'Working Paper', icon: BookOpen },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-      ];
+      // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'racm', label: 'RACM', icon: FileText },
-        { id: 'controls', label: 'Controls', icon: Shield },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
-        { id: 'working-paper', label: 'Audit Report', icon: BookOpen },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-      ];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
+}
+
+/** Per-engagement-type tab order + hidden set, persisted in localStorage. */
+type TabPrefs = { order: TabId[]; hidden: TabId[] };
+
+function loadTabPrefs(type: EngType): TabPrefs {
+  const canonical = tabsForType(type).map(t => t.id);
+  try {
+    const raw = localStorage.getItem(`eng-tab-prefs:${type}`);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<TabPrefs>;
+      const stored = Array.isArray(p.order) ? p.order : [];
+      // Keep stored order, drop ids no longer valid, append any newly-added tabs.
+      const order = [...stored.filter(id => canonical.includes(id)), ...canonical.filter(id => !stored.includes(id))];
+      // Configuration can never be hidden (it's where you re-enable the others).
+      const hidden = (Array.isArray(p.hidden) ? p.hidden : []).filter(id => canonical.includes(id) && id !== 'config');
+      return { order, hidden };
+    }
+  } catch { /* ignore malformed prefs */ }
+  return { order: canonical, hidden: [] };
 }
 
 // ─── Mock content (per type — kept small + realistic) ─────────────────────────
@@ -133,6 +154,9 @@ const MOCK_WORKFLOWS: MockWorkflow[] = [
   { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan',           type: 'Compliance',     inputs: ['SQL'],          cadence: { kind: 'Ad-hoc' },                       lastRun: '12h ago', status: 'Running', subProcess: 'Purchase Order Management',  truePositives: 12, totalFires: 28, libraryId: 'lw-009' },
   { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-001' },
 ];
+
+/** Engagement workflow set shared with the Controls/RACM tabs via the workspace store. */
+const WORKSPACE_WORKFLOWS = MOCK_WORKFLOWS.map(w => ({ id: w.id, code: w.code, name: w.name }));
 
 function effectivenessTier(pct: number): { label: string; tone: string; bar: string } {
   if (pct >= 80) return { label: 'High', tone: 'text-compliant-700', bar: 'bg-compliant' };
@@ -206,16 +230,29 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
 
+  // Tab order + hidden set — drag to reorder, toggle visibility from Configuration; persisted per type.
+  const [tabPrefs, setTabPrefs] = useState<TabPrefs>(() => engagement ? loadTabPrefs(engagement.type) : { order: [], hidden: [] });
+  const engType = engagement?.type;
+  useEffect(() => { if (engType) setTabPrefs(loadTabPrefs(engType)); }, [engType]);
+  useEffect(() => { if (engType) localStorage.setItem(`eng-tab-prefs:${engType}`, JSON.stringify(tabPrefs)); }, [engType, tabPrefs]);
+  // If the active tab gets hidden, fall back to the first visible tab.
+  useEffect(() => {
+    if (tabPrefs.hidden.includes(activeTab)) {
+      const firstVisible = tabPrefs.order.find(id => !tabPrefs.hidden.includes(id));
+      if (firstVisible) setActiveTab(firstVisible);
+    }
+  }, [tabPrefs, activeTab]);
+
   if (!engagement) {
     return (
       <div className="h-full overflow-y-auto bg-white">
         <div className="p-8">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
             <ArrowLeft size={14} />Back to Engagements
           </button>
           <div className="glass-card rounded-xl p-12 text-center">
-            <p className="text-[0.875rem] font-semibold text-text mb-1">Engagement not found</p>
-            <p className="text-[0.75rem] text-text-muted">It may have been deleted or moved.</p>
+            <p className="text-[14px] font-semibold text-text mb-1">Engagement not found</p>
+            <p className="text-[12px] text-text-muted">It may have been deleted or moved.</p>
           </div>
         </div>
       </div>
@@ -226,6 +263,30 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const health = healthTier(eng.health);
   const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
   const processColor = PROCESS_COLORS[eng.process];
+
+  // Visible, ordered tabs (honoring drag order + hidden set).
+  const tabDefById = new Map(tabs.map(t => [t.id, t]));
+  const visibleTabIds = tabPrefs.order.filter(id => !tabPrefs.hidden.includes(id) && tabDefById.has(id));
+  const visibleTabs = visibleTabIds.map(id => tabDefById.get(id)!);
+
+  // Map a reorder of the visible subset back onto the full order (hidden tabs keep their slots).
+  const reorderVisibleTabs = (newVisible: TabId[]) => {
+    setTabPrefs(prev => {
+      const order = [...prev.order];
+      let vi = 0;
+      for (let i = 0; i < order.length; i += 1) {
+        if (!prev.hidden.includes(order[i]!) && tabDefById.has(order[i]!)) order[i] = newVisible[vi++]!;
+      }
+      return { ...prev, order };
+    });
+  };
+  const toggleTabHidden = (id: TabId) => {
+    if (id === 'config') return; // never hide the tab that re-enables the others
+    setTabPrefs(prev => ({
+      ...prev,
+      hidden: prev.hidden.includes(id) ? prev.hidden.filter(x => x !== id) : [...prev.hidden, id],
+    }));
+  };
 
   /**
    * Open the full Case Management workspace in a NEW browser tab, deep-linked to
@@ -245,8 +306,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   // Overview drill-downs navigate to the relevant SUB-TAB in this same browser
   // tab (a dashboard should route you deeper into the engagement, not pop a new
   // window). Compliance has no exceptions tab, so it falls back to the workspace.
-  const hasExceptionsTab = tabs.some(t => t.id === 'exceptions');
-  const goToWorkflowsTab = () => setActiveTab('workflows');
+  const hasExceptionsTab = visibleTabIds.includes('exceptions');
+  // Compliance has no Workflows tab — its overview "Controls in Scope" KPI lands on Controls instead.
+  const goToWorkflowsTab = () => setActiveTab(eng?.type === 'Compliance' ? 'controls' : 'workflows');
   const goToExceptionsTab = () => {
     if (hasExceptionsTab) setActiveTab('exceptions');
     else openCaseWorkspace();
@@ -289,10 +351,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const completedPct = Math.round((completedCount / checklist.length) * 100);
 
   return (
+    <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back to Engagements
         </button>
 
@@ -300,31 +363,36 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
         <div className="flex items-start justify-between mb-6 gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-[0.8125rem] font-bold shrink-0" style={{ background: processColor }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-[13px] font-bold shrink-0" style={{ background: processColor }}>
                 {eng.process}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-xl font-bold text-text">{eng.name}</h1>
-                  <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${STATUS_CLS[eng.status]}`}>{eng.status}</span>
-                  <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[0.75rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
+                  <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_CLS[eng.status]}`}>{eng.status}</span>
+                  <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[10.5px] font-semibold border ${TYPE_CLS[eng.type]}`}>
                     {TYPE_LABEL[eng.type]}
                   </span>
                   {eng.type === 'Automation' && eng.subtype && (
-                    <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
+                    <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
                       {SUBTYPE_LABEL[eng.subtype]}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-[0.75rem] text-text-muted mt-1 flex-wrap">
+                <div className="flex items-center gap-2.5 text-[12px] text-text-muted mt-1 flex-wrap">
                   <span className="font-mono tracking-tight">{eng.code}</span>
-                  <span className="flex items-center gap-1"><User size={11} />{eng.owner}</span>
-                  <span className="flex items-center gap-1"><Calendar size={11} />{eng.periodStart} – {eng.periodEnd}</span>
-                  <span className="flex items-center gap-1"><Shield size={11} />{eng.framework}</span>
+                  <span className="text-border-light" aria-hidden="true">·</span>
+                  <button
+                    onClick={() => setActiveTab('config')}
+                    className="inline-flex items-center gap-1 text-text-muted hover:text-primary font-medium transition-colors cursor-pointer"
+                    title="Owner, planned dates, framework & more"
+                  >
+                    <Settings size={11} /> Configuration
+                  </button>
                 </div>
               </div>
             </div>
-            <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-3xl">{eng.description}</p>
+            <p className="text-[13px] text-text-secondary mt-2 max-w-3xl">{eng.description}</p>
           </div>
 
           {/* Health */}
@@ -333,7 +401,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
               <div className={`text-3xl font-bold tabular-nums ${notStarted ? 'text-text-muted' : health.text}`}>
                 {notStarted ? '—' : `${eng.health}%`}
               </div>
-              <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-0.5">
+              <div className="text-[10px] text-text-muted uppercase tracking-wide mt-0.5">
                 {eng.type === 'Automation' ? 'Pass Rate' : 'Effective'}
               </div>
               {!notStarted && (
@@ -345,8 +413,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         </div>
 
-        {/* KPI strip — per-sub-tab for Automation (each tab owns its KPIs), so no shared engagement-level strip here. */}
-        {eng.type !== 'Automation' && (
+        {/* KPI strip — Internal Audit only. Automation owns per-tab KPIs; Compliance's
+            numbers live on the Overview tab, so the header stays clutter-free. */}
+        {eng.type === 'Internal Audit' && (
           <div className="grid gap-3 mb-6 grid-cols-6">
             {kpis.map((kpi, i) => (
               <motion.div
@@ -357,32 +426,48 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 className="glass-card rounded-xl p-3 text-center"
               >
                 <kpi.icon size={14} className="mx-auto text-text-muted mb-1" />
-                <div className="text-[0.9375rem] font-bold text-text tabular-nums truncate">{kpi.value}</div>
-                <div className="text-[0.625rem] text-text-muted leading-tight">{kpi.label}</div>
+                <div className="text-[15px] font-bold text-text tabular-nums truncate">{kpi.value}</div>
+                <div className="text-[10px] text-text-muted leading-tight">{kpi.label}</div>
               </motion.div>
             ))}
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex items-center border-b border-border-light mb-5 overflow-x-auto">
-          {tabs.map(tab => {
+        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide) */}
+        <Reorder.Group
+          as="div"
+          axis="x"
+          values={visibleTabIds}
+          onReorder={reorderVisibleTabs}
+          className="flex items-center border-b border-border-light mb-5 overflow-x-auto"
+        >
+          {visibleTabs.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
-              <button
+              <Reorder.Item
+                as="div"
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-                  active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
-                }`}
+                value={tab.id}
+                title="Drag to reorder"
+                className="shrink-0 cursor-grab active:cursor-grabbing"
               >
-                <Icon size={14} />
-                {tab.label}
-              </button>
+                <button
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap select-none ${
+                    active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${TAB_META[tab.id].chip}`}>
+                    <Icon size={13} />
+                  </span>
+                  {tab.label}
+                  <GripHorizontal size={12} className="text-text-muted/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              </Reorder.Item>
             );
           })}
-        </div>
+        </Reorder.Group>
 
         {/* Tab content */}
         <AnimatePresence mode="wait">
@@ -411,13 +496,14 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ CONTROLS (Compliance / IA) ═══ */}
             {activeTab === 'controls' && (
-              <ControlsTab engagement={eng} />
+              <ControlsTab engagement={eng} onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)} />
             )}
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
             {activeTab === 'workflows' && (
               <WorkflowsBySubProcess
                 workflows={MOCK_WORKFLOWS}
+                engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
                 onConfigureWorkflow={(wfId) => setConfigWorkflow(wfId)}
@@ -443,6 +529,12 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {activeTab === 'trail' && (
               <ActionTrailTab eng={eng} />
             )}
+
+            {/* ═══ CONFIGURATION (all types) — editable engagement details ═══ */}
+            {activeTab === 'config' && (
+              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => addToast({ message: 'Engagement configuration saved', type: 'success' })}
+                tabs={tabs} hiddenTabs={tabPrefs.hidden} onToggleTab={toggleTabHidden} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -460,6 +552,140 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           />
         )}
       </AnimatePresence>
+    </div>
+    </EngagementWorkspaceProvider>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Configuration Tab — editable engagement details (owner, planned dates, …)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const ENG_STATUS_OPTIONS: EngStatus[] = ['Active', 'In Progress', 'Planned', 'Review', 'Draft', 'Closed'];
+const ENG_PROCESS_OPTIONS: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
+const CONFIG_INPUT_CLS = 'w-full px-3 py-2 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+
+function ConfigField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
+  eng: Engagement;
+  onSaved: () => void;
+  tabs: { id: TabId; label: string; icon: React.ElementType }[];
+  hiddenTabs: TabId[];
+  onToggleTab: (id: TabId) => void;
+}) {
+  const initial = {
+    name: eng.name,
+    owner: eng.owner,
+    status: eng.status,
+    process: eng.process,
+    framework: eng.framework,
+    periodStart: eng.periodStart,
+    periodEnd: eng.periodEnd,
+    description: eng.description,
+  };
+  const [form, setForm] = useState(initial);
+  const [saved, setSaved] = useState(initial);
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm(f => ({ ...f, [k]: v }));
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const ownerOptions = OWNER_LIST.includes(form.owner) ? OWNER_LIST : [form.owner, ...OWNER_LIST];
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <div className="rounded-xl border border-border-light bg-white p-5">
+        <h3 className="text-[13px] font-semibold text-text">Engagement details</h3>
+        <p className="text-[12px] text-text-muted mt-0.5 mb-4">Owner, planned schedule, and framework for this engagement.</p>
+        <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+          <ConfigField label="Name" full>
+            <input value={form.name} onChange={e => set('name', e.target.value)} className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Owner">
+            <select value={form.owner} onChange={e => set('owner', e.target.value)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ownerOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Status">
+            <select value={form.status} onChange={e => set('status', e.target.value as EngStatus)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ENG_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Process">
+            <select value={form.process} onChange={e => set('process', e.target.value as ProcessCode)} className={`${CONFIG_INPUT_CLS} cursor-pointer`}>
+              {ENG_PROCESS_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </ConfigField>
+          <ConfigField label="Framework">
+            <input value={form.framework} onChange={e => set('framework', e.target.value)} className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Planned start">
+            <input value={form.periodStart} onChange={e => set('periodStart', e.target.value)} placeholder="e.g. Apr 2025" className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Planned end">
+            <input value={form.periodEnd} onChange={e => set('periodEnd', e.target.value)} placeholder="e.g. Mar 2026" className={CONFIG_INPUT_CLS} />
+          </ConfigField>
+          <ConfigField label="Description" full>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={3} className={`${CONFIG_INPUT_CLS} resize-none leading-relaxed`} />
+          </ConfigField>
+        </div>
+      </div>
+
+      {/* Sub-pages — show/hide which tabs appear; drag the headers to reorder. */}
+      <div className="rounded-xl border border-border-light bg-white p-5">
+        <h3 className="text-[13px] font-semibold text-text">Sub-pages</h3>
+        <p className="text-[12px] text-text-muted mt-0.5 mb-4">
+          Choose which tabs appear for this engagement. Drag the tab headers left/right to change their order.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const locked = tab.id === 'config';
+            const visible = !hiddenTabs.includes(tab.id);
+            return (
+              <label
+                key={tab.id}
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition-colors ${
+                  locked ? 'border-border-light bg-surface-1/40 cursor-default'
+                    : visible ? 'border-border-light bg-white hover:bg-surface-1/40 cursor-pointer'
+                      : 'border-dashed border-border-light bg-surface-1/30 cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={visible}
+                  disabled={locked}
+                  onChange={() => onToggleTab(tab.id)}
+                  className="w-4 h-4 rounded border-border accent-primary cursor-pointer disabled:cursor-default"
+                />
+                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${TAB_META[tab.id].chip} ${visible ? '' : 'opacity-50'}`}>
+                  <Icon size={13} />
+                </span>
+                <span className={`text-[12.5px] font-medium ${visible ? 'text-text' : 'text-text-muted'}`}>{tab.label}</span>
+                {locked
+                  ? <span className="ml-auto text-[10px] uppercase tracking-wider font-semibold text-text-muted">Always on</span>
+                  : <span className="ml-auto text-text-muted">{visible ? <Eye size={13} /> : <EyeOff size={13} />}</span>}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-3">
+        {dirty && <span className="text-[12px] text-text-muted">Unsaved changes</span>}
+        <button
+          onClick={() => { setSaved(form); onSaved(); }}
+          disabled={!dirty}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors cursor-pointer"
+        >
+          <CheckCircle2 size={14} /> Save changes
+        </button>
+      </div>
     </div>
   );
 }
@@ -479,6 +705,13 @@ const SEV_BADGE_CLS: Record<Severity, string> = {
   High: 'bg-high-50 text-high-700',
   Medium: 'bg-mitigated-50 text-mitigated-700',
   Low: 'bg-compliant-50 text-compliant-700',
+};
+
+const SEV_DOT_CLS: Record<Severity, string> = {
+  Critical: 'bg-risk',
+  High: 'bg-high',
+  Medium: 'bg-mitigated',
+  Low: 'bg-compliant',
 };
 
 function ExceptionManagementTab({
@@ -503,20 +736,29 @@ function ExceptionManagementTab({
 
   const [wfSearch, setWfSearch] = useState('');
   const [sortByOpen, setSortByOpen] = useState(false);
+  const [sevFilter, setSevFilter] = useState<'All' | Severity>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | EngagementException['status']>('All');
+  const filtersActive = sevFilter !== 'All' || statusFilter !== 'All';
 
   /**
    * Show *every* workflow tied to this engagement — even ones that haven't fired
    * exceptions yet — so the section reads as the live exception inventory rather
    * than a partial list. Workflows with exceptions keep their breakdown; quiet
-   * ones get a clear "no exceptions yet" marker.
+   * ones get a clear "no exceptions yet" marker. Severity/status filters narrow
+   * the exceptions counted per workflow.
    */
   const allWorkflowsView = useMemo(() => {
     const byId = new Map(groups.map(g => [g.workflowId, g]));
     return MOCK_WORKFLOWS.map(wf => {
       const grp = byId.get(wf.id);
-      const exceptions = grp?.exceptions ?? [];
+      const exceptions = (grp?.exceptions ?? []).filter(e =>
+        (sevFilter === 'All' || e.severity === sevFilter) &&
+        (statusFilter === 'All' || e.status === statusFilter)
+      );
       const total = exceptions.length;
       const openCount = exceptions.filter(e => e.status !== 'Resolved').length;
+      const severityCounts: Record<Severity, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+      for (const e of exceptions) severityCounts[e.severity] += 1;
       return {
         workflowId: wf.id,
         workflowName: wf.name,
@@ -526,80 +768,54 @@ function ExceptionManagementTab({
         total,
         openCount,
         openPct: total > 0 ? Math.round((openCount / total) * 100) : 0,
-        severityCounts: grp?.severityCounts ?? { Critical: 0, High: 0, Medium: 0, Low: 0 },
+        severityCounts,
       };
     });
-  }, [groups]);
+  }, [groups, sevFilter, statusFilter]);
 
   const visibleWorkflows = useMemo(() => {
     const q = wfSearch.trim().toLowerCase();
-    const list = allWorkflowsView.filter(w =>
+    let list = allWorkflowsView.filter(w =>
       !q || w.workflowName.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
     );
+    // When a severity/status filter is active, hide workflows with no matching exceptions.
+    if (filtersActive) list = list.filter(w => w.total > 0);
     if (sortByOpen) {
       // Highest open % first; ties broken by open count.
       return [...list].sort((a, b) => b.openPct - a.openPct || b.openCount - a.openCount);
     }
     return list;
-  }, [allWorkflowsView, wfSearch, sortByOpen]);
+  }, [allWorkflowsView, wfSearch, sortByOpen, filtersActive]);
 
   return (
     <div className="space-y-4">
-      {/* Sub-tab KPI cards — exception-focused signals for this tab. Click to drill into the workspace. */}
-      <div className="grid grid-cols-4 gap-3">
-        <button
-          onClick={() => onOpenWorkspace()}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">All Exceptions</span>
-            <Workflow size={13} className="text-text-muted" />
-          </div>
-          <div className="text-[1.375rem] font-bold text-text tabular-nums leading-none">{allExceptions.length}</div>
-          <div className="text-[0.6875rem] text-text-muted mt-1.5">Across {allWorkflowsView.length} workflows</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Open' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">Open</span>
-            <AlertTriangle size={13} className="text-risk-700" />
-          </div>
-          <div className="text-[1.375rem] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
-          <div className="text-[0.6875rem] text-text-muted mt-1.5">Awaiting triage</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Triaging' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">In Progress</span>
-            <Clock size={13} className="text-mitigated-700" />
-          </div>
-          <div className="text-[1.375rem] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
-          <div className="text-[0.6875rem] text-text-muted mt-1.5">Owner assigned</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Resolved' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted">Resolved</span>
-            <CheckCircle2 size={13} className="text-compliant-700" />
-          </div>
-          <div className="text-[1.375rem] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
-          <div className="text-[0.6875rem] text-text-muted mt-1.5">Closed this engagement</div>
-        </button>
+      {/* Exception signals — borderless inline stats (out of the box); each drills into the workspace. */}
+      <div className="flex flex-wrap items-center gap-y-3 px-1 py-1">
+        {([
+          { label: 'All Exceptions', value: allExceptions.length, sub: `Across ${allWorkflowsView.length} workflows`, tone: 'text-text', onClick: () => onOpenWorkspace() },
+          { label: 'Open', value: totals.open, sub: 'Awaiting triage', tone: 'text-risk-700', onClick: () => onOpenWorkspace({ status: 'Open' }) },
+          { label: 'In Progress', value: totals.triaging, sub: 'Owner assigned', tone: 'text-mitigated-700', onClick: () => onOpenWorkspace({ status: 'Triaging' }) },
+          { label: 'Resolved', value: totals.resolved, sub: 'Closed this engagement', tone: 'text-compliant-700', onClick: () => onOpenWorkspace({ status: 'Resolved' }) },
+        ] as { label: string; value: number; sub: string; tone: string; onClick: () => void }[]).map(k => (
+          <button
+            key={k.label}
+            onClick={k.onClick}
+            className="text-left pl-7 ml-7 border-l border-border-light first:pl-0 first:ml-0 first:border-l-0 hover:opacity-60 transition-opacity cursor-pointer"
+          >
+            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{k.label}</div>
+            <div className={`text-[21px] font-bold tabular-nums leading-tight ${k.tone}`}>{k.value}</div>
+            <div className="text-[10.5px] text-text-muted">{k.sub}</div>
+          </button>
+        ))}
       </div>
 
       {/* Compact toolbar — title, search, sort, workspace link. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-baseline gap-2 shrink-0">
-          <h4 className="text-[0.8125rem] font-semibold text-text">Exceptions by workflow</h4>
-          <span className="text-[0.6875rem] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
+          <h4 className="text-[13px] font-semibold text-text">Exceptions by workflow</h4>
+          <span className="text-[11px] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
@@ -607,12 +823,41 @@ function ExceptionManagementTab({
               value={wfSearch}
               onChange={e => setWfSearch(e.target.value)}
               placeholder="Search workflows..."
-              className="w-48 pl-8 pr-2.5 py-1.5 text-[0.75rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-48 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as 'All' | EngagementException['status'])}
+            className={`py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold outline-none cursor-pointer transition-colors ${
+              statusFilter !== 'All' ? 'border-primary/40 text-primary bg-primary-xlight/30' : 'border-border bg-white text-text-secondary hover:border-primary/30'
+            }`}
+            title="Filter by status"
+            aria-label="Filter by status"
+          >
+            <option value="All">All statuses</option>
+            <option value="Open">Open</option>
+            <option value="Triaging">Triaging</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+          <select
+            value={sevFilter}
+            onChange={e => setSevFilter(e.target.value as 'All' | Severity)}
+            className={`py-1.5 px-2.5 rounded-lg border text-[11.5px] font-semibold outline-none cursor-pointer transition-colors ${
+              sevFilter !== 'All' ? 'border-primary/40 text-primary bg-primary-xlight/30' : 'border-border bg-white text-text-secondary hover:border-primary/30'
+            }`}
+            title="Filter by severity"
+            aria-label="Filter by severity"
+          >
+            <option value="All">All severities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
           <button
             onClick={() => setSortByOpen(v => !v)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-semibold transition-colors cursor-pointer ${
               sortByOpen
                 ? 'bg-primary text-white border-primary'
                 : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
@@ -622,70 +867,51 @@ function ExceptionManagementTab({
             <ArrowUpDown size={12} />
             Open %
           </button>
+          {filtersActive && (
+            <button
+              onClick={() => { setSevFilter('All'); setStatusFilter('All'); }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Per-workflow breakdown — shows every workflow, including those with 0 exceptions */}
-      <div className="space-y-2.5">
+      {/* Per-workflow breakdown — one clean line per workflow */}
+      <div className="rounded-xl border border-border-light bg-white divide-y divide-border-light overflow-hidden">
         {visibleWorkflows.length === 0 ? (
-          <div className="glass-card rounded-xl px-4 py-8 text-center text-[0.75rem] text-text-muted">
-            No workflows match “{wfSearch}”.
+          <div className="px-4 py-10 text-center text-[12px] text-text-muted">
+            {wfSearch.trim()
+              ? <>No workflows match “{wfSearch}”.</>
+              : 'No workflows match the selected filters.'}
           </div>
         ) : visibleWorkflows.map(group => {
           const hasNone = group.total === 0;
-          const openTier = group.openPct >= 50 ? 'text-risk-700' : group.openPct > 0 ? 'text-mitigated-700' : 'text-text-muted';
-          const openBar = group.openPct >= 50 ? 'bg-risk' : group.openPct > 0 ? 'bg-mitigated-500' : 'bg-surface-3';
           return (
             <button
               key={group.workflowId}
               onClick={() => onOpenWorkspace({ workflowId: group.workflowId })}
               disabled={hasNone}
-              className={`w-full glass-card rounded-xl px-4 py-3 flex items-center gap-4 text-left transition-colors ${
-                hasNone ? 'opacity-70 cursor-default' : 'hover:border-primary/20 cursor-pointer'
+              className={`group/row w-full px-5 py-4 flex items-center gap-3 text-left transition-colors ${
+                hasNone ? 'cursor-default' : 'hover:bg-primary-xlight/25 cursor-pointer'
               }`}
             >
-              <div className={`p-2 rounded-lg shrink-0 ${hasNone ? 'bg-surface-2' : 'bg-brand-50'}`}>
-                <Workflow size={14} className={hasNone ? 'text-text-muted' : 'text-brand-600'} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[0.8125rem] font-semibold text-text">{group.workflowName}</span>
-                  <span className="px-1.5 h-4 rounded text-[0.75rem] font-bold bg-surface-2 text-text-secondary font-mono">{group.code}</span>
-                  {hasNone ? (
-                    <span className="text-[0.6875rem] text-text-muted italic">No exceptions yet</span>
-                  ) : (
-                    <span className="text-[0.6875rem] text-text-muted">
-                      <span className="font-semibold text-text">{group.total}</span> total · <span className="font-semibold text-risk-700">{group.openCount}</span> open
-                    </span>
-                  )}
-                </div>
-                {!hasNone && (
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map(sev => (
-                      group.severityCounts[sev] > 0 && (
-                        <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[sev]}`}>
-                          {group.severityCounts[sev]} {sev}
-                        </span>
-                      )
-                    ))}
-                  </div>
-                )}
-              </div>
+              <Workflow size={15} className={`shrink-0 ${hasNone ? 'text-text-muted/60' : 'text-brand-600'}`} />
+              <span className={`text-[13px] font-semibold truncate ${hasNone ? 'text-text-muted' : 'text-text'}`}>{group.workflowName}</span>
+              <span className="hidden md:inline px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono shrink-0">{group.code}</span>
 
-              {/* Right-aligned open % */}
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="ml-auto flex items-center gap-4 shrink-0">
                 {hasNone ? (
-                  <span className="text-[0.6875rem] text-text-muted tabular-nums w-[88px] text-right">—</span>
+                  <span className="text-[11px] text-text-muted/70 italic">No open exceptions</span>
                 ) : (
-                  <div className="w-[88px] text-right">
-                    <div className={`text-[0.9375rem] font-bold tabular-nums leading-none ${openTier}`}>{group.openPct}%</div>
-                    <div className="text-[0.75rem] text-text-muted uppercase tracking-wide mt-0.5">open</div>
-                    <div className="mt-1 h-1 bg-surface-3 rounded-full overflow-hidden">
-                      <div className={`h-full ${openBar} rounded-full transition-all`} style={{ width: `${group.openPct}%` }} />
-                    </div>
-                  </div>
+                  /* Single signal per workflow: open exceptions */
+                  <span className="inline-flex items-baseline gap-1.5">
+                    <span className={`text-[18px] font-bold tabular-nums leading-none ${group.openCount > 0 ? 'text-risk-700' : 'text-compliant-700'}`}>{group.openCount}</span>
+                    <span className="text-[11px] text-text-muted">open exception{group.openCount === 1 ? '' : 's'}</span>
+                  </span>
                 )}
-                {!hasNone && <ArrowUpRight size={14} className="text-text-muted" aria-label="Opens in a new tab" />}
+                <ArrowUpRight size={14} className={hasNone ? 'text-transparent' : 'text-text-muted group-hover/row:text-primary transition-colors'} aria-label="Opens in a new tab" />
               </div>
             </button>
           );
@@ -701,13 +927,13 @@ function ExceptionRow({ ex, onClick, showWorkflow }: { ex: EngagementException; 
       onClick={onClick}
       className="w-full flex items-center gap-4 px-4 py-3 hover:bg-surface-2/30 transition-colors cursor-pointer text-left"
     >
-      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
+      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide ${SEV_BADGE_CLS[ex.severity]} shrink-0`}>
         {ex.severity}
       </span>
-      <span className="font-mono text-[0.75rem] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
+      <span className="font-mono text-[11.5px] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-[0.8125rem] text-text truncate">{ex.title}</div>
-        <div className="text-[0.6875rem] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+        <div className="text-[13px] text-text truncate">{ex.title}</div>
+        <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
           <span>{ex.assignee}</span>
           <span className="text-border">·</span>
           <span>{ex.opened}</span>
@@ -725,7 +951,7 @@ function ExceptionRow({ ex, onClick, showWorkflow }: { ex: EngagementException; 
           )}
         </div>
       </div>
-      <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center shrink-0 ${STATUS_PILL_CLS[ex.status]}`}>
+      <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center shrink-0 ${STATUS_PILL_CLS[ex.status]}`}>
         {ex.status}
       </span>
       <ChevronRight size={14} className="text-text-muted shrink-0" />
@@ -821,12 +1047,12 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       {/* Header — title + generate report */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-[0.8125rem] font-semibold text-text">Action Trail</h3>
-          <p className="text-[0.6875rem] text-text-muted mt-0.5">Every event on this engagement — runs, exceptions, evidence, and sign-offs.</p>
+          <h3 className="text-[13px] font-semibold text-text">Action Trail</h3>
+          <p className="text-[11px] text-text-muted mt-0.5">Every event on this engagement — runs, exceptions, evidence, and sign-offs.</p>
         </div>
         <button
           onClick={() => setReportOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary-xlight/40 text-primary hover:bg-primary/10 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary-xlight/40 text-primary hover:bg-primary/10 text-[12px] font-semibold transition-colors cursor-pointer"
           title="Generate an AI-summarised report for a chosen period"
         >
           <Sparkles size={13} />Generate Report
@@ -843,10 +1069,10 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
         ].map(kpi => (
           <div key={kpi.label} className="glass-card rounded-xl p-4">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{kpi.label}</span>
+              <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{kpi.label}</span>
               <kpi.icon size={13} className="text-text-muted" />
             </div>
-            <div className={`text-[1.375rem] font-bold tabular-nums ${kpi.tone}`}>{kpi.value}</div>
+            <div className={`text-[22px] font-bold tabular-nums ${kpi.tone}`}>{kpi.value}</div>
           </div>
         ))}
       </div>
@@ -855,10 +1081,10 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[0.8125rem] font-semibold text-text">Daily new vs closed</h3>
-            <p className="text-[0.6875rem] text-text-muted mt-0.5">Last 30 days — exceptions opened (top) and closed (bottom).</p>
+            <h3 className="text-[13px] font-semibold text-text">Daily new vs closed</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">Last 30 days — exceptions opened (top) and closed (bottom).</p>
           </div>
-          <div className="flex items-center gap-3 text-[0.6875rem] text-text-muted">
+          <div className="flex items-center gap-3 text-[11px] text-text-muted">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-risk-500" />New</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-compliant" />Closed</span>
           </div>
@@ -886,12 +1112,12 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
                     <div className="w-full bg-surface-3/60 rounded-sm" style={{ height: '2px' }} />
                   )}
                 </div>
-                {isToday && <div className="text-[0.5625rem] font-bold uppercase tracking-wider text-primary mt-1">Now</div>}
+                {isToday && <div className="text-[9px] font-bold uppercase tracking-wider text-primary mt-1">Now</div>}
               </div>
             );
           })}
         </div>
-        <div className="flex items-center justify-between text-[0.625rem] text-text-muted mt-2 tabular-nums">
+        <div className="flex items-center justify-between text-[10px] text-text-muted mt-2 tabular-nums">
           <span>{formatChartDay(29)}</span>
           <span>{formatChartDay(15)}</span>
           <span>{formatChartDay(0)}</span>
@@ -899,13 +1125,13 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap text-[0.6875rem]">
+      <div className="flex items-center gap-4 flex-wrap text-[11px]">
         <div className="flex items-center gap-2">
           <span className="font-bold text-text-muted uppercase tracking-wide">Workflow</span>
           <select
             value={workflowFilter}
             onChange={e => setWorkflowFilter(e.target.value)}
-            className="px-2.5 py-1 rounded-lg border border-border bg-white text-[0.6875rem] text-text outline-none focus:border-primary/40 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg border border-border bg-white text-[11px] text-text outline-none focus:border-primary/40 cursor-pointer"
           >
             <option value="All">All workflows</option>
             {workflowOptions.map(([id, name]) => (
@@ -932,7 +1158,7 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
             ))}
           </div>
         </div>
-        <div className="ml-auto text-[0.6875rem] text-text-muted tabular-nums">
+        <div className="ml-auto text-[11px] text-text-muted tabular-nums">
           {filtered.length} of {allEvents.length} events
         </div>
       </div>
@@ -941,14 +1167,14 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
       {grouped.length === 0 ? (
         <div className="border border-border-light rounded-xl p-12 text-center bg-white">
           <Activity size={28} className="text-text-muted mx-auto mb-3" />
-          <p className="text-[0.875rem] font-semibold text-text mb-1">No activity for these filters</p>
-          <p className="text-[0.75rem] text-text-muted">Try clearing the workflow or type filter.</p>
+          <p className="text-[14px] font-semibold text-text mb-1">No activity for these filters</p>
+          <p className="text-[12px] text-text-muted">Try clearing the workflow or type filter.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {grouped.map(group => (
             <div key={group.dayOffset}>
-              <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-2 sticky top-0 bg-white/80 backdrop-blur-sm py-1">
+              <div className="text-[10.5px] uppercase tracking-wider font-semibold text-text-muted mb-2 sticky top-0 bg-white/80 backdrop-blur-sm py-1">
                 {formatDay(group.dayOffset)}
                 <span className="ml-2 text-text-muted/60 normal-case font-normal tracking-normal">{formatChartDay(group.dayOffset)}</span>
               </div>
@@ -968,9 +1194,9 @@ export function ActionTrailTab({ eng }: { eng: Engagement }) {
                         <Icon size={13} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[0.8125rem] text-text leading-snug">{ev.title}</div>
-                        {ev.detail && <div className="text-[0.75rem] text-text-muted mt-0.5">{ev.detail}</div>}
-                        <div className="flex items-center gap-2 text-[0.6875rem] text-text-muted mt-1 flex-wrap">
+                        <div className="text-[13px] text-text leading-snug">{ev.title}</div>
+                        {ev.detail && <div className="text-[12px] text-text-muted mt-0.5">{ev.detail}</div>}
+                        <div className="flex items-center gap-2 text-[11px] text-text-muted mt-1 flex-wrap">
                           <span>{ev.actor}</span>
                           {ev.workflowName && (
                             <>
@@ -1235,13 +1461,13 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.donutHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a slice to drill into Exception Management.</p>
+              <h3 className="text-[13px] font-semibold text-text">{labels.donutHeader}</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">Click a slice to drill into Exception Management.</p>
             </div>
-            <span className="text-[0.6875rem] text-text-muted">{totalOpenForDonut} open</span>
+            <span className="text-[11px] text-text-muted">{totalOpenForDonut} open</span>
           </div>
           {severityData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No open exceptions</div>
+            <div className="h-[180px] flex items-center justify-center text-[12px] text-text-muted">No open exceptions</div>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-[180px] h-[180px] shrink-0 relative">
@@ -1266,8 +1492,8 @@ export function HealthOverviewTab({
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <div className="text-[1.375rem] font-bold text-text tabular-nums leading-none">{totalOpenForDonut}</div>
-                  <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-1">Open</div>
+                  <div className="text-[22px] font-bold text-text tabular-nums leading-none">{totalOpenForDonut}</div>
+                  <div className="text-[10px] text-text-muted uppercase tracking-wide mt-1">Open</div>
                 </div>
               </div>
               <div className="flex-1 space-y-1.5">
@@ -1277,11 +1503,11 @@ export function HealthOverviewTab({
                     onClick={() => onDrillToExceptions()}
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
                   >
-                    <span className="flex items-center gap-2 text-[0.75rem] text-text">
+                    <span className="flex items-center gap-2 text-[12px] text-text">
                       <span className="w-2.5 h-2.5 rounded-sm" style={{ background: d.color }} />
                       {d.name}
                     </span>
-                    <span className="text-[0.75rem] font-bold text-text tabular-nums">{d.value}</span>
+                    <span className="text-[12px] font-bold text-text tabular-nums">{d.value}</span>
                   </button>
                 ))}
               </div>
@@ -1293,12 +1519,12 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.barHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a bar to filter the Exception Management tab.</p>
+              <h3 className="text-[13px] font-semibold text-text">{labels.barHeader}</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">Click a bar to filter the Exception Management tab.</p>
             </div>
           </div>
           {workflowData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity</div>
+            <div className="h-[180px] flex items-center justify-center text-[12px] text-text-muted">No exception activity</div>
           ) : (
             <div className="h-[180px]">
               <ResponsiveContainer>
@@ -1338,10 +1564,10 @@ export function HealthOverviewTab({
       <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[0.8125rem] font-semibold text-text">{labels.heatmapHeader.replace('14', String(heatmapDays))}</h3>
-            <p className="text-[0.6875rem] text-text-muted mt-0.5">Rows are workflows; each cell is a day. Click a cell to drill into that workflow.</p>
+            <h3 className="text-[13px] font-semibold text-text">{labels.heatmapHeader.replace('14', String(heatmapDays))}</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">Rows are workflows; each cell is a day. Click a cell to drill into that workflow.</p>
           </div>
-          <div className="flex items-center gap-2 text-[0.75rem] text-text-muted">
+          <div className="flex items-center gap-2 text-[10.5px] text-text-muted">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-surface-2/40 border border-border-light/30" />0
             </span>
@@ -1357,14 +1583,14 @@ export function HealthOverviewTab({
           </div>
         </div>
         {!heatmapHasData ? (
-          <div className="h-[120px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity in the last {heatmapDays} days</div>
+          <div className="h-[120px] flex items-center justify-center text-[12px] text-text-muted">No exception activity in the last {heatmapDays} days</div>
         ) : (
           <div className="space-y-1.5">
             {heatmapData.map(row => (
               <div key={row.workflowId} className="flex items-center gap-3">
                 <button
                   onClick={() => onDrillToExceptions()}
-                  className="w-[180px] text-left text-[0.75rem] text-text font-medium truncate hover:text-primary transition-colors cursor-pointer shrink-0"
+                  className="w-[180px] text-left text-[11.5px] text-text font-medium truncate hover:text-primary transition-colors cursor-pointer shrink-0"
                   title={row.name}
                 >
                   {row.name}
@@ -1377,16 +1603,16 @@ export function HealthOverviewTab({
                       title={`${formatChartDay(heatmapDays - 1 - idx)} — ${c} exception${c === 1 ? '' : 's'}`}
                       className={`h-6 rounded-sm border transition-transform hover:scale-110 cursor-pointer ${heatmapCellCls(c)}`}
                     >
-                      {c > 0 && <span className="text-[0.5625rem] font-bold text-text/70">{c}</span>}
+                      {c > 0 && <span className="text-[9px] font-bold text-text/70">{c}</span>}
                     </button>
                   ))}
                 </div>
-                <span className="text-[0.6875rem] font-bold text-text tabular-nums w-8 text-right shrink-0">{row.total}</span>
+                <span className="text-[11px] font-bold text-text tabular-nums w-8 text-right shrink-0">{row.total}</span>
               </div>
             ))}
             <div className="flex items-center gap-3 pt-1.5">
-              <div className="w-[180px] text-[0.625rem] text-text-muted shrink-0" />
-              <div className="flex-1 grid gap-1 text-[0.5625rem] text-text-muted tabular-nums" style={{ gridTemplateColumns: `repeat(${heatmapDays}, minmax(0, 1fr))` }}>
+              <div className="w-[180px] text-[10px] text-text-muted shrink-0" />
+              <div className="flex-1 grid gap-1 text-[9px] text-text-muted tabular-nums" style={{ gridTemplateColumns: `repeat(${heatmapDays}, minmax(0, 1fr))` }}>
                 {Array.from({ length: heatmapDays }).map((_, idx) => {
                   const offset = heatmapDays - 1 - idx;
                   // Label every 2nd day to avoid crowding.
@@ -1409,8 +1635,8 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.effectivenessHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">True positives / total fires per workflow. Click a workflow to see its past runs.</p>
+              <h3 className="text-[13px] font-semibold text-text">{labels.effectivenessHeader}</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">True positives / total fires per workflow. Click a workflow to see its past runs.</p>
             </div>
           </div>
           <div className="space-y-1">
@@ -1425,14 +1651,14 @@ export function HealthOverviewTab({
                   className={`w-full space-y-1 text-left px-2 py-1.5 -mx-2 rounded-lg transition-colors ${onOpenWorkflow ? 'hover:bg-surface-2/50 cursor-pointer' : 'cursor-default'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[0.75rem] text-text truncate">{wf.name}</span>
-                    <span className={`text-[0.75rem] font-bold tabular-nums shrink-0 ${tier.tone}`}>{eff}% · {tier.label}</span>
+                    <span className="text-[12px] text-text truncate">{wf.name}</span>
+                    <span className={`text-[12px] font-bold tabular-nums shrink-0 ${tier.tone}`}>{eff}% · {tier.label}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${tier.bar} transition-all`} style={{ width: `${eff}%` }} />
                     </div>
-                    <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0 w-12 text-right">{wf.truePositives}/{wf.totalFires}</span>
+                    <span className="text-[10.5px] text-text-muted tabular-nums shrink-0 w-12 text-right">{wf.truePositives}/{wf.totalFires}</span>
                   </div>
                 </button>
               );
@@ -1444,8 +1670,8 @@ export function HealthOverviewTab({
         <div className="glass-card rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-[0.8125rem] font-semibold text-text">{labels.funnelHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">
+              <h3 className="text-[13px] font-semibold text-text">{labels.funnelHeader}</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">
                 {isAutomation
                   ? 'Where exceptions sit in the resolution pipeline. Bottlenecks become visible.'
                   : isCompliance
@@ -1460,7 +1686,7 @@ export function HealthOverviewTab({
               <div className="space-y-2">
                 {funnelSteps.map((s, i) => (
                   <div key={s.label} className="flex items-center gap-3">
-                    <span className="text-[0.6875rem] text-text-muted w-24 shrink-0 truncate">{s.label}</span>
+                    <span className="text-[11px] text-text-muted w-24 shrink-0 truncate">{s.label}</span>
                     <div className="flex-1 h-7 bg-surface-2/40 rounded-md overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
@@ -1468,10 +1694,10 @@ export function HealthOverviewTab({
                         transition={{ delay: 0.05 + i * 0.06, duration: 0.4 }}
                         className={`h-full ${s.bar} flex items-center px-2`}
                       >
-                        {s.count > 0 && <span className="text-[0.6875rem] font-bold text-white tabular-nums">{s.count}</span>}
+                        {s.count > 0 && <span className="text-[11px] font-bold text-white tabular-nums">{s.count}</span>}
                       </motion.div>
                     </div>
-                    <span className="text-[0.6875rem] text-text-muted tabular-nums w-12 text-right shrink-0">
+                    <span className="text-[11px] text-text-muted tabular-nums w-12 text-right shrink-0">
                       {max === 0 ? '—' : `${Math.round((s.count / max) * 100)}%`}
                     </span>
                   </div>
@@ -1503,10 +1729,10 @@ export function HealthOverviewTab({
                 <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-mitigated-50/40 border border-mitigated-100/60">
                   <Sparkles size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
                   <div className="flex-1">
-                    <div className="text-[0.75rem] text-text font-medium">
+                    <div className="text-[12.5px] text-text font-medium">
                       Pattern detected — exceptions clustering on vendor <span className="font-mono font-bold">{vendorPattern.vendor}</span> ({vendorPattern.count} cases this engagement).
                     </div>
-                    <div className="text-[0.6875rem] text-text-muted mt-0.5">Open the Vendor 360 view to see this vendor's full risk profile across engagements.</div>
+                    <div className="text-[11px] text-text-muted mt-0.5">Open the Vendor 360 view to see this vendor's full risk profile across engagements.</div>
                   </div>
                 </div>
               )}
@@ -1514,10 +1740,10 @@ export function HealthOverviewTab({
                 <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-risk-50/40 border border-risk-100/60">
                   <AlertTriangle size={14} className="text-risk-700 mt-0.5 shrink-0" />
                   <div className="flex-1">
-                    <div className="text-[0.75rem] text-text font-medium">
+                    <div className="text-[12.5px] text-text font-medium">
                       Possible silent failure — <span className="font-semibold">{silentMonitor.name}</span> hasn't fired exceptions in {silentMonitor.lastRun} despite a frequency schedule.
                     </div>
-                    <div className="text-[0.6875rem] text-text-muted mt-0.5">Check the data feed / connector status.</div>
+                    <div className="text-[11px] text-text-muted mt-0.5">Check the data feed / connector status.</div>
                   </div>
                 </div>
               )}
@@ -1530,8 +1756,8 @@ export function HealthOverviewTab({
       {!hideWorkflowConfig && <div className="glass-card rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-[0.8125rem] font-semibold text-text">{labels.workflowConfigHeader}</h3>
-            <p className="text-[0.6875rem] text-text-muted mt-0.5">{labels.workflowConfigSub}</p>
+            <h3 className="text-[13px] font-semibold text-text">{labels.workflowConfigHeader}</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">{labels.workflowConfigSub}</p>
           </div>
         </div>
         <div className="space-y-4">
@@ -1539,8 +1765,8 @@ export function HealthOverviewTab({
             <div key={group.subProcess}>
               <div className="flex items-center gap-2 mb-2">
                 <Layers size={12} className="text-text-muted" />
-                <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">{group.subProcess}</span>
-                <span className="text-[0.6875rem] text-text-muted">· {group.items.length}</span>
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{group.subProcess}</span>
+                <span className="text-[11px] text-text-muted">· {group.items.length}</span>
               </div>
               <div className="space-y-2 ml-5">
                 {group.items.map(wf => {
@@ -1550,18 +1776,18 @@ export function HealthOverviewTab({
                       <div className="p-2 rounded-lg bg-brand-50 shrink-0"><Workflow size={14} className="text-brand-600" /></div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[0.8125rem] font-semibold text-text">{wf.name}</span>
-                          <span className="px-1.5 h-4 rounded text-[0.75rem] font-bold bg-surface-2 text-text-secondary font-mono">{wf.code}</span>
+                          <span className="text-[13px] font-semibold text-text">{wf.name}</span>
+                          <span className="px-1.5 h-4 rounded text-[9.5px] font-bold bg-surface-2 text-text-secondary font-mono">{wf.code}</span>
                           {wf.inputs.map(src => (
-                            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-4 rounded text-[0.75rem] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
+                            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
                               {src === 'SQL' && <span className="w-1 h-1 rounded-full bg-evidence-600" aria-hidden="true" />}
                               {src}
                             </span>
                           ))}
                         </div>
-                        <div className="text-[0.6875rem] text-text-muted mt-1 flex items-center gap-1.5 flex-wrap">
+                        <div className="text-[11px] text-text-muted mt-1 flex items-center gap-1.5 flex-wrap">
                           {wf.cadence.kind === 'Ad-hoc' ? (
-                            <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-semibold italic bg-mitigated-50/60 text-mitigated-700 border border-mitigated-100/60">Ad-hoc</span>
+                            <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700 border border-mitigated-100/60">Ad-hoc</span>
                           ) : (
                             <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
                           )}
@@ -1575,7 +1801,7 @@ export function HealthOverviewTab({
                       </div>
                       <button
                         onClick={() => onConfigureWorkflow(wf.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.6875rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0"
                       >
                         <Settings size={11} />
                         Configure
@@ -1592,8 +1818,8 @@ export function HealthOverviewTab({
       {/* ─── Engagement at a glance + recent activity (kept) ─── */}
       <div className="grid grid-cols-2 gap-4">
         <div className="glass-card rounded-xl p-5">
-          <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Engagement at a glance</h3>
-          <dl className="space-y-2.5 text-[0.75rem]">
+          <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Engagement at a glance</h3>
+          <dl className="space-y-2.5 text-[12.5px]">
             <div className="flex items-center justify-between"><dt className="text-text-muted">Type</dt><dd className="text-text font-medium">Automation{eng.subtype ? ` · ${eng.subtype}` : ''}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Process</dt><dd className="text-text font-medium">{eng.process}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Framework</dt><dd className="text-text font-medium">{eng.framework}</dd></div>
@@ -1602,13 +1828,13 @@ export function HealthOverviewTab({
           </dl>
         </div>
         <div className="glass-card rounded-xl p-5">
-          <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Recent activity</h3>
-          <ul className="space-y-3 text-[0.75rem]">
+          <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Recent activity</h3>
+          <ul className="space-y-3 text-[12.5px]">
             <li className="flex items-start gap-2.5">
               <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-compliant shrink-0" />
               <div>
                 <div className="text-text">Workflow run completed — {eng.lastActivity}</div>
-                <div className="text-[0.6875rem] text-text-muted">{eng.owner}</div>
+                <div className="text-[11px] text-text-muted">{eng.owner}</div>
               </div>
             </li>
             <li className="flex items-start gap-2.5">
@@ -1619,14 +1845,14 @@ export function HealthOverviewTab({
                     ? `${openCount + inProgressCount} open / in-progress exception(s)`
                     : 'No open exceptions'}
                 </div>
-                <div className="text-[0.6875rem] text-text-muted">Updated {eng.lastActivity}</div>
+                <div className="text-[11px] text-text-muted">Updated {eng.lastActivity}</div>
               </div>
             </li>
             <li className="flex items-start gap-2.5">
               <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-mitigated-500 shrink-0" />
               <div>
                 <div className="text-text">Next run: {eng.nextScheduled}</div>
-                <div className="text-[0.6875rem] text-text-muted">On schedule</div>
+                <div className="text-[11px] text-text-muted">On schedule</div>
               </div>
             </li>
           </ul>
@@ -1656,11 +1882,11 @@ function KpiCard({
       className={`text-left glass-card rounded-xl p-4 transition-all ${isClickable ? 'cursor-pointer hover:border-primary/30 hover:shadow-sm' : 'cursor-default'}`}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[0.75rem] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
+        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
         <Icon size={13} className="text-text-muted" />
       </div>
-      <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
-      {sub && <div className="text-[0.6875rem] text-text-muted mt-1.5">{sub}</div>}
+      <div className={`text-[22px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
+      {sub && <div className="text-[11px] text-text-muted mt-1.5">{sub}</div>}
       {progress !== undefined && (
         <div className="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-500 ${progressCls ?? 'bg-primary'}`} style={{ width: `${progress}%` }} />
@@ -1695,7 +1921,6 @@ function WorkflowConfigDrawer({
   const [retry, setRetry] = useState<string>('3x');
   const [owner, setOwner] = useState<string>(OWNER_LIST[0]);
   const [minSeverity, setMinSeverity] = useState<Severity>('Medium');
-  const [exceptionRouting, setExceptionRouting] = useState<string>('Round-robin');
 
   if (!wf) return null;
 
@@ -1718,9 +1943,9 @@ function WorkflowConfigDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Settings size={16} className="text-brand-600 shrink-0" />
-              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
+              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
             </div>
-            <p className="text-[0.75rem] text-ink-500">
+            <p className="text-[12px] text-ink-500">
               <span className="font-mono">{wf.code}</span>
               <span className="mx-1.5 text-ink-300">·</span>
               {wf.type}
@@ -1738,13 +1963,13 @@ function WorkflowConfigDrawer({
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Schedule */}
           <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Schedule</label>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Schedule</label>
             <div className="grid grid-cols-2 gap-2">
               {SCHEDULE_OPTIONS.map(s => (
                 <button
                   key={s}
                   onClick={() => setSchedule(s)}
-                  className={`px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${
+                  className={`px-3 py-2 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${
                     schedule === s
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1758,7 +1983,7 @@ function WorkflowConfigDrawer({
 
           {/* Detection threshold */}
           <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Detection threshold</label>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Detection threshold</label>
             <div className="flex items-center gap-3">
               <input
                 type="range" min="0.5" max="1" step="0.01"
@@ -1766,20 +1991,20 @@ function WorkflowConfigDrawer({
                 onChange={(e) => setThreshold(e.target.value)}
                 className="flex-1 accent-brand-500"
               />
-              <span className="w-12 text-right text-[0.875rem] font-bold text-ink-900 tabular-nums">{(parseFloat(threshold) * 100).toFixed(0)}%</span>
+              <span className="w-12 text-right text-[14px] font-bold text-ink-900 tabular-nums">{(parseFloat(threshold) * 100).toFixed(0)}%</span>
             </div>
-            <p className="text-[0.6875rem] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
+            <p className="text-[11px] text-ink-500 mt-1.5">Minimum confidence required to raise an exception. Higher = fewer false positives.</p>
           </div>
 
           {/* Retry */}
           <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Retry policy</label>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Retry policy</label>
             <div className="flex gap-2">
               {RETRY_OPTIONS.map(r => (
                 <button
                   key={r}
                   onClick={() => setRetry(r)}
-                  className={`flex-1 px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${
+                  className={`flex-1 px-3 py-2 rounded-lg border text-[12px] font-medium transition-all cursor-pointer ${
                     retry === r
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1793,11 +2018,11 @@ function WorkflowConfigDrawer({
 
           {/* Owner */}
           <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Owner</label>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Owner</label>
             <select
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
             >
               {OWNER_LIST.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -1805,13 +2030,13 @@ function WorkflowConfigDrawer({
 
           {/* Min severity to alert */}
           <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Minimum severity to alert</label>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Minimum severity to alert</label>
             <div className="grid grid-cols-4 gap-2">
               {SEVERITY_MIN_OPTIONS.map(s => (
                 <button
                   key={s}
                   onClick={() => setMinSeverity(s)}
-                  className={`px-2 py-2 rounded-lg border text-[0.6875rem] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                  className={`px-2 py-2 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
                     minSeverity === s
                       ? `${SEV_BADGE_CLS[s]} ring-2 ring-brand-500/20`
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -1823,25 +2048,10 @@ function WorkflowConfigDrawer({
             </div>
           </div>
 
-          {/* Exception routing */}
-          <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2 block">Exception routing</label>
-            <select
-              value={exceptionRouting}
-              onChange={(e) => setExceptionRouting(e.target.value)}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 cursor-pointer"
-            >
-              <option value="Round-robin">Round-robin to team</option>
-              <option value="Owner">Always to owner</option>
-              <option value="Escalation">Escalation matrix (severity-based)</option>
-              <option value="Manual">Manual assignment</option>
-            </select>
-          </div>
-
           {/* Data source preview */}
           <div className="rounded-lg border border-border-light bg-canvas/60 p-3 flex items-start gap-2.5">
             <Database size={13} className="text-text-muted mt-0.5 shrink-0" />
-            <div className="text-[0.6875rem] text-text-muted leading-relaxed">
+            <div className="text-[11px] text-text-muted leading-relaxed">
               <span className="font-semibold text-text">Inputs:</span> {wf.inputs.join(' · ')}
               {wf.inputs.includes('SQL') && (
                 <div className="mt-1">SQL queries reuse the engagement's connected data source. Edit the source in Knowledge Hub.</div>
@@ -1853,13 +2063,13 @@ function WorkflowConfigDrawer({
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
+            className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={onSaved}
-            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer"
           >
             Save configuration
           </button>
@@ -1912,14 +2122,31 @@ function linkedToMockWorkflow(w: LibraryWorkflow): MockWorkflow {
   };
 }
 
+/** Parse a "2h ago" / "8m ago" / "12h ago" / "Not run yet" string to minutes-ago for sorting (older = larger). */
+function lastRunMinutes(s: string): number {
+  const m = s.match(/(\d+)\s*(m|h|d)\b/);
+  if (!m) return Number.POSITIVE_INFINITY; // "Not run yet" sorts last
+  const n = parseInt(m[1], 10);
+  return m[2] === 'm' ? n : m[2] === 'h' ? n * 60 : n * 1440;
+}
+
+type WorkflowSort = 'default' | 'open' | 'lastRun';
+const WF_SORT_OPTIONS: { value: WorkflowSort; label: string }[] = [
+  { value: 'default', label: 'Default order' },
+  { value: 'open', label: 'Open exceptions' },
+  { value: 'lastRun', label: 'Last run' },
+];
+
 function WorkflowsBySubProcess({
   workflows,
+  engagementId,
   engagementName,
   onOpenWorkflow,
   onConfigureWorkflow,
   onCreateWorkflow,
 }: {
   workflows: MockWorkflow[];
+  engagementId: string;
   engagementName: string;
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
   onConfigureWorkflow?: (workflowId: string) => void;
@@ -1927,7 +2154,40 @@ function WorkflowsBySubProcess({
 }) {
   const [linked, setLinked] = useState<MockWorkflow[]>([]);
   const allWorkflows = useMemo(() => [...workflows, ...linked], [workflows, linked]);
-  const groups = useMemo(() => groupBySubProcess(allWorkflows), [allWorkflows]);
+  const ws = useEngagementWorkspace();
+
+  /** Control-attributes linked to a workflow (shared with the Controls tab). */
+  const linkedAttributesFor = (workflowId: string): { id: string; description: string }[] =>
+    ws.attributeIdsForWorkflow(workflowId).map(id => ({ id, description: ws.attributeById(id)?.description ?? id }));
+
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<WorkflowSort>('default');
+
+  /** Open (non-resolved) exception count per workflow for this engagement — powers the count badge + "Open exceptions" sort. */
+  const openByWorkflow = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const ex of exceptionsForEngagement(engagementId)) {
+      if (ex.status === 'Resolved') continue;
+      m.set(ex.workflowId, (m.get(ex.workflowId) ?? 0) + 1);
+    }
+    return m;
+  }, [engagementId]);
+
+  const visibleWorkflows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = allWorkflows.filter(w =>
+      !q || w.name.toLowerCase().includes(q) || w.code.toLowerCase().includes(q)
+         || w.type.toLowerCase().includes(q) || w.subProcess.toLowerCase().includes(q)
+    );
+    if (sortBy === 'open') {
+      list = [...list].sort((a, b) => (openByWorkflow.get(b.id) ?? 0) - (openByWorkflow.get(a.id) ?? 0));
+    } else if (sortBy === 'lastRun') {
+      list = [...list].sort((a, b) => lastRunMinutes(a.lastRun) - lastRunMinutes(b.lastRun));
+    }
+    return list;
+  }, [allWorkflows, query, sortBy, openByWorkflow]);
+
+  const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
   const [bulkMode, setBulkMode] = useState(false);
@@ -1971,32 +2231,46 @@ function WorkflowsBySubProcess({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="text-[0.8125rem] font-semibold text-text">
-          Workflows <span className="text-text-muted font-normal">({allWorkflows.length})</span>
-          {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
-        </h3>
+        <div className="flex items-center gap-3 min-w-0">
+          <h3 className="text-[13px] font-semibold text-text shrink-0">
+            Workflows
+            {grouped && <span className="text-text-muted font-normal ml-2">· grouped by process</span>}
+          </h3>
+          {!bulkMode && (
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search workflows..."
+                className="w-52 pl-8 pr-2.5 py-1.5 text-[12px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              />
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {bulkMode && (
             <>
-              <span className="text-[0.75rem] text-text-secondary">
+              <span className="text-[12px] text-text-secondary">
                 <span className="font-semibold text-text">{selectedIds.size}</span> selected
               </span>
               <button
                 onClick={allSelected ? () => setSelectedIds(new Set()) : selectAll}
-                className="text-[0.75rem] font-semibold text-text-secondary hover:text-primary px-2 py-1 cursor-pointer"
+                className="text-[11.5px] font-semibold text-text-secondary hover:text-primary px-2 py-1 cursor-pointer"
               >
                 {allSelected ? 'Clear' : 'Select all'}
               </button>
               <button
                 onClick={() => setBulkModalOpen(true)}
                 disabled={selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
               >
                 <Play size={12} />Execute {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
               </button>
               <button
                 onClick={exitBulkMode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -2004,9 +2278,21 @@ function WorkflowsBySubProcess({
           )}
           {!bulkMode && (
             <>
+              <div className="relative flex items-center">
+                <ArrowUpDown size={13} className="absolute left-2.5 text-text-muted pointer-events-none" />
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as WorkflowSort)}
+                  className="pl-8 pr-2.5 py-1.5 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 hover:border-primary/30 cursor-pointer"
+                  title="Sort workflows"
+                  aria-label="Sort workflows"
+                >
+                  {WF_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                </select>
+              </div>
               <button
                 onClick={() => setGrouped(g => !g)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
                   grouped
                     ? 'bg-primary text-white border-primary'
                     : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
@@ -2017,22 +2303,26 @@ function WorkflowsBySubProcess({
               </button>
               <button
                 onClick={enterBulkMode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] text-[12px] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 <Play size={12} />Execute Workflows
               </button>
               <button
                 onClick={() => setLinkModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
               >
-                <Plus size={12} />Link Workflow
+                <Plus size={12} />Add Workflows
               </button>
             </>
           )}
         </div>
       </div>
 
-      {grouped ? (
+      {visibleWorkflows.length === 0 ? (
+        <div className="glass-card rounded-xl px-4 py-10 text-center text-[12px] text-text-muted">
+          No workflows match “{query}”.
+        </div>
+      ) : grouped ? (
         <div className="space-y-3">
           {groups.map(group => {
             const isCollapsed = collapsed.has(group.subProcess);
@@ -2045,8 +2335,8 @@ function WorkflowsBySubProcess({
                   <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[0.8125rem] font-semibold text-text">{group.subProcess}</span>
-                      <span className="text-[0.6875rem] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
+                      <span className="text-[13px] font-semibold text-text">{group.subProcess}</span>
+                      <span className="text-[11px] text-text-muted">{group.items.length} workflow{group.items.length === 1 ? '' : 's'}</span>
                     </div>
                   </div>
                   <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isCollapsed ? '' : 'rotate-90'}`} />
@@ -2065,6 +2355,8 @@ function WorkflowsBySubProcess({
                           <WorkflowRow
                             key={wf.id}
                             wf={wf}
+                            openCount={openByWorkflow.get(wf.id) ?? 0}
+                            linkedAttributes={linkedAttributesFor(wf.id)}
                             bulkMode={bulkMode}
                             selected={selectedIds.has(wf.id)}
                             onToggleSelect={() => toggleSelect(wf.id)}
@@ -2082,10 +2374,12 @@ function WorkflowsBySubProcess({
         </div>
       ) : (
         <div className="space-y-2">
-          {allWorkflows.map(wf => (
+          {visibleWorkflows.map(wf => (
             <WorkflowRow
               key={wf.id}
               wf={wf}
+              openCount={openByWorkflow.get(wf.id) ?? 0}
+              linkedAttributes={linkedAttributesFor(wf.id)}
               bulkMode={bulkMode}
               selected={selectedIds.has(wf.id)}
               onToggleSelect={() => toggleSelect(wf.id)}
@@ -2122,9 +2416,11 @@ function WorkflowsBySubProcess({
 }
 
 function WorkflowRow({
-  wf, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
+  wf, openCount, linkedAttributes, bulkMode, selected, onToggleSelect, onOpen, onConfigure,
 }: {
   wf: MockWorkflow;
+  openCount: number;
+  linkedAttributes: { id: string; description: string }[];
   bulkMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
@@ -2156,15 +2452,15 @@ function WorkflowRow({
       <div className="flex-1 min-w-0">
         {/* Title line */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[0.875rem] font-semibold text-text leading-snug">{wf.name}</span>
-          <span className="px-1.5 h-[18px] rounded text-[0.625rem] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+          <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
+          <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
         </div>
         {/* Meta line — generous spacing, input badges grouped here */}
-        <div className="text-[0.75rem] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
+        <div className="text-[11.5px] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
           <span className="font-medium text-text-secondary">{wf.type}</span>
           <span className="text-border-light">·</span>
           {wf.cadence.kind === 'Ad-hoc' ? (
-            <span className="inline-flex items-center px-1.5 h-[18px] rounded text-[0.625rem] font-semibold italic bg-mitigated-50/60 text-mitigated-700">Ad-hoc</span>
+            <span className="inline-flex items-center px-1.5 h-[18px] rounded text-[10px] font-semibold italic bg-mitigated-50/60 text-mitigated-700">Ad-hoc</span>
           ) : (
             <span className="text-text-secondary font-medium">{wf.cadence.label}</span>
           )}
@@ -2173,16 +2469,38 @@ function WorkflowRow({
           <span className="text-border-light">·</span>
           <span className={`${tier.tone} font-semibold`}>{eff}% effective</span>
           <span className="text-text-muted/80">({wf.truePositives}/{wf.totalFires} · 90d)</span>
+          {openCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[10px] font-bold bg-risk-50 text-risk-700">
+              <AlertTriangle size={9} />{openCount} open
+            </span>
+          )}
           {/* Input source badges */}
           {wf.inputs.map(src => (
-            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[0.75rem] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
+            <span key={src} className={`inline-flex items-center gap-1 px-1.5 h-[18px] rounded text-[9.5px] font-bold uppercase tracking-wide border ${INPUT_BADGE_CLS[src]}`}>
               {src === 'SQL' && <span className="w-1 h-1 rounded-full bg-evidence-600" aria-hidden="true" />}
               {src}
             </span>
           ))}
         </div>
+        {/* Linked control-attributes (shared with the Controls tab) */}
+        {linkedAttributes.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted shrink-0">
+              <ListChecks size={11} /> Controls
+            </span>
+            {linkedAttributes.slice(0, 4).map(a => (
+              <span key={a.id} className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-md text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-100 max-w-[220px]">
+                <span className="font-mono text-[9px] opacity-70 shrink-0">{a.id}</span>
+                <span className="truncate">{a.description}</span>
+              </span>
+            ))}
+            {linkedAttributes.length > 4 && (
+              <span className="text-[10px] font-semibold text-text-muted">+{linkedAttributes.length - 4} more</span>
+            )}
+          </div>
+        )}
       </div>
-      <span className={`px-2.5 h-6 rounded-full text-[0.75rem] font-semibold inline-flex items-center shrink-0 ${
+      <span className={`px-2.5 h-6 rounded-full text-[10.5px] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'
         : wf.status === 'Running' ? 'bg-evidence-50 text-evidence-700'
         : 'bg-risk-50 text-risk-700'
@@ -2190,7 +2508,7 @@ function WorkflowRow({
       {!bulkMode && (
         <button
           onClick={(e) => { e.stopPropagation(); onConfigure(); }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.6875rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100"
           title="Configure workflow"
         >
           <Settings size={11} />

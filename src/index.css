@@ -410,10 +410,14 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   box-shadow: none;
   transition: border-color 100ms ease-out;
 }
-.ai-border:focus-within {
+.ai-border:has(textarea:focus) {
   /* Claude-style focus: border tone only. No ring, no glow, no shadow
    * change. The border darkens by one step (brand-200 → brand-300) and
-   * that's the entire focus signal — calm, editorial, in-flow. */
+   * that's the entire focus signal — calm, editorial, in-flow.
+   * Uses :has(textarea:focus) — NOT :focus-within — so clicking the
+   * +/mode-toggle buttons inside the composer doesn't shift the border
+   * tone. Active state reflects typing, not internal button focus
+   * (those buttons get their own focus-visible:ring-2). */
   border-color: var(--color-brand-300);
 }
 .ai-border::before,
@@ -448,13 +452,12 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   mix-blend-mode: overlay;
 }
 
-/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ── */
+/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ──
+   Applies to buttons only. Inputs/textareas/selects show focus via
+   border-color change at the component level (no ring/glow). */
 .focus-ring:focus-visible,
 button:focus-visible,
-[role="button"]:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
+[role="button"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24);
   border-radius: var(--radius-md);
@@ -462,10 +465,27 @@ select:focus-visible {
 
 /* Opt-out: suppress the global focus ring on anything tagged .no-focus-ring
    (e.g. full-bleed list rows that show focus via a background tint instead). */
-.no-focus-ring:focus-visible,
 input.no-focus-ring:focus-visible,
 textarea.no-focus-ring:focus-visible,
-select.no-focus-ring:focus-visible {
+select.no-focus-ring:focus-visible,
+button.no-focus-ring:focus-visible,
+button.no-focus-ring:focus,
+[role="button"].no-focus-ring:focus-visible,
+[role="button"].no-focus-ring:focus,
+.no-focus-ring:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+/* Reports: focus shows the border only — no ring/glow box-shadow. Kills both
+   the global focus-visible ring and any Tailwind focus:ring on report inputs.
+   Higher specificity than both, so the border (focus:border-*) stays. */
+.reports-focus-noring input:focus,
+.reports-focus-noring input:focus-visible,
+.reports-focus-noring textarea:focus,
+.reports-focus-noring textarea:focus-visible,
+.reports-focus-noring select:focus,
+.reports-focus-noring select:focus-visible {
   box-shadow: none;
 }
 
@@ -612,4 +632,51 @@ select.no-focus-ring:focus-visible {
 .react-grid-item.resizing {
   z-index: 50;
   opacity: 0.95;
+}
+
+/* Print stylesheet — hide chrome (sidebar, headers, drawers, modals) and
+ * let the `.report-printable` surface print full-bleed in black ink. */
+@media print {
+  /* Hide everything that isn't the report being printed. */
+  header,
+  aside,
+  nav,
+  [role="dialog"],
+  [role="alertdialog"],
+  [data-drawer],
+  [data-sidebar],
+  [data-modal-overlay] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Force the printable report region to full-bleed black text. */
+  .report-printable,
+  .report-printable * {
+    color: #000000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .report-printable {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  /* Avoid awkward breaks inside cards / list items. */
+  .report-printable section,
+  .report-printable article,
+  .report-printable li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Strip interactive affordances. */
+  button,
+  .no-print {
+    display: none !important;
+  }
 }

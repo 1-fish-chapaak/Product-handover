@@ -3,7 +3,6 @@
 // Business Process RACM, Compliance Controls/Evidence/WorkingPaper, and shared
 // Activity Trail components.
 
-import DatePicker from '../shared/DatePicker';
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -24,6 +23,8 @@ import ControlsTab from '../audit/ControlsTab';
 import EvidenceTab from '../audit/EvidenceTab';
 import WorkingPaperTab from '../audit/WorkingPaperTab';
 import { HealthOverviewTab, ActionTrailTab } from '../audit/EngagementOverviewView';
+import { EngagementTabBar } from '../audit/EngagementTabBar';
+import { EngagementWorkspaceProvider } from '../audit/engagementWorkspace';
 import type { Engagement as RACMEngagement } from '../../data/engagements';
 import InternalAuditControlsTab from '../engagement-configurable/patterns/internal-audit/InternalAuditControlsTab';
 import type { InternalAuditAnalysisState } from '../engagement-configurable/patterns/internal-audit/internalAuditAnalysisData';
@@ -128,7 +129,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl bg-gray-900 text-white text-[0.75rem] font-medium shadow-lg"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl bg-gray-900 text-white text-[12px] font-medium shadow-lg"
     >
       {message}
     </motion.div>
@@ -145,8 +146,8 @@ const AUTOMATION_CATEGORIES = [
   'Ad-hoc Workflow Automation',
 ] as const;
 
-const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-const fieldLabelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
+const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[12.5px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const fieldLabelCls = 'text-[11.5px] font-semibold text-text-muted block mb-1.5';
 
 function AutomationCreateModal({ onClose, onCreate }: {
   onClose: () => void;
@@ -208,8 +209,8 @@ function AutomationCreateModal({ onClose, onCreate }: {
               <Workflow size={16} className="text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-[0.9375rem] font-bold text-text">Create Automation Project</h2>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Workflows, files, schedules, and exceptions can be configured inside the workspace.</p>
+              <h2 className="text-[15px] font-bold text-text">Create Automation Project</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">Workflows, files, schedules, and exceptions can be configured inside the workspace.</p>
             </div>
           </div>
           <button onClick={onClose}
@@ -262,29 +263,29 @@ function AutomationCreateModal({ onClose, onCreate }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={fieldLabelCls}>Planned Start Date</label>
-              <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
             </div>
             <div>
               <label className={fieldLabelCls}>Planned End Date</label>
-              <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
             </div>
           </div>
 
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 border border-emerald-100/60 text-[0.75rem] text-emerald-700 leading-relaxed">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 border border-emerald-100/60 text-[10.5px] text-emerald-700 leading-relaxed">
             <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
             <span>You can add workflows and configure runs after creation.</span>
           </div>
 
-          {validation && <p className="text-[0.6875rem] text-red-500 font-medium">{validation}</p>}
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[0.75rem] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
             Cancel
           </button>
           <button onClick={handleCreate}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
             Create Project
           </button>
         </div>
@@ -380,8 +381,8 @@ function IACreateModal({ onClose, onCreate }: {
               <ClipboardCheck size={16} className="text-purple-600" />
             </div>
             <div>
-              <h2 className="text-[0.9375rem] font-bold text-text">Create Internal Audit Assignment</h2>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Define scope, attach RACM/checklists, run workflows, and generate reports after creation.</p>
+              <h2 className="text-[15px] font-bold text-text">Create Internal Audit Assignment</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">Define scope, attach RACM/checklists, run workflows, and generate reports after creation.</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
@@ -393,7 +394,7 @@ function IACreateModal({ onClose, onCreate }: {
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* A. Basic Details */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
             <div>
               <label className={fieldLabelCls}>Assignment Name <span className="text-red-400">*</span></label>
               <input value={name} onChange={e => { setName(e.target.value); setValidation(''); }} placeholder="e.g. P2P Internal Audit Review" className={fieldCls} />
@@ -407,7 +408,7 @@ function IACreateModal({ onClose, onCreate }: {
 
           {/* B. Ownership */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Owner <span className="text-red-400">*</span></label>
@@ -422,32 +423,32 @@ function IACreateModal({ onClose, onCreate }: {
 
           {/* C. Timeline */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Planned Start Date</label>
-                <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Planned End Date</label>
-                <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Data / Audit Period From</label>
-                <DatePicker value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className={fieldCls} />
+                <input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Data / Audit Period To</label>
-                <DatePicker value={periodTo} onChange={e => setPeriodTo(e.target.value)} className={fieldCls} />
+                <input type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)} className={fieldCls} />
               </div>
             </div>
           </div>
 
           {/* E. Initial Setup Options */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Initial Setup Options</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Initial Setup Options</h4>
             <div className="rounded-lg border border-border-light bg-surface-2/20 p-4 space-y-3">
               {([
                 { key: 'includeScope' as const, label: 'Include Scope setup', desc: 'Define what this audit will cover' },
@@ -462,24 +463,24 @@ function IACreateModal({ onClose, onCreate }: {
                 <label key={opt.key} className="flex items-start gap-3 cursor-pointer group">
                   <input type="checkbox" checked={setup[opt.key]} onChange={() => toggle(opt.key)} className={checkboxCls + ' mt-0.5'} />
                   <div>
-                    <div className="text-[0.75rem] font-semibold text-text group-hover:text-primary transition-colors">{opt.label}</div>
-                    <div className="text-[0.75rem] text-text-muted">{opt.desc}</div>
+                    <div className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors">{opt.label}</div>
+                    <div className="text-[10.5px] text-text-muted">{opt.desc}</div>
                   </div>
                 </label>
               ))}
             </div>
           </div>
 
-          {validation && <p className="text-[0.6875rem] text-red-500 font-medium">{validation}</p>}
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[0.75rem] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
             Cancel
           </button>
           <button onClick={handleCreate}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
             Create Internal Audit
           </button>
         </div>
@@ -554,8 +555,8 @@ function ComplianceCreateModal({ onClose, onCreate }: {
               <ShieldCheck size={16} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-[0.9375rem] font-bold text-text">Create Compliance Engagement</h2>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">RACM, controls, samples, evidence, testing, review, and conclusion can be completed after creation.</p>
+              <h2 className="text-[15px] font-bold text-text">Create Compliance Engagement</h2>
+              <p className="text-[11px] text-text-muted mt-0.5">RACM, controls, samples, evidence, testing, review, and conclusion can be completed after creation.</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
@@ -567,7 +568,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Basic Details */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Basic Details</h4>
             <div>
               <label className={fieldLabelCls}>Engagement Name <span className="text-red-400">*</span></label>
               <input value={name} onChange={e => { setName(e.target.value); setValidation(''); }} placeholder="e.g. P2P SOX Control Testing" className={fieldCls} />
@@ -581,7 +582,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
 
           {/* Framework & Process */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Framework & Process</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Framework & Process</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Framework <span className="text-red-400">*</span></label>
@@ -606,7 +607,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
 
           {/* Ownership */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Ownership</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Owner <span className="text-red-400">*</span></label>
@@ -621,34 +622,34 @@ function ComplianceCreateModal({ onClose, onCreate }: {
 
           {/* Timeline */}
           <div className="space-y-3">
-            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
+            <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Timeline</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Planned Start Date</label>
-                <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Planned End Date</label>
-                <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
               </div>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-100/60 text-[0.75rem] text-blue-700 leading-relaxed">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-100/60 text-[10.5px] text-blue-700 leading-relaxed">
             <ShieldCheck size={12} className="shrink-0 mt-0.5" />
             <span>You can select RACM, set up controls, and begin testing after creation.</span>
           </div>
 
-          {validation && <p className="text-[0.6875rem] text-red-500 font-medium">{validation}</p>}
+          {validation && <p className="text-[11px] text-red-500 font-medium">{validation}</p>}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[0.75rem] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
             Cancel
           </button>
           <button onClick={handleCreate}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors shadow-sm shadow-primary/20">
             Create Compliance Engagement
           </button>
         </div>
@@ -677,8 +678,8 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
           <div>
-            <h2 className="text-[0.9375rem] font-bold text-text">New Engagement</h2>
-            <p className="text-[0.6875rem] text-text-muted mt-0.5">Choose the engagement type to get started.</p>
+            <h2 className="text-[15px] font-bold text-text">New Engagement</h2>
+            <p className="text-[11px] text-text-muted mt-0.5">Choose the engagement type to get started.</p>
           </div>
           <button onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
@@ -694,8 +695,8 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
             <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
               <ClipboardCheck size={18} className="text-purple-600" />
             </div>
-            <div className="text-[0.8125rem] font-bold text-text group-hover:text-purple-700 transition-colors">Internal Audit</div>
-            <p className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">Multi-stage audit: scope, RACM, controls, workflows, exceptions, and reporting.</p>
+            <div className="text-[13px] font-bold text-text group-hover:text-purple-700 transition-colors">Internal Audit</div>
+            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">Multi-stage audit: scope, RACM, controls, workflows, exceptions, and reporting.</p>
           </button>
           <button
             onClick={() => onSelect('Automation')}
@@ -704,8 +705,8 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
             <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center mb-3">
               <Workflow size={18} className="text-emerald-600" />
             </div>
-            <div className="text-[0.8125rem] font-bold text-text group-hover:text-emerald-700 transition-colors">Automation</div>
-            <p className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">Continuous monitoring: configure workflows, detect exceptions, and manage cases.</p>
+            <div className="text-[13px] font-bold text-text group-hover:text-emerald-700 transition-colors">Automation</div>
+            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">Continuous monitoring: configure workflows, detect exceptions, and manage cases.</p>
           </button>
           <button
             onClick={() => onSelect('Compliance')}
@@ -714,8 +715,8 @@ function TypePickerModal({ onClose, onSelect }: { onClose: () => void; onSelect:
             <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center mb-3">
               <ShieldCheck size={18} className="text-blue-600" />
             </div>
-            <div className="text-[0.8125rem] font-bold text-text group-hover:text-blue-700 transition-colors">Compliance</div>
-            <p className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">Framework-driven control testing with RACM, samples, evidence, attribute testing, and working paper.</p>
+            <div className="text-[13px] font-bold text-text group-hover:text-blue-700 transition-colors">Compliance</div>
+            <p className="text-[11px] text-text-muted mt-1 leading-relaxed">Framework-driven control testing with RACM, samples, evidence, attribute testing, and working paper.</p>
           </button>
         </div>
       </motion.div>
@@ -761,11 +762,11 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-          <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-          <h1 className="font-display text-[1.75rem] font-bold text-text tracking-tight">Engagement Final</h1>
-          <p className="text-[0.8125rem] text-text-secondary mt-1.5">Browse all engagements — compliance audits, internal audits, and automation programs.</p>
+          <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
+          <h1 className="font-display text-[28px] font-bold text-text tracking-tight">Engagement Final</h1>
+          <p className="text-[13px] text-text-secondary mt-1.5">Browse all engagements — compliance audits, internal audits, and automation programs.</p>
         </div>
-        <button onClick={() => setShowTypePicker(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
+        <button onClick={() => setShowTypePicker(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
           <Plus size={14} />New Engagement
         </button>
       </div>
@@ -774,12 +775,12 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
       <div className="relative max-w-xl">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagement, owner, framework, or code..."
-          className="w-full pl-9 pr-4 h-10 rounded-lg border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" />
+          className="w-full pl-9 pr-4 h-10 rounded-lg border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" />
       </div>
 
       {/* Filter Chips */}
-      <div className="flex items-center gap-2 flex-wrap text-[0.6875rem]">
-        <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Type</span>
+      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Type</span>
         {['All', 'Compliance', 'Internal Audit', 'Automation'].map(t => (
           <button key={t} onClick={() => setTypeFilter(t)}
             className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${typeFilter === t ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
@@ -787,7 +788,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
           </button>
         ))}
         <div className="w-px h-5 bg-border-light" />
-        <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Status</span>
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</span>
         {['All', ...allStatuses.slice(0, 4)].map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${statusFilter === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
@@ -795,7 +796,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
           </button>
         ))}
         <div className="w-px h-5 bg-border-light" />
-        <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Process</span>
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Process</span>
         {['All', ...allProcesses].map(p => (
           <button key={p} onClick={() => setProcessFilter(p)}
             className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${processFilter === p ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>
@@ -807,7 +808,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
       {/* Engagement List */}
       <div className="border border-border-light rounded-xl bg-white overflow-hidden">
         {/* Column Headers */}
-        <div className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr] gap-5 px-6 py-3 bg-surface-2/30 border-b border-border-light text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted/80">
+        <div className="grid grid-cols-[2.4fr_1fr_1.3fr_1.4fr] gap-5 px-6 py-3 bg-surface-2/30 border-b border-border-light text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80">
           <div>Engagement</div>
           <div>Type</div>
           <div>Health</div>
@@ -816,7 +817,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
 
         {/* Rows */}
         {filtered.length === 0 && (
-          <div className="px-6 py-12 text-center text-[0.8125rem] text-text-muted">No engagements match your filters.</div>
+          <div className="px-6 py-12 text-center text-[13px] text-text-muted">No engagements match your filters.</div>
         )}
         {filtered.map((eng, i) => {
           const health = healthTier(eng.health);
@@ -831,14 +832,14 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
               {/* Col 1: Engagement */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-[0.75rem] font-semibold text-text leading-snug">{eng.name}</h3>
-                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status] || 'bg-gray-100 text-gray-600'}`}>
+                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{eng.name}</h3>
+                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_CLS[eng.status] || 'bg-gray-100 text-gray-600'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status] || 'bg-gray-400'}`} />
                     {eng.status}
                   </span>
                 </div>
-                <p className="text-[0.75rem] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">{eng.description}</p>
-                <div className="flex items-center gap-3 mt-2 text-[0.6875rem] text-text-muted flex-wrap">
+                <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">{eng.description}</p>
+                <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
                   <span className="font-mono tracking-tight">{eng.code}</span>
                   <span className="text-border">·</span>
                   <span>{eng.owner}</span>
@@ -846,14 +847,14 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
                   <span className="tabular-nums">{eng.period}</span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">{eng.process}</span>
-                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-medium bg-white text-text-muted border border-border-light">{eng.framework}</span>
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">{eng.process}</span>
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">{eng.framework}</span>
                 </div>
               </div>
 
               {/* Col 2: Type */}
               <div className="flex flex-col items-start gap-1.5">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold border ${TYPE_CLS[eng.type] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${TYPE_CLS[eng.type] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                   {eng.type}
                 </span>
               </div>
@@ -861,12 +862,12 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
               {/* Col 3: Health */}
               <div className="space-y-1.5">
                 {isNotStarted ? (
-                  <div className="text-[0.6875rem] text-text-muted italic">Not yet started</div>
+                  <div className="text-[11px] text-text-muted italic">Not yet started</div>
                 ) : (
                   <>
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-[0.8125rem] font-bold tabular-nums ${health.text}`}>{eng.health}%</span>
-                      <span className="text-[0.625rem] font-medium text-text-muted uppercase tracking-wide">Effective</span>
+                      <span className={`text-[13px] font-bold tabular-nums ${health.text}`}>{eng.health}%</span>
+                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wide">Effective</span>
                     </div>
                     <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${health.bar} rounded-full transition-all duration-500`} style={{ width: `${eng.health}%` }} />
@@ -876,14 +877,14 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
                 {eng.exceptions > 0 && (
                   <div className="flex items-center gap-1 mt-0.5">
                     <AlertTriangle size={11} className="text-risk-700" />
-                    <span className="text-[0.6875rem] font-semibold text-risk-700">{eng.exceptions}</span>
-                    <span className="text-[0.6875rem] text-text-muted">open</span>
+                    <span className="text-[11px] font-semibold text-risk-700">{eng.exceptions}</span>
+                    <span className="text-[11px] text-text-muted">open</span>
                   </div>
                 )}
               </div>
 
               {/* Col 4: Activity */}
-              <div className="flex flex-col gap-1 min-w-0 text-[0.6875rem]">
+              <div className="flex flex-col gap-1 min-w-0 text-[11px]">
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-text-muted shrink-0">{labels.last}</span>
                   <span className="text-text font-medium truncate">{eng.lastActivity}</span>
@@ -899,7 +900,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
         })}
 
         {/* Footer */}
-        <div className="px-6 py-2.5 bg-surface-2/30 border-t border-border-light text-[0.6875rem] text-text-muted">
+        <div className="px-6 py-2.5 bg-surface-2/30 border-t border-border-light text-[11px] text-text-muted">
           {filtered.length} of {MOCK_IA_ENGAGEMENTS.length} engagements
         </div>
       </div>
@@ -975,6 +976,14 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
 // ─── Tab definitions ────────────────────────────────────────────────────
 
 interface TabDef { id: string; label: string }
+
+/** Workflow set shared with the audit Controls/RACM/Evidence tabs via the workspace provider. */
+const FINAL_WORKSPACE_WORKFLOWS = [
+  { id: 'wf1', code: 'WF-P2P-001', name: 'Three-Way Match (PO · GRN · Invoice)' },
+  { id: 'wf2', code: 'WF-P2P-002', name: 'Duplicate Invoice Detector' },
+  { id: 'wf3', code: 'WF-P2P-003', name: 'PO Approval Threshold Scan' },
+  { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor' },
+];
 
 const ALL_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
@@ -1086,7 +1095,7 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
   return (
     <div className="space-y-0">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
         <ArrowLeft size={14} />Back to Engagement Final Library
       </button>
 
@@ -1097,14 +1106,14 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
             <div className="p-2 rounded-lg bg-emerald-100"><Workflow size={18} className="text-emerald-600" /></div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-[0.9375rem] font-bold text-text">{card.name}</h2>
-                <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${card.statusTone}`}>{card.status}</span>
+                <h2 className="text-[15px] font-bold text-text">{card.name}</h2>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${card.statusTone}`}>{card.status}</span>
               </div>
-              <div className="flex items-center gap-2 text-[0.6875rem]">
-                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold">Automation</span>
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[0.5625rem] font-bold">CCM</span>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">Automation</span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-bold">CCM</span>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.625rem] text-gray-500 mt-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 mt-1">
                 <span>Owner: {card.owner}</span>
                 <span>Reviewer: {card.reviewer}</span>
                 <span>Process: {card.process}</span>
@@ -1117,18 +1126,7 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {AUTOMATION_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[0.6875rem] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={AUTOMATION_TABS} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-automation:${card.id}`} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -1169,10 +1167,10 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
       {activeTab === 'trail' && (
         <div className="space-y-0">
           <div className="flex items-center gap-4 pb-4 border-b border-border-light">
-            <div className="text-[0.6875rem] text-gray-400">{trailEvents.length} event{trailEvents.length !== 1 ? 's' : ''}</div>
+            <div className="text-[11px] text-gray-400">{trailEvents.length} event{trailEvents.length !== 1 ? 's' : ''}</div>
           </div>
           {trailEvents.length === 0 ? (
-            <div className="py-16 text-center"><Clock size={32} className="text-gray-200 mx-auto mb-3" /><p className="text-[0.875rem] font-semibold text-text mb-1">No Activity Yet</p></div>
+            <div className="py-16 text-center"><Clock size={32} className="text-gray-200 mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No Activity Yet</p></div>
           ) : (
             <div className="pt-2 space-y-1">
               {trailEvents.map(ev => {
@@ -1187,10 +1185,10 @@ function AutomationFinalWorkspace({ card, onBack }: { card: IAEngagementCard; on
                   <div key={ev.id} className={`flex items-start gap-3 px-4 py-2.5 rounded-lg border-l-[3px] ${cfg.border} hover:bg-white transition-colors`}>
                     <div className={`w-7 h-7 rounded-full ${cfg.bg} ${cfg.color} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[0.75rem] font-semibold text-text">{ev.title}</div>
-                      <div className="text-[0.625rem] text-gray-400 mt-0.5">{ev.subtitle}</div>
+                      <div className="text-[12px] font-semibold text-text">{ev.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{ev.subtitle}</div>
                     </div>
-                    <div className="text-[0.625rem] text-gray-300 shrink-0">{ev.time}</div>
+                    <div className="text-[10px] text-gray-300 shrink-0">{ev.time}</div>
                   </div>
                 );
               })}
@@ -1299,8 +1297,8 @@ function IAIDRTab() {
     return (
       <div className="rounded-xl border border-border-light bg-white p-12 text-center">
         <AlertTriangle size={32} className="text-gray-200 mx-auto mb-3" />
-        <p className="text-[0.875rem] font-semibold text-text mb-1">No Controls Selected</p>
-        <p className="text-[0.75rem] text-text-muted">Complete RACM and Controls review to generate a consolidated IDR list.</p>
+        <p className="text-[14px] font-semibold text-text mb-1">No Controls Selected</p>
+        <p className="text-[12px] text-text-muted">Complete RACM and Controls review to generate a consolidated IDR list.</p>
       </div>
     );
   }
@@ -1309,8 +1307,8 @@ function IAIDRTab() {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h3 className="text-[0.9375rem] font-bold text-text flex items-center gap-2"><Package size={15} className="text-primary" />IDR / Document Requests</h3>
-        <p className="text-[0.6875rem] text-text-muted mt-0.5">Consolidated information and document requests generated from audit controls.</p>
+        <h3 className="text-[15px] font-bold text-text flex items-center gap-2"><Package size={15} className="text-primary" />IDR / Document Requests</h3>
+        <p className="text-[11px] text-text-muted mt-0.5">Consolidated information and document requests generated from audit controls.</p>
       </div>
 
       {/* Summary Cards */}
@@ -1323,8 +1321,8 @@ function IAIDRTab() {
           { label: 'Overdue', value: overdueCount, color: 'text-red-600' },
         ].map(c => (
           <div key={c.label} className="rounded-xl border border-border-light bg-white p-4 text-center">
-            <div className={`text-[1.25rem] font-bold tabular-nums ${c.color}`}>{c.value}</div>
-            <div className="text-[0.625rem] text-gray-400 font-medium mt-0.5">{c.label}</div>
+            <div className={`text-[20px] font-bold tabular-nums ${c.color}`}>{c.value}</div>
+            <div className="text-[10px] text-gray-400 font-medium mt-0.5">{c.label}</div>
           </div>
         ))}
       </div>
@@ -1335,11 +1333,11 @@ function IAIDRTab() {
           <div className="flex items-center gap-2">
             <Send size={14} className="text-blue-600" />
             <div>
-              <p className="text-[0.75rem] font-semibold text-blue-800">Ready to send consolidated IDR</p>
-              <p className="text-[0.625rem] text-blue-600">{totalRequests} document requests across {Object.keys(IDR_MAPPINGS).length} controls</p>
+              <p className="text-[12px] font-semibold text-blue-800">Ready to send consolidated IDR</p>
+              <p className="text-[10px] text-blue-600">{totalRequests} document requests across {Object.keys(IDR_MAPPINGS).length} controls</p>
             </div>
           </div>
-          <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+          <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
             <Send size={12} />Send Consolidated IDR
           </button>
         </div>
@@ -1347,8 +1345,8 @@ function IAIDRTab() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center gap-2">
           <CheckCircle2 size={14} className="text-emerald-600" />
           <div>
-            <p className="text-[0.75rem] font-semibold text-emerald-800">IDR request sent to {recipientName || 'process owner'}{recipientEmail ? ` (${recipientEmail})` : ''}. Waiting for document submission.</p>
-            <p className="text-[0.625rem] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+            <p className="text-[12px] font-semibold text-emerald-800">IDR request sent to {recipientName || 'process owner'}{recipientEmail ? ` (${recipientEmail})` : ''}. Waiting for document submission.</p>
+            <p className="text-[10px] text-emerald-600">Sent on {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
           </div>
         </div>
       )}
@@ -1358,27 +1356,27 @@ function IAIDRTab() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-border-light bg-surface-2/30">
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider w-10">#</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Request Item</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Type</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Source Control</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Requested From</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Due Date</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Status</th>
-              <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider w-14">Files</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider w-10">#</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Request Item</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Type</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Source Control</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Requested From</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Due Date</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider w-14">Files</th>
             </tr>
           </thead>
           <tbody>
             {idrItems.map((item, idx) => (
               <tr key={item.id} className="border-b border-border-light last:border-0 hover:bg-surface-2/20 transition-colors">
-                <td className="px-4 py-2.5 text-[0.6875rem] text-gray-400 tabular-nums">{idx + 1}</td>
-                <td className="px-4 py-2.5 text-[0.6875rem] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-gray-300 shrink-0" />{item.name}</td>
-                <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{item.type}</td>
-                <td className="px-4 py-2.5 text-[0.625rem] text-text-muted max-w-[180px] truncate" title={item.source}>{item.source}</td>
-                <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{item.requestedFrom}</td>
-                <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{item.dueDate}</td>
-                <td className="px-4 py-2.5"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${IDR_STATUS_CLS[item.status]}`}>{item.status}</span></td>
-                <td className="px-4 py-2.5 text-[0.6875rem] text-text-muted tabular-nums text-center">{item.filesReceived}</td>
+                <td className="px-4 py-2.5 text-[11px] text-gray-400 tabular-nums">{idx + 1}</td>
+                <td className="px-4 py-2.5 text-[11px] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-gray-300 shrink-0" />{item.name}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.type}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted max-w-[180px] truncate" title={item.source}>{item.source}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.requestedFrom}</td>
+                <td className="px-4 py-2.5 text-[10px] text-text-muted">{item.dueDate}</td>
+                <td className="px-4 py-2.5"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold ${IDR_STATUS_CLS[item.status]}`}>{item.status}</span></td>
+                <td className="px-4 py-2.5 text-[11px] text-text-muted tabular-nums text-center">{item.filesReceived}</td>
               </tr>
             ))}
           </tbody>
@@ -1389,9 +1387,9 @@ function IAIDRTab() {
       {sentStatus === 'sent' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-[0.8125rem] font-bold text-text flex items-center gap-1.5"><Upload size={13} className="text-primary" />Process Owner Submissions</h4>
+            <h4 className="text-[13px] font-bold text-text flex items-center gap-1.5"><Upload size={13} className="text-primary" />Process Owner Submissions</h4>
             {receivedFiles.length === 0 && (
-              <button onClick={handleSimulateUpload} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-[0.625rem] font-semibold text-text cursor-pointer transition-colors flex items-center gap-1.5">
+              <button onClick={handleSimulateUpload} className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-[10px] font-semibold text-text cursor-pointer transition-colors flex items-center gap-1.5">
                 <Upload size={11} />Simulate Process Owner Upload
               </button>
             )}
@@ -1399,29 +1397,29 @@ function IAIDRTab() {
           {receivedFiles.length === 0 ? (
             <div className="rounded-xl border border-border-light border-dashed bg-white p-8 text-center">
               <Clock size={24} className="text-gray-200 mx-auto mb-2" />
-              <p className="text-[0.75rem] font-semibold text-text mb-0.5">Waiting for Submissions</p>
-              <p className="text-[0.625rem] text-text-muted">The process owner has been notified. Documents are expected by Jun 15, 2026.</p>
+              <p className="text-[12px] font-semibold text-text mb-0.5">Waiting for Submissions</p>
+              <p className="text-[10px] text-text-muted">The process owner has been notified. Documents are expected by Jun 15, 2026.</p>
             </div>
           ) : (
             <div className="rounded-xl border border-border-light bg-white overflow-hidden">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-border-light bg-surface-2/30">
-                    <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">File Name</th>
-                    <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Uploaded By</th>
-                    <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Uploaded At</th>
-                    <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Mapped To</th>
-                    <th className="px-4 py-2.5 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">File Name</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Uploaded By</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Uploaded At</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Mapped To</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {receivedFiles.map(f => (
                     <tr key={f.name} className="border-b border-border-light last:border-0 hover:bg-surface-2/20 transition-colors">
-                      <td className="px-4 py-2.5 text-[0.6875rem] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-blue-400 shrink-0" />{f.name}</td>
-                      <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{f.uploadedBy}</td>
-                      <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{f.uploadedAt}</td>
-                      <td className="px-4 py-2.5 text-[0.625rem] text-text-muted">{f.mappedTo}</td>
-                      <td className="px-4 py-2.5"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold bg-emerald-50 text-emerald-700">{f.status}</span></td>
+                      <td className="px-4 py-2.5 text-[11px] font-semibold text-text flex items-center gap-1.5"><FileText size={12} className="text-blue-400 shrink-0" />{f.name}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.uploadedBy}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.uploadedAt}</td>
+                      <td className="px-4 py-2.5 text-[10px] text-text-muted">{f.mappedTo}</td>
+                      <td className="px-4 py-2.5"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">{f.status}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1438,8 +1436,8 @@ function IAIDRTab() {
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
               <div>
-                <h2 className="text-[0.9375rem] font-bold text-text">Send Consolidated IDR Request</h2>
-                <p className="text-[0.6875rem] text-text-muted mt-0.5">Review and send document requests to the process owner.</p>
+                <h2 className="text-[15px] font-bold text-text">Send Consolidated IDR Request</h2>
+                <p className="text-[11px] text-text-muted mt-0.5">Review and send document requests to the process owner.</p>
               </div>
               <button onClick={() => setShowSendModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
                 <X size={16} />
@@ -1449,40 +1447,40 @@ function IAIDRTab() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Name</label>
+                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Name</label>
                     <input value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="e.g. Karan Mehta"
-                      className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+                      className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
                   </div>
                   <div>
-                    <label className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Email</label>
+                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Recipient Email</label>
                     <input value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="e.g. karan@company.com" type="email"
-                      className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+                      className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider block mb-1">Due Date</label>
-                  <p className="text-[0.75rem] font-semibold text-text">Jun 15, 2026</p>
+                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">Due Date</label>
+                  <p className="text-[12px] font-semibold text-text">Jun 15, 2026</p>
                 </div>
               </div>
               <div>
-                <p className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider mb-1">Requests ({totalRequests} items)</p>
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Requests ({totalRequests} items)</p>
                 <div className="rounded-lg border border-border-light max-h-[240px] overflow-y-auto divide-y divide-border-light">
                   {idrItems.map((item, idx) => (
-                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-[0.6875rem]">
+                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
                       <span className="text-gray-400 tabular-nums w-5 text-right shrink-0">{idx + 1}.</span>
                       <FileText size={11} className="text-gray-300 shrink-0" />
                       <span className="font-medium text-text truncate">{item.name}</span>
-                      <span className="ml-auto text-[0.5625rem] text-text-muted shrink-0">{item.type}</span>
+                      <span className="ml-auto text-[9px] text-text-muted shrink-0">{item.type}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3 shrink-0">
-              <button onClick={() => setShowSendModal(false)} className="px-4 py-2 rounded-lg text-[0.75rem] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
+              <button onClick={() => setShowSendModal(false)} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">
                 Cancel
               </button>
-              <button onClick={handleSend} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+              <button onClick={handleSend} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
                 <Send size={12} />Send Request
               </button>
             </div>
@@ -1613,7 +1611,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
   return (
     <div className="space-y-0">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
         <ArrowLeft size={14} />Back to Engagement Final Library
       </button>
 
@@ -1624,14 +1622,14 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
             <div className="p-2 rounded-lg bg-purple-100"><ClipboardCheck size={18} className="text-purple-600" /></div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-[0.9375rem] font-bold text-text">{card.name}</h2>
-                <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${card.statusTone}`}>{card.status}</span>
+                <h2 className="text-[15px] font-bold text-text">{card.name}</h2>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${card.statusTone}`}>{card.status}</span>
               </div>
-              <div className="flex items-center gap-2 text-[0.6875rem]">
-                <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[0.5625rem] font-bold">Audit Assignment</span>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[9px] font-bold">Audit Assignment</span>
                 <span className="text-text-muted">Internal Audit</span>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.625rem] text-gray-500 mt-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 mt-1">
                 <span>Owner: {card.owner}</span>
                 <span>Reviewer: {card.reviewer}</span>
                 <span>Process: {card.process}</span>
@@ -1644,18 +1642,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {visibleTabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[0.6875rem] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={visibleTabs} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-ia:${card.id}`} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -1672,7 +1659,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
         <div className="space-y-0">
           {announcement.status !== 'DRAFT' && (
             <div className="mb-3 flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                 announcement.status === 'SENT' || announcement.status === 'ACKNOWLEDGED' ? 'bg-emerald-50 text-emerald-700' :
                 announcement.status === 'READY_TO_SEND' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'
               }`}>
@@ -1681,7 +1668,7 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
                  announcement.status === 'SENT' ? 'Announcement Sent' :
                  announcement.status === 'READY_TO_SEND' ? 'Announcement Ready' : 'Announcement Drafted'}
               </span>
-              <button onClick={() => setShowAnnouncementModal(true)} className="text-[0.625rem] text-primary hover:underline cursor-pointer font-medium">View / Edit</button>
+              <button onClick={() => setShowAnnouncementModal(true)} className="text-[10px] text-primary hover:underline cursor-pointer font-medium">View / Edit</button>
             </div>
           )}
           <InternalAuditScopeTab
@@ -1694,11 +1681,13 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       )}
 
       {activeTab === 'racm' && (
-        <RACMTab engagement={racmEngagement} onOpenFullEditor={onOpenRacmFullEditor ? () => onOpenRacmFullEditor({
-          racmId: 'racm-procurement-fy26',
-          racmName: `${racmEngagement.process} Internal Audit RACM`,
-          processLabel: racmEngagement.process,
-        }) : undefined} />
+        <EngagementWorkspaceProvider engagement={racmEngagement} workflows={FINAL_WORKSPACE_WORKFLOWS}>
+          <RACMTab engagement={racmEngagement} onOpenFullEditor={onOpenRacmFullEditor ? () => onOpenRacmFullEditor({
+            racmId: 'racm-procurement-fy26',
+            racmName: `${racmEngagement.process} Internal Audit RACM`,
+            processLabel: racmEngagement.process,
+          }) : undefined} />
+        </EngagementWorkspaceProvider>
       )}
 
       {activeTab === 'controls' && (
@@ -1741,12 +1730,12 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       {activeTab === 'report' && (
         <div className="space-y-4">
           <div className="rounded-xl border border-border-light bg-white p-5">
-            <h3 className="text-[0.9375rem] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" />Audit Report</h3>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-[0.75rem] mb-4">
-              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Engagement</span><span className="text-text font-semibold">{card.name}</span></div>
-              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Process</span><span className="text-text font-semibold">{card.process}</span></div>
-              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Owner</span><span className="text-text font-semibold">{card.owner}</span></div>
-              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Period</span><span className="text-text font-semibold">{card.period}</span></div>
+            <h3 className="text-[15px] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" />Audit Report</h3>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-[12px] mb-4">
+              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Engagement</span><span className="text-text font-semibold">{card.name}</span></div>
+              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Process</span><span className="text-text font-semibold">{card.process}</span></div>
+              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Owner</span><span className="text-text font-semibold">{card.owner}</span></div>
+              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Period</span><span className="text-text font-semibold">{card.period}</span></div>
             </div>
             <div className="grid grid-cols-4 gap-2 mb-4">
               {[
@@ -1756,18 +1745,18 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
                 { label: 'Cases Assigned', value: automationState.cases.cases.length },
               ].map(s => (
                 <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
-                  <div className={`text-[1rem] font-bold tabular-nums ${s.color || 'text-text'}`}>{s.value}</div>
-                  <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+                  <div className={`text-[16px] font-bold tabular-nums ${s.color || 'text-text'}`}>{s.value}</div>
+                  <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
                 </div>
               ))}
             </div>
             {completedRuns.length === 0 ? (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50/50 border border-amber-200/50 text-[0.6875rem] text-amber-700">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50/50 border border-amber-200/50 text-[11px] text-amber-700">
                 <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                 <span>Run workflows from the Workflows tab to generate audit findings for this report.</span>
               </div>
             ) : (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 border border-emerald-200/50 text-[0.6875rem] text-emerald-700">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50/50 border border-emerald-200/50 text-[11px] text-emerald-700">
                 <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
                 <span>{completedRuns.length} workflow run(s) completed with {totalExceptions} exception(s). Review exceptions in Exception Management before finalizing.</span>
               </div>
@@ -1779,10 +1768,10 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       {activeTab === 'trail' && (
         <div className="space-y-0">
           <div className="flex items-center gap-4 pb-4 border-b border-border-light">
-            <div className="text-[0.6875rem] text-gray-400">{trailEvents.length} event{trailEvents.length !== 1 ? 's' : ''}</div>
+            <div className="text-[11px] text-gray-400">{trailEvents.length} event{trailEvents.length !== 1 ? 's' : ''}</div>
           </div>
           {trailEvents.length === 0 ? (
-            <div className="py-16 text-center"><Clock size={32} className="text-gray-200 mx-auto mb-3" /><p className="text-[0.875rem] font-semibold text-text mb-1">No Activity Yet</p></div>
+            <div className="py-16 text-center"><Clock size={32} className="text-gray-200 mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No Activity Yet</p></div>
           ) : (
             <div className="pt-2 space-y-1">
               {trailEvents.map(ev => {
@@ -1796,10 +1785,10 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
                   <div key={ev.id} className={`flex items-start gap-3 px-4 py-2.5 rounded-lg border-l-[3px] ${cfg.border} hover:bg-white transition-colors`}>
                     <div className={`w-7 h-7 rounded-full ${cfg.bg} ${cfg.color} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[0.75rem] font-semibold text-text">{ev.title}</div>
-                      <div className="text-[0.625rem] text-gray-400 mt-0.5">{ev.subtitle}</div>
+                      <div className="text-[12px] font-semibold text-text">{ev.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{ev.subtitle}</div>
                     </div>
-                    <div className="text-[0.625rem] text-gray-300 shrink-0">{ev.time}</div>
+                    <div className="text-[10px] text-gray-300 shrink-0">{ev.time}</div>
                   </div>
                 );
               })}
@@ -1827,8 +1816,8 @@ function EngagementFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
               {/* Modal header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
                 <div>
-                  <h2 className="text-[0.9375rem] font-bold text-text">Audit Announcement</h2>
-                  <p className="text-[0.6875rem] text-text-muted mt-0.5">Review the announcement before sharing it with process owners.</p>
+                  <h2 className="text-[15px] font-bold text-text">Audit Announcement</h2>
+                  <p className="text-[11px] text-text-muted mt-0.5">Review the announcement before sharing it with process owners.</p>
                 </div>
                 <button onClick={() => setShowAnnouncementModal(false)}
                   className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-text cursor-pointer transition-colors">
@@ -1894,7 +1883,7 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
   return (
     <div className="space-y-0">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
         <ArrowLeft size={14} />Back to Engagement Final Library
       </button>
 
@@ -1905,14 +1894,14 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
             <div className="p-2 rounded-lg bg-blue-100"><ShieldCheck size={18} className="text-blue-600" /></div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-[0.9375rem] font-bold text-text">{card.name}</h2>
-                <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold ${card.statusTone}`}>{card.status}</span>
+                <h2 className="text-[15px] font-bold text-text">{card.name}</h2>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${card.statusTone}`}>{card.status}</span>
               </div>
-              <div className="flex items-center gap-2 text-[0.6875rem]">
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[0.5625rem] font-bold">Compliance</span>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[9px] font-bold">Compliance</span>
                 <span className="text-text-muted">SOX ICFR</span>
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.625rem] text-gray-500 mt-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 mt-1">
                 <span>Owner: {card.owner}</span>
                 <span>Reviewer: {card.reviewer}</span>
                 <span>Process: {card.process}</span>
@@ -1925,20 +1914,10 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border-light mb-4">
-        <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
-          {COMPLIANCE_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-[0.6875rem] font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-text hover:border-gray-200'
-              }`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EngagementTabBar tabs={COMPLIANCE_TABS} activeTab={activeTab} onSelect={setActiveTab} storageKey={`final-compliance:${card.id}`} />
 
-      {/* Tab Content */}
+      {/* Tab Content — wrapped so the audit RACM/Controls/Evidence tabs get the shared workspace store */}
+      <EngagementWorkspaceProvider engagement={complianceEngagement} workflows={FINAL_WORKSPACE_WORKFLOWS}>
       {activeTab === 'overview' && (
         <HealthOverviewTab
           eng={complianceEngagement}
@@ -1972,6 +1951,7 @@ function ComplianceFinalWorkspace({ card, onBack, onOpenRacmFullEditor }: { card
       {activeTab === 'trail' && (
         <ActionTrailTab eng={complianceEngagement} />
       )}
+      </EngagementWorkspaceProvider>
     </div>
   );
 }

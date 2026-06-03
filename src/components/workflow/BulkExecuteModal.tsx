@@ -3,11 +3,12 @@ import { motion } from 'motion/react';
 import {
   Search, Sparkles, Check, ArrowRight, X, Calendar, Loader2, FileText,
   UploadCloud, Database, ChevronDown, ChevronUp, AlertTriangle, Upload,
-  Minus, ChevronLeft, ChevronRight, Clock, Trash2, ExternalLink, Plus,
+  Minus, Clock, Trash2, ExternalLink, Plus,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
 import { useBulkRunProgress } from '../shared/BulkRunProgress';
+import { CustomDatePicker } from '../shared/CustomDatePicker';
 import { LIBRARY_WORKFLOWS, type LibraryWorkflow } from './WorkflowLibraryView';
 
 const FREQUENCIES = ['Hourly', 'Daily', 'Weekly', 'Monthly'] as const;
@@ -29,18 +30,21 @@ const REQUIRED_FILES = [
     format: 'CSV',
     required: true,
     description: 'Period export of posted invoices — invoice number, vendor, amount, date, GL account, entered-by user.',
+    usedBy: ['Invoice Duplicate Detection', 'Payment Block Review'],
   },
   {
     name: 'Vendor Master',
     format: 'CSV',
     required: true,
     description: 'Active vendor master snapshot used to validate every invoice vendor against the approved list.',
+    usedBy: ['Vendor Risk Score'],
   },
   {
     name: 'GL Trial Balance',
     format: 'CSV',
     required: true,
     description: 'Period-end trial balance export — ties AP postings back to the general ledger for reconciliation.',
+    usedBy: ['GL Anomaly Detection', 'Period-End Accrual Check'],
   },
 ];
 
@@ -227,6 +231,19 @@ function makeUploaded(files: File[]): UploadedFile[] {
   }));
 }
 
+type ConfigField = {
+  key: string;
+  type: 'str' | 'int' | 'list_str' | 'bool';
+  defaultValue: string;
+};
+
+const DEFAULT_CONFIG_FIELDS: ConfigField[] = [
+  { key: 'pdf_path', type: 'str', defaultValue: 'efe62aa1-4c4f-43ae-bc8c-06e6c9f7ed59.pdf' },
+  { key: 'table_hint', type: 'str', defaultValue: 'invoice line items, folio charges, taxes, payments, totals' },
+  { key: 'graph_top_n', type: 'int', defaultValue: '20' },
+  { key: 'missing_tokens', type: 'list_str', defaultValue: ', none, null, nan, n/a, na, not found, not detected, unreadable' },
+];
+
 const SEED_UPLOADED_FILES: UploadedFile[] = [
   { id: 'seed-gl', name: 'gl_q3_2026.csv', size: Math.round(12.4 * 1024 * 1024) },
   { id: 'seed-invoice', name: 'invoice_batch_sep2026.pdf', size: Math.round(48.1 * 1024 * 1024) },
@@ -280,7 +297,7 @@ function Pill({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`px-3.5 h-8 rounded-lg text-[0.75rem] font-semibold transition-colors ${
+      className={`px-3.5 h-8 rounded-lg text-[12.5px] font-semibold transition-colors ${
         disabled
           ? 'bg-surface-2 text-text-muted/50 border border-border-light cursor-not-allowed'
           : active
@@ -333,6 +350,8 @@ export function BulkExecuteModal({
   // Step 2 state
   const [requiredFilesOpen, setRequiredFilesOpen] = useState(false);
   const [selectedListOpen, setSelectedListOpen] = useState(true);
+  const [configOpenIds, setConfigOpenIds] = useState<Set<string>>(new Set());
+  const [workflowConfigs, setWorkflowConfigs] = useState<Record<string, Record<string, string>>>({});
   const [uploadOpen, setUploadOpen] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>(SEED_UPLOADED_FILES);
   const [selectedUploadIds, setSelectedUploadIds] = useState<Set<string>>(new Set());
@@ -399,11 +418,15 @@ export function BulkExecuteModal({
 
   const handleSubmit = () => {
     if (!hasWorkflows || !hasAuditName) return;
+    setStep2View('upload');
+    setStep(2);
+  };
+
+  const handleUploadContinue = () => {
     setIsFetching(true);
     window.setTimeout(() => {
       setIsFetching(false);
-      setStep2View('upload');
-      setStep(2);
+      setStep2View('review');
     }, 2200);
   };
 
@@ -679,12 +702,12 @@ export function BulkExecuteModal({
         role="dialog"
         aria-modal="true"
         aria-label="Bulk Execute"
-        className="relative bg-white rounded-2xl shadow-2xl w-[800px] h-[700px] max-h-[90vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-2xl shadow-2xl w-[1080px] h-[760px] max-h-[92vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
-          <h3 className="text-[1rem] font-semibold text-text">Bulk Execute</h3>
+          <h3 className="text-[16px] font-semibold text-text">Bulk Execute</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-surface-2 rounded-md transition-colors cursor-pointer" aria-label="Close">
             <X size={16} className="text-text-muted" />
           </button>
@@ -696,7 +719,7 @@ export function BulkExecuteModal({
           {STEPS.map((s, idx) => (
             <Fragment key={s.n}>
               <div className="flex items-center gap-2.5 shrink-0">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold ${
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold ${
                   s.state === 'active'
                     ? 'bg-primary text-white'
                     : s.state === 'done'
@@ -705,7 +728,7 @@ export function BulkExecuteModal({
                 }`}>
                   {s.state === 'done' ? <Check size={13} strokeWidth={3} /> : s.n}
                 </div>
-                <span className={`text-[0.8125rem] ${
+                <span className={`text-[13px] ${
                   s.state === 'active' ? 'text-text font-semibold' : s.state === 'done' ? 'text-text' : 'text-text-muted'
                 }`}>
                   {s.label}
@@ -725,7 +748,7 @@ export function BulkExecuteModal({
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Business Process(es) included in this bulk run */}
           <div>
-            <label className="block text-[0.75rem] font-semibold text-text mb-1.5">
+            <label className="block text-[12px] font-semibold text-text mb-1.5">
               {uniqueBps.length > 1 ? 'Business Processes' : 'Business Process'}
             </label>
             {hasWorkflows ? (
@@ -733,14 +756,14 @@ export function BulkExecuteModal({
                 {uniqueBps.map(bp => (
                   <span
                     key={bp}
-                    className="inline-flex items-center h-6 px-2 rounded-md bg-primary-xlight border border-primary/15 text-[0.75rem] font-medium text-primary"
+                    className="inline-flex items-center h-6 px-2 rounded-md bg-primary-xlight border border-primary/15 text-[12px] font-medium text-primary"
                   >
                     {bp}
                   </span>
                 ))}
               </div>
             ) : (
-              <div className="px-3 py-2.5 rounded-md border border-border-light bg-surface-2 text-[0.8125rem] text-text-muted">
+              <div className="px-3 py-2.5 rounded-md border border-border-light bg-surface-2 text-[13px] text-text-muted">
                 No workflows selected
               </div>
             )}
@@ -754,12 +777,12 @@ export function BulkExecuteModal({
               className="w-full flex items-center gap-2 mb-1.5 cursor-pointer"
               aria-expanded={selectedListOpen}
             >
-              <label className="text-[0.75rem] font-semibold text-text cursor-pointer">Selected Workflows</label>
-              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[0.6875rem] font-semibold">
+              <label className="text-[12px] font-semibold text-text cursor-pointer">Selected Workflows</label>
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[11px] font-semibold">
                 {activeWorkflows.length}
               </span>
               {combinedSelected.length > activeWorkflows.length && (
-                <span className="text-[0.6875rem] text-text-muted">
+                <span className="text-[11px] text-text-muted">
                   ({combinedSelected.length - activeWorkflows.length} deselected)
                 </span>
               )}
@@ -775,12 +798,12 @@ export function BulkExecuteModal({
                 value={addSearch}
                 onChange={e => setAddSearch(e.target.value)}
                 placeholder="Search workflows to add…"
-                className="w-full pl-9 pr-3 py-2 rounded-md border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
               />
               {addSearch.trim() && (
                 <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-border-light rounded-md shadow-lg max-h-[220px] overflow-y-auto">
                   {addMatches.length === 0 ? (
-                    <div className="px-3 py-2.5 text-[0.75rem] text-text-muted">No matching workflows to add.</div>
+                    <div className="px-3 py-2.5 text-[12px] text-text-muted">No matching workflows to add.</div>
                   ) : addMatches.map(w => (
                     <button
                       key={w.id}
@@ -790,8 +813,8 @@ export function BulkExecuteModal({
                     >
                       <Plus size={14} className="text-primary shrink-0" />
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[0.8125rem] font-medium text-text truncate">{w.name}</span>
-                        <span className="block text-[0.6875rem] text-text-muted">{w.businessProcess} · {w.controlId}</span>
+                        <span className="block text-[13px] font-medium text-text truncate">{w.name}</span>
+                        <span className="block text-[11px] text-text-muted">{w.businessProcess} · {w.controlId}</span>
                       </span>
                     </button>
                   ))}
@@ -800,30 +823,75 @@ export function BulkExecuteModal({
             </div>
 
             {selectedListOpen && (
-            <div className="border border-border-light rounded-md divide-y divide-border-light overflow-hidden max-h-[240px] overflow-y-auto">
+            <div className="border border-border-light rounded-md divide-y divide-border-light overflow-hidden max-h-[320px] overflow-y-auto">
               {combinedSelected.map(w => {
                 const checked = !modalDeselected.has(w.id);
+                const configOpen = configOpenIds.has(w.id);
+                const config = workflowConfigs[w.id] ?? Object.fromEntries(
+                  DEFAULT_CONFIG_FIELDS.map(f => [f.key, f.defaultValue])
+                );
+                const toggleConfig = () => {
+                  setConfigOpenIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(w.id)) next.delete(w.id);
+                    else next.add(w.id);
+                    return next;
+                  });
+                };
+                const updateField = (key: string, value: string) => {
+                  setWorkflowConfigs(prev => ({
+                    ...prev,
+                    [w.id]: { ...config, [key]: value },
+                  }));
+                };
                 return (
-                  <label
-                    key={w.id}
-                    className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-2/60 transition-colors"
-                  >
-                    <span className="pt-0.5">
-                      <Checkbox
-                        checked={checked}
-                        onChange={() => toggleWorkflow(w.id)}
-                        ariaLabel={`Toggle ${w.name}`}
-                      />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[0.8125rem] font-medium ${checked ? 'text-text' : 'text-text-muted line-through'}`}>
-                        {w.name}
+                  <div key={w.id}>
+                    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-2/60 transition-colors">
+                      <span className="pt-0.5">
+                        <Checkbox
+                          checked={checked}
+                          onChange={() => toggleWorkflow(w.id)}
+                          ariaLabel={`Toggle ${w.name}`}
+                        />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[13px] font-medium ${checked ? 'text-text' : 'text-text-muted line-through'}`}>
+                          {w.name}
+                        </div>
+                        <div className="text-[11px] text-text-muted mt-0.5">
+                          {w.businessProcess} · {w.controlId}
+                        </div>
                       </div>
-                      <div className="text-[0.6875rem] text-text-muted mt-0.5">
-                        {w.businessProcess} · {w.controlId}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleConfig}
+                        aria-expanded={configOpen}
+                        className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-border-light bg-white text-[12px] font-semibold text-text-secondary hover:border-primary/30 hover:text-text transition-colors cursor-pointer shrink-0"
+                      >
+                        {configOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        Config
+                      </button>
                     </div>
-                  </label>
+                    {configOpen && (
+                      <div className="px-3 pb-3 pt-1 bg-surface-2/30">
+                        <div className="space-y-3 pl-7">
+                          {DEFAULT_CONFIG_FIELDS.map(field => (
+                            <div key={field.key}>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <label className="text-[12px] font-semibold text-text">{field.key}</label>
+                                <span className="text-[10.5px] font-mono text-text-muted">{field.type}</span>
+                              </div>
+                              <input
+                                value={config[field.key] ?? field.defaultValue}
+                                onChange={e => updateField(field.key, e.target.value)}
+                                className="w-full px-3 py-2 rounded-md border border-border-light bg-white text-[12.5px] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -832,27 +900,27 @@ export function BulkExecuteModal({
 
           {/* Audit Details */}
           <div>
-            <div className="text-[0.75rem] font-semibold text-text mb-2">Audit Details</div>
+            <div className="text-[12px] font-semibold text-text mb-2">Audit Details</div>
             <div className="space-y-3">
               <div>
-                <label className="block text-[0.75rem] font-medium text-text-secondary mb-1">
+                <label className="block text-[12px] font-medium text-text-secondary mb-1">
                   Audit Name <span className="text-risk">*</span>
                 </label>
                 <input
                   value={auditName}
                   onChange={e => setAuditName(e.target.value)}
                   placeholder="Enter audit name"
-                  className="w-full px-3 py-2.5 rounded-md border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full px-3 py-2.5 rounded-md border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-[0.75rem] font-medium text-text-secondary mb-1">Audit Description</label>
+                <label className="block text-[12px] font-medium text-text-secondary mb-1">Audit Description</label>
                 <textarea
                   value={auditDescription}
                   onChange={e => setAuditDescription(e.target.value)}
                   placeholder="Describe the purpose or scope of this audit"
                   rows={3}
-                  className="w-full px-3 py-2.5 rounded-md border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none"
+                  className="w-full px-3 py-2.5 rounded-md border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none"
                 />
               </div>
             </div>
@@ -862,14 +930,14 @@ export function BulkExecuteModal({
           <div className="rounded-lg border border-border-light bg-surface-2/40 p-4">
             <div className="flex items-center gap-2 mb-4">
               <Calendar size={14} className="text-primary" />
-              <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                 Audit run frequency
               </span>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               {/* Frequency — only meaningful for Schedule trigger */}
               <div>
-                <label className="block text-[0.75rem] font-semibold text-text mb-2">Frequency</label>
+                <label className="block text-[12px] font-semibold text-text mb-2">Frequency</label>
                 <div className="flex flex-wrap gap-2">
                   {FREQUENCIES.map(f => (
                     <Pill
@@ -885,19 +953,19 @@ export function BulkExecuteModal({
               </div>
               {/* Run Time — only meaningful for Schedule trigger */}
               <div>
-                <label className="block text-[0.75rem] font-semibold text-text mb-2">Run Time</label>
+                <label className="block text-[12px] font-semibold text-text mb-2">Run Time</label>
                 <input
                   type="time"
                   value={runTime}
                   onChange={e => setRunTime(e.target.value)}
                   disabled={triggerOn !== 'Schedule'}
-                  className="w-full px-3 py-2 rounded-md border border-border-light text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-surface-2"
+                  className="w-full px-3 py-2 rounded-md border border-border-light text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-surface-2"
                 />
               </div>
               {/* Day of week — only for Weekly + Schedule */}
               {frequency === 'Weekly' && triggerOn === 'Schedule' && (
                 <div className="col-span-2">
-                  <label className="block text-[0.75rem] font-semibold text-text mb-2">Select day of the week</label>
+                  <label className="block text-[12px] font-semibold text-text mb-2">Select day of the week</label>
                   <div className="flex flex-wrap gap-2">
                     {WEEKDAYS.map(d => (
                       <Pill
@@ -915,14 +983,14 @@ export function BulkExecuteModal({
               {frequency === 'Monthly' && triggerOn === 'Schedule' && (
                 <div className="col-span-2 grid grid-cols-2 gap-x-6">
                   <div>
-                    <label className="block text-[0.75rem] font-semibold text-text mb-2">Select date</label>
+                    <label className="block text-[12px] font-semibold text-text mb-2">Select date</label>
                     <CustomDatePicker value={monthlyDate} onChange={setMonthlyDate} />
                   </div>
                 </div>
               )}
               {/* Trigger On */}
               <div>
-                <label className="block text-[0.75rem] font-semibold text-text mb-2">Trigger On</label>
+                <label className="block text-[12px] font-semibold text-text mb-2">Trigger On</label>
                 <div className="flex flex-wrap gap-2">
                   {TRIGGERS.map(t => (
                     <Pill
@@ -937,7 +1005,7 @@ export function BulkExecuteModal({
               </div>
               {/* Retry on Failure */}
               <div>
-                <label className="block text-[0.75rem] font-semibold text-text mb-2">Retry on Failure</label>
+                <label className="block text-[12px] font-semibold text-text mb-2">Retry on Failure</label>
                 <div className="flex flex-wrap gap-2">
                   {RETRIES.map(r => (
                     <Pill
@@ -958,14 +1026,14 @@ export function BulkExecuteModal({
         <div className="px-6 py-4 border-t border-border-light flex items-center justify-between shrink-0">
           <button
             onClick={onClose}
-            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             aria-disabled={!canContinue}
-            className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[0.8125rem] font-semibold transition-colors ${
+            className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
               canContinue
                 ? 'bg-primary hover:bg-primary-hover cursor-pointer'
                 : 'bg-primary/40 cursor-not-allowed'
@@ -991,12 +1059,12 @@ export function BulkExecuteModal({
             >
               <div className="flex items-center gap-2">
                 <FileText size={14} className="text-primary" />
-                <span className="text-[0.8125rem] font-semibold text-text">Required Files</span>
-                <span className="text-[0.75rem] text-text-muted">
+                <span className="text-[13px] font-semibold text-text">Required Files</span>
+                <span className="text-[12px] text-text-muted">
                   {REQUIRED_FILES.filter(f => f.required).length} required · {REQUIRED_FILES.length} total
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[0.75rem] text-text-muted">
+              <div className="flex items-center gap-1.5 text-[12px] text-text-muted">
                 Click to {requiredFilesOpen ? 'collapse' : 'expand'}
                 {requiredFilesOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
@@ -1008,18 +1076,21 @@ export function BulkExecuteModal({
                     key={file.name}
                     className="p-3 rounded-md border border-border-light bg-surface-2/30"
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[0.8125rem] font-semibold text-text">{file.name}</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border-light bg-white text-[0.625rem] font-mono font-semibold text-ink-700">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span className="text-[13px] font-semibold text-text">{file.name}</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border-light bg-white text-[10px] font-mono font-semibold text-ink-700">
                         {file.format}
                       </span>
-                      {file.required && (
-                        <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-risk">
-                          Required
+                      {file.usedBy.map(wf => (
+                        <span
+                          key={wf}
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-border-light text-[11px] text-text-secondary"
+                        >
+                          {wf}
                         </span>
-                      )}
+                      ))}
                     </div>
-                    <div className="text-[0.75rem] text-text-secondary leading-relaxed">{file.description}</div>
+                    <div className="text-[12px] text-text-secondary leading-relaxed">{file.description}</div>
                   </div>
                 ))}
               </div>
@@ -1034,12 +1105,12 @@ export function BulkExecuteModal({
               className="w-full flex items-start justify-between px-4 py-3 cursor-pointer"
             >
               <div className="text-left">
-                <div className="text-[0.8125rem] font-semibold text-text">Upload data files</div>
-                <div className="text-[0.75rem] text-text-muted">
+                <div className="text-[13px] font-semibold text-text">Upload data files</div>
+                <div className="text-[12px] text-text-muted">
                   Upload the files required for this workflow, then hit Continue.
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 text-[0.75rem] text-text-muted shrink-0 pt-0.5">
+              <div className="flex items-center gap-1.5 text-[12px] text-text-muted shrink-0 pt-0.5">
                 Click to {uploadOpen ? 'collapse' : 'expand'}
                 {uploadOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
@@ -1062,7 +1133,7 @@ export function BulkExecuteModal({
                       <button
                         type="button"
                         onClick={() => setUploadModeTab('upload')}
-                        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-md border text-[12.5px] font-semibold transition-colors cursor-pointer ${
                           uploadModeTab === 'upload'
                             ? 'bg-primary border-primary text-white'
                             : 'bg-white border-primary/30 text-primary hover:bg-primary/5'
@@ -1074,7 +1145,7 @@ export function BulkExecuteModal({
                       <button
                         type="button"
                         onClick={() => setUploadModeTab('existing')}
-                        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-md border text-[12.5px] font-semibold transition-colors cursor-pointer ${
                           uploadModeTab === 'existing'
                             ? 'bg-primary border-primary text-white'
                             : 'bg-white border-primary/30 text-primary hover:bg-primary/5'
@@ -1090,7 +1161,7 @@ export function BulkExecuteModal({
                             value={dsSearch}
                             onChange={e => setDsSearch(e.target.value)}
                             placeholder="Search data sources..."
-                            className="w-full pl-8 pr-3 h-9 rounded-md border border-border-light text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                            className="w-full pl-8 pr-3 h-9 rounded-md border border-border-light text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                           />
                         </div>
                       )}
@@ -1112,18 +1183,18 @@ export function BulkExecuteModal({
                           <UploadCloud size={22} className="text-primary" />
                         </div>
                         <div className="text-center">
-                          <div className="text-[0.8125rem] font-semibold text-text">Drop files here or click to upload</div>
-                          <div className="text-[0.75rem] text-text-muted mt-1">
+                          <div className="text-[13px] font-semibold text-text">Drop files here or click to upload</div>
+                          <div className="text-[12px] text-text-muted mt-1">
                             CSV, PDF, images — any data files for this workflow
                           </div>
-                          <div className="text-[0.6875rem] text-text-muted/80 mt-2">Auto-mapped to required inputs</div>
+                          <div className="text-[11px] text-text-muted/80 mt-2">Auto-mapped to required inputs</div>
                         </div>
                       </div>
                     ) : (
                       <div className="flex flex-col min-h-[220px]">
                         <div className="flex-1 overflow-y-auto pr-1">
                           {filteredDataSources.length === 0 ? (
-                            <div className="text-[0.75rem] text-text-muted text-center py-4">No data sources match.</div>
+                            <div className="text-[12px] text-text-muted text-center py-4">No data sources match.</div>
                           ) : (
                             <div className="grid grid-cols-2 gap-2">
                               {filteredDataSources.map(ds => {
@@ -1145,8 +1216,8 @@ export function BulkExecuteModal({
                                       <Database size={13} className="text-primary" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <div className="text-[0.75rem] font-semibold text-text truncate">{ds.name}</div>
-                                      <div className="text-[0.6875rem] text-text-muted truncate">
+                                      <div className="text-[12.5px] font-semibold text-text truncate">{ds.name}</div>
+                                      <div className="text-[11px] text-text-muted truncate">
                                         {ds.records} records · last sync {ds.lastSync}
                                       </div>
                                     </div>
@@ -1189,12 +1260,12 @@ export function BulkExecuteModal({
               <div className="px-4 pt-4 pb-3">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
-                    <div className="text-[0.8125rem] font-semibold text-text">Workflow Mapping</div>
-                    <div className="text-[0.75rem] text-text-muted mt-0.5">
+                    <div className="text-[13px] font-semibold text-text">Workflow Mapping</div>
+                    <div className="text-[11.5px] text-text-muted mt-0.5">
                       Auto-mapped {reviewCounts.mapped} of {reviewCounts.all} workflows. Review issues below, fix column mappings, or drop workflows from this run.
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[0.6875rem] shrink-0 pt-0.5">
+                  <div className="flex items-center gap-1.5 text-[11px] shrink-0 pt-0.5">
                     <Sparkles size={12} className="text-primary" />
                     <span className="text-primary font-medium">Auto-mapping complete</span>
                   </div>
@@ -1220,7 +1291,7 @@ export function BulkExecuteModal({
                         key={chip.key}
                         type="button"
                         onClick={() => setReviewFilter(chip.key)}
-                        className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full border text-[0.75rem] font-medium transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-full border text-[11.5px] font-medium transition-colors cursor-pointer ${
                           active
                             ? 'border-text bg-text text-white'
                             : 'border-border-light bg-white text-text-muted hover:border-border hover:text-text'
@@ -1228,7 +1299,7 @@ export function BulkExecuteModal({
                       >
                         {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />}
                         {chip.label}
-                        <span className={`font-mono text-[0.75rem] ${active ? 'opacity-70' : 'opacity-60'}`}>
+                        <span className={`font-mono text-[10.5px] ${active ? 'opacity-70' : 'opacity-60'}`}>
                           {chip.count}
                         </span>
                       </button>
@@ -1239,7 +1310,7 @@ export function BulkExecuteModal({
 
               <div className="px-4 pb-4 space-y-2">
                 {filteredReviewWorkflows.length === 0 ? (
-                  <div className="text-[0.75rem] text-text-muted text-center py-12">
+                  <div className="text-[12px] text-text-muted text-center py-12">
                     No workflows match this filter.
                   </div>
                 ) : (
@@ -1257,15 +1328,15 @@ export function BulkExecuteModal({
                         }`}
                       >
                         <div className="flex items-center gap-3 px-4 py-3">
-                          <div className="font-mono text-[0.6875rem] text-text-muted/70 w-16 shrink-0">{rw.code}</div>
+                          <div className="font-mono text-[11px] text-text-muted/70 w-16 shrink-0">{rw.code}</div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className={`text-[0.75rem] font-medium truncate ${isDropped ? 'text-text-muted line-through' : 'text-text'}`}>
+                              <span className={`text-[12.5px] font-medium truncate ${isDropped ? 'text-text-muted line-through' : 'text-text'}`}>
                                 {rw.name}
                               </span>
                               <ReviewStatusChip status={rw.status} />
                             </div>
-                            <div className="text-[0.6875rem] text-text-muted truncate">
+                            <div className="text-[11px] text-text-muted truncate">
                               {(rw.status === 'mapped' || rw.status === 'column') && rw.mappedFiles && rw.mappedFiles.length > 0 ? (
                                 <span className="font-mono">{rw.mappedFiles.join(' · ')}</span>
                               ) : rw.status === 'file' ? (
@@ -1277,7 +1348,7 @@ export function BulkExecuteModal({
                               ) : null}
                             </div>
                             {rw.status === 'sql' && (
-                              <label className="inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted cursor-pointer select-none mt-1.5">
+                              <label className="inline-flex items-center gap-1.5 text-[11.5px] text-text-muted cursor-pointer select-none mt-1.5">
                                 <input
                                   type="checkbox"
                                   checked={!!rw.sqlUseDefaults}
@@ -1350,14 +1421,14 @@ export function BulkExecuteModal({
               <div className="px-4 pt-4 pb-3">
                 <div className="flex items-center justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="text-[0.8125rem] font-semibold text-text">Workflow Mapping</div>
-                    <span className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-primary bg-primary/8 px-1.5 py-0.5 rounded-full">
+                    <div className="text-[13px] font-semibold text-text">Workflow Mapping</div>
+                    <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary bg-primary/8 px-1.5 py-0.5 rounded-full">
                       <Sparkles size={10} />
                       Auto-mapping complete
                     </span>
                   </div>
                 </div>
-                <div className="text-[0.75rem] text-text-muted mb-3">
+                <div className="text-[11.5px] text-text-muted mb-3">
                   Auto-mapped {reviewCounts.mapped} of {reviewCounts.all} · Review issues, fix mappings, or drop workflows.
                 </div>
 
@@ -1381,7 +1452,7 @@ export function BulkExecuteModal({
                         key={chip.key}
                         type="button"
                         onClick={() => setReviewFilter(chip.key)}
-                        className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full border text-[0.6875rem] font-medium transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full border text-[11px] font-medium transition-colors cursor-pointer ${
                           active
                             ? 'border-text bg-text text-white'
                             : 'border-border-light bg-white text-text-muted hover:border-border hover:text-text'
@@ -1389,7 +1460,7 @@ export function BulkExecuteModal({
                       >
                         {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />}
                         {chip.label}
-                        <span className={`font-mono text-[0.625rem] ${active ? 'opacity-70' : 'opacity-60'}`}>
+                        <span className={`font-mono text-[10px] ${active ? 'opacity-70' : 'opacity-60'}`}>
                           {chip.count}
                         </span>
                       </button>
@@ -1400,7 +1471,7 @@ export function BulkExecuteModal({
 
               <div className="px-4 pb-4">
                 {filteredReviewWorkflows.length === 0 ? (
-                  <div className="text-[0.75rem] text-text-muted text-center py-12 rounded-xl border border-border-light bg-white">
+                  <div className="text-[12px] text-text-muted text-center py-12 rounded-xl border border-border-light bg-white">
                     No workflows match this filter.
                   </div>
                 ) : (
@@ -1419,13 +1490,13 @@ export function BulkExecuteModal({
                           <div className="flex items-center gap-3 px-3.5 py-2.5">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                <span className="font-mono text-[0.75rem] text-text-muted/70 shrink-0">{rw.code}</span>
-                                <span className={`text-[0.75rem] font-medium truncate ${isDropped ? 'text-text-muted line-through' : 'text-text'}`}>
+                                <span className="font-mono text-[10.5px] text-text-muted/70 shrink-0">{rw.code}</span>
+                                <span className={`text-[12.5px] font-medium truncate ${isDropped ? 'text-text-muted line-through' : 'text-text'}`}>
                                   {rw.name}
                                 </span>
                                 <ReviewStatusChip status={rw.status} />
                               </div>
-                              <div className="text-[0.6875rem] text-text-muted truncate">
+                              <div className="text-[11px] text-text-muted truncate">
                                 {(rw.status === 'mapped' || rw.status === 'column') && rw.mappedFiles && rw.mappedFiles.length > 0 ? (
                                   <span className="font-mono">{rw.mappedFiles.join(' · ')}</span>
                                 ) : rw.status === 'file' ? (
@@ -1513,7 +1584,7 @@ export function BulkExecuteModal({
               if (step2View === 'review') setStep2View('upload');
               else setStep(1);
             }}
-            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
           >
             Back
           </button>
@@ -1527,10 +1598,10 @@ export function BulkExecuteModal({
                   });
                   return;
                 }
-                setStep2View('review');
+                handleUploadContinue();
               }}
               aria-disabled={!hasUpload}
-              className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[0.8125rem] font-semibold transition-colors ${
+              className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
                 hasUpload
                   ? 'bg-primary hover:bg-primary-hover cursor-pointer'
                   : 'bg-primary/40 cursor-not-allowed'
@@ -1543,7 +1614,7 @@ export function BulkExecuteModal({
             <button
               onClick={handleStep2Continue}
               aria-disabled={!step2CanContinue}
-              className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[0.8125rem] font-semibold transition-colors ${
+              className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
                 step2CanContinue
                   ? 'bg-primary hover:bg-primary-hover cursor-pointer'
                   : 'bg-primary/40 cursor-not-allowed'
@@ -1609,8 +1680,8 @@ function FetchingFilesLoader({ workflowCount }: { workflowCount: number }) {
           <Loader2 size={28} className="text-primary animate-spin" />
         </span>
       </div>
-      <div className="text-[0.9375rem] font-semibold text-text mb-1.5">Fetching required files</div>
-      <div className="text-[0.8125rem] text-text-secondary mb-6 text-center max-w-[380px]">
+      <div className="text-[15px] font-semibold text-text mb-1.5">Fetching required files</div>
+      <div className="text-[13px] text-text-secondary mb-6 text-center max-w-[380px]">
         Identifying the data sources and files common to your {workflowCount} selected workflow{workflowCount === 1 ? '' : 's'}.
       </div>
       <div className="w-full max-w-[360px] space-y-2">
@@ -1618,7 +1689,7 @@ function FetchingFilesLoader({ workflowCount }: { workflowCount: number }) {
           const done = i < stepIdx;
           const active = i === stepIdx;
           return (
-            <div key={s} className="flex items-center gap-2.5 text-[0.75rem]">
+            <div key={s} className="flex items-center gap-2.5 text-[12.5px]">
               <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                 done ? 'bg-primary text-white' : active ? 'bg-primary/15 text-primary' : 'bg-surface-2 text-text-muted'
               }`}>
@@ -1681,9 +1752,9 @@ function UploadedFilesPanel({
           <ChevronDown size={12} className="text-text-muted" />
         </button>
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-[0.8125rem] font-semibold text-text">Files Uploaded</span>
+          <span className="text-[13px] font-semibold text-text">Files Uploaded</span>
           {failed > 0 && (
-            <div className="flex items-center gap-1 text-[0.75rem] text-risk min-w-0">
+            <div className="flex items-center gap-1 text-[11.5px] text-risk min-w-0">
               <AlertTriangle size={12} className="shrink-0" />
               <span className="truncate">
                 {failed} of {files.length} file{files.length === 1 ? '' : 's'} failed - delete or resolve to continue
@@ -1694,7 +1765,7 @@ function UploadedFilesPanel({
         <button
           type="button"
           onClick={onUploadMore}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-white text-[0.75rem] font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-white text-[12px] font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
         >
           <Upload size={13} />
           Upload
@@ -1702,7 +1773,7 @@ function UploadedFilesPanel({
         <button
           type="button"
           onClick={onChooseExisting}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-primary/40 text-primary bg-white text-[0.75rem] font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-primary/40 text-primary bg-white text-[12px] font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
         >
           <Database size={13} />
           Choose Existing
@@ -1726,11 +1797,11 @@ function UploadedFilesPanel({
                 <Check size={11} strokeWidth={3} />
               </button>
               <div className="flex-1 min-w-0">
-                <div className="text-[0.75rem] font-semibold text-text truncate">{u.name}</div>
-                <div className="text-[0.6875rem] text-text-muted">{humanSize(u.size)}</div>
+                <div className="text-[12.5px] font-semibold text-text truncate">{u.name}</div>
+                <div className="text-[11px] text-text-muted">{humanSize(u.size)}</div>
               </div>
               {u.error && (
-                <div className="flex items-center gap-1.5 text-[0.75rem] text-risk shrink-0">
+                <div className="flex items-center gap-1.5 text-[11.5px] text-risk shrink-0">
                   <AlertTriangle size={12} />
                   <span>{u.error}</span>
                 </div>
@@ -1752,7 +1823,7 @@ function UploadedFilesPanel({
 }
 
 function ReviewStatusChip({ status }: { status: ReviewWorkflowStatus }) {
-  const base = 'inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.75rem] font-medium tracking-wide shrink-0 border';
+  const base = 'inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10.5px] font-medium tracking-wide shrink-0 border';
   switch (status) {
     case 'mapped':
       return (
@@ -1815,7 +1886,7 @@ function ReviewActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center px-2.5 h-7 rounded-md border text-[0.75rem] font-medium transition-colors cursor-pointer ${cls}`}
+      className={`inline-flex items-center px-2.5 h-7 rounded-md border text-[11.5px] font-medium transition-colors cursor-pointer ${cls}`}
     >
       {children}
     </button>
@@ -1852,18 +1923,18 @@ function ReviewColumnMapper({
     <div className="border-t border-dashed border-border-light bg-surface-2/40 px-4 py-3.5">
       <div className="flex items-start justify-between mb-3 gap-3">
         <div className="min-w-0">
-          <div className="text-[0.75rem] font-semibold text-text">Column Mapping</div>
-          <div className="text-[0.75rem] text-text-muted mt-0.5">
+          <div className="text-[11.5px] font-semibold text-text">Column Mapping</div>
+          <div className="text-[10.5px] text-text-muted mt-0.5">
             Map required schema columns to columns found in uploaded file. Fuzzy matches are auto-applied — verify or override.
           </div>
         </div>
-        <div className="text-[0.75rem] font-mono text-text-muted shrink-0">
+        <div className="text-[10.5px] font-mono text-text-muted shrink-0">
           {resolved}/{columns.length} resolved
         </div>
       </div>
 
       <div className="rounded-lg border border-border-light bg-white p-3">
-        <div className="grid grid-cols-[1fr_18px_1fr_60px] gap-3 text-[0.75rem] uppercase tracking-wider text-text-muted/80 font-semibold pb-1.5 border-b border-border-light">
+        <div className="grid grid-cols-[1fr_18px_1fr_60px] gap-3 text-[9.5px] uppercase tracking-wider text-text-muted/80 font-semibold pb-1.5 border-b border-border-light">
           <div>Required Column</div>
           <div></div>
           <div>Source Column</div>
@@ -1874,12 +1945,12 @@ function ReviewColumnMapper({
             key={`${c.required}-${idx}`}
             className="grid grid-cols-[1fr_18px_1fr_60px] gap-3 items-center py-2 border-b border-border-light/60 last:border-b-0"
           >
-            <div className="text-[0.75rem] font-mono text-text truncate">{c.required}</div>
+            <div className="text-[12px] font-mono text-text truncate">{c.required}</div>
             <ArrowRight size={12} className="text-text-muted/50" />
             <select
               value={c.matched ?? ''}
               onChange={e => onUpdate(idx, e.target.value)}
-              className={`min-w-0 px-2 h-7 rounded-md border text-[0.75rem] font-mono outline-none transition-colors cursor-pointer ${
+              className={`min-w-0 px-2 h-7 rounded-md border text-[11.5px] font-mono outline-none transition-colors cursor-pointer ${
                 c.confidence === 'missing'
                   ? 'border-risk/40 bg-risk/5 text-risk'
                   : 'border-border-light bg-white text-text focus:border-primary/40 focus:ring-2 focus:ring-primary/10'
@@ -1892,17 +1963,17 @@ function ReviewColumnMapper({
             </select>
             <div className="flex justify-end">
               {c.confidence === 'exact' && (
-                <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.75rem] font-medium bg-compliant-50 text-compliant-700 border border-compliant/25">
+                <span className="inline-flex items-center px-1.5 h-5 rounded text-[9.5px] font-medium bg-compliant-50 text-compliant-700 border border-compliant/25">
                   exact
                 </span>
               )}
               {c.confidence === 'fuzzy' && (
-                <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.75rem] font-medium bg-mitigated-50 text-mitigated-700 border border-mitigated/30">
+                <span className="inline-flex items-center px-1.5 h-5 rounded text-[9.5px] font-medium bg-mitigated-50 text-mitigated-700 border border-mitigated/30">
                   fuzzy
                 </span>
               )}
               {c.confidence === 'missing' && (
-                <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.75rem] font-medium bg-risk/10 text-risk border border-risk/30">
+                <span className="inline-flex items-center px-1.5 h-5 rounded text-[9.5px] font-medium bg-risk/10 text-risk border border-risk/30">
                   missing
                 </span>
               )}
@@ -1912,7 +1983,7 @@ function ReviewColumnMapper({
       </div>
 
       <div className="flex items-center justify-between mt-3 gap-3">
-        <div className="text-[0.75rem] flex items-center gap-1.5 min-w-0">
+        <div className="text-[10.5px] flex items-center gap-1.5 min-w-0">
           {allResolved ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-compliant" />
@@ -1931,7 +2002,7 @@ function ReviewColumnMapper({
           type="button"
           onClick={onConfirm}
           disabled={!allResolved}
-          className={`inline-flex items-center px-2.5 h-7 rounded-md border text-[0.75rem] font-medium transition-colors shrink-0 ${
+          className={`inline-flex items-center px-2.5 h-7 rounded-md border text-[11.5px] font-medium transition-colors shrink-0 ${
             allResolved
               ? 'border-primary/25 text-primary bg-white hover:bg-primary/5 cursor-pointer'
               : 'border-border-light text-text-muted/50 bg-white cursor-not-allowed'
@@ -1989,16 +2060,16 @@ function Step3ReviewExecute({
         <div className="mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-primary mb-1">Final Review</div>
-              <h3 className="text-[1rem] font-semibold text-text">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-primary mb-1">Final Review</div>
+              <h3 className="text-[16px] font-semibold text-text">
                 Ready to execute <span className="text-primary font-mono">{auditName.trim() || 'BulkRun'}</span>
               </h3>
             </div>
-            <div className="text-[0.75rem] text-text-muted shrink-0 pt-1 whitespace-nowrap">
+            <div className="text-[11.5px] text-text-muted shrink-0 pt-1 whitespace-nowrap">
               Ready · {active.length} workflow{active.length === 1 ? '' : 's'} · ~{estRuntime.toFixed(1)} min
             </div>
           </div>
-          <p className="text-[0.75rem] text-text-muted mt-1">
+          <p className="text-[12px] text-text-muted mt-1">
             Review the run summary below. Once executed, audit trail will be locked and results will be available in your engagement dashboard.
           </p>
         </div>
@@ -2015,15 +2086,15 @@ function Step3ReviewExecute({
             <FileText size={15} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[0.6875rem] font-medium text-text-muted">Final Report</div>
-            <div className="font-mono text-[0.8125rem] text-primary font-semibold truncate">{reportName}.xlsx</div>
-            <div className="text-[0.6875rem] text-text-muted mt-0.5 truncate">
+            <div className="text-[11px] font-medium text-text-muted">Final Report</div>
+            <div className="font-mono text-[13px] text-primary font-semibold truncate">{reportName}.xlsx</div>
+            <div className="text-[11px] text-text-muted mt-0.5 truncate">
               Consolidated report with per-workflow sheets · exceptions flagged · linked back to RACM controls
             </div>
           </div>
           <button
             type="button"
-            className="inline-flex items-center px-2.5 h-7 rounded-md border border-border-light bg-white text-[0.75rem] font-medium text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center px-2.5 h-7 rounded-md border border-border-light bg-white text-[11.5px] font-medium text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
           >
             Rename
           </button>
@@ -2031,7 +2102,7 @@ function Step3ReviewExecute({
 
         {overrides.length > 0 && (
           <details className="mb-4 rounded-xl overflow-hidden border border-mitigated/30 bg-mitigated-50">
-            <summary className="cursor-pointer p-3 flex items-center gap-2 text-[0.75rem] font-medium text-mitigated-700">
+            <summary className="cursor-pointer p-3 flex items-center gap-2 text-[12px] font-medium text-mitigated-700">
               <AlertTriangle size={13} />
               <span className="flex-1">
                 {overrides.length} workflow{overrides.length > 1 ? 's have' : ' has'} column overrides applied
@@ -2041,17 +2112,17 @@ function Step3ReviewExecute({
             <div className="px-3 pb-3 space-y-2 bg-white">
               {overrides.map(w => (
                 <div key={w.id} className="pt-2.5 border-t border-border-light first:border-t-0">
-                  <div className="text-[0.75rem] font-medium text-text mb-1.5">
+                  <div className="text-[12.5px] font-medium text-text mb-1.5">
                     {w.name}
-                    <span className="font-mono text-[0.75rem] text-text-muted ml-1.5">{w.code}</span>
+                    <span className="font-mono text-[10.5px] text-text-muted ml-1.5">{w.code}</span>
                   </div>
                   <div className="space-y-0.5">
                     {(w.columns ?? []).filter(c => c.confidence !== 'missing').map((c, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-[0.6875rem] font-mono">
+                      <div key={idx} className="flex items-center gap-2 text-[11px] font-mono">
                         <span className="text-text w-40 truncate">{c.required}</span>
                         <ArrowRight size={10} className="text-text-muted/60 shrink-0" />
                         <span className="text-primary truncate">{c.matched}</span>
-                        <span className={`ml-auto inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-medium border ${
+                        <span className={`ml-auto inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-medium border ${
                           c.confidence === 'fuzzy'
                             ? 'bg-mitigated-50 text-mitigated-700 border-mitigated/30'
                             : 'bg-compliant-50 text-compliant-700 border-compliant/25'
@@ -2068,21 +2139,21 @@ function Step3ReviewExecute({
         )}
 
         <div className="mb-4">
-          <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-text-muted mb-2">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-text-muted mb-2">
             Running ({active.length})
           </div>
           <div className="rounded-xl border border-border-light bg-white divide-y divide-border-light overflow-hidden">
             {active.map(w => (
               <div key={w.id} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-compliant shrink-0" />
-                <div className="font-mono text-[0.6875rem] text-text-muted/70 w-16 shrink-0">{w.code}</div>
-                <div className="flex-1 text-[0.75rem] text-text truncate">{w.name}</div>
+                <div className="font-mono text-[11px] text-text-muted/70 w-16 shrink-0">{w.code}</div>
+                <div className="flex-1 text-[12.5px] text-text truncate">{w.name}</div>
                 {w.hasOverrides && (
-                  <span className="inline-flex items-center px-1.5 h-5 rounded text-[0.75rem] font-medium bg-mitigated-50 text-mitigated-700 border border-mitigated/30 shrink-0">
+                  <span className="inline-flex items-center px-1.5 h-5 rounded text-[9.5px] font-medium bg-mitigated-50 text-mitigated-700 border border-mitigated/30 shrink-0">
                     overrides
                   </span>
                 )}
-                <div className="text-[0.6875rem] text-text-muted font-mono w-16 text-right shrink-0">~{w.runtime.toFixed(1)} min</div>
+                <div className="text-[11px] text-text-muted font-mono w-16 text-right shrink-0">~{w.runtime.toFixed(1)} min</div>
               </div>
             ))}
           </div>
@@ -2090,16 +2161,16 @@ function Step3ReviewExecute({
 
         {skipped.length > 0 && (
           <div>
-            <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-text-muted mb-2">
+            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-text-muted mb-2">
               Skipped ({skipped.length})
             </div>
             <div className="rounded-xl border border-border-light bg-surface-2/40 divide-y divide-border-light/60 overflow-hidden">
               {skipped.map(w => (
                 <div key={w.id} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-text-muted/60 shrink-0" />
-                  <div className="font-mono text-[0.6875rem] text-text-muted/70 w-16 shrink-0">{w.code}</div>
-                  <div className="flex-1 text-[0.75rem] text-text-muted line-through truncate">{w.name}</div>
-                  <div className="text-[0.6875rem] text-text-muted italic shrink-0">{skipReason(w)}</div>
+                  <div className="font-mono text-[11px] text-text-muted/70 w-16 shrink-0">{w.code}</div>
+                  <div className="flex-1 text-[12.5px] text-text-muted line-through truncate">{w.name}</div>
+                  <div className="text-[11px] text-text-muted italic shrink-0">{skipReason(w)}</div>
                 </div>
               ))}
             </div>
@@ -2111,7 +2182,7 @@ function Step3ReviewExecute({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+          className="px-4 h-9 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
         >
           Back
         </button>
@@ -2120,7 +2191,7 @@ function Step3ReviewExecute({
             type="button"
             onClick={onExecute}
             disabled={active.length === 0}
-            className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[0.8125rem] font-semibold transition-colors ${
+            className={`flex items-center gap-2 px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
               active.length > 0 ? 'bg-primary hover:bg-primary-hover cursor-pointer' : 'bg-primary/40 cursor-not-allowed'
             }`}
           >
@@ -2146,11 +2217,11 @@ function Step3StatCard({
 }) {
   return (
     <div className="rounded-xl border border-border-light bg-white p-4">
-      <div className={`font-mono text-[1.625rem] font-medium leading-none tracking-tight ${muted ? 'text-text-muted' : 'text-text'}`}>
+      <div className={`font-mono text-[26px] font-medium leading-none tracking-tight ${muted ? 'text-text-muted' : 'text-text'}`}>
         {value}
-        {suffix && <span className="text-[0.8125rem] text-text-muted ml-1 font-medium">{suffix}</span>}
+        {suffix && <span className="text-[13px] text-text-muted ml-1 font-medium">{suffix}</span>}
       </div>
-      <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted mt-2">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mt-2">{label}</div>
     </div>
   );
 }
@@ -2214,7 +2285,7 @@ function SqlConfigModal({
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <Clock size={15} className="text-primary" />
             </div>
-            <h3 className="text-[1rem] font-semibold text-text">Configuration Details</h3>
+            <h3 className="text-[16px] font-semibold text-text">Configuration Details</h3>
           </div>
           <button
             type="button"
@@ -2228,7 +2299,7 @@ function SqlConfigModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-          <div className="text-[0.75rem] text-text-muted">
+          <div className="text-[11.5px] text-text-muted">
             <span className="font-mono">{workflow.code}</span> · {workflow.name}
           </div>
           {rows.map((row, rIdx) => (
@@ -2253,7 +2324,7 @@ function SqlConfigModal({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -2261,7 +2332,7 @@ function SqlConfigModal({
             type="button"
             onClick={onSave}
             disabled={!allRequiredFilled}
-            className={`px-4 h-9 rounded-md text-white text-[0.8125rem] font-semibold transition-colors ${
+            className={`px-4 h-9 rounded-md text-white text-[13px] font-semibold transition-colors ${
               allRequiredFilled
                 ? 'bg-primary hover:bg-primary-hover cursor-pointer'
                 : 'bg-primary/40 cursor-not-allowed'
@@ -2286,7 +2357,7 @@ function SqlConfigInput({
 }) {
   return (
     <div>
-      <label className="block text-[0.75rem] font-semibold text-text mb-1.5">
+      <label className="block text-[12px] font-semibold text-text mb-1.5">
         {field.label}
         {field.required && <span className="text-risk ml-0.5">*</span>}
       </label>
@@ -2297,198 +2368,10 @@ function SqlConfigInput({
           type={field.type === 'number' ? 'number' : 'text'}
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full px-3 py-2.5 rounded-md border border-border-light text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+          className="w-full px-3 py-2.5 rounded-md border border-border-light text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
         />
       )}
     </div>
   );
 }
 
-// Custom date picker that matches the app's design tokens.
-// `value` and `onChange` use ISO format (YYYY-MM-DD) so it stays compatible with native input behavior.
-function CustomDatePicker({
-  value,
-  onChange,
-  placeholder = 'dd/mm/yyyy',
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const today = new Date();
-  const parsed = value ? new Date(value + 'T00:00:00') : null;
-  const [viewYear, setViewYear] = useState(parsed ? parsed.getFullYear() : today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(parsed ? parsed.getMonth() : today.getMonth());
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const formatDisplay = (d: Date) => {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
-  };
-  const toISO = (d: Date) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const monthName = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-  // Build 6-week grid starting Sunday
-  const firstOfMonth = new Date(viewYear, viewMonth, 1);
-  const startWeekday = firstOfMonth.getDay(); // 0=Sun
-  const gridStart = new Date(viewYear, viewMonth, 1 - startWeekday);
-  const cells: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    cells.push(d);
-  }
-
-  const goPrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear(y => y - 1);
-    } else setViewMonth(m => m - 1);
-  };
-  const goNextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear(y => y + 1);
-    } else setViewMonth(m => m + 1);
-  };
-  const selectDate = (d: Date) => {
-    onChange(toISO(d));
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
-    setOpen(false);
-  };
-  const goToday = () => {
-    setViewYear(today.getFullYear());
-    setViewMonth(today.getMonth());
-    selectDate(today);
-  };
-  const clearDate = () => {
-    onChange('');
-    setOpen(false);
-  };
-
-  const isSameDay = (a: Date, b: Date | null) =>
-    !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(p => !p)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border-light bg-white text-[0.8125rem] text-text hover:border-primary/30 focus:border-primary/40 focus:ring-2 focus:ring-primary/10 outline-none transition-all cursor-pointer"
-      >
-        <span className={parsed ? 'text-text' : 'text-text-muted/70'}>
-          {parsed ? formatDisplay(parsed) : placeholder}
-        </span>
-        <Calendar size={14} className="text-text-muted shrink-0" />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 bottom-full mb-1.5 z-30 w-[300px] rounded-lg border border-border-light bg-white shadow-lg p-3">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[0.8125rem] font-semibold text-text">{monthName}</div>
-            <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                onClick={goPrevMonth}
-                className="w-7 h-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-text-muted hover:text-text cursor-pointer transition-colors"
-                aria-label="Previous month"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={goNextMonth}
-                className="w-7 h-7 rounded-md hover:bg-surface-2 flex items-center justify-center text-text-muted hover:text-text cursor-pointer transition-colors"
-                aria-label="Next month"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-
-          {/* Weekday header */}
-          <div className="grid grid-cols-7 gap-0.5 mb-1">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i} className="h-7 flex items-center justify-center text-[0.6875rem] font-semibold text-text-muted">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Day cells */}
-          <div className="grid grid-cols-7 gap-0.5">
-            {cells.map((d, i) => {
-              const inMonth = d.getMonth() === viewMonth;
-              const isToday = isSameDay(d, today);
-              const isSelected = isSameDay(d, parsed);
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => selectDate(d)}
-                  className={`h-8 rounded-md text-[0.75rem] font-medium transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'bg-primary text-white hover:bg-primary-hover'
-                      : isToday
-                        ? 'border border-primary text-primary hover:bg-primary/5'
-                        : inMonth
-                          ? 'text-text hover:bg-surface-2'
-                          : 'text-text-muted/40 hover:bg-surface-2'
-                  }`}
-                >
-                  {d.getDate()}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-light">
-            <button
-              type="button"
-              onClick={clearDate}
-              className="text-[0.75rem] font-semibold text-primary hover:text-primary-hover cursor-pointer"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={goToday}
-              className="text-[0.75rem] font-semibold text-primary hover:text-primary-hover cursor-pointer"
-            >
-              Today
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

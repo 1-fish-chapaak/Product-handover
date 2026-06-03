@@ -8,7 +8,6 @@ import { GENERATED_REPORTS } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
-import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
@@ -35,7 +34,8 @@ import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
 import Vendor360View from './components/audit/Vendor360View';
 import EngagementCompareView from './components/audit/EngagementCompareView';
-import CaseManagementWorkspace from './components/audit/CaseManagementWorkspace';
+import { ENGAGEMENTS } from './data/engagements';
+import { exceptionsForEngagementAsGrc } from './data/engagement-exceptions';
 import ProgramsView from './components/audit/ProgramsView';
 // New pages
 import RACMView from './components/governance/RACMView';
@@ -44,6 +44,7 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/admin/PlatformUsageView';
@@ -61,6 +62,7 @@ import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPane
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
 import NotificationDrawer from './components/notifications/NotificationDrawer';
 import { createNotification, type PlatformNotification } from './data/notifications';
+import CommandPalette from './components/shared/CommandPalette';
 // V3 Configurable Engagement — dev-only preview (not wired to main flow)
 import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
 import EngagementFinalModule from './components/engagement-final/EngagementFinalModule';
@@ -118,6 +120,7 @@ function AppInner() {
     toggleChatHistory,
     setSelectedWorkflow,
     setSelectedBP,
+    addUserProcess,
     openAuditExecution,
     openEngagement,
     openCaseManagement,
@@ -129,6 +132,8 @@ function AppInner() {
     setWorkflowCanvasStage,
     setWorkflowType,
     setChatInitialQuery,
+    setChatWorkflowRunSeed,
+    openChatWithWorkflowRun,
     setChatComposerDraft,
     setQueryAssumptions,
     enterWorkflowMode,
@@ -274,6 +279,32 @@ function AppInner() {
     return () => window.removeEventListener('irame:open-report', handler);
   }, [setView]);
 
+  // Command palette (Cmd+K) navigation. The palette is a leaf component —
+  // it dispatches a CustomEvent and the shell owns routing. For 'process'
+  // selections we set the selected BP (which auto-switches the view to
+  // bp-detail). For everything else we just switch the view.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        kind: 'process' | 'racm' | 'risk' | 'control';
+        id: string;
+        view: string;
+        bpId?: string;
+      }>).detail;
+      if (!detail) return;
+      if (detail.kind === 'process' && detail.bpId) {
+        setSelectedBP(detail.bpId);
+      } else {
+        setView(detail.view as any);
+        // Pass the picked id along as a deep-link focus hint — same pattern
+        // the notification drawer uses to highlight the destination row.
+        setFocusedNotificationRefId(detail.id);
+      }
+    };
+    window.addEventListener('irame:command-palette-navigate', handler);
+    return () => window.removeEventListener('irame:command-palette-navigate', handler);
+  }, [setView, setSelectedBP, setFocusedNotificationRefId]);
+
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
     setViewLoading(true);
@@ -369,6 +400,7 @@ function AppInner() {
             setSelectedWorkflow={setSelectedWorkflow}
             openAuditExecution={openAuditExecution}
             setSelectedBP={setSelectedBP}
+            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
           />
         );
 
@@ -393,6 +425,8 @@ function AppInner() {
               setQueryAssumptions={setQueryAssumptions}
               initialQuery={state.chatInitialQuery ?? undefined}
               onInitialQueryProcessed={() => setChatInitialQuery(null)}
+              workflowRunSeed={state.chatWorkflowRunSeed}
+              onWorkflowRunSeedConsumed={() => setChatWorkflowRunSeed(null)}
               composerDraft={state.chatComposerDraft}
               onComposerDraftConsumed={() => setChatComposerDraft(null)}
               selectedChatId={state.selectedChatId}
@@ -416,6 +450,8 @@ function AppInner() {
               }}
               onDismissPendingDashboard={() => setPendingDashboard(null)}
               onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+              workflowBuilderSeedPrompt={state.workflowBuilderSeedPrompt}
+              onWorkflowBuilderSeedConsumed={() => setWorkflowBuilderSeedPrompt(null)}
               availableDashboards={[
                 ...state.createdDashboards.map(d => ({ id: d.id, name: d.name, description: d.description, accent: d.accent })),
                 ...BUILTIN_DASHBOARDS,
@@ -525,6 +561,7 @@ function AppInner() {
           <WorkflowLibraryView
             onCreateWorkflow={() => enterWorkflowMode()}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
           />
         );
 
@@ -533,6 +570,7 @@ function AppInner() {
           <WorkflowExecutor
             workflowId={state.selectedWorkflowId!}
             onBack={() => setSelectedWorkflow(null)}
+            onFollowUp={(query, seed) => openChatWithWorkflowRun(query, seed)}
             onRunComplete={(workflowId) => {
               // Phase 3 producer: push a notification when a workflow run
               // finishes. Same pattern as ShareModal.
@@ -561,6 +599,8 @@ function AppInner() {
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
+            addUserProcess={addUserProcess}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
@@ -575,6 +615,7 @@ function AppInner() {
           <BusinessProcesses
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
+            userProcesses={state.userProcesses}
             onOpenEngagement={(engId) => {
               setEngagementBackView('business-processes');
               openAuditExecution(engId);
@@ -707,10 +748,10 @@ function AppInner() {
               setView('engagement-detail' as any);
             }}
             onOpenCaseManagement={openCaseManagement}
-            onOpenRacmFullEditor={() => openRacmFullEditor({
+            onOpenRacmFullEditor={(override) => openRacmFullEditor({
               racmId: 'racm-procurement-fy26',
-              racmName: 'Procurement SOP · Budget to Payment RACM',
-              processLabel: 'P2P',
+              racmName: override?.racmName ?? 'Procurement SOP · Budget to Payment RACM',
+              processLabel: override?.processLabel ?? 'P2P',
               backView: 'engagement-overview',
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
@@ -720,18 +761,17 @@ function AppInner() {
         );
 
       case 'engagement-case-management': {
-        // Deep-link filters (set when drilled in from an Overview chart in a new tab).
-        const sp = new URLSearchParams(window.location.search);
-        const initialFilters = {
-          severity: sp.get('severity') ?? undefined,
-          workflow: sp.get('workflow') ?? undefined,
-          status: sp.get('status') ?? undefined,
-        };
+        // Engagement case management reuses the reference ManageExceptionsView,
+        // scoped to this engagement's own exceptions (adapted to GrcException).
+        const caseEngId = state.selectedEngagementId ?? '';
+        const caseEng = ENGAGEMENTS.find(e => e.id === caseEngId);
         return (
-          <CaseManagementWorkspace
-            engagementId={state.selectedEngagementId ?? ''}
+          <ManageExceptionsView
+            role={state.exceptionRole}
+            setRole={setExceptionRole}
             onBack={() => setView('engagement-overview')}
-            initialFilters={initialFilters}
+            exceptions={exceptionsForEngagementAsGrc(caseEngId)}
+            contextLabel={caseEng?.name}
           />
         );
       }
@@ -813,7 +853,7 @@ function AppInner() {
       case 'ai-concierge':
       case 'ai-concierge-forensics':
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} />;
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
 
       case 'ai-concierge-workflow-builder':
         return (
@@ -879,7 +919,7 @@ function AppInner() {
     <ToastProvider>
       <BulkRunProgressProvider>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
-        {!(LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') && (
+        {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (
           <Sidebar
             view={state.view}
             setView={setView}
@@ -1003,6 +1043,9 @@ function AppInner() {
             />
           )}
         </AnimatePresence>
+
+        {/* Global Cmd+K command palette */}
+        <CommandPalette />
       </div>
       </BulkRunProgressProvider>
     </ToastProvider>

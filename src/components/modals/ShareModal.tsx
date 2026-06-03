@@ -48,7 +48,7 @@ export default function ShareModal({ onClose, onShare }: Props) {
   }, [onClose]);
 
   const handleCopyLink = () => {
-    addToast({ type: 'success', message: 'Link copied to clipboard!' });
+    addToast({ type: 'success', message: 'Link copied to clipboard.' });
   };
 
   const addChips = (raw: string) => {

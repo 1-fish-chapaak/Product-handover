@@ -16,6 +16,9 @@ import type {
   JourneyFiles,
   JourneyAlignments,
 } from './types';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
+import { cn } from '../../lib/cn';
 
 interface Props {
   workflow: WorkflowDraft;
@@ -101,12 +104,12 @@ export default function StepMapData({
         return (
           <section
             key={input.id}
-            className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden"
+            className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden"
           >
             {/* Compact header row */}
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[0.875rem] font-semibold text-ink-900 shrink-0">
+                <span className="text-[15px] font-semibold text-ink-900 shrink-0">
                   {input.name}
                 </span>
                 <ArrowLeft size={13} className="text-ink-400 shrink-0" />
@@ -117,25 +120,25 @@ export default function StepMapData({
                     setPreviewInput({ name: input.name, files: uploaded })
                   }
                   disabled={uploaded.length === 0}
-                  className={[
-                    'text-[0.8125rem] truncate text-left transition-colors',
+                  className={cn(
+                    'text-[13px] truncate text-left transition-colors',
                     uploaded.length > 0
                       ? 'text-ink-500 hover:text-brand-700 cursor-pointer'
                       : 'text-ink-400 italic cursor-default',
-                  ].join(' ')}
+                  )}
                 >
                   {sourceName}
                 </button>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">
+                <span className="text-[12px] text-ink-400 tabular-nums whitespace-nowrap">
                   {selected.size} of {allCols.length} cols
                 </span>
                 <button
                   type="button"
                   onClick={() => toggleExpanded(input.id)}
                   aria-expanded={isOpen}
-                  className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
                 >
                   <Pencil size={12} />
                   Edit
@@ -147,7 +150,7 @@ export default function StepMapData({
             {!isOpen && (
               <div className="px-4 pb-3">
                 {selectedCols.length === 0 ? (
-                  <span className="text-[0.75rem] text-ink-400 italic">
+                  <span className="text-[12px] text-ink-400 italic">
                     No columns selected.
                   </span>
                 ) : (
@@ -155,7 +158,7 @@ export default function StepMapData({
                     {selectedCols.map((col) => (
                       <span
                         key={col}
-                        className="inline-flex items-center rounded-lg bg-brand-50 border border-brand-100 px-2.5 py-1 text-[0.75rem] text-ink-800 font-medium"
+                        className="inline-flex items-center rounded-lg bg-brand-50 border border-brand-100 px-2.5 py-1 text-[12px] text-ink-800 font-medium"
                       >
                         {col}
                       </span>
@@ -169,20 +172,20 @@ export default function StepMapData({
             {isOpen && (
               <div className="border-t border-canvas-border/60 px-4 py-3">
                 {allCols.length === 0 ? (
-                  <div className="text-[0.75rem] text-ink-400">
+                  <div className="text-[12px] text-ink-400">
                     No columns detected for {input.name}.
                   </div>
                 ) : (
                   <>
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[0.75rem] font-bold uppercase tracking-[0.14em] text-ink-400">
+                      <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">
                         Select columns to use
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => selectAll(input.id, allCols)}
-                          className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer px-1 py-0.5 transition-colors"
+                          className="text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer px-1 py-0.5 transition-colors"
                         >
                           Select all
                         </button>
@@ -190,7 +193,7 @@ export default function StepMapData({
                         <button
                           type="button"
                           onClick={() => deselectAll(input.id)}
-                          className="text-[0.75rem] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer px-1 py-0.5 transition-colors"
+                          className="text-[12px] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer px-1 py-0.5 transition-colors"
                         >
                           Deselect all
                         </button>
@@ -200,9 +203,10 @@ export default function StepMapData({
                     <div className="relative mb-2.5">
                       <Search
                         size={12}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 z-10"
                       />
-                      <input
+                      <Input
+                        sizeVariant="sm"
                         type="text"
                         value={search}
                         onChange={(e) =>
@@ -212,13 +216,13 @@ export default function StepMapData({
                           }))
                         }
                         placeholder="Type to filter columns…"
-                        className="w-full rounded-full border border-canvas-border bg-canvas pl-8 pr-3 py-2 text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/15 focus:border-brand-400/50 transition-all"
+                        className="rounded-full pl-8"
                       />
                     </div>
 
                     {filteredCols.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[0.75rem] text-ink-400">
-                        No columns match “{search}”.
+                      <div className="rounded-lg border border-dashed border-canvas-border px-3 py-4 text-center text-[12px] text-ink-400">
+                        No columns match &ldquo;{search}&rdquo;.
                       </div>
                     ) : (
                       <ul className="grid grid-cols-2 gap-1.5">
@@ -230,26 +234,26 @@ export default function StepMapData({
                                 type="button"
                                 onClick={() => toggleColumn(input.id, col)}
                                 aria-pressed={isSelected}
-                                className={[
+                                className={cn(
                                   'w-full flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-left transition-colors cursor-pointer',
                                   isSelected
                                     ? 'border-brand-400 bg-brand-50/60'
                                     : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30',
-                                ].join(' ')}
+                                )}
                               >
                                 <span
-                                  className={[
+                                  className={cn(
                                     'w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors',
                                     isSelected
                                       ? 'bg-brand-600 text-white'
                                       : 'border border-canvas-border bg-canvas',
-                                  ].join(' ')}
+                                  )}
                                 >
                                   {isSelected && (
                                     <Check size={12} strokeWidth={3} />
                                   )}
                                 </span>
-                                <span className="flex-1 text-[0.8125rem] font-medium text-ink-800 truncate">
+                                <span className="flex-1 text-[13px] font-medium text-ink-800 truncate">
                                   {col}
                                 </span>
                               </button>
@@ -268,26 +272,26 @@ export default function StepMapData({
 
       <div className="flex items-center justify-between gap-2">
         {onConfirm ? (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onConfirm}
             disabled={confirmDisabled}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+            leadingIcon={<ShieldCheck size={13} />}
           >
-            <ShieldCheck size={13} />
-            Confirm & Proceed
-          </button>
+            Confirm &amp; Proceed
+          </Button>
         ) : (
           <span />
         )}
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => onViewWorkspace?.()}
-          className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 px-3 py-1.5 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
+          leadingIcon={<Shapes size={13} />}
         >
-          <Shapes size={13} />
           View Workspace
-        </button>
+        </Button>
       </div>
 
       {/* Preview modal */}
@@ -325,43 +329,44 @@ function DataPreviewModal({
 }) {
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: 'rgba(15, 8, 30, 0.5)' }}
       onClick={onClose}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-[680px] max-h-[80vh] bg-canvas-elevated rounded-2xl shadow-2xl border border-canvas-border overflow-hidden"
+        className="relative w-[680px] max-h-[80vh] bg-canvas-elevated rounded-xl border border-canvas-border overflow-hidden shadow-[0_18px_48px_-18px_rgba(15,8,30,0.25)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-canvas-border">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
               <FileIcon size={16} className="text-brand-600" />
             </div>
             <div>
-              <div className="text-[0.875rem] font-bold text-ink-900">{schemaName}</div>
-              <div className="text-[0.75rem] text-ink-400">{fileName}</div>
+              <div className="text-[15px] font-semibold text-ink-900">{schemaName}</div>
+              <div className="text-[12px] text-ink-400 font-mono">{fileName}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
         <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-[0.75rem]">
+          <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-canvas-border bg-canvas/60">
                 {PREVIEW_COLUMNS.map((col) => (
                   <th
                     key={col}
-                    className="px-4 py-2.5 text-left text-[0.625rem] font-bold uppercase tracking-[0.1em] text-ink-400"
+                    className="px-4 py-2.5 text-left text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-400"
                   >
                     {col}
                   </th>
@@ -384,14 +389,10 @@ function DataPreviewModal({
         </div>
 
         <div className="flex items-center justify-between px-6 py-3 border-t border-canvas-border">
-          <span className="text-[0.6875rem] text-ink-400">Previewing first 5 entries</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold px-4 py-2 transition-colors cursor-pointer"
-          >
+          <span className="text-[12px] text-ink-400">Previewing first 5 entries</span>
+          <Button variant="primary" size="sm" onClick={onClose}>
             Close Preview
-          </button>
+          </Button>
         </div>
       </motion.div>
     </div>,

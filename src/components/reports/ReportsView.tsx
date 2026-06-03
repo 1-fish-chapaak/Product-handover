@@ -8,10 +8,14 @@ import {
   Sparkles, Settings, Palette, Type,
   Image, Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
-  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink, Copy,
+  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
-  Star, Layers, Check, CloudUpload, RefreshCw,
+  Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
 } from 'lucide-react';
+import EmptyState from '../shared/EmptyState';
+import { SkeletonRow } from '../shared/Skeleton';
+import { ChromaGrid, handleChromaCardMove } from './ChromaGrid';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
@@ -27,6 +31,15 @@ import { KpiCountUp } from '../shared/KpiTile';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
+import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
+import AddObservationModal, {
+  computeNextObservationId,
+  isImageMime,
+  formatFileSize,
+  attachmentVisual,
+  type EditingObservationInput,
+  type ObservationAttachment,
+} from './AddObservationModal';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -50,42 +63,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Executive: 'text-indigo-600 bg-indigo-50',
 };
 
-// Observation attachments — auditors evidence files. Any number, any
-// type (image/pdf/csv/xlsx/doc/docx). Stored as base64 data URLs so the
-// preview/lightbox doesn't depend on any backend.
-type ObservationAttachment = {
-  id: string;
-  name: string;
-  size: number;
-  mimeType: string;
-  dataUrl: string;
-};
-
-const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
-const ATTACHMENT_ACCEPT =
-  'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-function isImageMime(mime: string): boolean {
-  return mime.startsWith('image/');
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Maps mime type → { Icon, tint } for the chip rendering. Falls back to a
-// generic paperclip so an unrecognized but otherwise-valid mime still
-// renders something coherent.
-function attachmentVisual(mime: string): { Icon: React.ElementType; tone: string } {
-  if (mime === 'application/pdf') return { Icon: FileText, tone: 'text-risk-700' };
-  if (mime === 'text/csv' || mime.includes('spreadsheet') || mime === 'application/vnd.ms-excel')
-    return { Icon: FileSpreadsheet, tone: 'text-compliant-700' };
-  if (mime === 'application/msword' || mime.includes('wordprocessing'))
-    return { Icon: FileText, tone: 'text-evidence-700' };
-  return { Icon: Paperclip, tone: 'text-text-muted' };
-}
+// Observation attachment type + helpers live in AddObservationModal.
 
 // Report tag chip — maps the freeform tag string to the GRC semantic
 // palette instead of one-off hex pairs. Keeps the colour vocabulary the
@@ -95,7 +73,7 @@ function reportTagChip(tag: string): { classes: string; label: string } {
     return { classes: 'bg-evidence-50 text-evidence-700', label: tag };
   }
   if (tag === 'Bulk Audit') {
-    return { classes: 'bg-mitigated-50 text-mitigated-700', label: tag };
+    return { classes: 'bg-brand-50 text-brand-700', label: tag };
   }
   return { classes: 'bg-paper-100 text-ink-600', label: tag };
 }
@@ -131,9 +109,8 @@ export type WorkflowResult = {
   failureReason?: 'errored' | 'skipped';
 };
 
-// Four design treatments for the bulk audit report detail page, exposed as
-// side-by-side demos in My Reports so we can compare against the default.
-export type BulkAuditAestheticVariant = 'editorial' | 'forensic' | 'minimal' | 'architectural';
+// The bulk audit report detail page renders in a single editorial treatment.
+export type BulkAuditAestheticVariant = 'editorial';
 
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isEmpty?: boolean;
@@ -141,13 +118,17 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   description?: string;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
+  /** Explicit override for read-only state (Shared with me, archived). */
+  isReadOnly?: boolean;
+  /** Display name of the user who shared the report — surfaces in the chip. */
+  sharedByName?: string;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
 export const CUSTOM_TEMPLATES = [
   {
     id: 'ct-custom-01',
-    name: 'Custom Template - 01',
+    name: 'Third-Party Vendor Risk Scorecard',
     desc: 'Custom scorecard for third-party vendors with risk tiers, control gaps, and remediation SLAs.',
     category: 'Risk',
     icon: 'alert-triangle',
@@ -160,7 +141,7 @@ export const CUSTOM_TEMPLATES = [
   },
   {
     id: 'ct-custom-02',
-    name: 'Custom Template - 02',
+    name: 'Quarterly Audit Snapshot',
     desc: 'One-page executive snapshot of quarterly audit findings and status.',
     category: 'Audit',
     icon: 'file-text',
@@ -282,7 +263,7 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
         onClick={() => scroll('left')}
         disabled={!canScrollLeft}
         aria-label="Scroll left"
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer"
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronLeft size={16} />
       </button>
@@ -293,12 +274,19 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
       >
         {children}
       </div>
+      {/* Right-edge fade — only when more content sits past the viewport. */}
+      {canScrollRight && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 bottom-3 w-12 bg-gradient-to-l from-white to-transparent"
+        />
+      )}
       <button
         type="button"
         onClick={() => scroll('right')}
         disabled={!canScrollRight}
         aria-label="Scroll right"
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:opacity-0 disabled:pointer-events-none transition-all cursor-pointer"
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-9 h-9 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-text hover:bg-surface-2 hover:border-primary/40 disabled:invisible disabled:pointer-events-none transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <ChevronRight size={16} />
       </button>
@@ -311,6 +299,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
   const { addToast } = useToast();
   const [step, setStep] = useState<'upload' | 'selected' | 'converting' | 'converted'>('upload');
   const [templateName, setTemplateName] = useState('SOX Report Template');
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const DETECTED_SECTIONS = [
     'Executive Summary', 'Findings', 'Risk Assessment',
@@ -328,22 +318,23 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Upload Template"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><Upload size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><Upload size={16} /></div>
             <div>
-              <h3 className="text-[0.9375rem] font-semibold text-text">Upload Template</h3>
-              <p className="text-[0.6875rem] text-text-muted">Convert a document into a report template</p>
+              <h3 className="text-[15px] font-semibold text-text">Upload Template</h3>
+              <p className="text-[11px] text-text-muted">Convert a document into a report template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -352,14 +343,14 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <button
                 onClick={() => setStep('selected')}
-                className="w-full border-2 border-dashed border-border-light hover:border-primary/40 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-primary/[0.02] cursor-pointer group"
+                className="w-full border-2 border-dashed border-border-light hover:border-primary/40 rounded-[12px] p-10 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-primary/[0.02] cursor-pointer group"
               >
-                <div className="p-3 bg-primary/5 rounded-2xl group-hover:bg-primary/10 transition-colors">
-                  <Upload size={28} className="text-primary/50 group-hover:text-primary transition-colors" />
+                <div className="p-3 bg-primary/5 rounded-[8px] group-hover:bg-primary/10 transition-colors">
+                  <Upload size={32} className="text-primary/50 group-hover:text-primary transition-colors" />
                 </div>
                 <div className="text-center">
-                  <p className="text-[0.8125rem] font-medium text-text">Drop your template file here or click to browse</p>
-                  <p className="text-[0.6875rem] text-text-muted mt-1">Supports .docx, .pdf, .xlsx</p>
+                  <p className="text-[13px] font-medium text-text">Drop your template file here or click to browse</p>
+                  <p className="text-[11px] text-text-muted mt-1">Supports .docx, .pdf, .xlsx</p>
                 </div>
               </button>
             </motion.div>
@@ -368,17 +359,17 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           {/* File Selected */}
           {step === 'selected' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-xl">
-                <div className="p-2 bg-primary/10 rounded-lg"><FileText size={18} className="text-primary" /></div>
+              <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-[12px]">
+                <div className="p-2 bg-primary/10 rounded-[8px]"><FileText size={20} className="text-primary" /></div>
                 <div className="flex-1">
-                  <p className="text-[0.8125rem] font-semibold text-text">SOX_Report_Template.docx</p>
-                  <p className="text-[0.6875rem] text-text-muted">2.4 MB</p>
+                  <p className="text-[13px] font-semibold text-text">SOX_Report_Template.docx</p>
+                  <p className="text-[11px] text-text-muted">2.4 MB</p>
                 </div>
-                <CheckCircle2 size={18} className="text-compliant-700" />
+                <CheckCircle2 size={20} className="text-compliant-700" />
               </div>
               <button
                 onClick={() => setStep('converting')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer" style={{ borderRadius: '8px' }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-all cursor-pointer rounded-[8px]"
               >
                 <Sparkles size={14} /> Convert to Template
               </button>
@@ -395,8 +386,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                 <Sparkles size={32} className="text-primary" />
               </motion.div>
               <div className="text-center">
-                <p className="text-[0.875rem] font-semibold text-text">Analyzing document structure...</p>
-                <p className="text-[0.6875rem] text-text-muted mt-1">Detecting sections, headers, and formatting</p>
+                <p className="text-[14px] font-semibold text-text">Analyzing document structure...</p>
+                <p className="text-[11px] text-text-muted mt-1">Detecting sections, headers, and formatting</p>
               </div>
               <div className="w-48 h-1.5 bg-surface-2 rounded-full overflow-hidden">
                 <motion.div
@@ -412,16 +403,16 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           {/* Conversion Complete */}
           {step === 'converted' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-              <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-xl">
+              <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-[12px]">
                 <CheckCircle2 size={20} className="text-compliant-700" />
                 <div>
-                  <p className="text-[0.8125rem] font-semibold text-primary">Template converted!</p>
-                  <p className="text-[0.6875rem] text-primary/70">6 sections detected</p>
+                  <p className="text-[13px] font-semibold text-primary">Template converted!</p>
+                  <p className="text-[11px] text-primary/70">6 sections detected</p>
                 </div>
               </div>
 
               <div>
-                <label className="text-[0.75rem] font-semibold text-text mb-2 block">Detected Sections</label>
+                <label className="text-[12px] font-semibold text-text mb-2 block">Detected Sections</label>
                 <div className="space-y-1.5">
                   {DETECTED_SECTIONS.map((section, i) => (
                     <motion.div
@@ -429,21 +420,21 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.08 }}
-                      className="flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-lg"
+                      className="flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-[8px]"
                     >
-                      <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[0.625rem] font-bold">{i + 1}</div>
-                      <span className="text-[0.75rem] text-text font-medium">{section}</span>
+                      <div className="w-5 h-5 rounded-[8px] bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">{i + 1}</div>
+                      <span className="text-[12px] text-text font-medium">{section}</span>
                     </motion.div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="text-[0.75rem] font-semibold text-text mb-2 block">Template Name</label>
+                <label className="text-[12px] font-semibold text-text mb-2 block">Template Name</label>
                 <input
                   value={templateName}
                   onChange={e => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" style={{ borderRadius: '8px' }}
+                  className="w-full px-3 py-2.5 border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 rounded-[8px]"
                 />
               </div>
             </motion.div>
@@ -452,10 +443,10 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 
         {step === 'converted' && (
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-[0.75rem] font-medium text-text-secondary border border-border hover:bg-paper-50 transition-colors cursor-pointer" style={{ borderRadius: '8px' }}>Cancel</button>
+            <button onClick={onClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
             <button
-              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library!` }); onClose(); }}
-              className="px-5 py-2 bg-primary text-white text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer rounded-[8px]"
             >
               Save Template
             </button>
@@ -470,34 +461,37 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
 function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: typeof REPORT_TEMPLATES[0]; onClose: () => void; onEdit: () => void; onUse: () => void }) {
   const Icon = ICON_MAP[template.icon] || FileText;
   const color = CATEGORY_COLORS[template.category] || 'text-ink-500 bg-paper-50';
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Template Preview"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-xl ${color}`}><Icon size={16} /></div>
+            <div className={`p-2 rounded-[8px] ${color}`}><Icon size={16} /></div>
             <div>
-              <h3 className="text-[0.9375rem] font-semibold text-text">{template.name}</h3>
-              <p className="text-[0.6875rem] text-text-muted">{template.category} template</p>
+              <h3 className="text-[15px] font-semibold text-text">{template.name}</h3>
+              <p className="text-[11px] text-text-muted">{template.category} template</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <p className="text-[0.75rem] text-text-secondary leading-relaxed">{template.desc}</p>
+          <p className="text-[12px] text-text-secondary leading-relaxed">{template.desc}</p>
 
           <div>
-            <label className="text-[0.75rem] font-semibold text-text mb-3 block">Template Structure</label>
+            <label className="text-[12px] font-semibold text-text mb-3 block">Template Structure</label>
             <div className="space-y-2">
               {(template.sections || []).map((section, i) => {
                 const SectionIcon = SECTION_ICONS[section.icon] || FileText;
@@ -507,13 +501,13 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.06 }}
-                    className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-xl hover:bg-primary/[0.03] transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-[12px] hover:bg-primary/[0.03] transition-colors"
                   >
-                    <div className="p-1.5 rounded-lg bg-white border border-border-light shadow-sm">
+                    <div className="p-1.5 rounded-[8px] bg-white border border-border-light shadow-sm">
                       <SectionIcon size={14} className="text-primary" />
                     </div>
-                    <span className="text-[0.8125rem] text-text font-medium">{section.name}</span>
-                    <span className="ml-auto text-[0.625rem] text-text-muted font-medium">Section {i + 1}</span>
+                    <span className="text-[13px] text-text font-medium">{section.name}</span>
+                    <span className="ml-auto text-[10px] text-text-muted font-medium">Section {i + 1}</span>
                   </motion.div>
                 );
               })}
@@ -524,13 +518,13 @@ function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: 
         <div className="px-6 py-4 border-t border-border-light flex justify-between shrink-0">
           <button
             onClick={() => { onClose(); onEdit(); }}
-            className="flex items-center gap-1.5 px-4 py-2 text-[0.75rem] font-medium text-text-secondary border border-border-light hover:border-primary/30 hover:bg-primary-xlight rounded-lg transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"
           >
             <Edit3 size={12} /> Edit Template
           </button>
           <button
             onClick={onUse}
-            className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-xl text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             <Sparkles size={12} /> Use This Template
           </button>
@@ -558,6 +552,8 @@ function ChooseReportModal({
 }) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const filtered = reports.filter(r => r.name.toLowerCase().includes(search.trim().toLowerCase()));
   const selected = reports.find(r => r.id === selectedId) || null;
@@ -566,42 +562,43 @@ function ChooseReportModal({
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Choose Report"
-        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[85vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[85vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><PackageOpen size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><PackageOpen size={16} /></div>
             <div>
-              <h3 className="text-[0.9375rem] font-semibold text-text">Choose Report</h3>
-              <p className="text-[0.75rem] text-text-muted">Select an existing report or create a new report</p>
+              <h3 className="text-[15px] font-semibold text-text">Choose Report</h3>
+              <p className="text-[12px] text-text-muted">Select an existing report or create a new report</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* Search */}
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border-light focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-[8px] border border-border-light focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
             <Search size={14} className="text-text-muted shrink-0" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search Report"
-              className="flex-1 bg-transparent text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none"
+              className="flex-1 bg-transparent text-[13px] text-text placeholder:text-text-muted focus:outline-none"
             />
           </div>
 
           {/* Report list */}
           <div className="space-y-2">
             {filtered.length === 0 && (
-              <div className="px-3 py-6 text-center text-[0.75rem] text-text-muted">No reports match your search</div>
+              <div className="px-3 py-6 text-center text-[12px] text-text-muted">No reports match your search</div>
             )}
             {filtered.map(r => {
               const isSelected = selectedId === r.id;
@@ -609,7 +606,7 @@ function ChooseReportModal({
                 <button
                   key={r.id}
                   onClick={() => setSelectedId(r.id)}
-                  className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
+                  className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-[12px] border transition-colors cursor-pointer ${
                     isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border-light hover:border-primary/30 hover:bg-surface-2'
                   }`}
                 >
@@ -620,10 +617,10 @@ function ChooseReportModal({
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[0.8125rem] font-semibold text-text truncate">{r.name}</span>
-                      <span className="text-[0.6875rem] text-text-muted shrink-0">{r.generatedAt}</span>
+                      <span className="text-[13px] font-semibold text-text truncate">{r.name}</span>
+                      <span className="text-[11px] text-text-muted shrink-0">{r.generatedAt}</span>
                     </div>
-                    <div className="text-[0.6875rem] text-text-muted truncate mt-0.5">{r.tag}</div>
+                    <div className="text-[11px] text-text-muted truncate mt-0.5">{r.tag}</div>
                   </div>
                 </button>
               );
@@ -633,7 +630,7 @@ function ChooseReportModal({
           {/* Add New Report */}
           <button
             onClick={onAddNew}
-            className="w-full px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+            className="w-full px-4 py-3 rounded-[8px] bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
           >
             + Add New Report
           </button>
@@ -643,14 +640,14 @@ function ChooseReportModal({
         <div className="px-6 py-4 border-t border-border-light flex items-center gap-3 shrink-0">
           <button
             onClick={onCancel}
-            className="flex-1 px-5 py-2.5 rounded-lg border border-border-light text-text-secondary text-[0.8125rem] font-semibold hover:bg-paper-50 hover:text-text transition-colors cursor-pointer"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-border-light text-text bg-white text-[13px] font-semibold hover:bg-paper-50 transition-colors cursor-pointer"
           >
             Back
           </button>
           <button
             onClick={() => { if (selected) onContinue(selected); }}
             disabled={!selected}
-            className="flex-1 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
             title={`Apply "${template.name}"`}
           >
             Continue
@@ -668,10 +665,10 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-xl shadow-xl border border-border-light z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-border-light z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-light">
-        <span className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
+        <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
         {REPORT_TEMPLATES.map(rt => {
@@ -680,14 +677,14 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
             <button
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
+              className="w-full text-left px-3 py-2.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
             >
-              <div className={`p-1.5 rounded-md ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[0.75rem] font-medium text-text truncate">{rt.name}</div>
-                <div className="text-[0.625rem] text-text-muted">{rt.category}</div>
+                <div className="text-[12px] font-medium text-text truncate">{rt.name}</div>
+                <div className="text-[10px] text-text-muted">{rt.category}</div>
               </div>
             </button>
           );
@@ -714,7 +711,7 @@ function TemplateSectionRow({
       value={section}
       dragListener={false}
       dragControls={controls}
-      className="group flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-lg"
+      className="group flex items-center gap-2.5 px-3 py-2 bg-surface-2 rounded-[8px]"
     >
       <button
         onPointerDown={(e) => controls.start(e)}
@@ -723,11 +720,11 @@ function TemplateSectionRow({
       >
         <GripVertical size={12} />
       </button>
-      <div className="p-1 rounded-md bg-white border border-border-light shadow-sm">
+      <div className="p-1 rounded-[8px] bg-white border border-border-light shadow-sm">
         <SectionIcon size={12} className="text-primary" />
       </div>
-      <span className="text-[0.75rem] text-text font-medium">{section.name}</span>
-      <span className="ml-auto text-[0.625rem] text-text-muted font-medium">Section {index + 1}</span>
+      <span className="text-[12px] text-text font-medium">{section.name}</span>
+      <span className="ml-auto text-[10px] text-text-muted font-medium">Section {index + 1}</span>
       <button
         onClick={onDelete}
         aria-label={`Delete ${section.name}`}
@@ -747,52 +744,159 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
   const [headerText, setHeaderText] = useState('Confidential — For Internal Use Only');
   const [footerText, setFooterText] = useState('Generated by Auditify Copilot');
   const [sections, setSections] = useState(template.sections || []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<{ field: 'copyName' | 'brand' | 'sections'; label: string }[]>([]);
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+
+  const copyNameRef = useRef<HTMLInputElement>(null);
+  const brandRef = useRef<HTMLInputElement>(null);
+  const sectionsRef = useRef<HTMLDivElement>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Initial state captured at mount for dirty-detection.
+  const initialRef = useRef({
+    copyName: `Copy of ${template.name}`,
+    brand: 'Auditify',
+    theme: 'Purple & White',
+    headerText: 'Confidential — For Internal Use Only',
+    footerText: 'Generated by Auditify Copilot',
+    sections: template.sections || [],
+  });
+  const isDirty =
+    (isCopy && copyName !== initialRef.current.copyName) ||
+    brand !== initialRef.current.brand ||
+    theme !== initialRef.current.theme ||
+    headerText !== initialRef.current.headerText ||
+    footerText !== initialRef.current.footerText ||
+    sections !== initialRef.current.sections;
+
+  const attemptClose = () => {
+    if (isDirty && !isSaving) {
+      setShowAbandonConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+  useFocusTrap(containerRef, true, attemptClose);
+
+  const fieldRefs: Record<string, React.RefObject<HTMLElement | null>> = {
+    copyName: copyNameRef,
+    brand: brandRef,
+    sections: sectionsRef,
+  };
+
+  const handleSave = () => {
+    // Required-field validation: brand is always required; copyName is
+    // required in the Copy flow; sections must be non-empty.
+    const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
+    if (isCopy && !copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
+    if (!brand.trim()) next.push({ field: 'brand', label: 'Brand Name' });
+    if (!sections || sections.length === 0) next.push({ field: 'sections', label: 'At least one section' });
+    if (next.length > 0) {
+      setErrors(next);
+      const first = fieldRefs[next[0].field]?.current;
+      first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      first?.focus?.();
+      return;
+    }
+    setErrors([]);
+    setIsSaving(true);
+    // Simulate an async save so the spinner is observable.
+    window.setTimeout(() => {
+      if (isCopy && onSaveCopy) {
+        const finalName = copyName.trim() || `Copy of ${template.name}`;
+        if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
+          setIsSaving(false);
+          addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
+          return;
+        }
+        onSaveCopy({
+          ...template,
+          id: `ct-copy-${Date.now()}`,
+          name: finalName,
+          sections,
+        });
+        addToast({ type: 'success', message: 'Copy saved to Custom Templates.' });
+      } else {
+        addToast({ type: 'success', message: 'Template saved.' });
+      }
+      setIsSaving(false);
+      onClose();
+    }, 320);
+  };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={attemptClose}>
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Edit Template"
-        className="relative bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl"><Settings size={16} /></div>
+            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><Settings size={16} /></div>
             <div>
-              <h3 className="text-[0.9375rem] font-semibold text-text">Edit Template</h3>
-              <p className="text-[0.6875rem] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
+              <h3 className="text-[15px] font-semibold text-text">Edit Template</h3>
+              <p className="text-[11px] text-text-muted">{isCopy ? `Copy of ${template.name}` : template.name}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+          <button onClick={attemptClose} aria-label="Close" className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} className="text-text-muted" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {errors.length > 0 && (
+            <div
+              role="alert"
+              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
+            >
+              <div className="font-semibold mb-1">Please complete the following before saving:</div>
+              <ul className="space-y-0.5">
+                {errors.map(err => (
+                  <li key={err.field}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = fieldRefs[err.field]?.current;
+                        el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        el?.focus?.();
+                      }}
+                      className="underline hover:text-risk-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                    >
+                      {err.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* Template Name (Copy flow) + Brand */}
           {isCopy ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><FileText size={13} /> Template Name</label>
-                <input value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={14} /> Template Name</label>
+                <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
               <div>
-                <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-                <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={14} /> Brand Name</label>
+                <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
               </div>
             </div>
           ) : (
             <div>
-              <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Image size={13} /> Brand Name</label>
-              <input value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+              <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Image size={14} /> Brand Name</label>
+              <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
             </div>
           )}
 
           {/* Theme */}
           <div>
-            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Palette size={13} /> Color Theme</label>
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Palette size={14} /> Color Theme</label>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { name: 'Purple & White', colors: ['#6a12cd', '#f8f9fc'] },
@@ -800,11 +904,11 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                 { name: 'Teal & Light', colors: ['#0d9488', '#f0fdfa'] },
                 { name: 'Slate & Blue', colors: ['#334155', '#3b82f6'] },
               ].map(t => (
-                <button key={t.name} onClick={() => setTheme(t.name)} className={`p-2.5 rounded-lg border-2 text-center transition-all cursor-pointer ${theme === t.name ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
+                <button key={t.name} onClick={() => setTheme(t.name)} className={`p-2.5 rounded-[12px] border-2 text-center transition-all cursor-pointer ${theme === t.name ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'}`}>
                   <div className="flex gap-1 justify-center mb-1.5">
                     {t.colors.map((c, i) => <div key={i} className="w-5 h-5 rounded-full border border-white shadow-sm" style={{ background: c }} />)}
                   </div>
-                  <span className="text-[0.5625rem] font-medium text-text">{t.name}</span>
+                  <span className="text-[9px] font-medium text-text">{t.name}</span>
                 </button>
               ))}
             </div>
@@ -812,25 +916,25 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
 
           {/* Header */}
           <div>
-            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Type size={13} /> Header Text</label>
-            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Type size={14} /> Header Text</label>
+            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Footer */}
           <div>
-            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><Layout size={13} /> Footer Text</label>
-            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><Layout size={14} /> Footer Text</label>
+            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
 
           {/* Page Layout Preview */}
-          <div>
-            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-text mb-2"><FileText size={13} /> Page Layout Preview</label>
-            <div className="border border-border-light rounded-xl p-4 bg-surface-2">
-              <div className="bg-white rounded-lg shadow-sm border border-border-light overflow-hidden flex flex-col">
+          <div ref={sectionsRef} tabIndex={-1}>
+            <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2"><FileText size={14} /> Page Layout Preview</label>
+            <div className="border border-border-light rounded-[12px] p-4 bg-surface-2">
+              <div className="bg-white rounded-[12px] shadow-sm border border-border-light overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="px-4 py-2.5 bg-primary/5 flex items-center justify-between">
-                  <span className="text-[0.6875rem] font-bold text-primary">{brand}</span>
-                  <span className="text-[0.625rem] text-text-muted">{headerText}</span>
+                  <span className="text-[11px] font-bold text-primary">{brand}</span>
+                  <span className="text-[10px] text-text-muted">{headerText}</span>
                 </div>
                 {/* Section list */}
                 <Reorder.Group axis="y" values={sections} onReorder={setSections} className="p-3 space-y-1.5 flex-1">
@@ -845,7 +949,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                 </Reorder.Group>
                 {/* Footer */}
                 <div className="px-4 py-2 bg-surface-2 flex items-center justify-center border-t border-border-light">
-                  <span className="text-[0.625rem] text-text-muted">{footerText}</span>
+                  <span className="text-[10px] text-text-muted">{footerText}</span>
                 </div>
               </div>
             </div>
@@ -853,31 +957,30 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         </div>
 
         <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-[0.75rem] font-medium text-text-secondary hover:bg-paper-50 rounded-lg transition-colors cursor-pointer">Cancel</button>
           <button
-            onClick={() => {
-              if (isCopy && onSaveCopy) {
-                const finalName = copyName.trim() || `Copy of ${template.name}`;
-                if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
-                  addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
-                  return;
-                }
-                onSaveCopy({
-                  ...template,
-                  id: `ct-copy-${Date.now()}`,
-                  name: finalName,
-                  sections,
-                });
-                addToast({ type: 'success', message: 'Copy saved to Custom Templates!' });
-              } else {
-                addToast({ type: 'success', message: 'Template saved!' });
-              }
-              onClose();
-            }}
-            className="px-5 py-2 bg-primary text-white rounded-xl text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
-          >{isCopy ? 'Save Copy' : 'Save Template'}</button>
+            onClick={attemptClose}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          >Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          >
+            {isSaving && <Loader2 size={12} className="animate-spin" />}
+            {isSaving ? 'Saving…' : isCopy ? 'Save Copy' : 'Save Template'}
+          </button>
         </div>
       </motion.div>
+      <ConfirmDialog
+        open={showAbandonConfirm}
+        onClose={() => setShowAbandonConfirm(false)}
+        onConfirm={() => { setShowAbandonConfirm(false); onClose(); }}
+        title="Discard changes?"
+        description={<>You have unsaved changes to this template. Closing now will discard them.</>}
+        confirmLabel="Discard"
+        destructive
+      />
     </motion.div>
   );
 }
@@ -906,24 +1009,24 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
         {/* Section nav */}
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Executive Summary */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
-          <p className="text-[0.75rem] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
+          <p className="text-[12px] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
         </div>
         {/* Control Testing Results — Excel-style */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light flex items-center justify-between">
-            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
-            <span className="text-[0.625rem] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
+            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
+            <span className="text-[10px] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[0.6875rem]">
+            <table className="w-full text-[11px]">
               <thead>
                 <tr className="bg-paper-50 border-b border-border-light">
                   {['Control ID', 'Control Name', 'Process', 'Type', 'Frequency', 'Owner', 'Result', 'Exceptions'].map(h => (
@@ -937,38 +1040,38 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                     <td className="px-4 py-2.5 font-mono font-semibold text-primary">{c.id}</td>
                     <td className="px-4 py-2.5 font-medium text-text">{c.name}</td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.process}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${c.type === 'Preventive' ? 'text-evidence-700 bg-evidence-50' : 'text-brand-700 bg-brand-50'}`}>{c.type}</span></td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.type === 'Preventive' ? 'text-evidence-700 bg-evidence-50' : 'text-brand-700 bg-brand-50'}`}>{c.type}</span></td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.freq}</td>
                     <td className="px-4 py-2.5 text-text-secondary">{c.owner}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${resultColor(c.result)}`}>{c.result}</span></td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resultColor(c.result)}`}>{c.result}</span></td>
                     <td className="px-4 py-2.5 text-center font-semibold">{c.exceptions > 0 ? <span className="text-risk-700">{c.exceptions}</span> : <span className="text-text-muted">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-3 border-t border-border-light bg-paper-50/50 flex items-center justify-between text-[0.625rem] text-text-muted">
+          <div className="px-5 py-3 border-t border-border-light bg-paper-50/50 flex items-center justify-between text-[10px] text-text-muted">
             <span>Showing {controls.length} of 54 tested controls</span>
             <span>8 Effective · 2 Deficient · 0 Pending</span>
           </div>
         </div>
         {/* Deficiency Detail */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
               { id: 'DEF-001', control: 'CTR-003', title: 'Vendor Master Change — Missing Dual Approval', severity: 'Significant', status: 'In Remediation', due: 'Mar 31, 2026', owner: 'Deepak Bansal', desc: '7 vendor master changes processed without dual-approval. Includes 3 bank account modifications.' },
               { id: 'DEF-002', control: 'CTR-008', title: 'Journal Entry Override — Approval Bypass', severity: 'Material Weakness', status: 'Evidence Submitted', due: 'Mar 31, 2026', owner: 'Rohan Patel', desc: '7 journal entries posted bypassing approval workflow. Total value: 12.4L. Root cause: system configuration gap.' },
             ].map(d => (
-              <div key={d.id} className="rounded-xl border border-border-light p-4 hover:shadow-sm transition-shadow">
+              <div key={d.id} className="rounded-[12px] border border-border-light p-4 hover:shadow-sm transition-shadow">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[0.625rem] font-bold text-white px-2 py-0.5 rounded-md bg-risk">{d.id}</span>
-                  <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
-                  <span className="text-[0.625rem] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
+                  <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-[8px] bg-risk">{d.id}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
+                  <span className="text-[10px] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
                 </div>
-                <h4 className="text-[0.75rem] font-semibold text-text mb-1">{d.title}</h4>
-                <p className="text-[0.6875rem] text-text-secondary leading-relaxed mb-2">{d.desc}</p>
-                <div className="flex items-center gap-3 text-[0.625rem] text-text-muted">
+                <h4 className="text-[12px] font-semibold text-text mb-1">{d.title}</h4>
+                <p className="text-[11px] text-text-secondary leading-relaxed mb-2">{d.desc}</p>
+                <div className="flex items-center gap-3 text-[10px] text-text-muted">
                   <span>Control: <span className="font-mono font-semibold text-primary">{d.control}</span></span>
                   <span>Due: <span className="font-semibold">{d.due}</span></span>
                   <span>Owner: {d.owner}</span>
@@ -995,55 +1098,54 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
     const riskColor = (l: number, i: number) => {
       const score = l * i;
       if (score >= 12) return 'bg-risk';
-      if (score >= 8) return 'bg-high';
-      if (score >= 4) return 'bg-mitigated';
+      if (score >= 5) return 'bg-mitigated';
       return 'bg-compliant';
     };
     return (
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Risk Heatmap */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
           <div className="flex gap-6">
             <div className="flex-1">
-              <div className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
+              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
               <div className="grid grid-cols-5 gap-1">
                 {[5,4,3,2,1].map(likelihood => (
                   [1,2,3,4,5].map(impact => {
                     const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact);
                     return (
-                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-lg flex items-center justify-center text-[0.5625rem] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
+                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-[8px] flex items-center justify-center text-[12px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
                         {risksInCell.length > 0 ? risksInCell.map(r => r.id.split('-')[1]).join(',') : ''}
                       </div>
                     );
                   })
                 ))}
               </div>
-              <div className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
+              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
             </div>
             <div className="w-48">
-              <div className="text-[0.625rem] font-semibold text-text mb-2">Legend</div>
+              <div className="text-[11px] font-semibold text-text mb-2">Legend</div>
               <div className="space-y-1.5">
-                {[{ c: 'bg-risk', l: 'Critical (12-25)' }, { c: 'bg-high', l: 'High (8-11)' }, { c: 'bg-mitigated', l: 'Medium (4-7)' }, { c: 'bg-compliant', l: 'Low (1-3)' }].map(item => (
-                  <div key={item.l} className="flex items-center gap-2 text-[0.625rem] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
+                {[{ c: 'bg-risk', l: 'High (12-25)' }, { c: 'bg-mitigated', l: 'Medium (5-11)' }, { c: 'bg-compliant', l: 'Low (1-4)' }].map(item => (
+                  <div key={item.l} className="flex items-center gap-2 text-[11px] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
                 ))}
               </div>
             </div>
           </div>
         </div>
         {/* Risk Register */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
+            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
           </div>
-          <table className="w-full text-[0.6875rem]">
+          <table className="w-full text-[11px]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Risk ID', 'Description', 'Process', 'L', 'I', 'Score', 'Controls', 'Status'].map(h => (
@@ -1059,9 +1161,9 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 text-text-secondary">{r.process}</td>
                   <td className="px-4 py-2.5 text-center">{r.likelihood}</td>
                   <td className="px-4 py-2.5 text-center">{r.impact}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-md text-[0.625rem] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
+                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-[8px] text-[10px] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
                   <td className="px-4 py-2.5 text-center font-semibold">{r.controls}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1083,23 +1185,23 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Effectiveness Scorecards */}
         <div className="grid grid-cols-4 gap-3">
           {processes.map(p => (
-            <div key={p.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
-              <div className="text-[0.6875rem] font-semibold text-text-muted mb-2">{p.name}</div>
-              <div className="text-[1.75rem] font-bold text-text leading-none">{p.rate}%</div>
-              <div className="text-[0.625rem] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
+            <div key={p.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
+              <div className="text-[11px] font-semibold text-text-muted mb-2">{p.name}</div>
+              <div className="text-[28px] font-bold text-text leading-none">{p.rate}%</div>
+              <div className="text-[10px] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
               {/* Progress bar */}
               <div className="h-2 bg-paper-50 rounded-full overflow-hidden mb-2">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${(p.tested / p.total) * 100}%` }} transition={{ delay: 0.3, duration: 0.6 }} className="h-full rounded-full bg-primary" />
               </div>
-              <div className="flex justify-between text-[0.5625rem] text-text-muted">
+              <div className="flex justify-between text-[9px] text-text-muted">
                 <span>{p.tested}/{p.total} tested</span>
                 <span>{p.deficient} deficient</span>
               </div>
@@ -1107,11 +1209,11 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           ))}
         </div>
         {/* Gap Analysis Table */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
+            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
           </div>
-          <table className="w-full text-[0.6875rem]">
+          <table className="w-full text-[11px]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Process', 'Untested', 'Deadline', 'Priority', 'Assigned To'].map(h => (
@@ -1130,7 +1232,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 font-semibold text-text">{g.process}</td>
                   <td className="px-4 py-2.5 font-bold text-risk-700">{g.untested}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{g.deadline}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${g.priority === 'High' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{g.priority}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.priority === 'High' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{g.priority}</span></td>
                   <td className="px-4 py-2.5 text-text-secondary">{g.assignee}</td>
                 </tr>
               ))}
@@ -1138,13 +1240,13 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           </table>
         </div>
         {/* Improvement Plan */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
           <div className="space-y-2">
             {['Automate 5 manual detective controls in P2P — target: 98% effectiveness', 'Accelerate S2C control testing — hire 1 contractor for April-June sprint', 'Deploy AI anomaly detection on R2R reconciliation — reduce deficiency rate by 50%', 'Implement continuous monitoring for all preventive controls by Q2'].map((item, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-lg">
-                <span className="text-[0.5625rem] font-bold text-primary bg-primary/10 w-5 h-5 rounded-md flex items-center justify-center shrink-0">{i + 1}</span>
-                <span className="text-[0.6875rem] text-text-secondary leading-relaxed">{item}</span>
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-[8px]">
+                <span className="text-[9px] font-bold text-primary bg-primary/10 w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0">{i + 1}</span>
+                <span className="text-[11px] text-text-secondary leading-relaxed">{item}</span>
               </div>
             ))}
           </div>
@@ -1165,27 +1267,27 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
         {/* Workflow Performance Cards */}
         <div className="grid grid-cols-2 gap-3">
           {workflows.map(w => (
-            <div key={w.name} className="bg-white rounded-xl border border-border-light p-4 hover:shadow-primary/5 transition-all">
+            <div key={w.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[0.75rem] font-semibold text-text">{w.name}</h4>
-                <span className="text-[0.625rem] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
+                <h4 className="text-[12px] font-semibold text-text">{w.name}</h4>
+                <span className="text-[10px] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
               </div>
               <div className="flex items-end gap-4 mb-3">
                 <div>
-                  <div className="text-[1.25rem] font-bold text-text">{w.runs}</div>
-                  <div className="text-[0.5625rem] text-text-muted uppercase">Runs</div>
+                  <div className="text-[20px] font-bold text-text">{w.runs}</div>
+                  <div className="text-[9px] text-text-muted uppercase">Runs</div>
                 </div>
                 <div>
-                  <div className="text-[1.25rem] font-bold text-compliant-700">{w.savings}</div>
-                  <div className="text-[0.5625rem] text-text-muted uppercase">Saved</div>
+                  <div className="text-[20px] font-bold text-compliant-700">{w.savings}</div>
+                  <div className="text-[9px] text-text-muted uppercase">Saved</div>
                 </div>
                 <div className="flex-1">
                   <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none">
@@ -1198,11 +1300,11 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
           ))}
         </div>
         {/* Exception Breakdown */}
-        <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
           <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[0.8125rem] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
+            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
           </div>
-          <table className="w-full text-[0.6875rem]">
+          <table className="w-full text-[11px]">
             <thead>
               <tr className="bg-paper-50 border-b border-border-light">
                 {['Exception', 'Workflow', 'Type', 'Resolution', 'Time', 'Status'].map(h => (
@@ -1224,7 +1326,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
                   <td className="px-4 py-2.5 text-text-secondary">{e.type}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{e.resolution}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{e.time}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-bold ${e.status === 'Closed' ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{e.status}</span></td>
+                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${e.status === 'Closed' ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{e.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1240,8 +1342,8 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
       <div className="space-y-5">
         <div className="flex gap-2 flex-wrap">
           {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-              <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
             </div>
           ))}
         </div>
@@ -1252,17 +1354,17 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
             { label: 'Controls Effective', value: '48/54', delta: '89%', sub: 'effectiveness rate', color: 'text-compliant-700' },
             { label: 'Audit Progress', value: '58%', delta: 'On track', sub: '54 of 87 controls tested', color: 'text-evidence-700' },
           ].map(m => (
-            <div key={m.label} className="bg-white rounded-xl border border-border-light p-5 text-center">
-              <div className="text-[0.625rem] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
-              <div className={`text-[2rem] font-bold leading-none ${m.color}`}>{m.value}</div>
-              <div className="text-[0.6875rem] font-semibold text-compliant-700 mt-1">{m.delta}</div>
-              <div className="text-[0.625rem] text-text-muted">{m.sub}</div>
+            <div key={m.label} className="bg-white rounded-[12px] border border-border-light p-5 text-center">
+              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
+              <div className={`text-[32px] font-bold leading-none ${m.color}`}>{m.value}</div>
+              <div className="text-[11px] font-semibold text-compliant-700 mt-1">{m.delta}</div>
+              <div className="text-[10px] text-text-muted">{m.sub}</div>
             </div>
           ))}
         </div>
         {/* Process Breakdown */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
           <div className="space-y-3">
             {[
               { name: 'P2P — Procure to Pay', progress: 72, controls: '17/24', risk: 'High' },
@@ -1271,25 +1373,25 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
               { name: 'S2C — Source to Contract', progress: 21, controls: '3/14', risk: 'Medium' },
             ].map(p => (
               <div key={p.name} className="flex items-center gap-4">
-                <div className="w-48 text-[0.6875rem] font-medium text-text">{p.name}</div>
+                <div className="w-48 text-[11px] font-medium text-text">{p.name}</div>
                 <div className="flex-1 h-3 bg-paper-50 rounded-full overflow-hidden">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${p.progress}%` }} transition={{ delay: 0.2, duration: 0.6 }} className="h-full rounded-full bg-primary" />
                 </div>
-                <span className="text-[0.6875rem] font-bold text-text w-10 text-right">{p.progress}%</span>
-                <span className="text-[0.625rem] text-text-muted w-12">{p.controls}</span>
-                <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full ${p.risk === 'High' ? 'text-risk-700 bg-risk-50' : p.risk === 'Medium' ? 'text-mitigated-700 bg-mitigated-50' : 'text-compliant-700 bg-compliant-50'}`}>{p.risk}</span>
+                <span className="text-[11px] font-bold text-text w-10 text-right">{p.progress}%</span>
+                <span className="text-[10px] text-text-muted w-12">{p.controls}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.risk === 'High' ? 'text-risk-700 bg-risk-50' : p.risk === 'Medium' ? 'text-mitigated-700 bg-mitigated-50' : 'text-compliant-700 bg-compliant-50'}`}>{p.risk}</span>
               </div>
             ))}
           </div>
         </div>
         {/* Strategic Recommendations */}
-        <div className="bg-white rounded-xl border border-border-light p-5">
-          <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
+        <div className="bg-white rounded-[12px] border border-border-light p-5">
+          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
           <div className="space-y-2">
             {['Approve additional AI workflow investment for S2C process — projected 3x ROI based on P2P results', 'Remediate DEF-002 (journal entry override) before March 31 — material weakness impacting filing', 'Reallocate Tushar Goel from P2P to S2C support in April — P2P is 72% complete, S2C needs acceleration', 'Expand vendor master monitoring to O2C process — similar risk profile to P2P where it saved 2.4L'].map((rec, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-lg border border-primary/5">
-                <span className="text-[0.5625rem] font-bold text-white bg-primary w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                <span className="text-[0.6875rem] text-text leading-relaxed">{rec}</span>
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-[8px] border border-primary/5">
+                <span className="text-[9px] font-bold text-white bg-primary w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                <span className="text-[11px] text-text leading-relaxed">{rec}</span>
               </div>
             ))}
           </div>
@@ -1303,17 +1405,17 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
     <div className="space-y-5">
       <div className="flex gap-2 flex-wrap">
         {sections.map((s, i) => (
-          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-secondary shadow-sm">
-            <span className="text-[0.5625rem] font-bold text-primary/50">{i + 1}</span> {s.name}
+          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
+            <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
           </div>
         ))}
       </div>
       {sections.map((s) => {
         const SIcon = SECTION_ICONS[s.icon] || FileText;
         return (
-          <div key={s.name} className="bg-white rounded-xl border border-border-light p-5">
-            <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
-            <div className="h-16 bg-paper-50 rounded-lg flex items-center justify-center text-[0.6875rem] text-text-muted border border-dashed border-border-light">
+          <div key={s.name} className="bg-white rounded-[12px] border border-border-light p-5">
+            <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
+            <div className="h-16 bg-paper-50 rounded-[12px] flex items-center justify-center text-[11px] text-text-muted border border-dashed border-border-light">
               Section content generated from {report.name} data
             </div>
           </div>
@@ -1324,7 +1426,7 @@ function TemplateLayout({ templateId, template, report }: { templateId: string; 
 }
 
 // ─── Query Card Component ───
-type QueryShape = { id: string; status: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
+type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 
 function parseNumeric(v: string): number {
   const match = String(v).match(/-?\d[\d,.]*/);
@@ -1412,13 +1514,13 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-text-secondary hover:text-primary cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
-        <span>Manage Exceptions</span>
+        <span>Manage exceptions</span>
         <ArrowRight
-          size={11}
+          size={16}
           className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
         />
       </button>
@@ -1431,15 +1533,15 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       disabled={launching}
       title="Review & classify exceptions · opens in a new tab"
       aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
+      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[12px] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
         launching ? 'scale-[0.97] shadow-[0_0_0_4px_rgba(106,18,205,0.25),0_4px_14px_rgba(106,18,205,0.35)]' : 'hover:-translate-y-[1px] active:translate-y-0'
       }`}
       style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
     >
-      <ShieldAlert size={13} className="shrink-0 relative z-10" />
+      <ShieldAlert size={14} className="shrink-0 relative z-10" />
       <span className="relative z-10">Manage Exceptions</span>
       <ArrowRight
-        size={13}
+        size={14}
         className={`shrink-0 relative z-10 ${launching ? '' : 'transition-transform duration-200 group-hover:translate-x-0.5'}`}
         style={launching ? { animation: 'launch-arrow-eject 340ms cubic-bezier(0.2, 0, 0, 1) forwards' } : undefined}
       />
@@ -1476,10 +1578,10 @@ function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: s
       {launching && (
         <span
           aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[0.75rem] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
           style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
         >
-          <ArrowRight size={10} className="-rotate-45" />
+          <ArrowRight size={12} className="-rotate-45" />
           Opening in new tab…
         </span>
       )}
@@ -1514,7 +1616,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
       aria-label={isOn ? 'Generating cases' : 'Generate cases'}
       onClick={handleToggle}
       disabled={isOn}
-      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold text-text-secondary bg-white border border-border rounded-[8px] cursor-pointer hover:border-primary/40 hover:text-primary transition-colors"
+      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[12px] font-semibold text-text-secondary bg-white border border-border rounded-[8px] cursor-pointer hover:border-primary/40 hover:text-primary transition-colors"
     >
       <span
         className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 ${
@@ -1561,6 +1663,8 @@ function ConfirmDialog({
   cancelLabel?: string;
   destructive?: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, open, onClose);
   if (!open) return null;
   const titleId = `confirm-${title.replace(/\s+/g, '-').toLowerCase()}`;
   const descId = `${titleId}-desc`;
@@ -1576,12 +1680,14 @@ function ConfirmDialog({
       >
         <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
         <motion.div
+          ref={containerRef}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="alertdialog"
+          aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descId}
           className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[440px] max-w-[calc(100vw-32px)] p-6"
@@ -1589,22 +1695,22 @@ function ConfirmDialog({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
+            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
-          <h3 id={titleId} className="text-[1rem] font-bold text-text tracking-tight mb-2">{title}</h3>
-          <div id={descId} className="text-[0.8125rem] text-text-secondary leading-relaxed mb-6 pr-4">{description}</div>
+          <h3 id={titleId} className="text-[16px] font-bold text-text tracking-tight mb-2">{title}</h3>
+          <div id={descId} className="text-[13px] text-text-secondary leading-relaxed mb-6 pr-4">{description}</div>
           <div className="flex items-center justify-end gap-2.5">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               {cancelLabel}
             </button>
             <button
               onClick={onConfirm}
-              className={`inline-flex items-center justify-center h-9 px-5 text-[0.8125rem] font-semibold text-white rounded-[8px] transition-colors cursor-pointer ${
+              className={`inline-flex items-center justify-center h-9 px-5 text-[13px] font-semibold text-white rounded-[8px] transition-colors cursor-pointer ${
                 destructive ? 'bg-risk hover:bg-risk-700' : 'bg-primary hover:bg-primary-hover'
               }`}
             >
@@ -1620,9 +1726,9 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
-  const safeQuery = query ?? { id: '', status: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
+  const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'comments' | 'source-files' | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
@@ -1634,13 +1740,11 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
-  const statusStyle = safeQuery.status === 'Completed'
-    ? { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' }
-    : { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' };
-
-  const severityStyle = safeQuery.severity === 'Critical'
+  const severityStyle = safeQuery.severity === 'High'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
-    : { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' };
+    : safeQuery.severity === 'Medium'
+      ? { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' }
+      : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1671,19 +1775,14 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           className="mb-4"
         >
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[0.75rem] font-semibold uppercase tracking-wider">
-              <span className="font-mono text-[0.75rem] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10px] font-semibold uppercase tracking-wider">
+              <span className="font-mono text-[12px] text-primary tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="text-text-muted shrink-0">{query.risk}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="flex items-center gap-1.5 shrink-0">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-                <span className={query.severity === 'Critical' ? 'text-risk-700' : 'text-high-700'}>{query.severity}</span>
-              </span>
-              <span aria-hidden className="text-ink-300 select-none">·</span>
-              <span className="flex items-center gap-1.5 shrink-0">
-                <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
-                <span className={query.status === 'Completed' ? 'text-compliant-700' : 'text-mitigated-700'}>{query.status}</span>
+                <span className={query.severity === 'High' ? 'text-risk-700' : query.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}>{query.severity}</span>
               </span>
             </div>
             <div className="flex items-center gap-4 shrink-0">
@@ -1692,14 +1791,14 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 const myComments = comments.filter(c => c.queryId === query.id).length;
                 return (
                   <button
-                    onClick={() => setDrawerTab('comments')}
+                    onClick={() => setCommentsOpen(true)}
                     title="Comments on this query"
                     aria-label="Comments on this query"
-                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-md cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
+                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-text-muted rounded-[8px] cursor-pointer hover:text-primary hover:bg-primary-xlight/50 transition-colors"
                   >
-                    <MessageSquare size={14} className="shrink-0" />
+                    <MessageSquare size={16} className="shrink-0" />
                     {myComments > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
+                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[9px] font-semibold bg-primary text-white rounded-full tabular-nums border border-white">
                         {myComments}
                       </span>
                     )}
@@ -1711,42 +1810,42 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   onClick={() => setMenuOpen(o => !o)}
                   title="More options"
                   aria-label="More options"
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
+                  className="w-7 h-7 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight/50 transition-colors cursor-pointer"
                 >
-                  <MoreVertical size={15} />
+                  <MoreVertical size={16} />
                 </button>
                 {menuOpen && (
-                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
+                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[8px] shadow-xl py-1">
                     <button
                       onClick={() => {
                         setMenuOpen(false);
                         onOpenQuery?.({ id: query.id, title: query.title });
                       }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <ExternalLink size={13} />
+                      <ExternalLink size={14} />
                       Open Query
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <LayoutGrid size={13} />
+                      <LayoutGrid size={14} />
                       Add Widgets
                     </button>
                     <button
                       onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
                     >
-                      <Download size={13} />
+                      <Download size={14} />
                       Download
                     </button>
                     <div className="my-1 border-t border-border-light" />
                     <button
                       onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                       Delete Query
                     </button>
                   </div>
@@ -1763,7 +1862,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="font-display text-[1.25rem] text-text leading-[1.3] tracking-[-0.005em] mb-4"
+          className="text-[20px] font-semibold text-text leading-[1.3] tracking-[-0.005em] mb-4"
         >
           {query.title}
         </motion.h3>
@@ -1784,10 +1883,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
                   className="flex items-baseline gap-2"
                 >
-                  <span className="text-[1rem] font-semibold text-text leading-none">
+                  <span className="text-[16px] font-semibold text-text leading-none">
                     <KpiCountUp value={k.value} delay={120 + ki * 80} />
                   </span>
-                  <span className="text-[0.75rem] text-text-muted font-medium">{k.label}</span>
+                  <span className="text-[12px] text-text-muted font-medium">{k.label}</span>
                 </motion.span>
               ))}
             </div>
@@ -1801,10 +1900,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+            className="bg-canvas-elevated border border-border-light rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                 <BarChart3 size={12} />
                 {g.title}
               </div>
@@ -1812,9 +1911,9 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
                 title="Remove graph"
                 aria-label="Remove graph"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
-                <X size={13} />
+                <X size={14} />
               </button>
             </div>
             <div className="h-[200px]">
@@ -1836,10 +1935,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-canvas-elevated border border-border-light rounded-xl p-4 mb-5"
+            className="bg-canvas-elevated border border-border-light rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                 <LayoutGrid size={12} />
                 Results Table
               </div>
@@ -1847,19 +1946,19 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 onClick={() => setTableAttached(false)}
                 title="Remove table"
                 aria-label="Remove table"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
-                <X size={13} />
+                <X size={14} />
               </button>
             </div>
-            <div className="overflow-x-auto rounded-lg border border-border-light">
+            <div className="overflow-x-auto rounded-[12px] border border-border-light">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-paper-50">
                     {queryTable.columns.map(c => (
                       <th
                         key={c}
-                        className="px-3 py-2 text-left text-[0.75rem] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
+                        className="px-3 py-2 text-left text-[10px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap"
                       >
                         {c}
                       </th>
@@ -1870,7 +1969,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   {queryTable.rows.map((row, ri) => (
                     <tr key={ri} className="border-b border-border-light last:border-b-0">
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2 text-[0.75rem] text-text-secondary whitespace-nowrap">
+                        <td key={ci} className="px-3 py-2 text-[12px] text-text-secondary whitespace-nowrap">
                           {cell}
                         </td>
                       ))}
@@ -1892,13 +1991,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         </motion.div>
       </div>
 
-      {drawerTab && createPortal(
+      {commentsOpen && createPortal(
         <CommentDrawer
           query={query}
           comments={comments}
           onAddComment={onAddComment}
-          initialTab={drawerTab}
-          onClose={() => setDrawerTab(null)}
+          onClose={() => setCommentsOpen(false)}
         />,
         document.body,
       )}
@@ -1907,13 +2005,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         title="Remove Query Card?"
-        description="This will permanently remove this query card from the report. This action cannot be undone."
+        description="Remove this query card from the report?"
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
           setShowDeleteConfirm(false);
           onDelete?.();
-          addToast({ type: 'success', message: 'Query card removed.' });
         }}
       />
 
@@ -1969,11 +2066,8 @@ function QueryWidgetModal({
   onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; table: boolean }) => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(() => new Set(initialKpis));
   const [selCharts, setSelCharts] = useState<Set<string>>(() => new Set(initialCharts));
@@ -2007,27 +2101,29 @@ function QueryWidgetModal({
       >
         <div className="absolute inset-0 bg-ink-900/45 backdrop-blur-[2px]" />
         <motion.div
+          ref={containerRef}
           initial={{ opacity: 0, scale: 0.97, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 10 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
+          aria-modal="true"
           aria-labelledby="query-widget-title"
-          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
+          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[840px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-light">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-[10px] bg-primary-xlight flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-[8px] bg-primary-xlight flex items-center justify-center shrink-0">
                 <FileText size={16} className="text-primary" />
               </div>
               <div className="min-w-0">
-                <h3 id="query-widget-title" className="text-[1rem] font-bold text-text tracking-tight">
+                <h3 id="query-widget-title" className="text-[16px] font-bold text-text tracking-tight">
                   Choose What to Include
                 </h3>
-                <p className="text-[0.75rem] text-text-secondary mt-0.5 truncate">
-                  <span className="font-mono text-[0.6875rem] text-primary">{queryId}</span>
+                <p className="text-[12px] text-text-secondary mt-0.5 truncate">
+                  <span className="font-mono text-[11px] text-primary">{queryId}</span>
                   <span className="mx-1.5 text-text-muted">·</span>
                   {queryTitle}
                 </p>
@@ -2036,26 +2132,26 @@ function QueryWidgetModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
             >
-              <X size={17} />
+              <X size={20} />
             </button>
           </div>
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {totalItems === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center mb-3">
-                  <BarChart3 size={20} className="text-text-muted" />
-                </div>
-                <p className="text-[0.8125rem] font-semibold text-text mb-1">Nothing to add for this query yet</p>
-              </div>
+              <EmptyState
+                icon={BarChart3}
+                title="Nothing to add yet"
+                body="Attach a graph, KPI or table to start building insights."
+                size="compact"
+              />
             ) : (
               <div className="space-y-5">
                 {/* Selection summary + all/none */}
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[0.75rem] text-text-muted" aria-live="polite">
+                  <p className="text-[12px] text-text-muted" aria-live="polite">
                     {totalSelected === 0
                       ? 'Select what to show on the card.'
                       : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
@@ -2064,14 +2160,14 @@ function QueryWidgetModal({
                     <button
                       type="button"
                       onClick={selectAll}
-                      className="text-[0.75rem] font-semibold text-primary hover:text-primary-hover cursor-pointer"
+                      className="text-[11px] font-semibold text-primary hover:text-primary-hover cursor-pointer"
                     >
                       Select all
                     </button>
                     <button
                       type="button"
                       onClick={clearAll}
-                      className="text-[0.75rem] font-semibold text-text-muted hover:text-text cursor-pointer"
+                      className="text-[11px] font-semibold text-text-muted hover:text-text cursor-pointer"
                     >
                       Clear
                     </button>
@@ -2130,7 +2226,7 @@ function QueryWidgetModal({
                               aria-checked={on}
                               aria-label={g.title}
                               onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
-                              className={`text-left bg-white border-2 rounded-xl p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                              className={`text-left bg-white border-2 rounded-[12px] p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                                 on
                                   ? 'border-primary shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
                                   : 'border-border-light hover:border-primary/40'
@@ -2138,9 +2234,9 @@ function QueryWidgetModal({
                             >
                               <div className="flex items-center gap-2 mb-2">
                                 <Checkbox checked={on} accent="brand" />
-                                <span className="text-[0.75rem] font-semibold text-text truncate">{g.title}</span>
+                                <span className="text-[12px] font-semibold text-text truncate">{g.title}</span>
                               </div>
-                              <div className="h-[150px] bg-canvas-elevated rounded-lg p-1.5 pointer-events-none">
+                              <div className="h-[150px] bg-canvas-elevated rounded-[12px] p-1.5 pointer-events-none">
                                 <ConfigurableChart
                                   type={g.type}
                                   xAxis={g.xAxis}
@@ -2191,15 +2287,15 @@ function QueryWidgetModal({
           <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-light bg-paper-50/40">
             <button
               onClick={onClose}
-              className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer"
             >
-              <FileText size={13} />
+              <FileText size={14} />
               Add to Card
             </button>
           </div>
@@ -2209,32 +2305,25 @@ function QueryWidgetModal({
   );
 }
 
-// ─── Query side-sheet — tabs: Comments + Source Files ───
+// ─── Query side-sheet — Comments ───
 function CommentDrawer({
   query,
   comments,
   onAddComment,
   onClose,
-  initialTab = 'comments',
 }: {
   query: QueryShape;
   comments: QueryComment[];
   onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
   onClose: () => void;
-  initialTab?: 'comments' | 'source-files';
 }) {
-  const [activeTab, setActiveTab] = useState<'comments' | 'source-files'>(initialTab);
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const seed = query.id.charCodeAt(query.id.length - 1);
-  const sourceFiles = [
-    { name: `${query.id}_invoices_raw.xlsx`,    type: 'excel' as const, size: '2.4 MB',  rows: 12480, modified: 'Mar 18, 2026', source: 'SAP · AP Ledger' },
-    { name: `${query.id}_vendor_master.xlsx`,   type: 'excel' as const, size: '780 KB',  rows: 1843,  modified: 'Mar 12, 2026', source: 'Vendor Master · Oracle' },
-    { name: `${query.id}_controls_catalog.csv`, type: 'csv'   as const, size: '144 KB',  rows: 312,   modified: 'Feb 28, 2026', source: 'GRC · Control Library' },
-    { name: `${query.id}_po_grn_trail.xlsx`,    type: 'excel' as const, size: `${(1.2 + (seed % 5) * 0.3).toFixed(1)} MB`, rows: 5612, modified: 'Mar 20, 2026', source: 'Procurement · P2P' },
-  ];
+  const containerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   // Show only comments belonging to the query the user clicked from.
   const queryComments = comments.filter(c => c.queryId === query.id);
@@ -2248,10 +2337,15 @@ function CommentDrawer({
 
   const handlePost = () => {
     const body = text.trim();
-    if (!body) return;
+    if (!body || isPosting) return;
+    setIsPosting(true);
+    // Optimistic — clear inputs immediately so the new entry appears posted.
     onAddComment?.(query.id, query.title, body, attachment ?? undefined);
     setText('');
     setAttachment(null);
+    // Release the busy state on the next frame; the parent state update has
+    // already flushed by then.
+    window.setTimeout(() => setIsPosting(false), 120);
   };
 
   return (
@@ -2265,73 +2359,46 @@ function CommentDrawer({
         onClick={onClose}
       />
       <motion.aside
+        ref={(el) => { containerRef.current = el as HTMLElement | null; }}
         initial={{ x: 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-border-light flex flex-col z-[60]"
         role="dialog"
-        aria-label={activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
+        aria-modal="true"
+        aria-label="Comments"
       >
-        {/* Tab strip + close */}
-        <div className="shrink-0 flex items-end justify-between gap-4 px-6 pt-4 border-b border-border-light bg-white">
-          <div role="tablist" aria-label="Query side-sheet tabs" className="flex items-center gap-1">
-            {[
-              { id: 'comments' as const, label: 'Comments', count: totalComments, icon: MessageSquare },
-              { id: 'source-files' as const, label: 'Source Files', count: sourceFiles.length, icon: Database },
-            ].map(tab => {
-              const isActive = activeTab === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative inline-flex items-center gap-1.5 h-9 px-3 text-[0.8125rem] font-medium cursor-pointer transition-colors ${
-                    isActive ? 'text-primary' : 'text-text-muted hover:text-text'
-                  }`}
-                >
-                  <Icon size={14} className="shrink-0" />
-                  {tab.label}
-                  <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.75rem] font-semibold rounded-full tabular-nums ${
-                    isActive ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-text-muted'
-                  }`}>
-                    {tab.count}
-                  </span>
-                  {isActive && (
-                    <motion.span
-                      layoutId="comment-drawer-tab-indicator"
-                      className="absolute left-0 right-0 -bottom-px h-[2px] bg-primary rounded-t"
-                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-                    />
-                  )}
-                </button>
-              );
-            })}
+        {/* Header strip + close */}
+        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-border-light bg-white">
+          <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary">
+            <MessageSquare size={14} className="shrink-0" />
+            Comments
+            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full tabular-nums bg-primary/10 text-primary">
+              {totalComments}
+            </span>
           </div>
           <button
             onClick={onClose}
-            className="mb-1 w-8 h-8 rounded-full text-text-muted hover:text-text hover:bg-primary-xlight flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full text-text-muted hover:text-text hover:bg-primary-xlight flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Tab header (title + sub-text) */}
+        {/* Header (title + sub-text) */}
         <header className="shrink-0 px-6 py-5 border-b border-border-light">
-          <h2 className="text-[1rem] font-semibold text-text leading-tight">
-            {activeTab === 'comments' ? 'Comments' : 'Data Source Files'}
+          <h2 className="text-[16px] font-semibold text-text leading-tight">
+            Comments
           </h2>
-          <p className="text-[0.75rem] text-text-muted mt-0.5 leading-snug">
-            {activeTab === 'comments' ? 'Commenting on ' : 'Files used to build '}
+          <p className="text-[12px] text-text-muted mt-0.5 leading-snug">
+            Commenting on{' '}
             <span className="font-mono font-semibold text-primary">{query.id}</span> — {query.title}
           </p>
         </header>
 
-        {activeTab === 'comments' ? (
-          <>
+        <>
             {/* Comment input */}
             <section className="shrink-0 px-6 py-4 border-b border-border-light">
               <div className="relative">
@@ -2340,7 +2407,7 @@ function CommentDrawer({
                   onChange={(e) => setText(e.target.value)}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-border-light rounded-[8px] text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+                  className="w-full resize-none p-3 pr-[72px] bg-white border border-border-light rounded-[8px] text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                 />
                 <input
                   ref={fileInputRef}
@@ -2364,79 +2431,102 @@ function CommentDrawer({
                   <button
                     type="button"
                     onClick={handlePost}
-                    disabled={!text.trim()}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[6px] transition-colors ${
-                      text.trim()
+                    disabled={!text.trim() || isPosting}
+                    className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                      text.trim() && !isPosting
                         ? 'bg-[#6a12cd] text-white hover:bg-primary-hover cursor-pointer'
                         : 'text-text-muted/50 cursor-not-allowed'
                     }`}
                     aria-label="Post comment"
                     title="Post comment"
                   >
-                    <Send size={14} />
+                    {isPosting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
                 </div>
               </div>
               {attachment && (
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[0.75rem] font-medium rounded-full">
-                    <Paperclip size={11} />
+                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
+                    <Paperclip size={12} />
                     {attachment}
                   </span>
-                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-text-muted hover:text-risk-700 cursor-pointer">remove</button>
+                  <button onClick={() => setAttachment(null)} className="text-[11px] text-text-muted hover:text-risk-700 cursor-pointer">remove</button>
                 </div>
               )}
             </section>
 
             {/* Shared activity log */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">Activity log</h3>
-                <span className="text-[0.6875rem] text-text-muted tabular-nums">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Activity log</h3>
+                <span className="text-[11px] text-text-muted tabular-nums">
                   {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
                 </span>
               </div>
               {queryGroups.length === 0 ? (
-                <p className="text-[0.8125rem] text-text-muted italic">No comments yet. Be the first to share a note.</p>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="No comments yet"
+                  body="Notes, questions, and decisions on this query will appear here."
+                  size="compact"
+                />
               ) : (
                 <div className="space-y-4">
                   {queryGroups.map(group => (
-                    <section key={group.queryId} className="border border-border-light rounded-[10px] overflow-hidden">
+                    <section key={group.queryId} className="border border-border-light rounded-[12px] overflow-hidden">
                       <header className={`px-3 py-2 bg-paper-50 border-b border-border-light flex items-center justify-between ${group.queryId === query.id ? 'bg-primary/5' : ''}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[0.75rem] font-bold text-primary shrink-0">{group.queryId}</span>
-                          <span className="text-[0.75rem] text-text-muted truncate">{group.queryTitle}</span>
+                          <span className="font-mono text-[11px] font-bold text-primary shrink-0">{group.queryId}</span>
+                          <span className="text-[11px] text-text-muted truncate">{group.queryTitle}</span>
                         </div>
-                        <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">
+                        <span className="text-[10px] text-text-muted tabular-nums shrink-0">
                           {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
                         </span>
                       </header>
                       <ol className="divide-y divide-border-light">
-                        {group.items.slice().reverse().map(c => (
-                          <li key={c.id} className="px-3 py-3">
-                            <div className="flex items-start gap-2.5">
-                              <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
-                                {c.initials}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <span className="text-[0.75rem] font-semibold text-text">{c.author}</span>
-                                  <span className="inline-flex items-center gap-1 text-[0.6875rem] text-text-muted tabular-nums whitespace-nowrap">
-                                    <ClockIcon size={10} />
-                                    {c.timestamp}
-                                  </span>
+                        {group.items.slice().reverse().map(c => {
+                          const isLong = c.text.length > 1000;
+                          const isExpanded = expandedComments.has(c.id);
+                          const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                          return (
+                            <li key={c.id} className="px-3 py-3">
+                              <div className="flex items-start gap-2.5">
+                                <span className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold tracking-wider">
+                                  {c.initials}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <span className="text-[12px] font-semibold text-text">{c.author}</span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums whitespace-nowrap">
+                                      <ClockIcon size={12} />
+                                      {c.timestamp}
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] text-text leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  {isLong && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedComments(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+                                        return next;
+                                      })}
+                                      className="mt-1 text-[11px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                                    >
+                                      {isExpanded ? 'Show less' : 'Show more'}
+                                    </button>
+                                  )}
+                                  {c.attachment && (
+                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[11px] font-medium rounded-full">
+                                      <Paperclip size={12} />
+                                      {c.attachment}
+                                    </span>
+                                  )}
                                 </div>
-                                <p className="text-[0.75rem] text-text leading-relaxed">{c.text}</p>
-                                {c.attachment && (
-                                  <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/10 text-primary text-[0.6875rem] font-medium rounded-full">
-                                    <Paperclip size={10} />
-                                    {c.attachment}
-                                  </span>
-                                )}
                               </div>
-                            </div>
-                          </li>
-                        ))}
+                            </li>
+                          );
+                        })}
                       </ol>
                     </section>
                   ))}
@@ -2444,61 +2534,6 @@ function CommentDrawer({
               )}
             </div>
           </>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              {sourceFiles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-10 h-10 rounded-xl bg-paper-50 flex items-center justify-center mb-3">
-                    <FileText size={18} className="text-text-muted/50" />
-                  </div>
-                  <p className="text-[0.8125rem] font-medium text-text-secondary">No source files attached to this query yet.</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border-light border border-border-light rounded-[10px] overflow-hidden">
-                  {sourceFiles.map(f => {
-                    const pillClass = f.type === 'excel'
-                      ? 'bg-compliant-50 text-compliant-700'
-                      : 'bg-brand-50 text-brand-700';
-                    return (
-                      <li key={f.name} className="flex items-center gap-3 px-4 py-3 hover:bg-paper-50 transition-colors">
-                        <div className="w-9 h-9 rounded-[8px] bg-paper-50 border border-border-light flex items-center justify-center shrink-0">
-                          <FileText size={16} className={f.type === 'excel' ? 'text-compliant-700' : 'text-brand-700'} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-mono text-[0.75rem] font-semibold text-text truncate">{f.name}</span>
-                            <span className={`inline-flex items-center h-5 px-1.5 text-[0.625rem] font-semibold uppercase tracking-wider rounded ${pillClass}`}>{f.type}</span>
-                          </div>
-                          <div className="text-[0.75rem] text-text-muted tabular-nums">
-                            {f.size} · {f.rows.toLocaleString()} rows · {f.source} · {f.modified}
-                          </div>
-                        </div>
-                        <button
-                          className="inline-flex items-center justify-center w-8 h-8 text-text-secondary bg-white border border-border-light rounded-[8px] hover:border-primary/30 hover:text-primary cursor-pointer"
-                          title={`Preview ${f.name}`}
-                          aria-label={`Preview ${f.name}`}
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          className="inline-flex items-center justify-center w-8 h-8 text-text-secondary bg-white border border-border-light rounded-[8px] hover:border-primary/30 hover:text-primary cursor-pointer"
-                          title={`Download ${f.name}`}
-                          aria-label={`Download ${f.name}`}
-                        >
-                          <Download size={14} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <footer className="shrink-0 px-6 py-3 border-t border-border-light text-right text-[0.75rem] text-text-muted tabular-nums">
-              {sourceFiles.length} files
-            </footer>
-          </>
-        )}
       </motion.aside>
     </>
   );
@@ -2536,18 +2571,23 @@ function ReportActivityLogDrawer({
 }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(containerRef, true, onClose);
 
   // Newest first.
   const sorted = [...comments].reverse();
 
   const handlePost = () => {
     const body = text.trim();
-    if (!body) return;
+    if (!body || isPosting) return;
+    setIsPosting(true);
     // Report-level entries are tagged as global so they show across all surfaces.
     onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachment ?? undefined);
     setText('');
     setAttachment(null);
+    window.setTimeout(() => setIsPosting(false), 120);
   };
 
   return (
@@ -2561,22 +2601,24 @@ function ReportActivityLogDrawer({
         onClick={onClose}
       />
       <motion.aside
+        ref={(el) => { containerRef.current = el as HTMLElement | null; }}
         initial={{ x: 24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-border-light flex flex-col z-[60]"
         role="dialog"
+        aria-modal="true"
         aria-label="Report activity log"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-border-light">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-[10px] bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <History size={18} />
+            <div className="w-10 h-10 rounded-[8px] bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <History size={20} />
             </div>
             <div>
-              <h2 className="text-[1rem] font-semibold text-text leading-tight">Report Activity Log</h2>
-              <p className="text-[0.75rem] text-text-muted mt-0.5 leading-snug">
+              <h2 className="text-[16px] font-semibold text-text leading-tight">Report Activity Log</h2>
+              <p className="text-[12px] text-text-muted mt-0.5 leading-snug">
                 All actions and comments across every query card on this report.
               </p>
             </div>
@@ -2598,7 +2640,7 @@ function ReportActivityLogDrawer({
               onChange={(e) => setText(e.target.value)}
               placeholder="Add a comment to the report activity log…"
               rows={3}
-              className="w-full resize-none p-3 pr-10 bg-white border border-border-light rounded-[8px] text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
+              className="w-full resize-none p-3 pr-10 bg-white border border-border-light rounded-[8px] text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
             />
             <input
               ref={fileInputRef}
@@ -2620,56 +2662,61 @@ function ReportActivityLogDrawer({
             </button>
           </div>
           {attachment && (
-            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[0.75rem] font-medium rounded-full">
-              <Paperclip size={11} />
+            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11px] font-medium rounded-full">
+              <Paperclip size={12} />
               {attachment}
               <button onClick={() => setAttachment(null)} className="hover:text-primary/70 cursor-pointer" aria-label="Remove attachment">
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           )}
           <div className="mt-2 flex justify-end">
             <button
               onClick={handlePost}
-              disabled={!text.trim()}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-[8px] transition-colors ${
-                text.trim()
+              disabled={!text.trim() || isPosting}
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                text.trim() && !isPosting
                   ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer'
                   : 'bg-primary/40 text-white/80 cursor-not-allowed'
               }`}
             >
-              <Send size={12} />
-              Post
+              {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {isPosting ? 'Posting…' : 'Post'}
             </button>
           </div>
         </section>
 
         {/* Activity feed */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
           {sorted.length === 0 ? (
-            <p className="text-center text-[0.75rem] text-text-muted py-10">No activity recorded yet.</p>
+            <EmptyState
+              icon={History}
+              title="No activity yet"
+              body="Edits, comments, and downloads will be tracked here."
+              size="compact"
+            />
           ) : (
             <ol className="space-y-4">
               {sorted.map(c => (
                 <li key={c.id} className="flex gap-3">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[0.6875rem] font-semibold">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold">
                     {c.initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3 mb-0.5">
-                      <span className="text-[0.75rem] font-semibold text-text">{c.author}</span>
-                      <span className="text-[0.6875rem] text-text-muted tabular-nums whitespace-nowrap">{c.timestamp}</span>
+                      <span className="text-[12px] font-semibold text-text">{c.author}</span>
+                      <span className="text-[11px] text-text-muted tabular-nums whitespace-nowrap">{c.timestamp}</span>
                     </div>
-                    <div className="text-[0.6875rem] text-text-muted mb-1.5">
+                    <div className="text-[11px] text-text-muted mb-1.5">
                       <span className="inline-flex items-center h-4 px-1.5 font-mono font-medium bg-primary/5 text-primary rounded">
                         {c.queryId}
                       </span>{' '}
                       <span className="ml-1 line-clamp-1">{c.queryTitle}</span>
                     </div>
-                    <p className="text-[0.75rem] text-text leading-relaxed">{c.text}</p>
+                    <p className="text-[12px] text-text leading-relaxed">{c.text}</p>
                     {c.attachment && (
-                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[0.75rem] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
-                        <Paperclip size={11} />
+                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-primary/5 text-primary text-[11px] font-medium rounded-full hover:bg-primary/10 cursor-pointer">
+                        <Paperclip size={12} />
                         {c.attachment}
                       </button>
                     )}
@@ -2715,16 +2762,16 @@ function ContentsRow({
       value={section}
       dragControls={controls}
       dragListener={false}
-      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
+      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-primary-xlight/30 transition-colors list-none cursor-default"
     >
       <button
         onPointerDown={(e) => { controls.start(e); }}
         aria-label="Drag to reorder"
         className="shrink-0 p-1 text-text-muted/40 hover:text-text-muted cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
       >
-        <GripVertical size={13} />
+        <GripVertical size={14} />
       </button>
-      <span className="shrink-0 w-6 text-[0.75rem] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[10px] text-text-muted/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -2736,12 +2783,12 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-md px-2 py-1 text-[0.75rem] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
+          className="flex-1 min-w-0 bg-white border border-primary/40 rounded-[8px] px-2 py-1 text-[12px] text-text focus:outline-none focus:ring-2 focus:ring-primary/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[0.75rem] text-text-secondary truncate transition-colors cursor-pointer"
+          className="flex-1 min-w-0 text-left text-[12px] text-text-secondary truncate transition-colors cursor-pointer"
         >
           {section.title}
         </button>
@@ -2751,16 +2798,16 @@ function ContentsRow({
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
-            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
+            className="p-1.5 rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
           >
-            <Edit3 size={13} />
+            <Edit3 size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             aria-label="Delete section"
-            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
           </button>
         </div>
       )}
@@ -2838,36 +2885,36 @@ function ObservationActionsMenu({
         aria-label="More options"
         className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
       >
-        <MoreVertical size={15} />
+        <MoreVertical size={16} />
       </button>
       {open && createPortal(
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-border-light rounded-[10px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-border-light rounded-[8px] shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
           >
-            <Edit3 size={13} />
+            <Edit3 size={14} />
             Edit observation
           </button>
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
             >
-              {attachmentHidden ? <Eye size={13} /> : <EyeOff size={13} />}
+              {attachmentHidden ? <Eye size={14} /> : <EyeOff size={14} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
             </button>
           )}
           <div className="my-1 border-t border-border-light/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
             Delete observation
           </button>
         </div>,
@@ -2926,7 +2973,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-2xl'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -2936,7 +2983,7 @@ function ObservationCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
+          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
             <span className="font-bold text-primary uppercase tracking-wider shrink-0">{obs.obsId}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">Observation</span>
@@ -2955,7 +3002,7 @@ function ObservationCard({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[0.9375rem] font-semibold text-text leading-[1.5] mb-5"
+          className="text-[15px] font-semibold text-text leading-[1.5] mb-5"
         >
           {obs.title}
         </motion.h3>
@@ -2966,7 +3013,7 @@ function ObservationCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: baseDelay + 0.4, duration: 0.4 }}
-            className="text-[0.8125rem] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
+            className="text-[13px] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
           >
             {obs.description}
           </motion.p>
@@ -2993,7 +3040,7 @@ function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-lg border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
+                    className="block w-[88px] h-[88px] rounded-[12px] border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -3009,11 +3056,11 @@ function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-md hover:border-primary/40 hover:bg-white transition-colors group"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-[8px] hover:border-primary/40 hover:bg-white transition-colors group"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
-                  <span className="text-[0.75rem] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
-                  <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
+                  <span className="text-[10px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -3036,7 +3083,7 @@ function ObservationCard({
             aria-label="Close preview"
             className="absolute top-5 right-5 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer backdrop-blur-sm"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
           {imageAttachments.length > 1 && (
             <>
@@ -3070,9 +3117,9 @@ function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-2xl cursor-default"
           />
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[0.75rem] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
             <span className="text-white/40">·</span>
             <span>{imageAttachments[lightboxIndex].name}</span>
@@ -3119,7 +3166,7 @@ function WorkflowResultCard({
   const severityStyle = workflow.severity === 'High'
     ? { pill: 'bg-risk-50 text-risk-700', dot: 'bg-risk-500' }
     : workflow.severity === 'Medium'
-      ? { pill: 'bg-high-50 text-high-700', dot: 'bg-high-500' }
+      ? { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' }
       : { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' };
 
   useEffect(() => {
@@ -3152,7 +3199,7 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
+          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
             <span className="font-bold text-primary uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
             {workflow.businessProcess && (
               <>
@@ -3163,7 +3210,7 @@ function WorkflowResultCard({
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="flex items-center gap-1.5 shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-high-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
+              <span className={`font-semibold uppercase tracking-wider ${workflow.severity === 'High' ? 'text-risk-700' : workflow.severity === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{workflow.severity}</span>
             </span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -3175,32 +3222,18 @@ function WorkflowResultCard({
                 aria-label="More options"
                 className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
               >
-                <MoreVertical size={15} />
+                <MoreVertical size={16} />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[10px] shadow-xl py-1">
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      navigator.clipboard?.writeText(workflow.workflowId);
-                      addToast({ type: 'success', message: `Copied ${workflow.workflowId}` });
-                    }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer"
-                  >
-                    <Copy size={13} />
-                    Copy Workflow ID
-                  </button>
+                <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-border-light rounded-[8px] shadow-xl py-1">
                   {onDelete && (
-                    <>
-                      <div className="my-1 border-t border-border-light" />
-                      <button
-                        onClick={() => { setMenuOpen(false); onDelete(); }}
-                        className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
-                      >
-                        <Trash2 size={13} />
-                        Delete
-                      </button>
-                    </>
+                    <button
+                      onClick={() => { setMenuOpen(false); onDelete(); }}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
                   )}
                 </div>
               )}
@@ -3215,12 +3248,12 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
           className="mb-5"
         >
-          <h3 className="text-[0.9375rem] font-semibold text-text leading-[1.5] mb-2">
+          <h3 className="text-[15px] font-semibold text-text leading-[1.5] mb-2">
             {workflow.name}
           </h3>
 
           {/* Risk owner — inline editable. Filled state renders as initials chip + name; empty state stays understated. */}
-          <div className="flex items-center gap-2 text-[0.75rem]">
+          <div className="flex items-center gap-2 text-[12px]">
             <span className="text-text-muted">Risk owner</span>
             {editingOwner ? (
               <input
@@ -3233,14 +3266,14 @@ function WorkflowResultCard({
                   if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
                 }}
                 placeholder="e.g., Priya Mehta"
-                className="flex-1 max-w-[280px] px-2 py-1 text-[0.75rem] text-text border border-primary/40 rounded-md focus:outline-none focus:border-primary"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-text border border-primary/40 rounded-[8px] focus:outline-none focus:border-primary"
               />
             ) : workflow.riskOwner ? (
               <button
                 onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
-                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-primary-xlight transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[0.625rem] font-bold tabular-nums">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold tabular-nums">
                   {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
                 <span className="text-text font-medium">{workflow.riskOwner}</span>
@@ -3263,16 +3296,16 @@ function WorkflowResultCard({
             { title: 'Observations', items: workflow.observations, emptyCopy: 'No observations recorded for this workflow yet.' },
           ].map(section => (
             <div key={section.title}>
-              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
                 <span>{section.title}</span>
                 {section.items.length > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[0.625rem] font-semibold tabular-nums">
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
                     {section.items.length}
                   </span>
                 )}
               </h4>
               {section.items.length === 0 ? (
-                <p className="text-[0.75rem] text-text-muted italic">{section.emptyCopy}</p>
+                <p className="text-[12px] text-text-muted italic">{section.emptyCopy}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {section.items.map((item, i) => (
@@ -3281,7 +3314,7 @@ function WorkflowResultCard({
                       initial={{ opacity: 0, x: -4 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: baseDelay + 0.4 + i * 0.05, duration: 0.3 }}
-                      className="flex gap-2.5 text-[0.8125rem] text-text leading-relaxed"
+                      className="flex gap-2.5 text-[13px] text-text leading-relaxed"
                     >
                       <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-primary/60" />
                       {item}
@@ -3295,20 +3328,20 @@ function WorkflowResultCard({
           {/* Output table */}
           {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
             <div>
-              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-text-secondary uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-3">
                 <span>Output</span>
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[0.625rem] font-semibold tabular-nums">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-paper-50 text-text-muted text-[10px] font-semibold tabular-nums">
                   {workflow.outputTable.rows.length}
                 </span>
               </h4>
-              <div className="border border-border-light rounded-xl overflow-hidden">
-                <table className="w-full border-collapse text-[0.75rem]">
+              <div className="border border-border-light rounded-[12px] overflow-hidden">
+                <table className="w-full border-collapse text-[12px]">
                   <thead>
                     <tr className="bg-paper-50/70">
                       {workflow.outputTable.columns.map((col, ci) => (
                         <th
                           key={col}
-                          className={`px-3 py-2 text-[0.75rem] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                          className={`px-3 py-2 text-[10px] font-semibold text-text-secondary uppercase tracking-wider border-b border-border-light ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
                         >
                           {col}
                         </th>
@@ -3329,15 +3362,15 @@ function WorkflowResultCard({
                           return (
                             <td
                               key={ci}
-                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[0.75rem] text-text-secondary tabular-nums' : ''}`}
+                              className={`px-3 py-2 text-text border-b border-border-light/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[12px] text-text-secondary tabular-nums' : ''}`}
                             >
                               {isSeverity ? (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[0.75rem] font-semibold ${
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[10px] font-semibold ${
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
-                                        ? 'bg-high-50 text-high-700'
+                                        ? 'bg-mitigated-50 text-mitigated-700'
                                         : 'bg-compliant-50 text-compliant-700'
                                   }`}
                                 >
@@ -3346,7 +3379,7 @@ function WorkflowResultCard({
                                       cellStr === 'High'
                                         ? 'bg-risk-500'
                                         : cellStr === 'Medium'
-                                          ? 'bg-high-500'
+                                          ? 'bg-mitigated-500'
                                           : 'bg-compliant-500'
                                     }`}
                                   />
@@ -3362,13 +3395,13 @@ function WorkflowResultCard({
                     ))}
                   </tbody>
                 </table>
-                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[0.6875rem] text-text-muted">
+                <div className="flex items-center justify-between px-3 py-2 bg-paper-50/40 border-t border-border-light/60 text-[11px] text-text-muted">
                   <span>{workflow.outputTable.rows.length} {workflow.outputTable.rows.length === 1 ? 'record' : 'records'}</span>
                   <button
                     onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
                     className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
                   >
-                    <Download size={11} />
+                    <Download size={12} />
                     Download CSV
                   </button>
                 </div>
@@ -3422,6 +3455,7 @@ function AttachedQueryCard({ query, index, onRemove }: {
 }) {
   const KindIcon = query.kind === 'query' ? MessageSquare : query.kind === 'upload' ? Upload : Database;
   const kindLabel = query.kind === 'query' ? 'Saved Query' : query.kind === 'upload' ? 'Uploaded File' : 'Data Source';
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   // Resolve the modal label to a REPORT_QUERIES_ATR entry. Only saved queries
   // map to canned data; uploads and ad-hoc data sources have no preview.
@@ -3445,28 +3479,37 @@ function AttachedQueryCard({ query, index, onRemove }: {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
-      className="bg-white border border-border-light rounded-2xl px-6 py-5"
+      className="bg-white border border-border-light rounded-[12px] px-6 py-5"
     >
       <div className="flex items-start gap-3">
-        <div className="size-9 rounded-[10px] bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
-          <KindIcon size={15} className="text-primary" />
+        <div className="size-9 rounded-[8px] bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
+          <KindIcon size={16} className="text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
-            <span className="text-[0.75rem] text-text-muted">·</span>
-            <span className="text-[0.75rem] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
+            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-primary/80">{kindLabel}</span>
+            <span className="text-[10px] text-text-muted">·</span>
+            <span className="text-[10px] text-text-muted">Attached {query.attachedAt} by {query.attachedBy}</span>
           </div>
-          <h3 className="text-[0.75rem] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
+          <h3 className="text-[14px] font-bold text-text tracking-tight leading-snug">{query.label}</h3>
         </div>
         <button
-          onClick={() => onRemove(query.id)}
+          onClick={() => setShowRemoveConfirm(true)}
           aria-label="Remove attached query"
-          className="p-1.5 rounded-lg text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0"
+          className="p-1.5 rounded-[8px] text-text-muted hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
         >
           <X size={14} />
         </button>
       </div>
+      <ConfirmDialog
+        open={showRemoveConfirm}
+        onClose={() => setShowRemoveConfirm(false)}
+        onConfirm={() => { setShowRemoveConfirm(false); onRemove(query.id); }}
+        title="Remove attached query?"
+        description={<>This will detach <span className="font-semibold text-text">{query.label}</span> from the report. You can re-attach it later.</>}
+        confirmLabel="Remove"
+        destructive
+      />
 
       <AnimatePresence mode="wait">
         {phase === 'syncing' && (
@@ -3475,12 +3518,12 @@ function AttachedQueryCard({ query, index, onRemove }: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-brand-200 rounded-[10px] bg-brand-50/40 px-5 py-4 flex items-center gap-3"
+            className="mt-4 border border-dashed border-brand-200 rounded-[12px] bg-brand-50/40 px-5 py-4 flex items-center gap-3"
           >
             <Loader2 size={14} className="text-primary animate-spin shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[0.75rem] font-semibold text-primary mb-0.5">Data syncing</p>
-              <p className="text-[0.75rem] text-text-muted">Running query against your data — preview will appear in a moment.</p>
+              <p className="text-[12px] font-semibold text-primary mb-0.5">Data syncing</p>
+              <p className="text-[11px] text-text-muted">Running query against your data — preview will appear in a moment.</p>
             </div>
           </motion.div>
         )}
@@ -3495,8 +3538,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             {/* Summary */}
             <div>
-              <div className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
-              <p className="text-[0.75rem] leading-relaxed text-text">{resolved.summary}</p>
+              <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted mb-1.5">Summary</div>
+              <p className="text-[12px] leading-relaxed text-text">{resolved.summary}</p>
             </div>
 
             {/* Findings */}
@@ -3504,13 +3547,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Lightbulb size={12} className="text-evidence-700" />
-                  <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
-                  <span className="text-[0.75rem] text-text-muted">·</span>
-                  <span className="text-[0.75rem] text-text-muted">{resolved.findings.length}</span>
+                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted">Findings</span>
+                  <span className="text-[10px] text-text-muted">·</span>
+                  <span className="text-[10px] text-text-muted">{resolved.findings.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.findings.map((f, i) => (
-                    <li key={i} className="flex gap-2 text-[0.75rem] text-text leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[12px] text-text leading-relaxed">
                       <span className="text-evidence-700 shrink-0 mt-1">•</span>
                       <span>{f}</span>
                     </li>
@@ -3524,13 +3567,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye size={12} className="text-primary" />
-                  <span className="text-[0.75rem] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
-                  <span className="text-[0.75rem] text-text-muted">·</span>
-                  <span className="text-[0.75rem] text-text-muted">{resolved.observations.length}</span>
+                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-text-muted">Observations</span>
+                  <span className="text-[10px] text-text-muted">·</span>
+                  <span className="text-[10px] text-text-muted">{resolved.observations.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.observations.map((o, i) => (
-                    <li key={i} className="flex gap-2 text-[0.75rem] text-text leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[12px] text-text leading-relaxed">
                       <span className="text-primary shrink-0 mt-1">•</span>
                       <span>{o}</span>
                     </li>
@@ -3547,12 +3590,12 @@ function AttachedQueryCard({ query, index, onRemove }: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-border-light rounded-[10px] bg-paper-50/40 px-5 py-4 flex items-center gap-3"
+            className="mt-4 border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-5 py-4 flex items-center gap-3"
           >
             <PackageOpen size={14} className="text-text-muted shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[0.75rem] font-semibold text-text mb-0.5">Preview not available</p>
-              <p className="text-[0.75rem] text-text-muted">
+              <p className="text-[12px] font-semibold text-text mb-0.5">Preview not available</p>
+              <p className="text-[11px] text-text-muted">
                 {query.kind === 'upload'
                   ? 'Uploaded files render once the parser finishes — wire your data pipeline to enable preview.'
                   : query.kind === 'source'
@@ -3600,6 +3643,9 @@ function AddQueryModal({ open, onClose, onAttach }: {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [isAttaching, setIsAttaching] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, open, onClose);
 
   if (!open) return null;
 
@@ -3618,19 +3664,25 @@ function AddQueryModal({ open, onClose, onAttach }: {
   };
 
   const handleAttach = () => {
-    if ((activeTab === 'recent' || activeTab === 'saved') && selectedQuery) {
-      onAttach({ kind: 'query', label: selectedQuery });
-      handleClose();
-    } else if (activeTab === 'upload' && uploadedFile) {
-      onAttach({ kind: 'upload', label: uploadedFile.name });
-      handleClose();
-    } else if ((activeTab === 'all' || activeTab === 'files' || activeTab === 'db') && selectedSource) {
-      const src = allSources.find(s => s.id === selectedSource);
-      if (src) {
-        onAttach({ kind: 'source', label: src.name });
+    if (isAttaching) return;
+    setIsAttaching(true);
+    // Resolve once parent state has settled.
+    window.setTimeout(() => {
+      if ((activeTab === 'recent' || activeTab === 'saved') && selectedQuery) {
+        onAttach({ kind: 'query', label: selectedQuery });
         handleClose();
+      } else if (activeTab === 'upload' && uploadedFile) {
+        onAttach({ kind: 'upload', label: uploadedFile.name });
+        handleClose();
+      } else if ((activeTab === 'all' || activeTab === 'files' || activeTab === 'db') && selectedSource) {
+        const src = allSources.find(s => s.id === selectedSource);
+        if (src) {
+          onAttach({ kind: 'source', label: src.name });
+          handleClose();
+        }
       }
-    }
+      setIsAttaching(false);
+    }, 120);
   };
 
   return (
@@ -3645,27 +3697,31 @@ function AddQueryModal({ open, onClose, onAttach }: {
         >
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
           <motion.div
+            ref={containerRef}
             initial={{ opacity: 0, scale: 0.96, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
             transition={{ duration: 0.2 }}
-            className="relative bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[820px] h-[600px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add Query"
+            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[840px] h-[600px]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-4 border-b border-canvas-border">
-              <h2 className="text-[1rem] font-bold text-ink-900 shrink-0">Add Query</h2>
+              <h2 className="text-[16px] font-bold text-ink-900 shrink-0">Add Query</h2>
               <div className="flex-1 mx-5 relative">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={activeTab === 'upload' ? 'Drop files below to upload...' : 'Search...'}
-                  className="w-full pl-10 pr-4 py-2 text-[0.8125rem] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                  className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                 />
               </div>
-              <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
+              <button onClick={handleClose} className="p-1.5 rounded-[8px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
                 <X size={20} className="text-ink-400" />
               </button>
             </div>
@@ -3683,13 +3739,13 @@ function AddQueryModal({ open, onClose, onAttach }: {
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setSelectedQuery(null); setSelectedSource(null); }}
-                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[0.8125rem] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[13px] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
                     activeTab === tab.id ? 'text-brand-700' : 'text-ink-400 hover:text-ink-600'
                   }`}
                 >
                   <tab.icon size={14} />
                   {tab.label}
-                  {tab.count > 0 && <span className="text-[0.6875rem] text-ink-400 font-normal">{tab.count}</span>}
+                  {tab.count > 0 && <span className="text-[11px] text-ink-400 font-normal">{tab.count}</span>}
                   {activeTab === tab.id && (
                     <motion.div layoutId="add-query-tab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-600 rounded-full" />
                   )}
@@ -3712,20 +3768,20 @@ function AddQueryModal({ open, onClose, onAttach }: {
                             if (filtered.length === 0) return null;
                             return (
                               <div key={group.group || 'ungrouped'}>
-                                {group.group && <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
+                                {group.group && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
                                 <div className="space-y-2">
                                   {filtered.map(q => (
                                     <button
                                       key={q}
                                       onClick={() => setSelectedQuery(q)}
-                                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all cursor-pointer text-left ${
                                         selectedQuery === q ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                                       }`}
                                     >
                                       {activeTab === 'recent'
                                         ? <MessageSquare size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />
                                         : <Star size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
-                                      <span className={`text-[0.8125rem] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
+                                      <span className={`text-[13px] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -3736,10 +3792,10 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           {activeTab === 'recent' ? <MessageSquare size={32} className="text-ink-200 mb-3" /> : <Star size={32} className="text-ink-200 mb-3" />}
-                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">
+                          <p className="text-[14px] font-medium text-ink-500 mb-1">
                             {activeTab === 'recent' ? 'No chats found' : 'No favourites found'}
                           </p>
-                          <p className="text-[0.75rem] text-ink-400">
+                          <p className="text-[12px] text-ink-400">
                             {search ? 'Try a different search term.' : activeTab === 'recent' ? 'Start a new chat to see it here.' : 'Star a chat to add it to favourites.'}
                           </p>
                         </div>
@@ -3762,7 +3818,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       onDragLeave={() => setDragging(false)}
                       onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) setUploadedFile(f); }}
                       onClick={() => !uploadedFile && document.getElementById('add-query-file-input')?.click()}
-                      className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center text-center transition-all min-h-[300px] ${
+                      className={`border-2 border-dashed rounded-[12px] p-12 flex flex-col items-center justify-center text-center transition-all min-h-[300px] ${
                         dragging
                           ? 'border-brand-500 bg-brand-50'
                           : uploadedFile
@@ -3772,31 +3828,31 @@ function AddQueryModal({ open, onClose, onAttach }: {
                     >
                       {uploadedFile ? (
                         <div>
-                          <CloudUpload size={28} className="text-green-600 mx-auto mb-3" />
-                          <h3 className="text-[0.9375rem] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
-                          <p className="text-[0.8125rem] text-compliant font-medium mb-1">
+                          <CloudUpload size={32} className="text-green-600 mx-auto mb-3" />
+                          <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
+                          <p className="text-[13px] text-compliant font-medium mb-1">
                             {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
                           </p>
                           <button
                             onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
-                            className="text-[0.75rem] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
+                            className="text-[12px] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
                           >
                             Remove file
                           </button>
                         </div>
                       ) : (
                         <>
-                          <Upload size={28} className="text-ink-300 mb-3" />
-                          <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Drop files here</h3>
-                          <p className="text-[0.8125rem] text-ink-400 mb-4">or pick from your computer</p>
+                          <Upload size={32} className="text-ink-300 mb-3" />
+                          <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
+                          <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('add-query-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-lg transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
                           </button>
-                          <p className="text-[0.6875rem] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
+                          <p className="text-[11px] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
                         </>
                       )}
                     </div>
@@ -3819,16 +3875,16 @@ function AddQueryModal({ open, onClose, onAttach }: {
                               <button
                                 key={source.id}
                                 onClick={() => setSelectedSource(isSelected ? null : source.id)}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all cursor-pointer text-left ${
                                   isSelected ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                                 }`}
                               >
-                                <div className={`size-8 rounded-md flex items-center justify-center shrink-0 ${meta.tone}`}>
+                                <div className={`size-8 rounded-[8px] flex items-center justify-center shrink-0 ${meta.tone}`}>
                                   <Icon size={14} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{source.name}</div>
-                                  <div className="text-[0.6875rem] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
+                                  <div className="text-[13px] font-medium text-ink-900 truncate">{source.name}</div>
+                                  <div className="text-[11px] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
                                 </div>
                                 {isSelected && <Check size={16} className="text-brand-600 shrink-0" />}
                               </button>
@@ -3838,8 +3894,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <Search size={32} className="text-ink-200 mb-3" />
-                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
-                          <p className="text-[0.75rem] text-ink-400">
+                          <p className="text-[14px] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
+                          <p className="text-[12px] text-ink-400">
                             {search ? 'Try a different search term.' : `No ${tabLabel} available.`}
                           </p>
                         </div>
@@ -3852,8 +3908,8 @@ function AddQueryModal({ open, onClose, onAttach }: {
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
-              <p className="text-[0.75rem] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
-              <button onClick={handleClose} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+              <p className="text-[12px] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
+              <button onClick={handleClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer">
                 Cancel
               </button>
               {(() => {
@@ -3864,13 +3920,13 @@ function AddQueryModal({ open, onClose, onAttach }: {
                 return (
                   <button
                     onClick={handleAttach}
-                    disabled={!enabled}
-                    className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
-                      enabled ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
+                    disabled={!enabled || isAttaching}
+                    className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                      enabled && !isAttaching ? 'bg-primary hover:bg-primary-hover text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
-                    <Check size={14} />
-                    Attach
+                    {isAttaching ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    {isAttaching ? 'Attaching…' : 'Attach'}
                   </button>
                 );
               })()}
@@ -3895,11 +3951,12 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
-  const { addToast, updateToast } = useToast();
+  const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   // QueryCard "Generate Cases" phase, lifted up so it survives template
   // switches that re-mount QueryCards. Keyed by query.id.
   const [casesPhases, setCasesPhases] = useState<Record<string, CasesPhase>>({});
@@ -3917,13 +3974,25 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     return () => window.removeEventListener('app:launch-pulse', handler);
   }, []);
 
-  const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
+  const applyTemplateNow = (template: typeof REPORT_TEMPLATES[0]) => {
     setApplyingTemplate(true);
     setTimeout(() => {
       setAppliedTemplate(template);
       setApplyingTemplate(false);
-      addToast({ type: 'success', message: `Template "${template.name}" applied!` });
+      addToast({ type: 'success', message: `Template "${template.name}" applied.` });
     }, 800);
+  };
+
+  const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
+    setShowApplyTemplate(false);
+    // Switching away from a template that's already applied replaces the
+    // current layout and its sections, so confirm first. The first-time
+    // apply (nothing applied yet, or re-picking the same one) is harmless.
+    if (appliedTemplate && appliedTemplate.id !== template.id) {
+      setPendingTemplate(template);
+      return;
+    }
+    applyTemplateNow(template);
   };
 
   const reportTemplate =
@@ -3965,37 +4034,37 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             rows={2}
             placeholder="Add a description for this report…"
             autoFocus
-            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-white text-[0.8125rem] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
+            className="w-full bg-white/10 border border-white/25 rounded-[8px] px-3 py-2 text-white text-[13px] leading-snug placeholder:text-white/50 focus:outline-none focus:border-white/55 focus:bg-white/15 transition-colors resize-none"
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={saveEditDesc}
-              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[0.75rem] font-semibold rounded-md hover:bg-white/90 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 h-7 px-3 bg-white text-primary text-[11px] font-semibold rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer"
             >
               <Check size={12} /> Save
             </button>
             <button
               onClick={cancelEditDesc}
-              className="h-7 px-2.5 text-white/75 text-[0.75rem] font-medium hover:text-white transition-colors cursor-pointer"
+              className="h-7 px-2.5 text-white/75 text-[11px] font-medium hover:text-white transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <span className="text-white/40 text-[0.75rem] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
+            <span className="text-white/40 text-[10px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
           </div>
         </div>
       );
     }
     return (
       <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
-        <p className="text-white/65 text-[0.8125rem] leading-snug pl-0.5">
+        <p className="text-white/65 text-[13px] leading-snug pl-0.5">
           {displayDescription || <span className="italic text-white/40">No description</span>}
         </p>
         <button
           onClick={startEditDesc}
           aria-label="Edit description"
-          className="shrink-0 p-1 -mt-0.5 rounded-md text-white/55 hover:text-white hover:bg-white/15 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer"
+          className="shrink-0 p-1 -mt-0.5 rounded-[8px] text-white/55 hover:text-white hover:bg-white/15 opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer"
         >
-          <Edit3 size={11} />
+          <Edit3 size={12} />
         </button>
       </div>
     );
@@ -4003,7 +4072,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   const DEFAULT_QUERIES = [
     {
-      id: 'Q01', status: 'In Review', risk: 'Financial Risk', severity: 'High',
+      id: 'Q01', risk: 'Financial Risk', severity: 'High',
       ...REPORT_QUERIES_ATR.Q01,
       addedBy: report.generatedBy,
       kpis: [
@@ -4015,7 +4084,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       chartData: [40, 55, 80, 65, 90, 75, 95, 70, 85, 100],
     },
     {
-      id: 'Q02', status: 'Completed', risk: 'Compliance Risk', severity: 'Critical',
+      id: 'Q02', risk: 'Compliance Risk', severity: 'High',
       ...REPORT_QUERIES_ATR.Q02,
       addedBy: 'AI Copilot',
       kpis: [
@@ -4032,19 +4101,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const TEMPLATE_QUERIES: Record<string, typeof DEFAULT_QUERIES> = {
     'rt-002': [ // Risk Assessment Summary
       {
-        id: 'RA01', status: 'Completed', risk: 'Aggregate Risk', severity: 'High',
+        id: 'RA01', risk: 'Aggregate Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.RA01,
         addedBy: report.generatedBy,
         kpis: [
           { label: 'Total Risks', value: '12', color: 'text-primary' },
-          { label: 'Critical', value: '2', color: 'text-risk-700' },
-          { label: 'High', value: '5', color: 'text-high-700' },
+          { label: 'High', value: '7', color: 'text-risk-700' },
           { label: 'Mitigated', value: '5', color: 'text-compliant-700' },
         ],
         chartData: [12, 10, 11, 9, 12, 10, 8, 12, 11, 12],
       },
       {
-        id: 'RA02', status: 'In Review', risk: 'Mitigation Gap', severity: 'Critical',
+        id: 'RA02', risk: 'Mitigation Gap', severity: 'High',
         ...REPORT_QUERIES_ATR.RA02,
         addedBy: 'AI Copilot',
         kpis: [
@@ -4058,7 +4126,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-003': [ // Control Effectiveness Report
       {
-        id: 'CE01', status: 'Completed', risk: 'Control Gap', severity: 'High',
+        id: 'CE01', risk: 'Control Gap', severity: 'High',
         ...REPORT_QUERIES_ATR.CE01,
         addedBy: report.generatedBy,
         kpis: [
@@ -4072,7 +4140,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-004': [ // Workflow Analytics Report
       {
-        id: 'WA01', status: 'Completed', risk: 'Operational Risk', severity: 'High',
+        id: 'WA01', risk: 'Operational Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.WA01,
         addedBy: 'AI Copilot',
         kpis: [
@@ -4084,7 +4152,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         chartData: [85, 88, 90, 87, 92, 94, 91, 93, 95, 94],
       },
       {
-        id: 'WA02', status: 'In Review', risk: 'Processing Risk', severity: 'High',
+        id: 'WA02', risk: 'Processing Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.WA02,
         addedBy: report.generatedBy,
         kpis: [
@@ -4098,7 +4166,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ],
     'rt-006': [ // Executive Dashboard Export
       {
-        id: 'EX01', status: 'Completed', risk: 'Strategic Risk', severity: 'High',
+        id: 'EX01', risk: 'Strategic Risk', severity: 'High',
         ...REPORT_QUERIES_ATR.EX01,
         addedBy: report.generatedBy,
         kpis: [
@@ -4225,11 +4293,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
+  // Regenerate summary mock — overrides the summary section's content with an
+  // alternative blurb after a short simulated delay so the action feels real.
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : DEFAULT_QUERIES;
     setSections(buildInitialSections(queries));
+    setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
 
@@ -4248,9 +4323,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   // ─── Add-Observation modal state ───
   const [showAddObservation, setShowAddObservation] = useState(false);
-  const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
-  const [editingObservationObsId, setEditingObservationObsId] = useState<string | null>(null);
-  const [obsForm, setObsForm] = useState<{ name: string; description: string; attachments: ObservationAttachment[] }>({ name: '', description: '', attachments: [] });
+  const [editingObservation, setEditingObservation] = useState<EditingObservationInput | null>(null);
   // Separate stream of observations added to applied-template view (where the body is template-driven)
   const [appliedObservations, setAppliedObservations] = useState<ObservationItem[]>([]);
 
@@ -4260,35 +4333,26 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       .filter((s): s is Extract<SectionItem, { kind: 'observation' }> => s.kind === 'observation')
       .map(s => s.obsId);
     const inApplied = appliedObservations.map(o => o.obsId);
-    const all = [...inSections, ...inApplied];
-    const maxN = all.reduce((max, id) => {
-      const m = id.match(/^OBS-(\d+)$/i);
-      const n = m ? parseInt(m[1], 10) : 0;
-      return n > max ? n : max;
-    }, 0);
-    return `OBS-${String(maxN + 1).padStart(3, '0')}`;
+    return computeNextObservationId([...inSections, ...inApplied]);
   };
 
   const openAddObservation = () => {
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
-    setObsForm({ name: '', description: '', attachments: [] });
+    setEditingObservation(null);
     setShowAddObservation(true);
   };
   const openEditObservation = (obs: { id: string; obsId: string; title: string; description: string; attachments?: ObservationAttachment[] }) => {
-    setEditingObservationId(obs.id);
-    setEditingObservationObsId(obs.obsId);
-    setObsForm({
+    setEditingObservation({
+      id: obs.id,
+      obsId: obs.obsId,
       name: obs.title,
       description: obs.description,
-      attachments: obs.attachments ? [...obs.attachments] : [],
+      attachments: obs.attachments,
     });
     setShowAddObservation(true);
   };
   const closeAddObservation = () => {
     setShowAddObservation(false);
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
+    setEditingObservation(null);
   };
 
   const toggleObservationAttachment = (id: string) => {
@@ -4302,114 +4366,19 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ));
   };
 
-  const handleObservationAttachments = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const queue = Array.from(files);
-    let rejectedSize = 0;
-    queue.forEach((file) => {
-      if (file.size > ATTACHMENT_MAX_BYTES) {
-        rejectedSize += 1;
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = String(e.target?.result ?? '');
-        if (!dataUrl) return;
-        setObsForm(prev => ({
-          ...prev,
-          attachments: [
-            ...prev.attachments,
-            {
-              id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              name: file.name,
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream',
-              dataUrl,
-            },
-          ],
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-    if (rejectedSize > 0) {
-      addToast({
-        type: 'info',
-        message: rejectedSize === 1
-          ? '1 file skipped — over the 10 MB per-file limit.'
-          : `${rejectedSize} files skipped — over the 10 MB per-file limit.`,
-      });
-    }
-  };
-
-  const removeObservationAttachment = (id: string) => {
-    setObsForm(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter(a => a.id !== id),
-    }));
-  };
-
-  // Drag-and-drop into the Add Observation modal. dragCounter tracks
-  // enter/leave nesting across child elements so the overlay doesn't
-  // flicker when dragging over inner inputs.
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-  const dragCounter = useRef(0);
-
-  const handleModalDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!e.dataTransfer.types.includes('Files')) return;
-    dragCounter.current += 1;
-    setIsDraggingFiles(true);
-  };
-  const handleModalDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) setIsDraggingFiles(false);
-  };
-  const handleModalDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-  const handleModalDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = 0;
-    setIsDraggingFiles(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleObservationAttachments(e.dataTransfer.files);
-      e.dataTransfer.clearData();
-    }
-  };
-
-  // Reset the drag counter whenever the modal closes so a stale count
-  // from a previous interaction can't pin the overlay open next time.
-  useEffect(() => {
-    if (!showAddObservation) {
-      dragCounter.current = 0;
-      setIsDraggingFiles(false);
-    }
-  }, [showAddObservation]);
-
-  const saveObservation = () => {
-    const name = obsForm.name.trim();
-    if (!name) return;
-    const description = obsForm.description.trim();
-    const attachments = obsForm.attachments.length > 0 ? obsForm.attachments : undefined;
-    if (editingObservationId) {
+  const handleObservationSave = ({ name, description, attachments }: { name: string; description: string; attachments?: ObservationAttachment[] }) => {
+    if (editingObservation) {
       setSections(prev => prev.map(s =>
-        s.id === editingObservationId && s.kind === 'observation'
+        s.id === editingObservation.id && s.kind === 'observation'
           ? { ...s, title: name, description, attachments }
           : s
       ));
       setAppliedObservations(prev => prev.map(o =>
-        o.id === editingObservationId
+        o.id === editingObservation.id
           ? { ...o, title: name, description, attachments }
           : o
       ));
-      addToast({ type: 'success', message: `${editingObservationObsId ?? 'Observation'} updated.` });
+      addToast({ type: 'success', message: `${editingObservation.obsId} updated.` });
     } else {
       const obsId = nextObservationId();
       const newItem: ObservationItem = {
@@ -4427,9 +4396,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       }
       addToast({ type: 'success', message: `${obsId} added.` });
     }
-    setShowAddObservation(false);
-    setEditingObservationId(null);
-    setEditingObservationObsId(null);
+    closeAddObservation();
   };
 
   // ─── Contents (table of contents) state + handlers ───
@@ -4476,13 +4443,13 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-2">
             <List size={16} className="text-primary" />
-            <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">Contents</h3>
+            <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
           </div>
           <button
             onClick={openAddObservation}
-            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
           >
-            <Plus size={13} />
+            <Plus size={14} />
             Add Observation
           </button>
         </div>
@@ -4518,6 +4485,19 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   // Report-level activity log drawer (consolidates activity across all query cards).
   const [activityLogOpen, setActivityLogOpen] = useState(false);
 
+  // Sync activity drawer state to the URL so a link can deep-link back to it.
+  // No react-router in this app — use history.replaceState directly.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (activityLogOpen) {
+      url.searchParams.set('drawer', 'activity');
+    } else if (url.searchParams.get('drawer') === 'activity') {
+      url.searchParams.delete('drawer');
+    }
+    window.history.replaceState({}, '', url.toString());
+  }, [activityLogOpen]);
+
   // Add Query modal — shown from the empty-state report layout.
   const [addQueryOpen, setAddQueryOpen] = useState(false);
 
@@ -4543,78 +4523,73 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     ]);
   };
 
+  const isReadOnly = report.isReadOnly === true || report.tag === 'Shared';
+  const sharedByName = report.sharedByName ?? (report as { sharedBy?: string }).sharedBy;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={launching ? { opacity: 0.88, x: 16 } : { opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-      className="h-full overflow-y-auto bg-surface-2"
+      className="report-printable h-full overflow-y-auto bg-surface-2"
     >
-      <div className="mx-auto px-8 py-6 max-w-6xl">
+      <div className="mx-auto px-8 py-6 max-w-6xl flex-col md:flex-row">
         {/* Top bar */}
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-text-secondary hover:text-primary transition-colors cursor-pointer">
-            <ArrowLeft size={14} /> Back to Reports
-          </button>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded">
+              <ArrowLeft size={14} /> Back to Reports
+            </button>
+            {isReadOnly && (
+              <span className="bg-paper-50 border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[11px] text-ink-500">
+                <Lock size={12} aria-hidden="true" />
+                <span>
+                  View-only{sharedByName ? <> · shared by {sharedByName}</> : ''}
+                </span>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 relative">
-            <div className="relative">
-              <button
-                onClick={() => setShowApplyTemplate(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
-              >
-                <Layout size={13} />
-                <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
-                <motion.span
-                  animate={{ rotate: showApplyTemplate ? 180 : 0 }}
-                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                  className="inline-flex"
+            {!isReadOnly && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowApplyTemplate(p => !p)}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
                 >
-                  <ChevronDown size={13} />
-                </motion.span>
-              </button>
-              <AnimatePresence>
-                {showApplyTemplate && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-                    <ApplyTemplateDropdown
-                      onSelect={handleApplyTemplate}
-                      onClose={() => setShowApplyTemplate(false)}
-                    />
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+                  <Layout size={14} />
+                  <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
+                  <motion.span
+                    animate={{ rotate: showApplyTemplate ? 180 : 0 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    className="inline-flex"
+                  >
+                    <ChevronDown size={14} />
+                  </motion.span>
+                </button>
+                <AnimatePresence>
+                  {showApplyTemplate && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
+                      <ApplyTemplateDropdown
+                        onSelect={handleApplyTemplate}
+                        onClose={() => setShowApplyTemplate(false)}
+                      />
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             {onShare && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}>
-                <Share2 size={13} /> Share
+              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]">
+                <Share2 size={14} /> Share
               </button>
             )}
-            <div className="relative">
-              <button
-                onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white" style={{ borderRadius: '8px' }}
-              >
-                <Download size={13} /> Download <ChevronDown size={11} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
-              </button>
-              {showDownloadDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-36" style={{ borderRadius: '8px' }}>
-                  {[
-                    { label: 'PDF', ext: 'pdf' },
-                    { label: 'Word (DOC)', ext: 'doc' },
-                    { label: 'PowerPoint', ext: 'ppt' },
-                    { label: 'Excel', ext: 'xlsx' },
-                  ].map(({ label, ext }) => (
-                    <button
-                      key={ext}
-                      onClick={() => { startReportDownload(addToast, updateToast, report.name, ext); setShowDownloadDropdown(false); }}
-                      className="w-full text-left px-3 py-2 text-[0.75rem] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]"
+            >
+              <Download size={14} /> Download
+            </button>
           </div>
         </div>
 
@@ -4630,10 +4605,49 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               <motion.div
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
-                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-2xl shadow-lg"
+                className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[12px] shadow-lg"
               >
                 <Loader2 size={20} className="text-primary animate-spin" />
-                <span className="text-[0.875rem] font-semibold text-text">Applying template...</span>
+                <span className="text-[14px] font-semibold text-text">Applying template...</span>
+              </motion.div>
+            </motion.div>
+          )}
+          {pendingTemplate && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ink-900/40 backdrop-blur-[2px]"
+              onClick={() => setPendingTemplate(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 12 }}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="switch-template-title"
+                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[320px] p-6"
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 id="switch-template-title" className="text-[15px] font-semibold text-text mb-2">Switch template?</h3>
+                <p className="text-[13px] text-text-secondary leading-relaxed mb-5">
+                  Switching to “{pendingTemplate.name}” replaces the current layout and its sections. Some content may not carry over.
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setPendingTemplate(null)}
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { const t = pendingTemplate; setPendingTemplate(null); applyTemplateNow(t); }}
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  >
+                    Switch
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -4642,39 +4656,44 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         {report.isEmpty ? (
           <>
             {/* Empty-state Cover — same chrome, simpler body */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
+            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="relative z-10 px-8 py-7">
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 {reportTemplate && (
-                  <p className="text-white/60 text-[0.8125rem] mb-3">{reportTemplate.desc}</p>
+                  <p className="text-white/60 text-[13px] mb-3">{reportTemplate.desc}</p>
                 )}
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[0.8125rem]">
+                  <div className="flex items-center gap-2 text-[13px]">
                     <span className="font-semibold text-white">{report.generatedBy}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
-                    {report.tag && (
-                      <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
-                        style={{
-                          borderRadius: '8px',
-                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                        }}
-                      >
-                        {report.tag}
-                      </span>
-                    )}
+                    {report.tag && (() => {
+                      const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
+                          style={{
+                            background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                            color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                          }}
+                        >
+                          <TagIcon size={12} aria-hidden="true" />
+                          {report.tag}
+                        </span>
+                      );
+                    })()}
                   </div>
-                  <button
-                    onClick={() => setAddQueryOpen(true)}
-                    className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-                  >
-                    <Plus size={13} />
-                    Add Query
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => setAddQueryOpen(true)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Plus size={14} />
+                      Add Query
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -4706,9 +4725,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         >
                           <div className="flex items-center gap-2.5 px-1">
                             <Icon size={16} className="text-primary" />
-                            <h3 className="text-[0.75rem] font-bold text-text tracking-tight">{section.name}</h3>
-                            <span className="text-[0.75rem] text-text-muted">·</span>
-                            <span className="text-[0.75rem] text-text-muted">{attached.length}</span>
+                            <h3 className="text-[14px] font-bold text-text tracking-tight">{section.name}</h3>
+                            <span className="text-[10px] text-text-muted">·</span>
+                            <span className="text-[10px] text-text-muted">{attached.length}</span>
                           </div>
                           <AnimatePresence>
                             {attached.map((q, qi) => (
@@ -4730,14 +4749,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.04 }}
-                        className="bg-white border border-border-light rounded-2xl px-6 py-5"
+                        className="bg-white border border-border-light rounded-[12px] px-6 py-5"
                       >
                         <div className="flex items-center gap-2.5 mb-3">
                           <Icon size={16} className="text-primary" />
-                          <h3 className="text-[0.75rem] font-bold text-text tracking-tight">{section.name}</h3>
+                          <h3 className="text-[14px] font-bold text-text tracking-tight">{section.name}</h3>
                         </div>
-                        <div className="border border-dashed border-border-light rounded-[10px] bg-paper-50/40 px-6 py-7 text-center">
-                          <p className="text-[0.75rem] text-text-muted/80">
+                        <div className="border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-6 py-7 text-center">
+                          <p className="text-[12px] text-text-muted/80">
                             {attached.length > 0
                               ? `${section.name} will be generated from your attached queries.`
                               : `Section content generated from ${report.name} data`}
@@ -4752,9 +4771,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <div className="space-y-3">
                       <div className="flex items-center gap-2.5 px-1">
                         <MessageSquare size={16} className="text-primary" />
-                        <h3 className="text-[0.75rem] font-bold text-text tracking-tight">Attached Queries</h3>
-                        <span className="text-[0.75rem] text-text-muted">·</span>
-                        <span className="text-[0.75rem] text-text-muted">{attached.length}</span>
+                        <h3 className="text-[14px] font-bold text-text tracking-tight">Attached Queries</h3>
+                        <span className="text-[10px] text-text-muted">·</span>
+                        <span className="text-[10px] text-text-muted">{attached.length}</span>
                       </div>
                       <AnimatePresence>
                         {attached.map((q, qi) => (
@@ -4770,8 +4789,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   )}
 
                   {(!reportTemplate || sections.length === 0) && (
-                    <div className="bg-white border border-border-light rounded-2xl px-6 py-12 text-center">
-                      <p className="text-[0.8125rem] text-text-muted">This template has no sections defined.</p>
+                    <div className="bg-white border border-border-light rounded-[12px] px-6 py-12 text-center">
+                      <p className="text-[13px] text-text-muted">This template has no sections defined.</p>
                     </div>
                   )}
                 </div>
@@ -4781,7 +4800,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         ) : appliedTemplate ? (
           <>
             {/* Report Cover */}
-            <div className="relative rounded-2xl overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
+            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
               <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
                 <FloatingLines
                   enabledWaves={['top', 'middle']}
@@ -4799,25 +4818,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                 <EditableDescription />
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[0.8125rem]">
+                  <div className="flex items-center gap-2 text-[13px]">
                     <span className="font-semibold text-white">{report.generatedBy}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{report.generatedAt}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
-                    {report.tag && (
-                      <span
-                        className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
-                        style={{
-                          borderRadius: '8px',
-                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                        }}
-                      >
-                        {report.tag}
-                      </span>
-                    )}
-                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[0.6875rem] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
+                    {/* When a template is applied, show only the applied-template chip — the default report.tag chip is hidden to avoid duplicate badges. */}
+                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                       {appliedTemplate.name}
                     </span>
                   </div>
@@ -4826,9 +4834,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       onClick={() => setActivityLogOpen(true)}
                       title="View this report's activity log"
                       aria-label="View report activity log"
-                      className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
                     >
-                      <History size={15} />
+                      <History size={16} />
                     </button>
                   </div>
                 </div>
@@ -4837,19 +4845,21 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
             {/* Contents — read-only list of template-defined sections */}
             {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
-              <div className="border border-border-light rounded-2xl bg-white p-6 mb-5">
+              <div className="border border-border-light rounded-[12px] bg-white p-6 mb-5">
                 <div className="flex items-center justify-between gap-3 mb-6">
                   <div className="flex items-center gap-2">
                     <List size={16} className="text-primary" />
-                    <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">Contents</h3>
+                    <h3 className="text-[15px] leading-[20px] font-bold text-text">Contents</h3>
                   </div>
-                  <button
-                    onClick={openAddObservation}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer"
-                  >
-                    <Plus size={13} />
-                    Add Observation
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={openAddObservation}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Plus size={14} />
+                      Add Observation
+                    </button>
+                  )}
                 </div>
                 <Reorder.Group
                   axis="y"
@@ -4859,9 +4869,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   className="list-none p-0 m-0 space-y-0.5"
                 >
                   {appliedTemplate.sections.map((s, i) => (
-                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-lg hover:bg-primary-xlight/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[0.75rem] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[0.75rem] text-text-secondary truncate">{s.name}</span>
+                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-primary-xlight/30 transition-colors">
+                      <span className="shrink-0 w-6 text-[10px] text-text-muted/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[12px] text-text-secondary truncate">{s.name}</span>
                     </li>
                   ))}
                   {appliedObservations.map((o, i) => {
@@ -4894,13 +4904,13 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             )}
 
             {/* Summary Stats Bar */}
-            <div className="grid grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
               {activeStats.map(stat => (
-                <div key={stat.label} className="glass-card rounded-xl p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                  <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
+                  <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                   <div>
                     <div className="text-xl font-bold text-text">{stat.value}</div>
-                    <div className="text-[0.625rem] text-text-muted tracking-wide">{stat.label}</div>
+                    <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
                   </div>
                 </div>
               ))}
@@ -4970,7 +4980,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
                             <EditableDescription />
                             <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 text-[0.8125rem]">
+                              <div className="flex items-center gap-2 text-[13px]">
                                 <span className="font-semibold text-white">{report.generatedBy}</span>
                                 <span className="text-white/30 mx-0.5">|</span>
                                 <span className="text-white/70">{report.generatedAt}</span>
@@ -4985,9 +4995,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 })()}
                                 {report.tag && (
                                   <span
-                                    className="inline-flex items-center px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap"
+                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
                                     style={{
-                                      borderRadius: '8px',
                                       background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
                                       color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
                                     }}
@@ -5001,9 +5010,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                   onClick={() => setActivityLogOpen(true)}
                                   title="View this report's activity log"
                                   aria-label="View report activity log"
-                                  className="w-9 h-9 rounded-[10px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                                  className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
                                 >
-                                  <History size={15} />
+                                  <History size={16} />
                                 </button>
                               </div>
                             </div>
@@ -5022,16 +5031,30 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                           <div className="flex items-center justify-between gap-3 mb-6">
                             <div className="flex items-center gap-2">
                               <FileText size={16} className="text-primary" />
-                              <h3 className="text-[0.9375rem] leading-[20px] font-bold text-text">{section.title}</h3>
+                              <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
                             </div>
                             {hasQueries && (
                               <button
-                                onClick={() => addToast({ type: 'success', message: 'Regenerating summary…' })}
+                                onClick={() => {
+                                  if (isRegeneratingSummary) return;
+                                  setIsRegeneratingSummary(true);
+                                  setTimeout(() => {
+                                    setSummaryOverride(ALT_SUMMARY);
+                                    setIsRegeneratingSummary(false);
+                                    addToast({ type: 'success', message: 'Executive summary regenerated.' });
+                                  }, 1200);
+                                }}
+                                disabled={isRegeneratingSummary}
+                                aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/20 rounded-[8px] hover:bg-primary-xlight/70 hover:border-primary/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
-                                <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
-                                Regenerate
+                                {isRegeneratingSummary ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                )}
+                                {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )}
                           </div>
@@ -5044,17 +5067,17 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
                                 className="flex items-center gap-3"
                               >
-                                <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                                <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                                 <div>
                                   <div className="text-xl font-bold text-text leading-none mb-1">
                                     <KpiCountUp value={stat.value} delay={120 + si * 80} />
                                   </div>
-                                  <div className="text-[0.6875rem] text-text-muted tracking-wide">{stat.label}</div>
+                                  <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
                                 </div>
                               </motion.div>
                             ))}
                           </div>
-                          <p className="text-[0.8125rem] text-text-secondary leading-relaxed">{section.content}</p>
+                          <p className="text-[13px] text-text-secondary leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5065,11 +5088,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                       <Reorder.Item {...sectionProps}>
                         <div className="grid grid-cols-4 gap-3">
                           {activeStats.map(stat => (
-                            <div key={stat.label} className="glass-card rounded-xl p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                              <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
+                            <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
+                              <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
                               <div>
                                 <div className="text-xl font-bold text-text">{stat.value}</div>
-                                <div className="text-[0.625rem] text-text-muted tracking-wide">{stat.label}</div>
+                                <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
                               </div>
                             </div>
                           ))}
@@ -5086,7 +5109,27 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         index={i}
                         sectionProps={sectionProps}
                         onOpenQuery={onOpenQuery}
-                        onDelete={() => removeSection(section.id)}
+                        onDelete={() => {
+                          // Snapshot the card and its position so Undo restores both.
+                          const snapshot = sections.find(s => s.id === section.id);
+                          const snapshotIndex = sections.findIndex(s => s.id === section.id);
+                          setSections(prev => prev.filter(s => s.id !== section.id));
+                          addToast({
+                            type: 'success',
+                            message: 'Query card removed.',
+                            action: snapshot ? {
+                              label: 'Undo',
+                              onClick: () => {
+                                setSections(prev => {
+                                  if (prev.some(s => s.id === snapshot.id)) return prev;
+                                  const next = [...prev];
+                                  next.splice(Math.max(0, snapshotIndex), 0, snapshot);
+                                  return next;
+                                });
+                              },
+                            } : undefined,
+                          });
+                        }}
                         comments={comments}
                         onAddComment={addComment}
                       />
@@ -5112,10 +5155,10 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     return (
                       <Reorder.Item {...sectionProps}>
                         <div className="border-x border-b border-border-light bg-white p-5">
-                          <div className="flex items-center gap-2 mb-2.5 text-[0.6875rem] text-text-muted font-semibold uppercase tracking-wider">
+                          <div className="flex items-center gap-2 mb-2.5 text-[11px] text-text-muted font-semibold uppercase tracking-wider">
                             <StickyNote size={12} className="text-primary" /> {section.title}
                           </div>
-                          <p className="text-[0.8125rem] text-text leading-relaxed">{section.content}</p>
+                          <p className="text-[13px] text-text leading-relaxed">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -5155,6 +5198,70 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         )}
       </AnimatePresence>
 
+      {/* Download Preview Modal — PDF / PPT / DOCX tabs, preview before export */}
+      <AnimatePresence>
+        {showDownloadModal && (
+          <ReportDownloadModal
+            reportName={report.name}
+            reportTag={report.tag}
+            generatedBy={report.generatedBy}
+            generatedAt={report.generatedAt}
+            sections={sections.map((s): DownloadPreviewSection => {
+              if (s.kind === 'query') {
+                const q = s.query;
+                const kpis = computeQueryKpis(q).map(k => ({ label: k.label, value: k.value }));
+                const charts = QUERY_GRAPHS[q.id] ?? [];
+                const table = QUERY_TABLES[q.id] ?? null;
+                return {
+                  id: s.id,
+                  kind: 'query',
+                  title: s.title,
+                  queryId: q.id,
+                  queryTitle: q.title,
+                  severity: q.severity,
+                  risk: q.risk,
+                  summary: q.summary,
+                  answer: q.answer,
+                  findings: q.findings,
+                  observations: q.observations,
+                  kpis,
+                  charts,
+                  table,
+                };
+              }
+              if (s.kind === 'workflow') {
+                const w = s.workflow;
+                return {
+                  id: s.id,
+                  kind: 'workflow',
+                  title: s.title,
+                  workflowId: w.workflowId,
+                  workflowName: w.name,
+                  severity: w.severity,
+                  summary: w.findings[0] ?? '',
+                  findings: w.findings,
+                  observations: w.observations,
+                };
+              }
+              if (s.kind === 'observation') {
+                return {
+                  id: s.id,
+                  kind: 'observation',
+                  title: s.title,
+                  obsId: s.obsId,
+                  description: s.description,
+                };
+              }
+              if (s.kind === 'summary' || s.kind === 'note') {
+                return { id: s.id, kind: s.kind, title: s.title, content: s.content };
+              }
+              return { id: s.id, kind: s.kind, title: s.title };
+            })}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Add Query modal — opened from empty-state cover */}
       <AddQueryModal
         open={addQueryOpen}
@@ -5186,177 +5293,15 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         destructive
       />
 
-      {/* Add Observation modal */}
-      {showAddObservation && createPortal(
-        <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
-            onClick={closeAddObservation}
-          >
-            <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              onDragEnter={handleModalDragEnter}
-              onDragLeave={handleModalDragLeave}
-              onDragOver={handleModalDragOver}
-              onDrop={handleModalDrop}
-              role="dialog"
-              aria-labelledby="add-observation-title"
-              className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[520px] max-w-[calc(100vw-32px)] p-6"
-            >
-              {/* Drop overlay — visible only while files are being dragged
-                  over the dialog. pointer-events-none so drag events still
-                  hit the modal handlers underneath. */}
-              {isDraggingFiles && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-primary bg-primary-xlight/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
-                >
-                  <div className="text-center">
-                    <CloudUpload size={28} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
-                    <div className="text-[0.875rem] font-semibold text-primary">Drop to attach files</div>
-                    <div className="text-[0.6875rem] text-text-secondary mt-1">PNG, JPG, PDF, CSV, XLSX</div>
-                  </div>
-                </motion.div>
-              )}
-              <button
-                onClick={closeAddObservation}
-                aria-label="Close"
-                className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-              <h3 id="add-observation-title" className="text-[1rem] font-bold text-text tracking-tight mb-5">{editingObservationId ? 'Edit observation' : 'Add observation'}</h3>
+      {/* Add Observation modal — shared component */}
+      <AddObservationModal
+        open={showAddObservation}
+        editing={editingObservation}
+        nextObsId={nextObservationId()}
+        onClose={closeAddObservation}
+        onSave={handleObservationSave}
+      />
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
-                  <input
-                    type="text"
-                    value={editingObservationObsId ?? nextObservationId()}
-                    readOnly
-                    className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[0.8125rem] font-mono text-text tabular-nums cursor-default"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Name <span className="text-risk normal-case font-normal">*</span></label>
-                  <input
-                    type="text"
-                    value={obsForm.name}
-                    onChange={(e) => setObsForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. Vendor master review gap"
-                    autoFocus
-                    className="w-full bg-white border border-border-light rounded-[8px] px-3 py-2 text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[0.6875rem] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
-                  <div className="bg-white border border-border-light rounded-[8px] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-all overflow-hidden">
-                    <textarea
-                      value={obsForm.description}
-                      onChange={(e) => setObsForm(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Add observation details, evidence, and recommended actions."
-                      rows={4}
-                      className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[0.8125rem] text-text focus:outline-none focus:ring-0 resize-none"
-                    />
-                    {obsForm.attachments.length > 0 && (
-                      <ul className="px-3 pb-2 space-y-1.5">
-                        {obsForm.attachments.map(att => {
-                          const isImage = isImageMime(att.mimeType);
-                          const { Icon, tone } = attachmentVisual(att.mimeType);
-                          return (
-                            <li
-                              key={att.id}
-                              className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[6px]"
-                            >
-                              {isImage ? (
-                                <div className="w-8 h-8 rounded-[4px] border border-border-light overflow-hidden bg-white shrink-0">
-                                  <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className={`w-8 h-8 rounded-[4px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
-                                  <Icon size={15} />
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[0.75rem] text-text font-medium truncate">{att.name}</div>
-                                <div className="text-[0.75rem] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeObservationAttachment(att.id)}
-                                aria-label={`Remove ${att.name}`}
-                                className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
-                              >
-                                <X size={13} />
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
-                      <label
-                        title="Attach files (PNG, JPG, PDF, CSV, XLSX)"
-                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[0.75rem] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer"
-                      >
-                        <Paperclip size={13} />
-                        <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
-                        <input
-                          type="file"
-                          multiple
-                          accept={ATTACHMENT_ACCEPT}
-                          onChange={(e) => {
-                            handleObservationAttachments(e.target.files);
-                            // Reset value so picking the same file twice re-fires onChange.
-                            e.target.value = '';
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                      {obsForm.attachments.length > 0 && (
-                        <span className="text-[0.75rem] text-text-muted tabular-nums pr-1">
-                          {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 mt-6">
-                <button
-                  onClick={closeAddObservation}
-                  className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveObservation}
-                  disabled={!obsForm.name.trim()}
-                  className="inline-flex items-center justify-center h-9 px-5 text-[0.8125rem] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
-                  {editingObservationId ? 'Update observation' : 'Save observation'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>,
-        document.body,
-      )}
     </motion.div>
   );
 }
@@ -5371,6 +5316,7 @@ export default function ReportsView({
   focusReportId,
   onFocusReportConsumed,
 }: ReportsViewProps = {}) {
+  const { addToast, updateToast } = useToast();
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -5393,6 +5339,7 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => [t, ...prev]);
   };
   const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v7';
+  const [hydrationFailed, setHydrationFailed] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
@@ -5400,12 +5347,57 @@ export default function ReportsView({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed as GeneratedReport[];
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Defer to an effect so the toast call can happen after mount.
+      setTimeout(() => setHydrationFailed(true), 0);
+    }
     return [...GENERATED_REPORTS];
   });
+  // Brief hydration flag — `true` for the first render only so list views can
+  // show skeletons while the persisted blob is read. Flips after first paint.
+  const [isHydrating, setIsHydrating] = useState(true);
   useEffect(() => {
-    try { localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports)); } catch { /* ignore */ }
-  }, [generatedReports]);
+    const id = window.setTimeout(() => setIsHydrating(false), 120);
+    return () => window.clearTimeout(id);
+  }, []);
+  // Surface the rare read failure once.
+  useEffect(() => {
+    if (hydrationFailed) {
+      addToast({
+        type: 'error',
+        message: "Couldn't load your saved reports — starting from defaults.",
+      });
+    }
+  }, [hydrationFailed, addToast]);
+  // Persist on change. If the write fails (quota, private mode), tell the
+  // user once per session rather than swallowing it silently.
+  const persistFailedOnceRef = useRef(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem(GENERATED_REPORTS_KEY, JSON.stringify(generatedReports));
+    } catch {
+      if (persistFailedOnceRef.current) return;
+      persistFailedOnceRef.current = true;
+      addToast({
+        type: 'error',
+        message: "Couldn't save your work locally — your browser storage may be full.",
+      });
+    }
+  }, [generatedReports, addToast]);
+  // Offline banner — listens to online/offline events.
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== 'undefined' && navigator.onLine === false,
+  );
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Hot-receive new reports generated by a Bulk Run (BulkRunProgress dispatches
   // this when its run completes). Prepend so it appears at the top of My Reports.
@@ -5421,12 +5413,18 @@ export default function ReportsView({
 
   // Toast "Open report" click flows through App.tsx, which sets focusReportId.
   // When it changes, jump into the full-page view of that report.
+  const [missingFocusReport, setMissingFocusReport] = useState(false);
   useEffect(() => {
     if (!focusReportId) return;
     const report = generatedReports.find(r => r.id === focusReportId);
     if (report) {
       setActiveTab('my-reports');
       setViewingReport(report);
+      setMissingFocusReport(false);
+      onFocusReportConsumed?.();
+    } else if (generatedReports.length > 0) {
+      // Hydration has occurred but the requested id is absent.
+      setMissingFocusReport(true);
       onFocusReportConsumed?.();
     }
   }, [focusReportId, generatedReports, onFocusReportConsumed]);
@@ -5476,7 +5474,6 @@ export default function ReportsView({
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportTemplate, setNewReportTemplate] = useState('');
   const [newReportTemplatePrefilled, setNewReportTemplatePrefilled] = useState(false);
-  const { addToast, updateToast } = useToast();
 
   const openNewReportModal = () => {
     setNewReportName('');
@@ -5503,25 +5500,24 @@ export default function ReportsView({
     <div className="relative">
       <button
         onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[0.6875rem] font-medium text-text-secondary bg-paper-50 border border-border-light hover:border-primary/30 transition-colors cursor-pointer"
-        style={{ borderRadius: '8px' }}
+        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-ink-700 bg-paper-50 border border-canvas-border hover:border-brand-200 transition-colors cursor-pointer rounded-[8px]"
       >
         {tagFilter === 'All' ? 'All Tags' : tagFilter}
-        <ChevronDown size={10} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
       </button>
       {showTagDropdown && (
-        <div className="absolute left-0 top-full mt-1 w-40 bg-white shadow-xl border border-border-light z-50 overflow-hidden py-1" style={{ borderRadius: '8px' }}>
-          {TAG_FILTER_OPTIONS.map(t => (
-            <button
-              key={t}
-              onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
-              className={`w-full text-left px-3 py-2 text-[0.75rem] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2 ${tagFilter === t ? 'text-primary font-semibold' : 'text-text-secondary'}`}
-            >
-              {tagFilter === t && <span className="text-primary">✓</span>}
-              {tagFilter !== t && <span className="w-3" />}
-              {t === 'All' ? 'All Tags' : t}
-            </button>
-          ))}
+        <div className="absolute left-0 top-full mt-1 w-40 bg-canvas-elevated shadow-lg border border-canvas-border z-50 py-2 rounded-lg">
+          <div className="px-1.5">
+            {TAG_FILTER_OPTIONS.map(t => (
+              <button
+                key={t}
+                onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
+                className={`w-full text-left px-2.5 py-1.5 rounded-md text-[12.5px] cursor-pointer transition-colors ${tagFilter === t ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'}`}
+              >
+                {t === 'All' ? 'All Tags' : t}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -5530,7 +5526,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-[8px] whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -5568,49 +5564,76 @@ export default function ReportsView({
 
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
-      <div className="px-[124px] py-8 relative flex flex-col min-h-full">
+      {isOffline && (
+        <div
+          role="status"
+          aria-live="assertive"
+          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px]"
+        >
+          <WifiOff size={14} aria-hidden="true" />
+          <span>You're offline — recent changes will sync once you reconnect.</span>
+        </div>
+      )}
+      {missingFocusReport && (
+        <div className="px-[124px] py-12">
+          <EmptyState
+            icon={AlertTriangle}
+            title="Report not found"
+            body="It may have been deleted or moved. Return to the reports list."
+            action={
+              <button
+                onClick={() => setMissingFocusReport(false)}
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              >
+                <ArrowLeft size={14} /> Back to reports
+              </button>
+            }
+          />
+        </div>
+      )}
+      <div className="reports-focus-noring px-[124px] py-8 relative flex flex-col min-h-full">
         {/* Header + Tabs share a single full-bleed white strip — bg-white
             extends past the page's horizontal/top insets so the strip reads
             as the page's header section, separate from the content below. */}
         <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
           {/* Header */}
           <div className="mb-6">
-            <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
+            <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
               Reports · {activeTab === 'my-reports' ? 'My Reports' : activeTab === 'shared-reports' ? 'Shared Reports' : 'Templates'}
             </div>
-            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
+            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0">
+          <div className="flex flex-wrap gap-x-0 gap-y-2">
           <button
             onClick={() => setActiveTab('my-reports')}
-            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'my-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <BookOpen size={14} />
               My Reports
-              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'my-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{generatedReports.length}</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'my-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{generatedReports.length}</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('shared-reports')}
-            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'shared-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'shared-reports' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <Share2 size={14} />
               Shared Reports
-              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'shared-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{SHARED_REPORTS.length}</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'shared-reports' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{SHARED_REPORTS.length}</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('templates')}
-            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'templates' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'templates' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
           >
             <span className="flex items-center gap-2">
               <FileText size={14} />
               Templates
-              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'templates' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{REPORT_TEMPLATES.length + customTemplates.length}</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'templates' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{REPORT_TEMPLATES.length + customTemplates.length}</span>
             </span>
           </button>
           </div>
@@ -5618,58 +5641,99 @@ export default function ReportsView({
 
         {/* My Reports — modern AI-SaaS table: minimal chrome, sentence-case
             headers, no grid lines, generous rows, very quiet hover. */}
-        {activeTab === 'my-reports' && viewMode === 'list' && (
+        {activeTab === 'my-reports' && viewMode === 'list' && isHydrating && (
+          <div className="flex-1 px-5 py-6 space-y-4" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
+        )}
+        {activeTab === 'my-reports' && viewMode === 'list' && !isHydrating && (
           <SmartTable
             className="flex-1"
             variant="modern"
+            searchBg="bg-paper-50"
+            showSortHint
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search reports..."
             searchKeys={['name', 'generatedBy']}
-            paginated={false}
-            emptyMessage={
-              generatedReports.length === 0
-                ? 'No reports yet. Create your first report to see it here.'
-                : tagFilter !== 'All'
-                  ? `No reports match the "${tagFilter}" filter.`
-                  : 'No reports match your search.'
-            }
+            paginated
+            pageSize={20}
+            hideResultCount
+            emptyContent={generatedReports.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="No reports yet"
+                body="Reports you generate from a template will appear here."
+                size="compact"
+              />
+            ) : (
+              ({ search, clearSearch }) => (
+                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700">
+                    {tagFilter !== 'All' && search
+                      ? `No reports match "${search}" in "${tagFilter}".`
+                      : tagFilter !== 'All'
+                        ? `No reports match the "${tagFilter}" filter.`
+                        : 'No reports match your search.'}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    {tagFilter !== 'All' && (
+                      <button
+                        type="button"
+                        onClick={() => setTagFilter('All')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={clearSearch}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
             headerExtra={
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
+                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
                 </div>
               </div>
             }
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">
+                <span className="font-mono text-[11px] text-text-muted tabular-nums">
                   {String(i + 1).padStart(2, '0')}
                 </span>
               )},
               { key: 'name', label: 'Report', render: (item) => {
-                const tagTone = item.tag === 'Internal Audit' ? 'text-evidence-700' : item.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
                 return (
                   <div className="cursor-pointer min-w-0" onClick={() => {
                     const report = generatedReports.find(r => r.id === item.id);
                     if (report) setViewingReport(report);
                   }}>
-                    {Boolean(item.tag) && (
-                      <div className={`text-[0.75rem] font-semibold uppercase tracking-[0.12em] mb-1 ${tagTone}`}>
-                        {String(item.tag)}
-                      </div>
-                    )}
                     <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
                       {(() => {
                         const n = String(item.name);
                         const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
                         return (
-                          <span className="relative group/nt inline-flex min-w-0">
-                            <span className="text-[0.875rem] text-text font-medium truncate hover:text-primary transition-colors">{truncated}</span>
+                          <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
+                            <span className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
                             {n.length > 100 && (
-                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[0.6875rem] font-normal leading-snug rounded-md max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
+                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-[8px] max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
                                 {n}
                               </span>
                             )}
@@ -5677,25 +5741,30 @@ export default function ReportsView({
                         );
                       })()}
                       {reportAppliedTemplates[String(item.id)] && (
-                        <span className="text-[0.625rem] font-medium text-primary inline-flex items-center gap-1 shrink-0">
-                          <Layout size={9} /> {reportAppliedTemplates[String(item.id)].name}
+                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
+                          <Layout size={12} /> {reportAppliedTemplates[String(item.id)].name}
                         </span>
                       )}
                     </div>
-                    <div className="text-[0.75rem] text-text-muted font-mono tabular-nums mt-1">
-                      {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}</span>
+                      {Boolean(item.tag) && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(String(item.tag)).classes}`}>
+                          {String(item.tag)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
               }},
               { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-                <span className="font-mono text-[0.75rem] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
+                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="p-1.5 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5706,12 +5775,12 @@ export default function ReportsView({
           <div className="w-full flex-1">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={gridSearch}
                   onChange={e => setGridSearch(e.target.value)}
                   placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {gridSearch && (
                   <button
@@ -5724,59 +5793,89 @@ export default function ReportsView({
               </div>
               <div className="flex items-center gap-2">
                 <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
+                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
                 </div>
               </div>
             </div>
             {filteredReports.length === 0 ? (
-              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
-                <FileText size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[0.8125rem] text-text-secondary max-w-[280px]">
-                  {generatedReports.length === 0
-                    ? 'No reports yet. Generate one from a template to see it here.'
-                    : tagFilter !== 'All'
-                      ? `No reports match the "${tagFilter}" filter.`
-                      : 'No reports match your search.'}
+              generatedReports.length === 0 ? (
+                <div className="px-6 py-12">
+                  <EmptyState
+                    icon={FileText}
+                    title="No reports yet"
+                    body="Reports you generate from a template will appear here."
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                    {tagFilter !== 'All' && gridSearch
+                      ? `No reports match "${gridSearch}" in "${tagFilter}".`
+                      : tagFilter !== 'All'
+                        ? `No reports match the "${tagFilter}" filter.`
+                        : 'No reports match your search.'}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    {tagFilter !== 'All' && (
+                      <button
+                        type="button"
+                        onClick={() => setTagFilter('All')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                    {gridSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setGridSearch('')}
+                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
             ) : (
-            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
-              {filteredReports.map((r, i) => {
-                const tagTone = r.tag === 'Internal Audit' ? 'text-evidence-700' : r.tag === 'Bulk Audit' ? 'text-mitigated-700' : 'text-text-muted';
-                return (
+            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
+              {filteredReports.map((r, i) => (
                   <motion.div
                     key={r.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                    className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
+                    onMouseMove={handleChromaCardMove}
                     onClick={() => setViewingReport(r)}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      {r.tag ? (
-                        <div className={`text-[0.75rem] font-semibold uppercase tracking-[0.12em] ${tagTone}`}>
-                          {r.tag}
-                        </div>
-                      ) : <span />}
-                      <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="p-1 text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-md transition-colors cursor-pointer" title="Delete"><Trash2 size={13} /></button>
+                    <div className="flex items-start justify-between gap-3 mb-2.5">
+                      <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                      <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                        <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                        <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                       </div>
                     </div>
-                    <div className="text-[0.875rem] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                    <div className="text-[0.75rem] text-text-muted font-mono tabular-nums">
-                      {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
-                    </div>
-                    <div className="mt-auto pt-4 flex items-center justify-end">
-                      <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">{r.generatedAt}</span>
+                    <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                        {r.tag && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(r.tag).classes}`}>
+                            {r.tag}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.generatedAt}</span>
                     </div>
                   </motion.div>
-                );
-              })}
-            </div>
+              ))}
+            </ChromaGrid>
             )}
           </div>
         )}
@@ -5787,54 +5886,77 @@ export default function ReportsView({
           <SmartTable
             className="flex-1"
             variant="modern"
+            searchBg="bg-paper-50"
+            showSortHint
             data={SHARED_REPORTS as unknown as Record<string, unknown>[]}
             keyField="id"
             searchPlaceholder="Search shared reports..."
             searchKeys={['name', 'sharedBy', 'sharedWith']}
-            paginated={false}
-            emptyMessage={
-              SHARED_REPORTS.length === 0
-                ? 'No reports have been shared with you yet.'
-                : 'No shared reports match your search.'
-            }
+            paginated
+            pageSize={20}
+            hideResultCount
+            emptyContent={SHARED_REPORTS.length === 0 ? (
+              <EmptyState
+                icon={Share2}
+                title="No shared reports"
+                body="Reports shared with you by your team will appear here."
+              />
+            ) : (
+              ({ search, clearSearch }) => (
+                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700">
+                    No shared reports match your search.
+                  </div>
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )
+            )}
             headerExtra={
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={15} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
+                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
               </div>
             }
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums">
+                <span className="font-mono text-[11px] text-text-muted tabular-nums">
                   {String(i + 1).padStart(2, '0')}
                 </span>
               )},
               { key: 'name', label: 'Report', render: (item) => (
                 <div className="min-w-0">
-                  <div className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] mb-1 text-evidence-700">
-                    Shared report
-                  </div>
-                  <div className="text-[0.875rem] text-text font-medium truncate">{String(item.name)}</div>
-                  <div className="text-[0.75rem] text-text-muted font-mono tabular-nums mt-1">
-                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'} · shared with {String(item.sharedWith)}
+                  <div className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate">{String(item.name)}</div>
+                  <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
+                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
                   </div>
                 </div>
               )},
               { key: 'sharedBy', label: 'Shared by', render: (item) => (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[0.75rem] font-semibold flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-text-secondary text-[0.75rem]">{String(item.sharedBy)}</span>
+                  <span className="text-text-secondary text-[12px]">{String(item.sharedBy)}</span>
                 </div>
               )},
               { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
-                <span className="font-mono text-[0.75rem] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
+                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="p-1.5 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5854,12 +5976,12 @@ export default function ReportsView({
           <div className="w-full flex-1">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={sharedGridSearch}
                   onChange={e => setSharedGridSearch(e.target.value)}
                   placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-md outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                 />
                 {sharedGridSearch && (
                   <button
@@ -5870,55 +5992,72 @@ export default function ReportsView({
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-lg">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={15} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-md bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={15} /></button>
+              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
+                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
+                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
               </div>
             </div>
             {filteredSharedReports.length === 0 ? (
-              <div className="px-6 py-20 flex flex-col items-center justify-center text-center">
-                <Share2 size={22} className="text-ink-300 mb-3" strokeWidth={1.5} />
-                <div className="text-[0.8125rem] text-text-secondary max-w-[280px]">
-                  {SHARED_REPORTS.length === 0
-                    ? 'Nothing shared with you yet. Reports your team shares will land here.'
-                    : 'No shared reports match your search.'}
+              SHARED_REPORTS.length === 0 ? (
+                <div className="px-6 py-12">
+                  <EmptyState
+                    icon={Share2}
+                    title="No shared reports"
+                    body="Reports shared with you by your team will appear here."
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="px-6 py-20 flex flex-col items-center gap-2 text-center">
+                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                    <Search size={20} className="text-ink-400" />
+                  </div>
+                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                    No shared reports match your search.
+                  </div>
+                  {sharedGridSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setSharedGridSearch('')}
+                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )
             ) : (
-            <div className="w-full p-5 grid grid-cols-3 gap-4 items-start">
+            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
               {filteredSharedReports.map((r, i) => (
                 <motion.div
                   key={r.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="bg-white border border-border-light rounded-lg p-5 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[148px]"
+                  className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
+                  onMouseMove={handleChromaCardMove}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-evidence-700">
-                      Shared with {r.sharedWith}
-                    </div>
-                    <div className="flex items-center gap-0.5 -mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Download"><Download size={13} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="p-1 text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-md transition-colors cursor-pointer" title="Share"><Share2 size={13} /></button>
+                  <div className="flex items-start justify-between gap-3 mb-2.5">
+                    <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                    <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                      <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                      <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
                     </div>
                   </div>
-                  <div className="text-[0.875rem] leading-[1.4] font-medium text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2 min-h-[40px]" title={r.name}>{r.name}</div>
-                  <div className="text-[0.75rem] text-text-muted font-mono tabular-nums">
-                    {r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}
-                  </div>
-                  <div className="mt-auto pt-4 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[0.5625rem] font-semibold bg-primary/10 text-primary shrink-0">
-                        {r.sharedBy.split(' ').map(n => n[0]).join('')}
+                  <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0 tabular-nums">
+                          {r.sharedBy.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <span className="text-[12px] text-ink-600 truncate">{r.sharedBy}</span>
                       </div>
-                      <span className="text-[0.75rem] text-text-secondary truncate">{r.sharedBy}</span>
                     </div>
-                    <span className="font-mono text-[0.6875rem] text-text-muted tabular-nums shrink-0">{r.sharedAt}</span>
+                    <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.sharedAt}</span>
                   </div>
                 </motion.div>
               ))}
-            </div>
+            </ChromaGrid>
             )}
           </div>
           );
@@ -5936,23 +6075,23 @@ export default function ReportsView({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className={`bg-white border border-border-light rounded-xl p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                className={`bg-white border border-border-light rounded-[12px] p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => setPreviewingTemplate(rt)}
               >
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-md ${tintBg}`}>
+                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[8px] ${tintBg}`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
-                  <div className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
+                  <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
                     {rt.category}
                   </div>
                 </div>
-                <h3 className="text-[0.9375rem] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
-                <p className="text-[0.75rem] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
+                <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
+                <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
                 <div className="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-border-light/60">
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }}
-                    className="inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
+                    className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
                   >
                     <Settings size={12} /> Customize
                   </button>
@@ -5978,10 +6117,10 @@ export default function ReportsView({
                         };
                         setGeneratedReports(prev => [newReport, ...prev]);
                         setViewingReport(newReport);
-                        addToast({ type: 'success', message: 'Report generated!' });
+                        addToast({ type: 'success', message: 'Report generated.' });
                       }, 1200);
                     }}
-                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold rounded-md cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
+                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold rounded-[8px] cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
                   >
                     Generate
                     <ArrowRight size={12} className="transition-transform duration-200 group-hover/gen:translate-x-[1.5px]" />
@@ -5994,18 +6133,21 @@ export default function ReportsView({
           return (
             <div className="space-y-10">
               <section>
-                <h2 className="font-display text-[1.25rem] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
+                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
                 <div className="grid grid-cols-3 gap-4">
                   {REPORT_TEMPLATES.map((rt, i) => renderCard(rt, i, false))}
                 </div>
               </section>
 
               <section>
-                <h2 className="font-display text-[1.25rem] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
+                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
                 {customTemplates.length === 0 ? (
-                  <div className="py-10 text-[0.8125rem] text-text-muted max-w-[420px]">
-                    No custom templates yet. Generate one from an existing report or upload a file to get started.
-                  </div>
+                  <EmptyState
+                    icon={Upload}
+                    title="No custom templates"
+                    body="Upload a template to reuse it across reports."
+                    size="compact"
+                  />
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
                     {customTemplates.map((rt, i) => renderCard(rt as any, i, false))}
@@ -6085,58 +6227,58 @@ export default function ReportsView({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               role="dialog" aria-modal="true" aria-label="New Report"
-              className="relative bg-white shadow-2xl w-[560px] overflow-hidden flex flex-col" style={{ borderRadius: '16px' }}
+              className="relative bg-white shadow-2xl w-[560px] overflow-hidden flex flex-col rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
               <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-primary/10 text-primary rounded-xl"><FileText size={16} /></div>
+                  <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><FileText size={16} /></div>
                   <div>
-                    <h3 className="text-[0.9375rem] font-semibold text-text">New Report</h3>
-                    <p className="text-[0.6875rem] text-text-muted">Set up your report</p>
+                    <h3 className="text-[15px] font-semibold text-text">New Report</h3>
+                    <p className="text-[11px] text-text-muted">Set up your report</p>
                   </div>
                 </div>
-                <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
+                <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
               </div>
 
               {/* Form */}
               <div className="p-6 space-y-5">
                 <div>
-                  <label className="block text-[0.75rem] font-semibold text-text mb-1.5">Report <span className="text-risk">*</span></label>
+                  <label className="block text-[12px] font-semibold text-text mb-1.5">Report <span className="text-risk">*</span></label>
                   <input
                     value={newReportName}
                     onChange={e => setNewReportName(e.target.value)}
                     placeholder="Report 01 — April 23, 2026"
-                    className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all rounded-[8px]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[0.75rem] font-semibold text-text mb-1.5">Description</label>
+                  <label className="block text-[12px] font-semibold text-text mb-1.5">Description</label>
                   <textarea
                     value={newReportDesc}
                     onChange={e => setNewReportDesc(e.target.value)}
                     placeholder="Report Description goes here"
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-border-light text-[0.8125rem] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" style={{ borderRadius: '8px' }}
+                    className="w-full px-3 py-2.5 border border-border-light text-[13px] text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none rounded-[8px]"
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[0.75rem] font-semibold text-text">Template</label>
+                    <label className="block text-[12px] font-semibold text-text">Template</label>
                     {newReportTemplatePrefilled && newReportTemplate && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[0.625rem] font-semibold">
-                        <Sparkles size={10} /> Pre-filled from selection
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
+                        <Sparkles size={12} /> Pre-filled from selection
                       </span>
                     )}
                   </div>
                   <select
                     value={newReportTemplate}
                     onChange={e => { setNewReportTemplate(e.target.value); setNewReportTemplatePrefilled(false); }}
-                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white ${
+                    className={`w-full px-3 py-2.5 border text-[13px] text-text appearance-none outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all cursor-pointer bg-white rounded-[8px] ${
                       newReportTemplatePrefilled && newReportTemplate ? 'border-primary/50' : 'border-border-light'
                     }`}
-                    style={{ borderRadius: '8px', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
                   >
                     <option value="">Select a template</option>
                     {REPORT_TEMPLATES.map(rt => (
@@ -6178,11 +6320,11 @@ export default function ReportsView({
                       };
                       setGeneratedReports(prev => [newReport, ...prev]);
                       setViewingReport(newReport);
-                      addToast({ type: 'success', message: 'Report generated!' });
+                      addToast({ type: 'success', message: 'Report generated.' });
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer" style={{ borderRadius: '8px' }}
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
                 >
                   Continue <ArrowRight size={14} />
                 </button>
@@ -6206,7 +6348,7 @@ export default function ReportsView({
               initial={{ opacity: 0, scale: 0.97, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 16 }}
-              className="relative bg-white overflow-hidden shadow-2xl flex flex-col w-[560px] max-h-[80vh]" style={{ borderRadius: '16px' }}
+              className="relative bg-white overflow-hidden shadow-2xl flex flex-col w-[560px] max-h-[80vh] rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               <ReportBuilder
@@ -6224,18 +6366,36 @@ export default function ReportsView({
       <ConfirmDialog
         open={!!reportToDelete}
         onClose={() => setReportToDelete(null)}
-        title="Delete File?"
+        title="Delete report?"
         description={reportToDelete && (
-          <>Are you sure you want to delete <span className="font-semibold text-text">{reportToDelete.name}</span>? This action cannot be undone.</>
+          <>This will remove <span className="font-semibold text-text">{reportToDelete.name}</span> from My Reports. You can undo this from the toast for a few seconds.</>
         )}
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
           if (!reportToDelete) return;
           const name = reportToDelete.name;
-          setGeneratedReports(prev => prev.filter(r => r.id !== reportToDelete.id));
+          const id = reportToDelete.id;
+          // Snapshot the report and its position so Undo restores both.
+          const snapshot = generatedReports.find(r => r.id === id);
+          const snapshotIndex = generatedReports.findIndex(r => r.id === id);
+          setGeneratedReports(prev => prev.filter(r => r.id !== id));
           setReportToDelete(null);
-          addToast({ type: 'success', message: `${name} deleted.` });
+          addToast({
+            type: 'success',
+            message: `${name} deleted.`,
+            action: snapshot ? {
+              label: 'Undo',
+              onClick: () => {
+                setGeneratedReports(prev => {
+                  if (prev.some(r => r.id === id)) return prev;
+                  const next = [...prev];
+                  next.splice(Math.max(0, snapshotIndex), 0, snapshot);
+                  return next;
+                });
+              },
+            } : undefined,
+          });
         }}
       />
     </div>

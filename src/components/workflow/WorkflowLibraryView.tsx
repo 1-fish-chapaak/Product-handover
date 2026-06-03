@@ -14,6 +14,9 @@ import {
   ArrowRight,
   ListFilter,
   ExternalLink,
+  Database,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
@@ -21,6 +24,8 @@ import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 interface Props {
   onCreateWorkflow?: () => void;
   onSelectWorkflow?: (id: string) => void;
+  /** Optional: skip the detail page and open the executor directly. */
+  onRunWorkflow?: (id: string) => void;
   /** When set, filters workflows by tag matching this process abbreviation */
   processFilter?: string;
 }
@@ -36,6 +41,15 @@ export type LibraryWorkflow = {
 };
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
+  {
+    id: 'lw-pdf-tester',
+    name: 'PDF tester',
+    description: 'Sandbox workflow whose required inputs are all PDFs. Use this to exercise the unstructured-document mapping journey end-to-end.',
+    tags: ['PDF', 'manual mapping'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-PDF',
+    live: true,
+  },
   {
     id: 'lw-001',
     name: 'Identify Higher Share of Business Awarded to Higher Price Vendors (Monthly Analysis)',
@@ -124,7 +138,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
 
 const TOTAL_PAGES = 144;
 
-export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, processFilter }: Props) {
+export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -136,6 +150,12 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState<'bp' | 'tags' | null>(null);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [auditRun, setAuditRun] = useState<{
+    name: string;
+    workflows: BulkRunWorkflowResult[];
+    skippedCount: number;
+    date: string;
+  } | null>(null);
 
   const selectedWorkflows = useMemo(
     () => LIBRARY_WORKFLOWS.filter(w => selectedIds.has(w.id)),
@@ -217,9 +237,20 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     runTime: string;
     retry: string;
   }) => {
-    void data;
     setBulkModalOpen(false);
     exitBulkMode();
+    const workflows = selectedWorkflows.map(w => ({
+      id: w.id,
+      code: w.controlId,
+      name: w.name,
+      casesFlagged: deterministicCaseCount(w.controlId + w.id),
+    }));
+    setAuditRun({
+      name: data.auditName || 'BulkRun',
+      workflows,
+      skippedCount: 0,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
   };
 
   const handleRowClick = (id: string) => {
@@ -229,6 +260,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       onSelectWorkflow?.(id);
     }
   };
+
+  if (auditRun) {
+    return <AuditLogsView run={auditRun} onBack={() => setAuditRun(null)} />;
+  }
 
   return (
     <motion.div
@@ -452,7 +487,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                           <ActionIconButton
                             label="Run workflow"
                             disabled={bulkMode}
-                            onClick={() => addToast({ message: `Running "${wf.name}"…`, type: 'success' })}
+                            onClick={() => {
+                              if (onRunWorkflow) {
+                                onRunWorkflow(wf.id);
+                              } else {
+                                addToast({ message: `Running "${wf.name}"…`, type: 'success' });
+                              }
+                            }}
                           >
                             <Play size={14} />
                           </ActionIconButton>
@@ -724,5 +765,156 @@ function PaginationButton({
     >
       {children}
     </button>
+  );
+}
+
+type BulkRunWorkflowResult = { id: string; code: string; name: string; casesFlagged: number };
+
+function deterministicCaseCount(seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  const buckets = [0, 0, 1, 4, 12, 47, 128, 312, 891, 1248, 3271];
+  return buckets[Math.abs(hash) % buckets.length];
+}
+
+function AuditLogsView({
+  run,
+  onBack,
+}: {
+  run: { name: string; workflows: BulkRunWorkflowResult[]; skippedCount: number; date: string };
+  onBack: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return run.workflows;
+    return run.workflows.filter(w => w.name.toLowerCase().includes(q));
+  }, [run.workflows, search]);
+  const successCount = run.workflows.length;
+  const totalCount = run.workflows.length + run.skippedCount;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: [0.22, 0.68, 0, 1] }}
+      className="h-full w-full bg-white flex flex-col overflow-hidden px-[120px]"
+    >
+      <div className="pt-8 pb-5">
+        <div className="flex items-center gap-2 text-[12.5px] text-ink-500">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer"
+          >
+            <Database size={13} />
+            Business Process
+          </button>
+          <ChevronRight size={13} />
+          <span>Audit Logs</span>
+          <ChevronRight size={13} />
+          <span className="text-primary font-mono">{run.name}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="rounded-xl border border-border-light bg-white p-5 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-text mb-1">Overall Status</div>
+            <div className="text-[12px] text-text-muted">Total workflows audited successfully</div>
+            <div className="text-[28px] font-semibold text-primary mt-3 leading-none">
+              {successCount}/{totalCount}
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Database size={18} className="text-primary" />
+          </div>
+        </div>
+        <div className="rounded-xl border border-border-light bg-white p-5 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-text mb-1">Skipped Workflows</div>
+            <div className="text-[12px] text-text-muted">Workflows skipped due to exception</div>
+            <div className="text-[28px] font-semibold text-text mt-3 leading-none">{run.skippedCount}</div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-surface-2 flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} className="text-text-muted" />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="relative flex-1 max-w-[480px]">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search Workflows"
+            className="w-full pl-9 pr-3 h-10 rounded-md border border-border-light text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-md border border-primary/30 text-primary bg-white text-[13px] font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
+        >
+          <FileText size={14} />
+          View Report
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto rounded-xl border border-border-light bg-white">
+        <div className="grid grid-cols-[1fr_180px_140px_140px] gap-x-4 px-4 py-3 border-b border-border-light bg-surface-2/40 text-[11.5px] font-semibold text-text-muted">
+          <div>Workflow Name</div>
+          <div>Cases Flagged</div>
+          <div>Status</div>
+          <div>Audit Date</div>
+        </div>
+        {filtered.length === 0 ? (
+          <div className="text-[12.5px] text-text-muted text-center py-12">
+            No workflows match this search.
+          </div>
+        ) : (
+          <div className="divide-y divide-border-light">
+            {filtered.map(w => {
+              const openExecutor = () => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('view', 'workflow-executor');
+                url.searchParams.set('workflowId', w.id);
+                url.searchParams.set('state', 'completed');
+                window.open(url.toString(), '_blank', 'noopener,noreferrer');
+              };
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={openExecutor}
+                  className="w-full text-left grid grid-cols-[1fr_180px_140px_140px] gap-x-4 px-4 py-3.5 items-center hover:bg-surface-2/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-[13px] text-text truncate hover:text-primary">{w.name}</span>
+                    <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-medium border border-compliant/25 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-compliant" />
+                      Live
+                    </span>
+                  </div>
+                  <div className="text-[13px] text-text tabular-nums">
+                    {w.casesFlagged.toLocaleString()} {w.casesFlagged === 1 ? 'case flagged' : 'cases flagged'}
+                  </div>
+                  <div>
+                    <span className="inline-flex items-center px-2.5 h-5 rounded-md bg-compliant-50 text-compliant-700 text-[10.5px] font-medium border border-compliant/25">
+                      Completed
+                    </span>
+                  </div>
+                  <div className="text-[13px] text-text">{run.date}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="py-6" />
+    </motion.div>
   );
 }

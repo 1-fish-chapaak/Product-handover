@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
-  Play, Trash2, AlertTriangle, X,
+  Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import CreateEngagementWizard from './CreateEngagementWizard';
+import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -65,6 +66,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 }
 
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
+  const [mode, setMode] = useState<'overview' | 'list'>('overview');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | EngStatus>('All');
@@ -104,6 +106,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
   const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
   const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
 
+  /** Jump from the overview into the list, pre-filtered on a single dimension. */
+  const goToList = (filter?: ListFilter) => {
+    setTypeFilter(filter?.type ?? 'All');
+    setStatusFilter(filter?.status ?? 'All');
+    setProcessFilter(filter?.process ?? 'All');
+    setSearch('');
+    setMode('list');
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
@@ -111,16 +122,18 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
         {/* Header */}
         <div className="flex items-end justify-between mb-5">
           <div>
-            <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-            <h1 className="font-display text-[2rem] font-bold text-text leading-tight">Engagement Library</h1>
-            <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
-              Browse all engagements — compliance audits, internal audits, and automation programs.
+            <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
+            <h1 className="font-display text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
+            <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
+              {mode === 'overview'
+                ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
+                : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onOpenAuditPlanning}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
               title="See engagements laid out on the FY timeline"
             >
               <Calendar size={13} />
@@ -129,58 +142,48 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             </button>
             <button
               onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />New Engagement
             </button>
           </div>
         </div>
 
-        {/* Search row */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 max-w-xl">
+        {/* Primary view switcher — prominent, on its own row */}
+        <div className="flex items-center gap-3 mb-6 border-b border-border-light">
+          <ViewToggle mode={mode} onChange={setMode} count={all.length} />
+        </div>
+
+        {mode === 'overview' && (
+          <EngagementsOverview
+            engagements={all}
+            onOpenEngagement={onOpenEngagement}
+            onGoToList={goToList}
+          />
+        )}
+
+        {mode === 'list' && (<>
+        {/* Search + filters — one compact row, no dedicated panel */}
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
               type="text"
               placeholder="Search engagement, owner, framework, or code..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-full pl-10 pr-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
-        </div>
-
-        {/* Filters row */}
-        <div className="flex items-center gap-2 mb-5 flex-wrap rounded-xl border border-border-light bg-surface-1/40 px-3 py-2.5">
-          <FilterGroup
-            label="Type"
-            options={TYPE_FILTERS}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            counts={counts.type}
-          />
-          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
-          <FilterGroup
-            label="Status"
-            options={STATUS_FILTERS}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            counts={counts.status}
-          />
-          <span className="w-px h-5 bg-border-light/80 mx-1" aria-hidden="true" />
-          <FilterGroup
-            label="Process"
-            options={PROCESS_FILTERS}
-            value={processFilter}
-            onChange={setProcessFilter}
-            counts={counts.process}
-          />
+          <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
+          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} />
+          <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
           {anyFilterActive && (
             <button
               onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-text-muted hover:text-primary px-2 py-1 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
             >
-              <X size={11} /> Clear filters
+              <X size={12} /> Clear
             </button>
           )}
         </div>
@@ -189,13 +192,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
         {filtered.length === 0 ? (
           <div className="border border-border-light rounded-xl p-14 text-center bg-white">
             <ClipboardCheck size={32} className="text-text-muted mx-auto mb-3" />
-            <p className="text-[0.875rem] font-semibold text-text mb-1">No engagements match your filters</p>
-            <p className="text-[0.75rem] text-text-muted">Try clearing the type, status, process, or search filter.</p>
+            <p className="text-[14px] font-semibold text-text mb-1">No engagements match your filters</p>
+            <p className="text-[12px] text-text-muted">Try clearing the type, status, process, or search filter.</p>
           </div>
         ) : (
           <div>
             {/* Column headers — label row above the cards */}
-            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted/80">
+            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80">
               <div>Engagement</div>
               <div>Type</div>
               <div>Health</div>
@@ -219,16 +222,16 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                   {/* Engagement column */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[0.75rem] font-semibold text-text leading-snug">{eng.name}</h3>
-                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status]}`}>
+                      <h3 className="text-[14.5px] font-semibold text-text leading-snug">{eng.name}</h3>
+                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_CLS[eng.status]}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
                         {eng.status}
                       </span>
                     </div>
-                    <p className="text-[0.75rem] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
+                    <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
                       {eng.description}
                     </p>
-                    <div className="flex items-center gap-3 mt-2 text-[0.6875rem] text-text-muted flex-wrap">
+                    <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
                       <span className="font-mono tracking-tight">{eng.code}</span>
                       <span className="text-border">·</span>
                       <span>{eng.owner}</span>
@@ -237,10 +240,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                     </div>
                     {/* Inline tag badges */}
                     <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                         {eng.process}
                       </span>
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.75rem] font-medium bg-white text-text-muted border border-border-light">
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
                         {eng.framework}
                       </span>
                     </div>
@@ -248,11 +251,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
 
                   {/* Type column */}
                   <div className="flex flex-col items-start gap-1.5">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${TYPE_CLS[eng.type]}`}>
                       {TYPE_LABEL[eng.type]}
                     </span>
                     {eng.type === 'Automation' && eng.subtype && (
-                      <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.75rem] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
+                      <span className="inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
                         {SUBTYPE_LABEL[eng.subtype]}
                       </span>
                     )}
@@ -261,15 +264,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                   {/* Health column */}
                   <div className="flex flex-col gap-1.5 min-w-0">
                     {notStarted ? (
-                      <div className="text-[0.6875rem] text-text-muted italic">
+                      <div className="text-[11px] text-text-muted italic">
                         {eng.controls} controls · not started
                       </div>
                     ) : (
                       <>
                         <div className="flex items-baseline justify-between gap-2">
                           <div className="flex items-baseline gap-2 min-w-0">
-                            <span className={`text-[0.9375rem] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
-                            <span className="text-[0.6875rem] text-text-secondary tabular-nums truncate">
+                            <span className={`text-[15px] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
+                            <span className="text-[11px] text-text-secondary tabular-nums truncate">
                               <span className="font-semibold text-text">{effective}</span>
                               <span className="text-text-muted">/{eng.controls}</span>
                               <span className="text-text-muted ml-1">controls effective</span>
@@ -284,8 +287,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                     {eng.openIssues > 0 && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <AlertTriangle size={11} className="text-risk-700" />
-                        <span className="text-[0.6875rem] font-semibold text-risk-700">{eng.openIssues}</span>
-                        <span className="text-[0.6875rem] text-text-muted">open</span>
+                        <span className="text-[11px] font-semibold text-risk-700">{eng.openIssues}</span>
+                        <span className="text-[11px] text-text-muted">open</span>
                       </div>
                     )}
                   </div>
@@ -313,11 +316,12 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-2.5 mt-2 text-[0.6875rem] text-text-muted">
+            <div className="px-6 py-2.5 mt-2 text-[11px] text-text-muted">
               {filtered.length} of {ENGAGEMENTS.length + created.length} engagements
             </div>
           </div>
         )}
+        </>)}
       </div>
 
       <AnimatePresence>
@@ -335,40 +339,76 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
   );
 }
 
-function FilterGroup<T extends string>({
-  label, options, value, onChange, counts,
+/** Primary Overview ⇄ List view switcher — large underline tabs. */
+function ViewToggle({
+  mode, onChange, count,
+}: {
+  mode: 'overview' | 'list';
+  onChange: (m: 'overview' | 'list') => void;
+  count: number;
+}) {
+  const tabs: { id: 'overview' | 'list'; label: string; Icon: typeof List; badge?: number }[] = [
+    { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
+    { id: 'list', label: 'All Engagements', Icon: List, badge: count },
+  ];
+  return (
+    <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">
+      {tabs.map(({ id, label, Icon, badge }) => {
+        const active = mode === id;
+        return (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(id)}
+            className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
+              active
+                ? 'border-primary text-primary'
+                : 'border-transparent text-text-muted hover:text-text hover:border-border'
+            }`}
+          >
+            <Icon size={16} />
+            {label}
+            {badge != null && (
+              <span className={`tabular-nums text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                active ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-text-muted'
+              }`}>{badge}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Compact dropdown filter — replaces the old chip panel. Highlights when a non-"All" value is picked. */
+function MinimalFilter<T extends string>({
+  label, allLabel, options, value, onChange, counts,
 }: {
   label: string;
+  allLabel: string;
   options: readonly T[];
   value: T;
   onChange: (next: T) => void;
   counts: Record<string, number>;
 }) {
+  const active = value !== 'All';
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider mr-0.5">{label}</span>
-      <div className="flex gap-1 flex-wrap">
-        {options.map(opt => {
-          const active = opt === value;
-          const n = counts[opt] ?? 0;
-          return (
-            <button
-              key={opt}
-              onClick={() => onChange(opt)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
-                active
-                  ? 'bg-primary text-white shadow-sm ring-1 ring-primary/20'
-                  : 'bg-white text-text-secondary border border-border-light hover:border-primary/30 hover:text-primary hover:bg-primary/5'
-              }`}
-            >
-              <span>{opt}</span>
-              <span className={`tabular-nums text-[0.625rem] font-bold px-1 rounded ${
-                active ? 'bg-white/20 text-white' : 'text-text-muted/80 bg-surface-2'
-              }`}>{n}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value as T)}
+      aria-label={`Filter by ${label}`}
+      className={`py-2 px-3 rounded-lg border text-[12.5px] font-semibold outline-none cursor-pointer transition-colors focus:ring-2 focus:ring-primary/10 ${
+        active
+          ? 'border-primary/40 text-primary bg-primary-xlight/30'
+          : 'border-border bg-white text-text-secondary hover:border-primary/30'
+      }`}
+    >
+      {options.map(opt => (
+        <option key={opt} value={opt}>
+          {opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}`}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -93,7 +93,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 font-mono text-[12px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
         >
           <ArrowLeft size={14} />
           Back to AI Concierge
@@ -102,11 +102,11 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
 
       {/* Hero — pinned to top of the chat area */}
       <div className="shrink-0 px-8 pt-12 pb-4 max-w-[860px] mx-auto w-full text-center">
-        <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500 mb-4">
+        <div className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-500 mb-4">
           <ChevronRight size={13} />
           Asking a few clarifying questions
         </div>
-        <h1 className="font-serif text-[2.25rem] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="font-serif text-[36px] tracking-tight text-ink-900 leading-[1.15]">
           One quick check before I edit.{' '}
           <span className="text-ink-500 italic">Pick what fits, or type your own.</span>
         </h1>
@@ -127,9 +127,9 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
         >
           {/* Header */}
           <div className="px-5 pt-4 pb-2.5 flex items-center justify-between gap-4">
-            <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-snug truncate flex items-baseline gap-2">
+            <h3 className="text-[14px] font-semibold text-ink-900 leading-snug truncate flex items-baseline gap-2">
               {current.question}
-              <span className="text-[0.75rem] font-medium text-ink-400 tabular-nums shrink-0">
+              <span className="text-[11.5px] font-medium text-ink-400 tabular-nums shrink-0">
                 · {currentPage + 1} of {total}
               </span>
             </h3>
@@ -151,13 +151,13 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
                 >
                   <span
                     className={[
-                      'w-6 h-6 rounded-md flex items-center justify-center text-[0.75rem] font-bold shrink-0',
+                      'w-6 h-6 rounded-md flex items-center justify-center text-[11.5px] font-bold shrink-0',
                       selected ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700',
                     ].join(' ')}
                   >
                     {selected ? <Check size={11} /> : idx + 1}
                   </span>
-                  <span className="flex-1 text-[0.75rem] text-ink-800">{option}</span>
+                  <span className="flex-1 text-[13.5px] text-ink-800">{option}</span>
                   <ReturnArrowIcon dimmed={!selected} />
                 </button>
               );
@@ -174,12 +174,12 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
                   <span className="w-6 h-6 rounded-md flex items-center justify-center bg-canvas border border-canvas-border shrink-0">
                     <Pencil size={11} className="text-ink-400" />
                   </span>
-                  <span className="text-[0.8125rem] text-ink-400">Something else</span>
+                  <span className="text-[13px] text-ink-400">Something else</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleSkip}
-                  className="text-[0.75rem] font-semibold text-ink-500 hover:text-ink-700 transition-colors px-3 py-1.5 rounded-lg border border-canvas-border bg-white cursor-pointer"
+                  className="text-[12.5px] font-semibold text-ink-500 hover:text-ink-700 transition-colors px-3 py-1.5 rounded-lg border border-canvas-border bg-white cursor-pointer"
                 >
                   Skip
                 </button>
@@ -199,7 +199,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
                     }
                   }}
                   placeholder="Type your own answer…"
-                  className="flex-1 px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                  className="flex-1 px-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                 />
                 <button
                   type="button"
@@ -220,7 +220,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
                     setCustomMode(false);
                     setCustomText('');
                   }}
-                  className="text-[0.75rem] text-ink-500 hover:text-ink-700 px-2 py-1 cursor-pointer"
+                  className="text-[12.5px] text-ink-500 hover:text-ink-700 px-2 py-1 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -243,7 +243,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
               }}
               rows={1}
               placeholder={`Or just type. I'll treat it as your answer to question ${currentPage + 1}.`}
-              className="w-full bg-transparent border-none outline-none resize-none py-3 pl-4 pr-24 text-[0.75rem] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[160px] rounded-b-2xl"
+              className="w-full bg-transparent border-none outline-none resize-none py-3 pl-4 pr-24 text-[13.5px] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[160px] rounded-b-2xl"
             />
             <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
               <button
@@ -272,7 +272,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
         </div>
 
         {/* Footer hints */}
-        <div className="flex items-center justify-between mt-3 text-[0.75rem] text-ink-400">
+        <div className="flex items-center justify-between mt-3 text-[11.5px] text-ink-400">
           <div className="flex items-center gap-3">
             <KbdHint label="↑↓" desc="navigate" />
             <KbdHint label="Enter" desc="select" />
@@ -286,7 +286,7 @@ export default function EditClarificationStage({ steps, onBack, onComplete }: Pr
               <button
                 type="button"
                 onClick={() => onComplete(answers)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors"
               >
                 Open editor
                 <ChevronRight size={12} />
