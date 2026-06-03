@@ -748,10 +748,10 @@ function AppInner() {
               setView('engagement-detail' as any);
             }}
             onOpenCaseManagement={openCaseManagement}
-            onOpenRacmFullEditor={() => openRacmFullEditor({
+            onOpenRacmFullEditor={(override) => openRacmFullEditor({
               racmId: 'racm-procurement-fy26',
-              racmName: 'Procurement SOP · Budget to Payment RACM',
-              processLabel: 'P2P',
+              racmName: override?.racmName ?? 'Procurement SOP · Budget to Payment RACM',
+              processLabel: override?.processLabel ?? 'P2P',
               backView: 'engagement-overview',
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}

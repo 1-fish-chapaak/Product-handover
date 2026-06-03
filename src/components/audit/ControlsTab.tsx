@@ -10,17 +10,23 @@ import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
   FileText, Image as ImageIcon, FileSpreadsheet, Check, AlertCircle,
   Link2, Workflow as WorkflowIcon, ClipboardList,
-  CheckCircle2, Circle,
+  CheckCircle2, Circle, FlaskConical,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
-import { type ControlAttribute } from '../../data/racm';
+import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Props { engagement: Engagement }
+interface Props {
+  engagement: Engagement;
+  /** Launch the Ask IRA workflow builder scoped to this engagement (Create-new path in the link modal). */
+  onCreateWorkflow?: () => void;
+  /** Jump to the Evidence tab with this control opened at Attribute Testing. */
+  onTestEvidence?: (controlId: string) => void;
+}
 
 type ControlStatus = 'Effective' | 'In Test' | 'Failed' | 'Pending';
 type StatusFilter = 'All' | ControlStatus;
@@ -113,10 +119,6 @@ function lastTestedFor(controlId: string): string {
   return `Last tested ${days}d ago`;
 }
 
-function ownerForControl(controlId: string): string {
-  return OWNER_NAMES[hash(controlId) % OWNER_NAMES.length] ?? OWNER_NAMES[0];
-}
-
 function confidenceTone(c: number): { bar: string; text: string } {
   if (c >= 85) return { bar: 'bg-compliant', text: 'text-compliant-700' };
   if (c >= 65) return { bar: 'bg-mitigated-500', text: 'text-mitigated-700' };
@@ -138,7 +140,7 @@ function kindForFile(name: string): EvidenceKind {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ControlsTab({ engagement }: Props): JSX.Element {
+export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence }: Props): JSX.Element {
   const { addToast } = useToast();
   const ws = useEngagementWorkspace();
   const controls = ws.controls;
@@ -180,6 +182,8 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
   const [aiPopover, setAiPopover] = useState<{ attributeId: string | null }>({ attributeId: null });
   const [linkPopover, setLinkPopover] = useState<{ attributeId: string | null }>({ attributeId: null });
   const [linkSearch, setLinkSearch] = useState<string>('');
+  // ── Bullet-level "map workflow" modal — the attribute currently being mapped.
+  const [mapAttr, setMapAttr] = useState<ControlAttribute | null>(null);
 
   // ── Per-control statuses (memoised; deterministic per engagement)
   const controlStatuses = useMemo(() => {
@@ -264,6 +268,18 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
   const unlinkWorkflow = (attributeId: string, workflowId: string) => {
     ws.unlinkWorkflow(attributeId, workflowId);
     addToast({ type: 'info', message: 'Workflow unlinked' });
+  };
+
+  // Resolve an attribute's linked workflows to their full {id, code, name} for inline chips.
+  const linkedWfFor = (attributeId: string) =>
+    ws.workflowIdsForAttribute(attributeId)
+      .map(id => ws.workflows.find(w => w.id === id))
+      .filter((w): w is { id: string; code: string; name: string } => !!w);
+
+  const createWorkflow = () => {
+    setMapAttr(null);
+    if (onCreateWorkflow) onCreateWorkflow();
+    else addToast({ type: 'info', message: 'Opening the workflow builder…' });
   };
 
   // ── Attribute expand + authoring
@@ -460,7 +476,6 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
                 <span className={`px-2 h-6 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
                 </span>
-                <span className="text-[11px] text-ink-500 shrink-0 tabular-nums">{c.attributes.length} attr</span>
                 <span className="text-[11px] text-ink-400 shrink-0 hidden md:inline">{lastTestedFor(c.controlId)}</span>
               </button>
 
@@ -474,32 +489,70 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
-                      <div className="flex items-center justify-between text-[11px] text-ink-500">
-                        <span><span className="font-semibold text-ink-600">{c.subProcess}</span> · {c.frequency} · Owner {ownerForControl(c.controlId)}</span>
-                        <span className="font-mono">{c.attributes.length} attribute{c.attributes.length === 1 ? '' : 's'}</span>
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-[12px] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
+                        {onTestEvidence && (
+                          <button
+                            onClick={() => onTestEvidence(c.controlId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50/50 hover:bg-brand-50 text-brand-700 text-[11.5px] font-semibold cursor-pointer transition-colors shrink-0"
+                            title="Open this control in the Evidence tab to upload evidence and test samples"
+                          >
+                            <FlaskConical size={13} /> Test evidence
+                          </button>
+                        )}
                       </div>
                       {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
                       <div className="space-y-1.5">
                         {c.attributes.map(attr => {
                           const attrExpanded = expandedAttrIds.has(attr.id);
-                          const linkCount = ws.workflowIdsForAttribute(attr.id).length;
+                          const linkedWfs = linkedWfFor(attr.id);
                           return (
                             <div key={attr.id} className="rounded-lg border border-canvas-border bg-white overflow-hidden">
-                              <button
-                                onClick={() => toggleAttr(attr.id)}
-                                aria-expanded={attrExpanded}
-                                className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-canvas/50 transition-colors cursor-pointer"
-                              >
-                                <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${attrExpanded ? 'bg-brand-600' : 'bg-ink-300'}`} />
-                                <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attr.id}</span>
-                                <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0">{attr.description}</span>
-                                {linkCount > 0 && (
-                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-500 shrink-0 mt-0.5" title={`${linkCount} linked workflow${linkCount === 1 ? '' : 's'}`}>
-                                    <WorkflowIcon size={11} />{linkCount}
-                                  </span>
-                                )}
-                                <ChevronRight size={14} className={`text-ink-400 shrink-0 mt-0.5 transition-transform duration-200 ${attrExpanded ? 'rotate-90' : ''}`} />
-                              </button>
+                              <div className="flex items-start gap-2 px-3 py-2.5 hover:bg-canvas/50 transition-colors">
+                                <button
+                                  onClick={() => toggleAttr(attr.id)}
+                                  aria-expanded={attrExpanded}
+                                  className="flex items-start gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
+                                >
+                                  <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${attrExpanded ? 'bg-brand-600' : 'bg-ink-300'}`} />
+                                  <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attrCode(attr.id)}</span>
+                                  <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0">{attr.description}</span>
+                                </button>
+                                {/* Inline workflow mapping — linked workflow chips + a clearly visible link control. */}
+                                <div className="shrink-0 mt-px flex items-center gap-1.5 flex-wrap justify-end max-w-[260px]">
+                                  {linkedWfs.map(w => (
+                                    <span
+                                      key={w.id}
+                                      title={w.name}
+                                      className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700"
+                                    >
+                                      <WorkflowIcon size={10} className="shrink-0" />
+                                      <span className="font-mono">{w.code}</span>
+                                      <button
+                                        onClick={() => unlinkWorkflow(attr.id, w.id)}
+                                        className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors"
+                                        aria-label={`Unlink ${w.code}`}
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                    </span>
+                                  ))}
+                                  <button
+                                    onClick={() => setMapAttr(attr)}
+                                    className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md border border-dashed border-canvas-border bg-white text-[10.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 cursor-pointer transition-colors"
+                                  >
+                                    <Link2 size={11} className="shrink-0" />
+                                    {linkedWfs.length > 0 ? 'Map' : 'Link workflow'}
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => toggleAttr(attr.id)}
+                                  aria-label={attrExpanded ? 'Collapse attribute' : 'Expand attribute'}
+                                  className="shrink-0 mt-0.5 cursor-pointer"
+                                >
+                                  <ChevronRight size={14} className={`text-ink-400 transition-transform duration-200 ${attrExpanded ? 'rotate-90' : ''}`} />
+                                </button>
+                              </div>
                               <AnimatePresence initial={false}>
                                 {attrExpanded && (
                                   <motion.div
@@ -588,6 +641,158 @@ export default function ControlsTab({ engagement }: Props): JSX.Element {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {mapAttr && (
+          <WorkflowMapModal
+            attribute={mapAttr}
+            workflows={ws.workflows}
+            linkedIds={ws.workflowIdsForAttribute(mapAttr.id)}
+            onLink={(id) => { ws.linkWorkflow(mapAttr.id, id); addToast({ type: 'success', message: 'Workflow linked' }); }}
+            onUnlink={(id) => unlinkWorkflow(mapAttr.id, id)}
+            onCreate={createWorkflow}
+            onClose={() => setMapAttr(null)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Workflow map modal — link an attribute to the engagement's workflows ─────
+
+function WorkflowMapModal({
+  attribute, workflows, linkedIds, onLink, onUnlink, onCreate, onClose,
+}: {
+  attribute: ControlAttribute;
+  workflows: { id: string; code: string; name: string }[];
+  linkedIds: string[];
+  onLink: (id: string) => void;
+  onUnlink: (id: string) => void;
+  onCreate: () => void;
+  onClose: () => void;
+}): JSX.Element {
+  const [search, setSearch] = useState('');
+  const linkedSet = new Set(linkedIds);
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workflows;
+    return workflows.filter(w => w.code.toLowerCase().includes(q) || w.name.toLowerCase().includes(q));
+  }, [search, workflows]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-[520px] max-h-[80vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-canvas-border">
+          <div className="min-w-0">
+            <h2 className="text-[16px] font-bold text-ink-800">Map workflows</h2>
+            <p className="text-[12.5px] text-ink-500 mt-0.5">
+              Link validation workflows to <span className="font-mono font-semibold text-brand-700">{attribute.id}</span>
+              <span className="text-ink-400"> · </span>
+              <span className="text-ink-600">{attribute.description}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Create new — Ask IRA path */}
+        <div className="px-6 pt-4">
+          <button
+            onClick={onCreate}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-brand-200 bg-brand-50/40 hover:bg-brand-50 transition-colors cursor-pointer text-left group"
+          >
+            <div className="p-2 rounded-lg bg-gradient-to-br from-brand-600 to-brand-500 shrink-0">
+              <Sparkles size={16} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold text-ink-800">Create a new workflow</div>
+              <div className="text-[11.5px] text-ink-500 mt-0.5">Build one with Ask IRA — opens the workflow builder with this attribute's context.</div>
+            </div>
+            <Plus size={16} className="text-brand-600 shrink-0 group-hover:scale-110 transition-transform" />
+          </button>
+
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-canvas-border" />
+            <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-400">or link an existing workflow</span>
+            <div className="flex-1 h-px bg-canvas-border" />
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-6">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search workflows by code or name…"
+              className="w-full pl-9 pr-3 py-2.5 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Workflow list — click to toggle the link live. */}
+        <div className="flex-1 overflow-y-auto px-6 py-3 min-h-[140px]">
+          {results.length === 0 ? (
+            <div className="py-10 text-center text-[12.5px] text-ink-400">No workflows match “{search}”.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {results.map(w => {
+                const linked = linkedSet.has(w.id);
+                return (
+                  <button
+                    key={w.id}
+                    onClick={() => (linked ? onUnlink(w.id) : onLink(w.id))}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                      linked ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-brand-200 hover:bg-canvas/50'
+                    }`}
+                  >
+                    <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
+                      linked ? 'bg-brand-600 border-brand-600' : 'bg-white border-canvas-border'
+                    }`}>
+                      {linked && <Check size={12} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><WorkflowIcon size={13} className="text-brand-600" /></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium text-ink-800 truncate">{w.name}</div>
+                      <div className="text-[11px] text-ink-400 mt-0.5 font-mono">{w.code}</div>
+                    </div>
+                    {linked && <span className="text-[10.5px] font-semibold text-brand-700 shrink-0">Linked</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-canvas-border bg-canvas/40">
+          <span className="text-[12px] text-ink-500">
+            <span className="font-semibold text-ink-700">{linkedIds.length}</span> workflow{linkedIds.length === 1 ? '' : 's'} linked
+          </span>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -751,7 +956,7 @@ function AttributeBlock(p: AttributeBlockProps): JSX.Element {
       {!p.compact && (
         <div className="px-4 py-3 border-b border-canvas-border bg-canvas/60">
           <div className="flex items-start gap-3">
-            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{p.attribute.id}</span>
+            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attrCode(p.attribute.id)}</span>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink-800 leading-snug">{p.attribute.description}</p>
               <p className="text-[11.5px] italic text-ink-500 mt-0.5 leading-snug">{p.attribute.testProcedure}</p>

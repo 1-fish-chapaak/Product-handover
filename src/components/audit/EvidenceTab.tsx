@@ -16,19 +16,20 @@
  * Generic attributes do not consume samples.
  */
 
-import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, FileText, Upload, Sparkles, CheckCircle2, XCircle,
   Clock, ChevronRight, ChevronDown, X, Plus, AlertTriangle, Filter, Search,
   Eye, Activity, BookText, Download, RefreshCw, Layers, Shield, ListChecks, User,
   Database, Shuffle, Settings2, Workflow as WorkflowIcon, Wand2, RotateCcw,
-  Check, Lock, Paperclip,
+  Check, Lock, Paperclip, MessageSquare,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
-import { racmRowsForProcess, type RACMRow, type ControlAttribute } from '../../data/racm';
+import { racmRowsForProcess, attrCode, type RACMRow, type ControlAttribute } from '../../data/racm';
 import { CURRENT_USER } from '../../data/grc-domain';
+import { useEngagementWorkspace } from './engagementWorkspace';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,10 @@ interface Props {
   engagement: Engagement;
   /** Hand off a seed prompt to the AI Concierge workflow builder (chat). */
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
+  /** When set (from Controls → "Test evidence"), auto-open this control at Attribute Testing. */
+  openControlId?: string | null;
+  /** Called once the openControlId has been consumed, so the parent can clear it. */
+  onOpened?: () => void;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,6 +50,7 @@ type HumanVerdict = 'Pass' | 'Fail' | 'Hold';
 type Verdict = AiVerdict | null;
 type SampleMethod = 'Random' | 'Statistical' | 'Column-filter' | 'Workflow';
 type StatusFilter = 'All' | 'Complete' | 'In progress' | 'Not started';
+type GroupBy = 'none' | 'subProcess';
 type ControlStatus = 'Not started' | 'In progress' | 'Validated' | 'Working paper ready';
 type Operator = '=' | '>' | '<' | 'contains';
 
@@ -313,8 +319,9 @@ function seedFor(controls: DistinctControl[]): SeedBundle {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Props): JSX.Element {
+export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openControlId, onOpened }: Props): JSX.Element {
   const { addToast } = useToast();
+  const ws = useEngagementWorkspace();
   const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
   const groupsBySub = useMemo(() => buildControlGroups(allRows), [allRows]);
   const subProcessNames = useMemo(() => Array.from(groupsBySub.keys()), [groupsBySub]);
@@ -328,6 +335,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
   // ─── State (control-level) ─────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [subProcessFilter, setSubProcessFilter] = useState<string>('All');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [search, setSearch] = useState<string>('');
   const [expandedSub, setExpandedSub] = useState<Set<string>>(() => new Set(subProcessNames.slice(0, 1)));
   /** When set, the tab switches from list mode to focused detail mode for that control. */
@@ -429,6 +437,25 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
     return 'In progress';
   };
 
+  // Workflow-link readiness carried over from the Controls tab (shared workspace store):
+  // the distinct workflow codes linked to any of this control's attributes.
+  const workflowCodesForControl = useCallback((ctrl: DistinctControl): string[] => {
+    const ids = new Set<string>();
+    ctrl.attributes.forEach(a => ws.workflowIdsForAttribute(a.id).forEach(id => ids.add(id)));
+    return Array.from(ids)
+      .map(id => ws.workflows.find(w => w.id === id)?.code)
+      .filter((c): c is string => !!c);
+  }, [ws]);
+
+  // Per-row derived props, shared by the flat and grouped renderers.
+  const rowPropsFor = (ctrl: DistinctControl) => {
+    const attrsTotal = ctrl.attributes.length;
+    const aDone = ctrl.attributes.filter(a => attrDone(ctrl, a)).length;
+    const pct = attrsTotal === 0 ? 0 : Math.round((aDone / attrsTotal) * 100);
+    const stepCompletion: [boolean, boolean, boolean] = [controlStepDone(ctrl, 1), controlStepDone(ctrl, 2), controlStepDone(ctrl, 3)];
+    return { attrsTotal, pct, stepCompletion, status: controlStatus(ctrl), codes: workflowCodesForControl(ctrl) };
+  };
+
   // ─── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     let totalAttrs = 0, withPopulation = 0, samplesGenerated = 0, validated = 0, passes = 0, fails = 0;
@@ -493,6 +520,9 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupsBySub, statusFilter, subProcessFilter, search, populationsByCtrl, samplingByCtrl, samplesByCtrl, genericByCtrl]);
 
+  // Flat (ungrouped) control list — the default view; grouping is opt-in via the Group-by control.
+  const flatControls = useMemo(() => visibleGroups.flatMap(g => g.controls), [visibleGroups]);
+
   const toggleSub = (key: string) => setExpandedSub(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const openControl = (controlId: string) => {
     setSelectedControlId(controlId);
@@ -507,6 +537,21 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
     if (ctrl.attributes.length > 0) setExpandedAttrByCtrl(prev => ({ ...prev, [controlId]: ctrl.attributes[0]!.id }));
   };
   const setSelectedAttr = (controlId: string, attrId: string) => setExpandedAttrByCtrl(prev => ({ ...prev, [controlId]: attrId }));
+
+  // Consume an external "open this control at Attribute Testing" request (Controls → Test evidence).
+  useEffect(() => {
+    if (!openControlId) return;
+    const ctrl = allControls.find(c => c.controlId === openControlId);
+    if (ctrl) {
+      setSelectedControlId(openControlId);
+      setActiveCheckpoint(3);
+      if (ctrl.attributes.length > 0) setExpandedAttrByCtrl(prev => ({ ...prev, [openControlId]: ctrl.attributes[0]!.id }));
+    }
+    onOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openControlId]);
+
+  const allAttrsBulkRef = useRef<HTMLInputElement | null>(null);
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
@@ -569,6 +614,61 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
       ...prev,
       [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => s.id !== sampleId ? s : { ...s, evidence: { ...s.evidence, [attr.id]: { ...(s.evidence[attr.id] || {}), [evidenceType]: null } } }),
     }));
+  };
+  /** Bulk-attach evidence for every in-scope sample at once (fills only the gaps). */
+  const onBulkUploadSampleEvidence = (ctrl: DistinctControl, attr: ControlAttribute) => {
+    const round = roundsByCtrlAttr[`${ctrl.controlId}::${attr.id}`] || [];
+    const active = round[round.length - 1];
+    let filled = 0;
+    setSamplesByCtrl(prev => ({
+      ...prev,
+      [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => {
+        const inScope = !active || active.sampleIds.includes(s.id) || round.length <= 1;
+        if (!inScope) return s;
+        const ev = { ...(s.evidence[attr.id] || {}) };
+        attr.requiredEvidence.forEach(et => {
+          if (!ev[et]) { ev[et] = { filename: mockFilename(et, s.id), size: mockFileSize(`${s.id}-${et}`) }; filled += 1; }
+        });
+        return { ...s, evidence: { ...s.evidence, [attr.id]: ev } };
+      }),
+    }));
+    const sampleCount = (samplesByCtrl[ctrl.controlId] || []).length;
+    pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} for ${attr.id} across ${sampleCount} samples` });
+    addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across ${sampleCount} samples` : 'All samples already have their evidence.' });
+  };
+  /** Control-level bulk: attach required evidence across every attribute (all samples + generic) at once. */
+  const onBulkUploadAllAttrs = (ctrl: DistinctControl) => {
+    const sb = sampleBasedAttrs(ctrl);
+    const gens = genericAttrs(ctrl);
+    let filled = 0;
+    if (sb.length > 0) {
+      setSamplesByCtrl(prev => ({
+        ...prev,
+        [ctrl.controlId]: (prev[ctrl.controlId] || []).map(s => {
+          const byAttr = { ...s.evidence };
+          sb.forEach(attr => {
+            const ev = { ...(byAttr[attr.id] || {}) };
+            attr.requiredEvidence.forEach(et => { if (!ev[et]) { ev[et] = { filename: mockFilename(et, s.id), size: mockFileSize(`${s.id}-${et}`) }; filled += 1; } });
+            byAttr[attr.id] = ev;
+          });
+          return { ...s, evidence: byAttr };
+        }),
+      }));
+    }
+    if (gens.length > 0) {
+      setGenericByCtrl(prev => {
+        const map = { ...(prev[ctrl.controlId] || {}) };
+        gens.forEach(attr => {
+          const cur = map[attr.id] || { evidence: {}, useAi: true, humanVerdict: 'Pass' as HumanVerdict, humanRemark: '', aiVerdict: null, aiConfidence: 0, aiRationale: '' };
+          const ev = { ...cur.evidence };
+          attr.requiredEvidence.forEach(et => { if (!ev[et]) { ev[et] = { filename: mockFilename(et, `${ctrl.controlId}-${attr.id}`), size: mockFileSize(`${ctrl.controlId}-${attr.id}-${et}`) }; filled += 1; } });
+          map[attr.id] = { ...cur, evidence: ev };
+        });
+        return { ...prev, [ctrl.controlId]: map };
+      });
+    }
+    pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` });
+    addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` : 'All attributes already have their evidence.' });
   };
 
   const onRunAttrAi = (ctrl: DistinctControl, attr: ControlAttribute) => {
@@ -721,18 +821,16 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
           <ControlStatusPill status={controlStatus(ctrl)} />
         </div>
 
-        {/* Workspace grid — vertical rail + content */}
-        <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6 min-h-[640px]">
-          {/* ── Vertical gamified checkpoint rail ── */}
-          <VerticalCheckpoints
-            phases={checkpoints}
-            active={activeCheckpoint}
-            onJump={(n) => setActiveCheckpoint(n)}
-            xp={{ samples: samps.length, validated: validatedCount, total: totalChecks, passed: passedCount, failed: failedCount }}
-          />
+        {/* Compact journey stepper on top — frees the full width for the testing content */}
+        <JourneyStepper
+          phases={checkpoints}
+          active={activeCheckpoint}
+          onJump={(n) => setActiveCheckpoint(n)}
+          xp={{ samples: samps.length, validated: validatedCount, total: totalChecks, passed: passedCount, failed: failedCount }}
+        />
 
-          {/* ── Active checkpoint content ── */}
-          <div className="min-w-0">
+        {/* ── Active checkpoint content (full width) ── */}
+        <div className="min-w-0">
             <AnimatePresence mode="wait">
               <motion.div key={activeCheckpoint} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="space-y-5">
 
@@ -752,9 +850,29 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
 
                 {activeCheckpoint === 3 && (
                   <div className="rounded-2xl border border-canvas-border bg-white">
-                    <div className="px-6 py-4 border-b border-canvas-border">
-                      <h5 className="text-[14px] font-bold text-text">Attribute Testing</h5>
-                      <p className="text-[11px] text-text-muted mt-0.5">Pick an attribute on the left. Each one carries its own evidence + validation workflow.</p>
+                    <div className="px-6 py-4 border-b border-canvas-border flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h5 className="text-[14px] font-bold text-text">Attribute Testing</h5>
+                        <p className="text-[11px] text-text-muted mt-0.5">Pick an attribute on the left, or upload evidence for every attribute at once.</p>
+                      </div>
+                      {ctrl.attributes.length > 0 && (
+                        <>
+                          <input
+                            ref={allAttrsBulkRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => { if (e.target.files && e.target.files.length > 0) onBulkUploadAllAttrs(ctrl); e.target.value = ''; }}
+                          />
+                          <button
+                            onClick={() => allAttrsBulkRef.current?.click()}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold cursor-pointer transition-colors"
+                            title="Upload evidence and apply it across every attribute and sample on this control"
+                          >
+                            <Upload size={12} /> Upload evidence for all attributes
+                          </button>
+                        </>
+                      )}
                     </div>
                     {ctrl.attributes.length === 0 ? (
                       <div className="px-6 py-12 text-center">
@@ -817,6 +935,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
                                 onBuildWorkflow={() => onBuildAttrWorkflow(ctrl, selectedAttr)}
                                 onUploadEvidence={(sid, et) => onUploadSampleEvidence(ctrl, selectedAttr, sid, et)}
                                 onRemoveEvidence={(sid, et) => onRemoveSampleEvidence(ctrl, selectedAttr, sid, et)}
+                                onBulkUpload={() => onBulkUploadSampleEvidence(ctrl, selectedAttr)}
                                 onRunAi={() => onRunAttrAi(ctrl, selectedAttr)}
                                 onOverride={(sid, patch) => onOverrideSample(ctrl, selectedAttr, sid, patch)}
                                 onStartRound={() => onStartRound(ctrl, selectedAttr)}
@@ -858,7 +977,6 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
                 </div>
               </details>
             )}
-          </div>
         </div>
       </div>
     );
@@ -867,16 +985,22 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
   // ─── LIST MODE ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* KPI strip */}
-      <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
-        <KpiTile label="Controls" value={allControls.length} sub="in scope" />
-        <KpiTile label="Attributes" value={kpis.totalAttrs} sub="across controls" />
-        <KpiTile label="Population up" value={`${Object.keys(populationsByCtrl).length}/${allControls.length}`} sub="controls" />
-        <KpiTile label="Samples" value={kpis.samplesGenerated} sub="generated" />
-        <KpiTile label="Validated" value={kpis.validated} sub={`${kpis.passes}P · ${kpis.fails}F`} tone={kpis.fails > 0 ? 'text-risk-700' : 'text-text'} />
-        <KpiTile label="Pass rate" value={`${kpis.passRate}%`} sub={kpis.validated === 0 ? '—' : `of ${kpis.validated}`} tone={kpis.passRate >= 90 ? 'text-compliant-700' : kpis.passRate >= 70 ? 'text-mitigated-700' : 'text-risk-700'} />
-        <KpiTile label="Pending" value={kpis.evPending} sub="evidence gaps" tone={kpis.evPending > 0 ? 'text-mitigated-700' : 'text-text'} />
-        <KpiTile label="Completion" value={`${kpis.overall}%`} sub="overall" tone={kpis.overall >= 80 ? 'text-compliant-700' : kpis.overall >= 50 ? 'text-mitigated-700' : 'text-text'} />
+      {/* KPI row — borderless inline stats (out of the box), trimmed to the essentials */}
+      <div className="flex flex-wrap items-center gap-y-3 px-1">
+        {([
+          { label: 'Controls', value: allControls.length, sub: 'in scope', tone: 'text-text' },
+          { label: 'Attributes', value: kpis.totalAttrs, sub: 'across controls', tone: 'text-text' },
+          { label: 'Validated', value: kpis.validated, sub: `${kpis.passes}P · ${kpis.fails}F`, tone: kpis.fails > 0 ? 'text-risk-700' : 'text-text' },
+          { label: 'Pass rate', value: `${kpis.passRate}%`, sub: kpis.validated === 0 ? '—' : `of ${kpis.validated}`, tone: kpis.passRate >= 90 ? 'text-compliant-700' : kpis.passRate >= 70 ? 'text-mitigated-700' : 'text-risk-700' },
+          { label: 'Pending', value: kpis.evPending, sub: 'evidence gaps', tone: kpis.evPending > 0 ? 'text-mitigated-700' : 'text-text' },
+          { label: 'Completion', value: `${kpis.overall}%`, sub: 'overall', tone: kpis.overall >= 80 ? 'text-compliant-700' : kpis.overall >= 50 ? 'text-mitigated-700' : 'text-text' },
+        ] as { label: string; value: string | number; sub: string; tone: string }[]).map(s => (
+          <div key={s.label} className="pl-5 ml-5 border-l border-canvas-border first:pl-0 first:ml-0 first:border-l-0">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{s.label}</div>
+            <div className={`text-[19px] font-bold tabular-nums leading-tight ${s.tone}`}>{s.value}</div>
+            <div className="text-[10.5px] text-text-muted">{s.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -899,7 +1023,18 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
                   : 'border border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{sp}</button>
             ))}
           </div>
-          <div className="relative w-[320px] max-w-full ml-auto">
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">Group by</span>
+            <div className="inline-flex rounded-md border border-canvas-border overflow-hidden">
+              {([['none', 'None'], ['subProcess', 'Sub-process']] as [GroupBy, string][]).map(([val, label]) => (
+                <button key={val} onClick={() => setGroupBy(val)}
+                  className={`px-2.5 h-7 text-[11.5px] font-medium transition-colors cursor-pointer ${groupBy === val
+                    ? 'bg-ink-800 text-white'
+                    : 'bg-white text-ink-600 hover:bg-canvas'}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="relative w-[320px] max-w-full">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search control id, attribute, or evidence type…"
@@ -908,74 +1043,121 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder }: Pro
         </div>
       </div>
 
-      {/* Dense control list grouped by sub-process */}
-      <div className="space-y-3">
-        {visibleGroups.length === 0 && (
-          <div className="glass-card rounded-xl p-10 text-center">
-            <p className="text-[13px] font-semibold text-text mb-1">No controls match these filters</p>
-            <p className="text-[12px] text-text-muted">Try clearing a filter or broadening your search.</p>
+      {/* Control list — flat by default; grouped by sub-process only when opted in. */}
+      {flatControls.length === 0 ? (
+        <div className="glass-card rounded-xl p-10 text-center">
+          <p className="text-[13px] font-semibold text-text mb-1">No controls match these filters</p>
+          <p className="text-[12px] text-text-muted">Try clearing a filter or broadening your search.</p>
+        </div>
+      ) : groupBy === 'none' ? (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-canvas-border flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-text-muted">Controls</span>
+            <span className="text-[11px] text-text-muted tabular-nums">{flatControls.length} total</span>
           </div>
-        )}
-        {visibleGroups.map(group => {
-          const isOpen = expandedSub.has(group.subProcess);
-          const counts = subProcessCounts(group.controls, controlStatus);
-          return (
-            <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
-              <button onClick={() => toggleSub(group.subProcess)} aria-expanded={isOpen}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-canvas/40 transition-colors cursor-pointer text-left">
-                <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
-                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-[13.5px] font-semibold text-text">{group.subProcess}</span>
-                  <span className="text-[11px] text-text-muted tabular-nums">
-                    {group.controls.length} control{group.controls.length === 1 ? '' : 's'}
-                    <span className="text-border mx-1.5">·</span>
-                    <span className="text-compliant-700 font-semibold">{counts.complete} ready</span>
-                    <span className="text-border mx-1.5">·</span>
-                    <span className="text-evidence-700 font-semibold">{counts.inProgress} in progress</span>
-                  </span>
-                </div>
-                <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
-              </button>
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-                    className="overflow-hidden border-t border-canvas-border">
-                    <div className="py-1 bg-canvas/30">
-                      {group.controls.map(ctrl => {
-                        const status = controlStatus(ctrl);
-                        const stepCompletion: [boolean, boolean, boolean] = [controlStepDone(ctrl, 1), controlStepDone(ctrl, 2), controlStepDone(ctrl, 3)];
-                        const attrsTotal = ctrl.attributes.length;
-                        const aDone = ctrl.attributes.filter(a => attrDone(ctrl, a)).length;
-                        const pct = attrsTotal === 0 ? 0 : Math.round((aDone / attrsTotal) * 100);
-                        return (
-                          <button key={ctrl.controlId} onClick={() => openControl(ctrl.controlId)}
-                            className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-white transition-colors cursor-pointer text-left border-l-2 border-transparent hover:border-brand-300">
-                            <Shield size={12} className="text-brand-600 shrink-0" />
-                            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 w-[80px]">{ctrl.controlId}</span>
-                            {ctrl.isKey && <span className="px-1 h-4 inline-flex items-center rounded text-[8.5px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-100 shrink-0">Key</span>}
-                            <span className="text-[12px] text-text truncate flex-1 min-w-0">{ctrl.description}</span>
-                            <span className="text-[10.5px] text-text-muted shrink-0 tabular-nums w-[60px] text-right">{attrsTotal} attr</span>
-                            <div className="shrink-0 w-[80px]">
-                              <div className="h-1.5 bg-canvas rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-compliant-500' : pct > 0 ? 'bg-brand-500' : 'bg-canvas-border'}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <span className="text-[8.5px] text-text-muted tabular-nums mt-0.5 block">{pct}%</span>
-                            </div>
-                            <MiniStepIndicator stepCompletion={stepCompletion} />
-                            <ControlStatusPill status={status} />
-                            <ChevronRight size={12} className="text-text-muted shrink-0" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
+          <div className="py-1">
+            {flatControls.map(ctrl => (
+              <ControlRow key={ctrl.controlId} ctrl={ctrl} {...rowPropsFor(ctrl)} onOpen={() => openControl(ctrl.controlId)} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleGroups.map(group => {
+            const isOpen = expandedSub.has(group.subProcess);
+            const counts = subProcessCounts(group.controls, controlStatus);
+            return (
+              <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+                <button onClick={() => toggleSub(group.subProcess)} aria-expanded={isOpen}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-canvas/40 transition-colors cursor-pointer text-left">
+                  <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
+                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-text">{group.subProcess}</span>
+                    <span className="text-[11px] text-text-muted tabular-nums">
+                      {group.controls.length} control{group.controls.length === 1 ? '' : 's'}
+                      <span className="text-border mx-1.5">·</span>
+                      <span className="text-compliant-700 font-semibold">{counts.complete} ready</span>
+                      <span className="text-border mx-1.5">·</span>
+                      <span className="text-evidence-700 font-semibold">{counts.inProgress} in progress</span>
+                    </span>
+                  </div>
+                  <ChevronRight size={14} className={`text-text-muted transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden border-t border-canvas-border">
+                      <div className="py-1 bg-canvas/30">
+                        {group.controls.map(ctrl => (
+                          <ControlRow key={ctrl.controlId} ctrl={ctrl} {...rowPropsFor(ctrl)} onOpen={() => openControl(ctrl.controlId)} />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Control list row (shared by flat + grouped renderers) ────────────────────
+
+function ControlRow({ ctrl, status, stepCompletion, attrsTotal, pct, codes, onOpen }: {
+  ctrl: DistinctControl;
+  status: ControlStatus;
+  stepCompletion: [boolean, boolean, boolean];
+  attrsTotal: number;
+  pct: number;
+  codes: string[];
+  onOpen: () => void;
+}): JSX.Element {
+  return (
+    <button onClick={onOpen}
+      className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-white transition-colors cursor-pointer text-left border-l-2 border-transparent hover:border-brand-300">
+      <Shield size={12} className="text-brand-600 shrink-0" />
+      <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 w-[80px]">{ctrl.controlId}</span>
+      {ctrl.isKey && <span className="px-1 h-4 inline-flex items-center rounded text-[8.5px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-100 shrink-0">Key</span>}
+      <span className="text-[12px] text-text truncate flex-1 min-w-0">{ctrl.description}</span>
+      <WorkflowReadiness codes={codes} />
+      <span className="text-[10.5px] text-text-muted shrink-0 tabular-nums w-[52px] text-right">{attrsTotal} attr</span>
+      <div className="shrink-0 w-[72px]">
+        <div className="h-1.5 bg-canvas rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-compliant-500' : pct > 0 ? 'bg-brand-500' : 'bg-canvas-border'}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[8.5px] text-text-muted tabular-nums mt-0.5 block">{pct}%</span>
+      </div>
+      <MiniStepIndicator stepCompletion={stepCompletion} />
+      <ControlStatusPill status={status} />
+      <ChevronRight size={12} className="text-text-muted shrink-0" />
+    </button>
+  );
+}
+
+/** Validation-readiness badge — carries the attribute→workflow links mapped on the Controls tab. */
+function WorkflowReadiness({ codes }: { codes: string[] }): JSX.Element {
+  if (codes.length === 0) {
+    return (
+      <span title="No validation workflow linked — tested manually"
+        className="inline-flex items-center px-1.5 h-5 rounded-full text-[9.5px] font-semibold border bg-canvas text-text-muted border-canvas-border shrink-0">
+        Manual
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 shrink-0">
+      <span title={codes.join(', ')}
+        className="inline-flex items-center gap-1 px-1.5 h-5 rounded-md bg-brand-50 border border-brand-100 text-[9.5px] font-mono font-semibold text-brand-700">
+        <WorkflowIcon size={9} />{codes[0]}{codes.length > 1 ? ` +${codes.length - 1}` : ''}
+      </span>
+      <span title="Validation workflow linked in Controls"
+        className="inline-flex items-center gap-1 px-1.5 h-5 rounded-full text-[9.5px] font-semibold bg-compliant-50 text-compliant-700 border border-compliant-50">
+        <CheckCircle2 size={9} />Validation ready
+      </span>
+    </span>
   );
 }
 
@@ -989,16 +1171,6 @@ function subProcessCounts(controls: DistinctControl[], statusFn: (c: DistinctCon
     else if (s !== 'Not started') inProgress += 1;
   });
   return { complete, inProgress };
-}
-
-function KpiTile({ label, value, sub, tone = 'text-text' }: { label: string; value: number | string; sub: string; tone?: string }): JSX.Element {
-  return (
-    <div className="rounded-xl border border-canvas-border bg-white px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1 truncate">{label}</div>
-      <div className={`text-[20px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
-      <div className="text-[10.5px] text-text-muted mt-1 truncate">{sub}</div>
-    </div>
-  );
 }
 
 function MiniStepIndicator({ stepCompletion }: { stepCompletion: [boolean, boolean, boolean] }): JSX.Element {
@@ -1178,7 +1350,7 @@ function ValidationWorkflowsSection({ ctrl, workflows, onAdd, onRemove }: {
 
 // ─── Section: Sample-based attribute ─────────────────────────────────────────
 
-function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, rounds, disabled, running, evidenceReady, allTested, passCount, failCount, validationWorkflow, pickerOpen, onTogglePicker, onSelectWorkflow, onClearWorkflow, onBuildWorkflow, onUploadEvidence, onRemoveEvidence, onRunAi, onOverride, onStartRound }: {
+function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, rounds, disabled, running, evidenceReady, allTested, passCount, failCount, validationWorkflow, pickerOpen, onTogglePicker, onSelectWorkflow, onClearWorkflow, onBuildWorkflow, onUploadEvidence, onRemoveEvidence, onBulkUpload, onRunAi, onOverride, onStartRound }: {
   ctrl: DistinctControl; attr: ControlAttribute;
   expanded: boolean; onToggle: () => void;
   samples: GeneratedSample[]; rounds: AttributeRound[];
@@ -1193,12 +1365,18 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
   onBuildWorkflow: () => void;
   onUploadEvidence: (sid: string, et: string) => void;
   onRemoveEvidence: (sid: string, et: string) => void;
+  onBulkUpload: () => void;
   onRunAi: () => void;
   onOverride: (sid: string, patch: Partial<AttrVerdict>) => void;
   onStartRound: () => void;
 }): JSX.Element {
   const activeRound = rounds[rounds.length - 1];
   void ctrl;
+  const bulkRef = useRef<HTMLInputElement | null>(null);
+  const samplesWithEvidence = samples.filter(s => attr.requiredEvidence.every(et => !!s.evidence[attr.id]?.[et])).length;
+  // Fail → Pass overrides require a justification comment.
+  const [passOverride, setPassOverride] = useState<{ sampleId: string } | null>(null);
+  const [overrideComment, setOverrideComment] = useState('');
 
   return (
     <div className={`rounded-xl border ${expanded ? 'border-brand-200 bg-white' : 'border-canvas-border bg-white'} overflow-hidden`}>
@@ -1208,7 +1386,7 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           {disabled ? <Lock size={11} className="text-text-muted" /> : <ChevronDown size={12} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />}
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-text-muted">{attr.id}</span>
+              <span className="text-[10px] font-mono text-text-muted">{attrCode(attr.id)}</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-brand-50 text-brand-700 border border-brand-100">SAMPLE-BASED</span>
               {rounds.length > 1 && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-mitigated-50 text-mitigated-700">R{activeRound!.roundNumber}</span>}
             </div>
@@ -1237,9 +1415,37 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           <WorkflowPicker workflow={validationWorkflow} open={pickerOpen} onToggle={onTogglePicker}
             onSelect={onSelectWorkflow} onClear={onClearWorkflow} onBuild={onBuildWorkflow} />
 
+          {/* Bulk evidence upload — attach the required evidence to every sample at once */}
+          {samples.length > 0 && (
+            <div className="rounded-lg border border-brand-100 bg-brand-50/30 px-3.5 py-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-md bg-brand-50 shrink-0"><Upload size={13} className="text-brand-600" /></div>
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-semibold text-text">Bulk evidence upload</div>
+                  <div className="text-[10px] text-text-muted">Attach the required evidence to every sample in one go · <span className="tabular-nums font-medium">{samplesWithEvidence}/{samples.length}</span> samples have all evidence</div>
+                </div>
+              </div>
+              <input
+                ref={bulkRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files && e.target.files.length > 0) onBulkUpload(); e.target.value = ''; }}
+              />
+              <button
+                onClick={() => bulkRef.current?.click()}
+                disabled={evidenceReady}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[11.5px] font-semibold cursor-pointer transition-colors"
+                title="Upload evidence files and apply them across all samples"
+              >
+                <Upload size={12} /> {evidenceReady ? 'All evidence uploaded' : 'Bulk upload for all samples'}
+              </button>
+            </div>
+          )}
+
           {/* Per-sample table */}
           <div className="rounded-lg border border-canvas-border overflow-hidden">
-            <table className="w-full text-[10.5px]">
+            <table className="w-full text-[11.5px]">
               <thead className="bg-canvas/40 border-b border-canvas-border">
                 <tr>
                   <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase">#</th>
@@ -1257,12 +1463,12 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
                   const effective = v?.useAi ? v?.aiVerdict : v?.humanVerdict;
                   return (
                     <tr key={s.id} className={`border-b border-canvas-border/60 last:border-b-0 ${inScope ? '' : 'opacity-40'}`}>
-                      <td className="px-3 py-1.5 text-text-muted tabular-nums">{idx + 1}</td>
-                      <td className="px-3 py-1.5 font-mono text-text">{s.id}</td>
+                      <td className="px-3 py-2.5 text-text-muted tabular-nums">{idx + 1}</td>
+                      <td className="px-3 py-2.5 font-mono text-text">{s.id}</td>
                       {attr.requiredEvidence.map(et => {
                         const file = s.evidence[attr.id]?.[et];
                         return (
-                          <td key={et} className="px-3 py-1.5">
+                          <td key={et} className="px-3 py-2.5">
                             {file ? (
                               <span className="inline-flex items-center gap-1 text-compliant-700">
                                 <Paperclip size={9} /><span className="truncate max-w-[140px]">{file.filename}</span>
@@ -1277,21 +1483,30 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
                           </td>
                         );
                       })}
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1">
-                          {effective === 'Pass' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-compliant-50 text-compliant-700">Pass</span>}
-                          {effective === 'Fail' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-risk-50 text-risk-700">Fail</span>}
-                          {effective === 'Hold' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-mitigated-50 text-mitigated-700">Hold</span>}
-                          {!effective && <span className="text-text-muted">—</span>}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <ResultPill effective={effective ?? null} overridden={!!v && !v.useAi} />
                           {effective && (
-                            <>
-                              <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Pass' })}
-                                className="ml-1 px-1 py-0.5 rounded text-[8px] text-text-muted hover:bg-compliant-50 hover:text-compliant-700 cursor-pointer">P</button>
-                              <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Fail' })}
-                                className="px-1 py-0.5 rounded text-[8px] text-text-muted hover:bg-risk-50 hover:text-risk-700 cursor-pointer">F</button>
-                            </>
+                            <div className="flex items-center gap-1">
+                              {effective !== 'Pass' && (
+                                <button onClick={() => { setPassOverride({ sampleId: s.id }); setOverrideComment(''); }}
+                                  title="Override to Pass (requires a comment)"
+                                  className="px-1.5 h-5 inline-flex items-center rounded text-[9.5px] font-semibold text-compliant-700 border border-compliant-100 hover:bg-compliant-50 cursor-pointer transition-colors">Pass</button>
+                              )}
+                              {effective !== 'Fail' && (
+                                <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Fail' })}
+                                  title="Override to Fail"
+                                  className="px-1.5 h-5 inline-flex items-center rounded text-[9.5px] font-semibold text-risk-700 border border-risk-100 hover:bg-risk-50 cursor-pointer transition-colors">Fail</button>
+                              )}
+                            </div>
                           )}
                         </div>
+                        {v?.humanRemark && (
+                          <div className="flex items-start gap-1 mt-1 text-[9.5px] text-text-muted max-w-[260px]">
+                            <MessageSquare size={9} className="mt-0.5 shrink-0 text-mitigated-600" />
+                            <span className="line-clamp-2 italic">“{v.humanRemark}”</span>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1329,7 +1544,59 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           )}
         </div>
       )}
+
+      {/* Override-to-Pass justification (required) */}
+      {passOverride && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={() => setPassOverride(null)} />
+          <div className="relative w-full max-w-[460px] bg-white rounded-2xl shadow-2xl p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-compliant-50 shrink-0"><CheckCircle2 size={18} className="text-compliant-700" /></div>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-bold text-text">Override to Pass</h3>
+                <p className="text-[12px] text-text-muted mt-0.5">Sample <span className="font-mono font-semibold text-text">{passOverride.sampleId}</span> failed validation. A justification is required to override it to Pass.</p>
+              </div>
+            </div>
+            <textarea
+              autoFocus
+              value={overrideComment}
+              onChange={e => setOverrideComment(e.target.value)}
+              rows={3}
+              placeholder="Why does this sample pass despite the failure? (required)"
+              className="w-full px-3 py-2.5 text-[12.5px] border border-canvas-border rounded-lg outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none placeholder:text-text-muted leading-relaxed"
+            />
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setPassOverride(null)} className="px-3.5 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas cursor-pointer transition-colors">Cancel</button>
+              <button
+                onClick={() => { onOverride(passOverride.sampleId, { useAi: false, humanVerdict: 'Pass', humanRemark: overrideComment.trim() }); setPassOverride(null); }}
+                disabled={!overrideComment.trim()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant-500 hover:opacity-90 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold cursor-pointer transition-opacity"
+              >
+                <CheckCircle2 size={14} /> Override to Pass
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Result pill (sample verdict) ────────────────────────────────────────────
+
+function ResultPill({ effective, overridden }: { effective: 'Pass' | 'Fail' | 'Hold' | null; overridden: boolean }): JSX.Element {
+  if (!effective) return <span className="text-text-muted text-[13px]">—</span>;
+  const map = {
+    Pass: { cls: 'bg-compliant-50 text-compliant-700 border-compliant-100', Icon: CheckCircle2 },
+    Fail: { cls: 'bg-risk-50 text-risk-700 border-risk-100', Icon: XCircle },
+    Hold: { cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated-100', Icon: Clock },
+  } as const;
+  const { cls, Icon } = map[effective];
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11.5px] font-bold border ${cls}`}>
+      <Icon size={13} />{effective}
+      {overridden && <span className="text-[8.5px] font-semibold uppercase tracking-wide opacity-70 ml-0.5">· you</span>}
+    </span>
   );
 }
 
@@ -1363,7 +1630,7 @@ function GenericAttrSection({ ctrl, attr, expanded, onToggle, result, running, v
           <ChevronDown size={12} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-text-muted">{attr.id}</span>
+              <span className="text-[10px] font-mono text-text-muted">{attrCode(attr.id)}</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100">GENERIC</span>
             </div>
             <div className="text-[12px] font-semibold text-text truncate">{attr.description}</div>
@@ -1660,96 +1927,63 @@ function WorkflowPicker({ workflow, open, onToggle, onSelect, onClear, onBuild }
 
 // ─── Vertical gamified checkpoint rail ───────────────────────────────────────
 
-function VerticalCheckpoints({ phases, active, onJump, xp }: {
+function JourneyStepper({ phases, active, onJump, xp }: {
   phases: { num: 1 | 2 | 3 | 4; label: string; sub: string; done: boolean }[];
   active: 1 | 2 | 3 | 4;
   onJump: (n: 1 | 2 | 3 | 4) => void;
   xp: { samples: number; validated: number; total: number; passed: number; failed: number };
 }): JSX.Element {
-  const doneCount = phases.filter(p => p.done).length;
-  const overallPct = Math.round((doneCount / phases.length) * 100);
+  const stat = (Icon: React.ElementType, value: number | string, label: string, tone: string) => (
+    <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap">
+      <Icon size={12} className={tone} />
+      <span className={`font-bold tabular-nums ${tone}`}>{value}</span>
+      <span className="text-text-muted">{label}</span>
+    </div>
+  );
 
   return (
-    <div className="glass-card rounded-2xl p-6 self-start sticky top-2 space-y-6">
-      {/* Header — overall journey progress */}
-      <div>
-        <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">Journey</span>
-          <span className="text-[10px] tabular-nums text-text-muted">{doneCount}/{phases.length}</span>
-        </div>
-        <div className="text-[24px] font-bold tabular-nums text-text leading-none">{overallPct}%</div>
-        <div className="mt-2 h-1.5 bg-canvas rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-500 ${overallPct === 100 ? 'bg-compliant-500' : 'bg-brand-500'}`} style={{ width: `${overallPct}%` }} />
-        </div>
-      </div>
-
-      {/* Checkpoint nodes */}
-      <div className="relative">
-        {/* connecting line */}
-        <div className="absolute left-[18px] top-3 bottom-3 w-0.5 bg-canvas-border" />
-        <div className="space-y-1">
+    <div className="glass-card rounded-2xl px-4 py-3">
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Horizontal stepper */}
+        <div className="flex items-center flex-1 min-w-0 overflow-x-auto">
           {phases.map((p, i) => {
             const isActive = active === p.num;
             const prev = i === 0 ? { done: true } : phases[i - 1]!;
             const canJump = p.done || prev.done || isActive;
             return (
-              <button key={p.num} onClick={() => canJump && onJump(p.num)} disabled={!canJump}
-                className={`relative w-full text-left px-1 py-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-3 ${
-                  isActive ? 'bg-brand-50/60'
-                    : canJump ? 'hover:bg-canvas/40'
-                    : 'opacity-50 cursor-not-allowed'
-                }`}>
-                {/* node bullet */}
-                <div className={`relative z-10 shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all ${
-                  p.done ? 'bg-compliant-500 border-compliant-500 text-white'
-                    : isActive ? 'bg-white border-brand-500 text-brand-700 ring-4 ring-brand-100'
-                    : !canJump ? 'bg-canvas border-canvas-border text-text-muted'
-                    : 'bg-white border-canvas-border text-text-muted'
-                }`}>
-                  {p.done ? <Check size={14} /> : !canJump ? <Lock size={11} /> : p.num}
-                </div>
-                <div className="flex-1 min-w-0 pt-1">
-                  <div className={`text-[12.5px] font-bold leading-tight ${
-                    p.done ? 'text-compliant-700' : isActive ? 'text-brand-700' : 'text-text'
-                  }`}>{p.label}</div>
-                  <div className="text-[10px] text-text-muted leading-tight mt-0.5 truncate">{p.sub}</div>
-                  {p.done && (
-                    <div className="text-[9px] text-compliant-700 font-semibold mt-1 inline-flex items-center gap-0.5">
-                      <CheckCircle2 size={9} />Cleared
-                    </div>
-                  )}
-                  {isActive && !p.done && (
-                    <div className="text-[9px] text-brand-700 font-semibold mt-1 inline-flex items-center gap-0.5 animate-pulse">
-                      <Sparkles size={9} />In progress
-                    </div>
-                  )}
-                </div>
-              </button>
+              <Fragment key={p.num}>
+                <button onClick={() => canJump && onJump(p.num)} disabled={!canJump}
+                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl shrink-0 transition-colors ${
+                    isActive ? 'bg-brand-50/70' : canJump ? 'hover:bg-canvas/50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                  }`}>
+                  <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all ${
+                    p.done ? 'bg-compliant-500 border-compliant-500 text-white'
+                      : isActive ? 'bg-white border-brand-500 text-brand-700 ring-4 ring-brand-100'
+                      : !canJump ? 'bg-canvas border-canvas-border text-text-muted'
+                      : 'bg-white border-canvas-border text-text-muted'
+                  }`}>
+                    {p.done ? <Check size={14} /> : !canJump ? <Lock size={11} /> : p.num}
+                  </div>
+                  <div className="text-left min-w-0">
+                    <div className={`text-[12px] font-bold leading-tight ${p.done ? 'text-compliant-700' : isActive ? 'text-brand-700' : 'text-text'}`}>{p.label}</div>
+                    <div className="text-[9.5px] text-text-muted leading-tight truncate max-w-[150px]">{p.sub}</div>
+                  </div>
+                </button>
+                {i < phases.length - 1 && (
+                  <div className={`h-0.5 flex-1 min-w-[14px] mx-1.5 rounded-full ${p.done ? 'bg-compliant-300' : 'bg-canvas-border'}`} />
+                )}
+              </Fragment>
             );
           })}
         </div>
-      </div>
-
-      {/* XP-style stats */}
-      <div className="rounded-xl border border-canvas-border bg-canvas/30 px-3 py-3">
-        <div className="text-[9px] font-bold text-text-muted uppercase tracking-wider mb-2">Progress this control</div>
-        <div className="space-y-1.5">
-          <XpRow label="Samples drawn" value={xp.samples} icon={Database} tone="text-text" />
-          <XpRow label="Validated" value={xp.total === 0 ? '—' : `${xp.validated}/${xp.total}`} icon={Sparkles} tone="text-evidence-700" />
-          <XpRow label="Passed" value={xp.passed} icon={CheckCircle2} tone="text-compliant-700" />
-          {xp.failed > 0 && <XpRow label="Failed" value={xp.failed} icon={XCircle} tone="text-risk-700" />}
+        {/* Compact progress stats */}
+        <div className="flex items-center gap-4 shrink-0 pl-4 border-l border-canvas-border">
+          {stat(Database, xp.samples, 'samples', 'text-text-secondary')}
+          {stat(Sparkles, xp.total === 0 ? '—' : `${xp.validated}/${xp.total}`, 'validated', 'text-evidence-700')}
+          {stat(CheckCircle2, xp.passed, 'passed', 'text-compliant-700')}
+          {xp.failed > 0 && stat(XCircle, xp.failed, 'failed', 'text-risk-700')}
         </div>
       </div>
-    </div>
-  );
-}
-
-function XpRow({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: React.ElementType; tone: string }): JSX.Element {
-  return (
-    <div className="flex items-center gap-2 text-[10.5px]">
-      <Icon size={10} className={tone} />
-      <span className="text-text-muted flex-1">{label}</span>
-      <span className={`font-bold tabular-nums ${tone}`}>{value}</span>
     </div>
   );
 }
@@ -1793,7 +2027,7 @@ function AttributeRail({ ctrl, sbAttrs, genAttrs, selectedAttrId, onSelect, attr
                   {done ? <Check size={8} /> : ''}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={`text-[10.5px] font-mono ${isSelected ? 'text-brand-700' : 'text-text-muted'}`}>{attr.id}</div>
+                  <div className={`text-[10.5px] font-mono ${isSelected ? 'text-brand-700' : 'text-text-muted'}`}>{attrCode(attr.id)}</div>
                   <div className="text-[11.5px] font-semibold text-text truncate leading-tight">{attr.description}</div>
                   <div className="flex items-center gap-1.5 mt-1 text-[9px]">
                     {passes > 0 && <span className="text-compliant-700 font-semibold tabular-nums">{passes}P</span>}
@@ -1827,7 +2061,7 @@ function AttributeRail({ ctrl, sbAttrs, genAttrs, selectedAttrId, onSelect, attr
                       : 'bg-canvas-border text-text-muted'
                   }`}>{done ? <Check size={8} /> : ''}</div>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[10.5px] font-mono ${isSelected ? 'text-mitigated-700' : 'text-text-muted'}`}>{attr.id}</div>
+                    <div className={`text-[10.5px] font-mono ${isSelected ? 'text-mitigated-700' : 'text-text-muted'}`}>{attrCode(attr.id)}</div>
                     <div className="text-[11.5px] font-semibold text-text truncate leading-tight">{attr.description}</div>
                     <div className="flex items-center gap-1.5 mt-1 text-[9px]">
                       {eff === 'Pass' && <span className="text-compliant-700 font-semibold">Pass</span>}

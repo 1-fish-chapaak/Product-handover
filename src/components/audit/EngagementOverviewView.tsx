@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   ArrowLeft, ArrowUpRight, AlertTriangle, Calendar,
   CheckCircle2, Clock, FileText, FolderOpen, Layers, Play,
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
@@ -54,7 +55,7 @@ interface Props {
   onBack: () => void;
   onOpenExecution: (engagementId: string) => void;
   onOpenCaseManagement: (engagementId: string) => void;
-  onOpenRacmFullEditor?: () => void;
+  onOpenRacmFullEditor?: (override?: { racmName?: string; processLabel?: string }) => void;
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   /** Open a workflow's detail page (same route the Workflow Library uses). */
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
@@ -64,39 +65,53 @@ interface Props {
 
 // ─── Tabs per engagement type ─────────────────────────────────────────────────
 
+/**
+ * Per-sub-page icon + a bright, business-colorful chip class. The chip is a
+ * literal Tailwind string (no interpolation) so the classes survive purge.
+ */
+const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
+  overview:        { icon: LayoutDashboard, chip: 'bg-blue-50 text-blue-600' },
+  racm:            { icon: Table2,          chip: 'bg-violet-50 text-violet-600' },
+  controls:        { icon: ShieldCheck,     chip: 'bg-emerald-50 text-emerald-600' },
+  workflows:       { icon: Workflow,        chip: 'bg-cyan-50 text-cyan-600' },
+  evidence:        { icon: FolderOpen,      chip: 'bg-amber-50 text-amber-600' },
+  exceptions:      { icon: AlertTriangle,   chip: 'bg-rose-50 text-rose-600' },
+  'working-paper': { icon: BookOpen,        chip: 'bg-teal-50 text-teal-600' },
+  trail:           { icon: Activity,        chip: 'bg-fuchsia-50 text-fuchsia-600' },
+  config:          { icon: Settings,        chip: 'bg-slate-100 text-slate-600' },
+};
+
 function tabsForType(type: EngType): { id: TabId; label: string; icon: React.ElementType }[] {
+  const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-        { id: 'config', label: 'Configuration', icon: Settings },
-      ];
+      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'racm', label: 'RACM', icon: FileText },
-        { id: 'controls', label: 'Controls', icon: Shield },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'evidence', label: 'Evidence', icon: FolderOpen },
-        { id: 'working-paper', label: 'Working Paper', icon: BookOpen },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-        { id: 'config', label: 'Configuration', icon: Settings },
-      ];
+      // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [
-        { id: 'overview', label: 'Overview', icon: Layers },
-        { id: 'racm', label: 'RACM', icon: FileText },
-        { id: 'controls', label: 'Controls', icon: Shield },
-        { id: 'workflows', label: 'Workflows', icon: Workflow },
-        { id: 'exceptions', label: 'Exception Management', icon: AlertTriangle },
-        { id: 'working-paper', label: 'Audit Report', icon: BookOpen },
-        { id: 'trail', label: 'Action Trail', icon: Activity },
-        { id: 'config', label: 'Configuration', icon: Settings },
-      ];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
+}
+
+/** Per-engagement-type tab order + hidden set, persisted in localStorage. */
+type TabPrefs = { order: TabId[]; hidden: TabId[] };
+
+function loadTabPrefs(type: EngType): TabPrefs {
+  const canonical = tabsForType(type).map(t => t.id);
+  try {
+    const raw = localStorage.getItem(`eng-tab-prefs:${type}`);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<TabPrefs>;
+      const stored = Array.isArray(p.order) ? p.order : [];
+      // Keep stored order, drop ids no longer valid, append any newly-added tabs.
+      const order = [...stored.filter(id => canonical.includes(id)), ...canonical.filter(id => !stored.includes(id))];
+      // Configuration can never be hidden (it's where you re-enable the others).
+      const hidden = (Array.isArray(p.hidden) ? p.hidden : []).filter(id => canonical.includes(id) && id !== 'config');
+      return { order, hidden };
+    }
+  } catch { /* ignore malformed prefs */ }
+  return { order: canonical, hidden: [] };
 }
 
 // ─── Mock content (per type — kept small + realistic) ─────────────────────────
@@ -214,6 +229,21 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const tabs = useMemo(() => engagement ? tabsForType(engagement.type) : [], [engagement]);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
+  // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
+  const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
+
+  // Tab order + hidden set — drag to reorder, toggle visibility from Configuration; persisted per type.
+  const [tabPrefs, setTabPrefs] = useState<TabPrefs>(() => engagement ? loadTabPrefs(engagement.type) : { order: [], hidden: [] });
+  const engType = engagement?.type;
+  useEffect(() => { if (engType) setTabPrefs(loadTabPrefs(engType)); }, [engType]);
+  useEffect(() => { if (engType) localStorage.setItem(`eng-tab-prefs:${engType}`, JSON.stringify(tabPrefs)); }, [engType, tabPrefs]);
+  // If the active tab gets hidden, fall back to the first visible tab.
+  useEffect(() => {
+    if (tabPrefs.hidden.includes(activeTab)) {
+      const firstVisible = tabPrefs.order.find(id => !tabPrefs.hidden.includes(id));
+      if (firstVisible) setActiveTab(firstVisible);
+    }
+  }, [tabPrefs, activeTab]);
 
   if (!engagement) {
     return (
@@ -236,6 +266,30 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
   const processColor = PROCESS_COLORS[eng.process];
 
+  // Visible, ordered tabs (honoring drag order + hidden set).
+  const tabDefById = new Map(tabs.map(t => [t.id, t]));
+  const visibleTabIds = tabPrefs.order.filter(id => !tabPrefs.hidden.includes(id) && tabDefById.has(id));
+  const visibleTabs = visibleTabIds.map(id => tabDefById.get(id)!);
+
+  // Map a reorder of the visible subset back onto the full order (hidden tabs keep their slots).
+  const reorderVisibleTabs = (newVisible: TabId[]) => {
+    setTabPrefs(prev => {
+      const order = [...prev.order];
+      let vi = 0;
+      for (let i = 0; i < order.length; i += 1) {
+        if (!prev.hidden.includes(order[i]!) && tabDefById.has(order[i]!)) order[i] = newVisible[vi++]!;
+      }
+      return { ...prev, order };
+    });
+  };
+  const toggleTabHidden = (id: TabId) => {
+    if (id === 'config') return; // never hide the tab that re-enables the others
+    setTabPrefs(prev => ({
+      ...prev,
+      hidden: prev.hidden.includes(id) ? prev.hidden.filter(x => x !== id) : [...prev.hidden, id],
+    }));
+  };
+
   /**
    * Open the full Case Management workspace in a NEW browser tab, deep-linked to
    * this engagement and optionally pre-filtered. Used ONLY from the Exception
@@ -254,8 +308,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   // Overview drill-downs navigate to the relevant SUB-TAB in this same browser
   // tab (a dashboard should route you deeper into the engagement, not pop a new
   // window). Compliance has no exceptions tab, so it falls back to the workspace.
-  const hasExceptionsTab = tabs.some(t => t.id === 'exceptions');
-  const goToWorkflowsTab = () => setActiveTab('workflows');
+  const hasExceptionsTab = visibleTabIds.includes('exceptions');
+  // Compliance has no Workflows tab — its overview "Controls in Scope" KPI lands on Controls instead.
+  const goToWorkflowsTab = () => setActiveTab(eng?.type === 'Compliance' ? 'controls' : 'workflows');
   const goToExceptionsTab = () => {
     if (hasExceptionsTab) setActiveTab('exceptions');
     else openCaseWorkspace();
@@ -380,25 +435,41 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex items-center border-b border-border-light mb-5 overflow-x-auto">
-          {tabs.map(tab => {
+        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide) */}
+        <Reorder.Group
+          as="div"
+          axis="x"
+          values={visibleTabIds}
+          onReorder={reorderVisibleTabs}
+          className="flex items-center border-b border-border-light mb-5 overflow-x-auto"
+        >
+          {visibleTabs.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
-              <button
+              <Reorder.Item
+                as="div"
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-                  active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
-                }`}
+                value={tab.id}
+                title="Drag to reorder"
+                className="shrink-0 cursor-grab active:cursor-grabbing"
               >
-                <Icon size={14} />
-                {tab.label}
-              </button>
+                <button
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap select-none ${
+                    active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${TAB_META[tab.id].chip}`}>
+                    <Icon size={13} />
+                  </span>
+                  {tab.label}
+                  <GripHorizontal size={12} className="text-text-muted/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              </Reorder.Item>
             );
           })}
-        </div>
+        </Reorder.Group>
 
         {/* Tab content */}
         <AnimatePresence mode="wait">
@@ -427,7 +498,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ CONTROLS (Compliance / IA) ═══ */}
             {activeTab === 'controls' && (
-              <ControlsTab engagement={eng} />
+              <ControlsTab
+                engagement={eng}
+                onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
+                onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
+              />
             )}
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
@@ -444,7 +519,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ EVIDENCE (Compliance / IA) ═══ */}
             {activeTab === 'evidence' && (
-              <EvidenceTab engagement={eng} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />
+              <EvidenceTab engagement={eng} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} openControlId={evidenceTarget} onOpened={() => setEvidenceTarget(null)} />
             )}
 
             {/* ═══ EXCEPTION MANAGEMENT (Automation) — slim summary; full workspace lives at /case-management ═══ */}
@@ -463,7 +538,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ CONFIGURATION (all types) — editable engagement details ═══ */}
             {activeTab === 'config' && (
-              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => addToast({ message: 'Engagement configuration saved', type: 'success' })} />
+              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => addToast({ message: 'Engagement configuration saved', type: 'success' })}
+                tabs={tabs} hiddenTabs={tabPrefs.hidden} onToggleTab={toggleTabHidden} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -504,7 +580,13 @@ function ConfigField({ label, children, full }: { label: string; children: React
   );
 }
 
-function EngagementConfigTab({ eng, onSaved }: { eng: Engagement; onSaved: () => void }) {
+function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
+  eng: Engagement;
+  onSaved: () => void;
+  tabs: { id: TabId; label: string; icon: React.ElementType }[];
+  hiddenTabs: TabId[];
+  onToggleTab: (id: TabId) => void;
+}) {
   const initial = {
     name: eng.name,
     owner: eng.owner,
@@ -522,7 +604,8 @@ function EngagementConfigTab({ eng, onSaved }: { eng: Engagement; onSaved: () =>
   const ownerOptions = OWNER_LIST.includes(form.owner) ? OWNER_LIST : [form.owner, ...OWNER_LIST];
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 items-start">
       <div className="rounded-xl border border-border-light bg-white p-5">
         <h3 className="text-[13px] font-semibold text-text">Engagement details</h3>
         <p className="text-[12px] text-text-muted mt-0.5 mb-4">Owner, planned schedule, and framework for this engagement.</p>
@@ -558,6 +641,47 @@ function EngagementConfigTab({ eng, onSaved }: { eng: Engagement; onSaved: () =>
             <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={3} className={`${CONFIG_INPUT_CLS} resize-none leading-relaxed`} />
           </ConfigField>
         </div>
+      </div>
+
+      {/* Sub-pages — show/hide which tabs appear; drag the headers to reorder. */}
+      <div className="rounded-xl border border-border-light bg-white p-5">
+        <h3 className="text-[13px] font-semibold text-text">Sub-pages</h3>
+        <p className="text-[12px] text-text-muted mt-0.5 mb-4">
+          Choose which tabs appear for this engagement. Drag the tab headers left/right to change their order.
+        </p>
+        <div className="grid grid-cols-1 gap-2">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const locked = tab.id === 'config';
+            const visible = !hiddenTabs.includes(tab.id);
+            return (
+              <label
+                key={tab.id}
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition-colors ${
+                  locked ? 'border-border-light bg-surface-1/40 cursor-default'
+                    : visible ? 'border-border-light bg-white hover:bg-surface-1/40 cursor-pointer'
+                      : 'border-dashed border-border-light bg-surface-1/30 cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={visible}
+                  disabled={locked}
+                  onChange={() => onToggleTab(tab.id)}
+                  className="w-4 h-4 rounded border-border accent-primary cursor-pointer disabled:cursor-default"
+                />
+                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${TAB_META[tab.id].chip} ${visible ? '' : 'opacity-50'}`}>
+                  <Icon size={13} />
+                </span>
+                <span className={`text-[12.5px] font-medium ${visible ? 'text-text' : 'text-text-muted'}`}>{tab.label}</span>
+                {locked
+                  ? <span className="ml-auto text-[10px] uppercase tracking-wider font-semibold text-text-muted">Always on</span>
+                  : <span className="ml-auto text-text-muted">{visible ? <Eye size={13} /> : <EyeOff size={13} />}</span>}
+              </label>
+            );
+          })}
+        </div>
+      </div>
       </div>
 
       <div className="flex items-center justify-end gap-3">
@@ -673,52 +797,24 @@ function ExceptionManagementTab({
 
   return (
     <div className="space-y-4">
-      {/* Sub-tab KPI cards — exception-focused signals for this tab. Click to drill into the workspace. */}
-      <div className="grid grid-cols-4 gap-3">
-        <button
-          onClick={() => onOpenWorkspace()}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">All Exceptions</span>
-            <Workflow size={13} className="text-text-muted" />
-          </div>
-          <div className="text-[22px] font-bold text-text tabular-nums leading-none">{allExceptions.length}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Across {allWorkflowsView.length} workflows</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Open' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Open</span>
-            <AlertTriangle size={13} className="text-risk-700" />
-          </div>
-          <div className="text-[22px] font-bold text-risk-700 tabular-nums leading-none">{totals.open}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Awaiting triage</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Triaging' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">In Progress</span>
-            <Clock size={13} className="text-mitigated-700" />
-          </div>
-          <div className="text-[22px] font-bold text-mitigated-700 tabular-nums leading-none">{totals.triaging}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Owner assigned</div>
-        </button>
-        <button
-          onClick={() => onOpenWorkspace({ status: 'Resolved' })}
-          className="glass-card rounded-xl p-3.5 text-left hover:border-primary/30 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">Resolved</span>
-            <CheckCircle2 size={13} className="text-compliant-700" />
-          </div>
-          <div className="text-[22px] font-bold text-compliant-700 tabular-nums leading-none">{totals.resolved}</div>
-          <div className="text-[11px] text-text-muted mt-1.5">Closed this engagement</div>
-        </button>
+      {/* Exception signals — borderless inline stats (out of the box); each drills into the workspace. */}
+      <div className="flex flex-wrap items-center gap-y-3 px-1 py-1">
+        {([
+          { label: 'All Exceptions', value: allExceptions.length, sub: `Across ${allWorkflowsView.length} workflows`, tone: 'text-text', onClick: () => onOpenWorkspace() },
+          { label: 'Open', value: totals.open, sub: 'Awaiting triage', tone: 'text-risk-700', onClick: () => onOpenWorkspace({ status: 'Open' }) },
+          { label: 'In Progress', value: totals.triaging, sub: 'Owner assigned', tone: 'text-mitigated-700', onClick: () => onOpenWorkspace({ status: 'Triaging' }) },
+          { label: 'Resolved', value: totals.resolved, sub: 'Closed this engagement', tone: 'text-compliant-700', onClick: () => onOpenWorkspace({ status: 'Resolved' }) },
+        ] as { label: string; value: number; sub: string; tone: string; onClick: () => void }[]).map(k => (
+          <button
+            key={k.label}
+            onClick={k.onClick}
+            className="text-left pl-7 ml-7 border-l border-border-light first:pl-0 first:ml-0 first:border-l-0 hover:opacity-60 transition-opacity cursor-pointer"
+          >
+            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{k.label}</div>
+            <div className={`text-[21px] font-bold tabular-nums leading-tight ${k.tone}`}>{k.value}</div>
+            <div className="text-[10.5px] text-text-muted">{k.sub}</div>
+          </button>
+        ))}
       </div>
 
       {/* Compact toolbar — title, search, sort, workspace link. */}
@@ -800,13 +896,12 @@ function ExceptionManagementTab({
           </div>
         ) : visibleWorkflows.map(group => {
           const hasNone = group.total === 0;
-          const presentSevs = (['Critical', 'High', 'Medium', 'Low'] as Severity[]).filter(s => group.severityCounts[s] > 0);
           return (
             <button
               key={group.workflowId}
               onClick={() => onOpenWorkspace({ workflowId: group.workflowId })}
               disabled={hasNone}
-              className={`group/row w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+              className={`group/row w-full px-5 py-4 flex items-center gap-3 text-left transition-colors ${
                 hasNone ? 'cursor-default' : 'hover:bg-primary-xlight/25 cursor-pointer'
               }`}
             >
@@ -816,23 +911,13 @@ function ExceptionManagementTab({
 
               <div className="ml-auto flex items-center gap-4 shrink-0">
                 {hasNone ? (
-                  <span className="text-[11px] text-text-muted/70 italic">No exceptions</span>
+                  <span className="text-[11px] text-text-muted/70 italic">No open exceptions</span>
                 ) : (
-                  <>
-                    <div className="hidden sm:flex items-center gap-2.5">
-                      {presentSevs.map(sev => (
-                        <span key={sev} className="inline-flex items-center gap-1 text-[11px] text-text-secondary tabular-nums" title={`${group.severityCounts[sev]} ${sev}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${SEV_DOT_CLS[sev]}`} aria-hidden="true" />
-                          {group.severityCounts[sev]}
-                        </span>
-                      ))}
-                    </div>
-                    <span className="text-[12px] tabular-nums w-[78px] text-right">
-                      <span className={`font-bold ${group.openCount > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{group.openCount}</span>
-                      <span className="text-text-muted"> open</span>
-                      <span className="text-text-muted/60"> /{group.total}</span>
-                    </span>
-                  </>
+                  /* Single signal per workflow: open exceptions */
+                  <span className="inline-flex items-baseline gap-1.5">
+                    <span className={`text-[18px] font-bold tabular-nums leading-none ${group.openCount > 0 ? 'text-risk-700' : 'text-compliant-700'}`}>{group.openCount}</span>
+                    <span className="text-[11px] text-text-muted">open exception{group.openCount === 1 ? '' : 's'}</span>
+                  </span>
                 )}
                 <ArrowUpRight size={14} className={hasNone ? 'text-transparent' : 'text-text-muted group-hover/row:text-primary transition-colors'} aria-label="Opens in a new tab" />
               </div>

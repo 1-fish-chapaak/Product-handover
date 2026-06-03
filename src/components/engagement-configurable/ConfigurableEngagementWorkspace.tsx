@@ -209,7 +209,7 @@ export default function ConfigurableEngagementWorkspace({ engagement, onBack, on
   return (
     <div>
       <WorkspaceHeader engagement={engagement} onBack={onBack} onEditSetup={onEditSetup} backLabel={backLabel} />
-      <WorkspaceTabs tabs={allTabs} activeTabId={activeTabId} onTabChange={setActiveTabId} hiddenTabIds={hiddenTabIds} />
+      <WorkspaceTabs tabs={allTabs} activeTabId={activeTabId} onTabChange={setActiveTabId} hiddenTabIds={hiddenTabIds} storageKey={`config:${engagement.id}`} />
       <PatternWorkspaceRenderer
         engagement={engagement}
         activeTabId={activeTab?.id || 'overview'}
