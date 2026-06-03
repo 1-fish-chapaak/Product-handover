@@ -8,6 +8,7 @@ import {
   FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
   HelpCircle, Grid3x3, Shield, Workflow, Archive,
 } from 'lucide-react';
+import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
@@ -1802,7 +1803,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       ) : (
         <>
           {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT. */}
-          <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-border-light">
+          <div className="flex items-center justify-between gap-3 px-6 py-3">
             <div className="relative shrink-0">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
@@ -4048,7 +4049,7 @@ function SectionEntryCard({ data }: { data: EntryData }) {
 // an engagement-style sub-card. Clicking the centre area drills into the section.
 function SectionCard({
   title, count, locked, lockedReason, onClick,
-  ratio, healthRatioText, entries, emptyEntriesLabel,
+  ratio, healthRatioText, icon: Icon, iconCls, attention, fixLabel,
 }: {
   title: string;
   count: number;
@@ -4061,93 +4062,76 @@ function SectionCard({
   healthRatioText?: string;
   entries?: EntryData[];
   emptyEntriesLabel?: string;
+  icon?: React.ElementType;
+  iconCls?: string;
+  attention?: boolean;
+  fixLabel?: string | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (locked) {
     return (
-      <div className="w-full bg-paper-50/40 border border-dashed border-canvas-border rounded-[12px] px-5 py-4">
-        <div className="flex items-baseline justify-between gap-3 mb-1">
-          <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-400 leading-none">{title}</h2>
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400 inline-flex items-center gap-1 shrink-0">
-            <Lock size={9} aria-hidden />Locked
-          </span>
+      <div className="flex items-center gap-3 py-2.5 px-2 -mx-2 opacity-60">
+        <span className="w-8 h-8 rounded-lg bg-paper-100 grid place-items-center text-ink-300 shrink-0">
+          {Icon ? <Icon size={15} /> : <Lock size={15} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-[13px] font-semibold text-ink-400">{title}</span>
+          <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 mt-0.5"><Lock size={9} aria-hidden />{lockedReason ?? 'Locked'}</div>
         </div>
-        <div className="text-[12px] text-ink-400 leading-tight">{lockedReason ?? 'Available after the previous step is set up.'}</div>
       </div>
     );
   }
 
   const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
-  const pct = hasHealth ? Math.round((ratio as number) * 100) : null;
-  // Split the health fraction so the numeric token ("5/6") wears JetBrains Mono —
-  // the auditor's data register — while the word ("mapped") stays in the body face.
+  const pct = hasHealth ? Math.round((ratio as number) * 100) : 0;
+  // The numeric token ("5/6") wears JetBrains Mono, the word ("mapped") stays in the body face.
   const ratioNum = healthRatioText ? healthRatioText.split(' ')[0] : '';
   const ratioWord = healthRatioText ? healthRatioText.split(' ').slice(1).join(' ') : '';
 
+  // Health-tier colour, matching the Engagements overview (compliant / mitigated / risk).
+  const tier = pct >= 85
+    ? { bar: 'bg-compliant', text: 'text-compliant-700' }
+    : pct >= 65
+      ? { bar: 'bg-mitigated', text: 'text-mitigated-700' }
+      : { bar: 'bg-risk', text: 'text-risk-700' };
+
   return (
-    <div className="space-y-2.5">
-      {/* Scorecard row — one calm line per section: title + count, then the section's
-          own health as a coverage meter + fraction. The cross-section "needs attention"
-          rollup lives once, in the summary line above the list — never restated here.
-          When expanded a thin divider separates the header from the entries below. */}
-      <div className={`group/row flex items-center gap-3 px-1 ${expanded ? 'pb-3 border-b border-canvas-border' : 'py-2.5'}`}>
-        <button
-          type="button"
-          onClick={() => setExpanded(e => !e)}
-          aria-label={expanded ? `Hide ${title} entries` : `Show ${title} entries`}
-          aria-expanded={expanded}
-          className="no-focus-ring shrink-0 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-paper-100 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"
-        >
-          {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-        </button>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Open ${title}`}
+      className="group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer text-left"
+    >
+      {/* identity icon chip — coloured by the section's GRC semantic, in the Engagements
+          event-icon style (bg-{sem}-50 / text-{sem}-700) */}
+      <span className={`w-8 h-8 rounded-lg grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
+        {Icon ? <Icon size={15} /> : null}
+      </span>
 
-        {/* The whole right area is one drill target → opens the section. The title lane is
-            a fixed width so the meters line up down the column; the count sits beside the
-            name as a quiet mono annotation, and a chevron slides in from the right on hover.
-            Inner elements are spans (a button may only contain phrasing content). */}
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={`Open ${title}`}
-          className="no-focus-ring flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
-        >
-          <span className="flex items-baseline gap-1.5 w-[120px] shrink-0">
-            <span className="text-[13px] font-semibold text-ink-900 leading-none group-hover/row:text-brand-700 transition-colors">{title}</span>
-            <span className="text-[12px] font-mono tabular-nums text-ink-400 shrink-0">· {count}</span>
-          </span>
-
-          {hasHealth ? (
-            <span className="flex items-center gap-2.5 min-w-0">
-              <span className="block h-1.5 w-24 rounded-full bg-paper-100 overflow-hidden shrink-0" role="img" aria-label={`${pct}% — ${healthRatioText}`}>
-                <span className="block h-full rounded-full bg-ink-400 transition-[width]" style={{ width: `${pct}%` }} />
-              </span>
-              <span className="text-[12px] text-ink-500 whitespace-nowrap">
-                <span className="font-mono tabular-nums text-ink-600">{ratioNum}</span> {ratioWord}
-              </span>
-            </span>
-          ) : null}
-
-          <ChevronRight
-            size={15}
-            aria-hidden
-            className="ml-auto shrink-0 text-ink-300 opacity-0 -translate-x-1 group-hover/row:opacity-100 group-hover/row:translate-x-0 transition-all duration-150"
-          />
-        </button>
+      {/* name + the count fraction */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[13px] font-semibold text-ink-800 truncate group-hover:text-brand-700 transition-colors">{title}</span>
+          <span className="text-[11px] text-ink-400 tabular-nums shrink-0">· {count}</span>
+        </div>
+        {hasHealth && (
+          <div className="text-[11px] text-ink-400 mt-0.5">
+            <span className="font-mono tabular-nums">{ratioNum}</span> {ratioWord}
+          </div>
+        )}
       </div>
 
-      {/* Expanded entries — nested under the section with a left rail + indent so they
-          read as belonging to it, not as peers of the section headers. */}
-      {expanded && entries && (
-        <div className="ml-3 pl-5 border-l border-canvas-border/70 space-y-2.5">
-          {entries.length > 0 ? (
-            entries.map(e => <SectionEntryCard key={e.id} data={e} />)
-          ) : (
-            <div className="text-[12px] text-ink-500 italic">{emptyEntriesLabel ?? `No ${title.toLowerCase()} yet.`}</div>
-          )}
+      {/* health bar + tier percentage */}
+      {hasHealth && (
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:block w-24 h-1.5 bg-paper-100 rounded-full overflow-hidden" role="img" aria-label={`${pct}% coverage`}>
+            <div className={`h-full rounded-full ${tier.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`text-[13px] font-bold tabular-nums w-10 text-right ${tier.text}`}>{pct}%</span>
         </div>
       )}
-    </div>
+
+      <ChevronRight size={15} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
+    </button>
   );
 }
 
@@ -4641,7 +4625,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   if (reviewingRacm) {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
-        <div className="px-[124px] py-8">
+        <div className="px-8 py-8">
           <ReviewImportWorkspace
             racmName={reviewingRacm.name}
             bpAbbr={bp.abbr}
@@ -4678,7 +4662,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-6 border-b border-border">
+          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4">
             <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
               <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
                 <ArrowLeft size={12} />Process Hub
@@ -4714,7 +4698,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                       aria-label={`Switch to ${m.title}`}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => switchDrilledSection(key)}
-                      className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                      className={`shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
                         active
                           ? 'bg-brand-600 text-paper-0'
                           : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
@@ -4732,7 +4716,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 <button
                   type="button"
                   onClick={() => triggerSectionCreate(drilledSection)}
-                  className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
                   <Plus size={13} />{sectionCreateLabel[drilledSection]}
                 </button>
               </div>
@@ -4829,8 +4813,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          <div className="font-mono text-[12px] mb-2 tracking-tight flex items-center gap-1.5 min-w-0">
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border">
+          {/* breadcrumb on its own line; Quick add now lives on the byline row below */}
+          <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
             <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
               <ArrowLeft size={12} />Process Hub
             </button>
@@ -4838,77 +4823,77 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             <span className="text-ink-700 truncate">{bp.name}</span>
           </div>
 
-          <div className="mb-2">
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
-          </div>
+          {/* Masthead body — the process title and byline set the page; the rolled-up
+              health now lives in the Process Health Score card just below. */}
+          <div className="flex items-start justify-between gap-10 pb-6">
+            <div className="min-w-0 flex-1">
+              <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15] mb-4">{bp.name}</h1>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4 text-[12px] flex-wrap">
+                  <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
+                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-ink-400">Owner</span>
+                    <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
+                  </span>
+                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
+                  {(() => {
+                    const s = bp.status ?? 'Active';
+                    const tone =
+                      s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                      s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                      s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                         { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                    return (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                        {s}
+                      </span>
+                    );
+                  })()}
+                </div>
 
-          <p className="text-[13px] text-text-secondary mb-5 max-w-2xl leading-relaxed">
-            {bp.description ?? 'Map risks, controls, SOPs, and workflows for this process.'}
-          </p>
-
-          <div className="flex items-center justify-between gap-3 mb-5 text-[12px] text-text-muted">
-            <div className="flex items-center gap-6 min-w-0">
-              <span className="font-mono">{bp.abbr}</span>
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Owner:</span>
-                <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Status:</span>
-                {(() => {
-                  const s = bp.status ?? 'Active';
-                  const tone =
-                    s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                    s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                    s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                       { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                  return (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                      {s}
-                    </span>
-                  );
-                })()}
-              </div>
-            </div>
-            {/* Quick add dropdown — shortcut to any of the five section create flows. */}
-            <div className="shrink-0">
-              <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCreateMenuOpen(v => !v)}
-                aria-haspopup="menu"
-                aria-expanded={createMenuOpen}
-                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
-                Quick add
-                <ChevronDown size={13} />
-              </button>
-              {createMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
-                  <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
-                    {([
-                      { key: 'sop' as const,        label: 'SOP' },
-                      { key: 'racm' as const,       label: 'RACM' },
-                      { key: 'risks' as const,      label: 'Risk' },
-                      { key: 'controls' as const,   label: 'Control' },
-                      { key: 'workflows' as const,  label: 'Workflow' },
-                    ]).map(item => (
-                      <button
-                        type="button"
-                        key={item.key}
-                        role="menuitem"
-                        onClick={() => handleDropdownPick(item.key)}
-                        className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+                {/* Quick add dropdown — shortcut to any of the five section create flows. */}
+                <div className="shrink-0">
+                  <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setCreateMenuOpen(v => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={createMenuOpen}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
+                    Quick add
+                    <ChevronDown size={13} />
+                  </button>
+                  {createMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
+                      <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
+                        {([
+                          { key: 'sop' as const,        label: 'SOP' },
+                          { key: 'racm' as const,       label: 'RACM' },
+                          { key: 'risks' as const,      label: 'Risk' },
+                          { key: 'controls' as const,   label: 'Control' },
+                          { key: 'workflows' as const,  label: 'Workflow' },
+                        ]).map(item => (
+                          <button
+                            type="button"
+                            key={item.key}
+                            role="menuitem"
+                            onClick={() => handleDropdownPick(item.key)}
+                            className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   </div>
-                </>
-              )}
+                </div>
               </div>
             </div>
+
           </div>
         </div>
 
@@ -4934,60 +4919,98 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           </div>
         )}
 
-        {/* Summary line — one honest health number for the whole process, plus a
-            jump to the first thing to fix. Replaces the old "needs attention" list:
-            the per-section issues now live on their own rows, so nothing's said twice. */}
-        {!isFreshBP && overallCoverage !== null && (
-          <motion.div className="mb-4 flex items-center justify-between gap-3 px-1" {...revealProps(0)}>
-            <p className="text-[13px] leading-none">
-              <span className="font-semibold text-ink-900"><span className="font-mono tabular-nums">{overallCoverage}%</span> healthy</span>
-              {attentionItems.length > 0 ? (
-                <span className="text-ink-500"> · {attentionItems.length} item{attentionItems.length !== 1 ? 's' : ''} need{attentionItems.length === 1 ? 's' : ''} attention</span>
-              ) : (
-                <span className="text-compliant-700"> · all clear</span>
-              )}
-            </p>
-            {attentionItems.length > 0 && firstFixSection && (
-              <button
-                type="button"
-                onClick={() => switchDrilledSection(firstFixSection)}
-                className="no-focus-ring shrink-0 inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
-              >
-                Fix first <ChevronRight size={13} aria-hidden />
-              </button>
-            )}
-          </motion.div>
-        )}
+        {/* KPI strip — process-level rollups, in the Engagements-overview style (shared
+            KpiTile: count-up value, label, footer; click to drill). */}
+        {!isFreshBP && overallCoverage !== null && (() => {
+          const controlsOpen = sectionInsights.controls.openCount ?? 0;
+          const risksOpen = sectionInsights.risks.openCount ?? 0;
+          const controlsEffective = Math.max(0, sectionMeta.controls.count - controlsOpen);
+          const risksMapped = Math.max(0, sectionMeta.risks.count - risksOpen);
+          const fixName = firstFixSection ? sectionMeta[firstFixSection].title : null;
+          const atRisk = attentionItems.length;
+          return (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <KpiTile
+                label="Process Health"
+                value={`${overallCoverage}%`}
+                index={0}
+                onClick={firstFixSection ? () => switchDrilledSection(firstFixSection) : undefined}
+                footer={
+                  <span className={`text-[11px] font-semibold ${atRisk > 0 ? 'text-risk-700' : 'text-ink-400'}`}>
+                    {atRisk > 0 ? `${atRisk} section${atRisk !== 1 ? 's' : ''} need${atRisk === 1 ? 's' : ''} attention` : 'All sections on track'}
+                  </span>
+                }
+              />
+              <KpiTile
+                label="Open items"
+                value={String(atRisk)}
+                index={1}
+                onClick={firstFixSection ? () => switchDrilledSection(firstFixSection) : undefined}
+                footer={<span className="text-[11px] text-ink-400">{fixName ? `Start with ${fixName}` : 'Nothing flagged'}</span>}
+              />
+              <KpiTile
+                label="Controls"
+                value={String(sectionMeta.controls.count)}
+                index={2}
+                onClick={() => switchDrilledSection('controls')}
+                footer={<span className="text-[11px] text-ink-400"><span className="font-semibold text-ink-600 tabular-nums">{controlsEffective}</span> effective</span>}
+              />
+              <KpiTile
+                label="Risks"
+                value={String(sectionMeta.risks.count)}
+                index={3}
+                onClick={() => switchDrilledSection('risks')}
+                footer={<span className="text-[11px] text-ink-400"><span className="font-semibold text-ink-600 tabular-nums">{risksMapped}</span> mapped</span>}
+              />
+            </div>
+          );
+        })()}
 
-        <div className="space-y-3">
-          {sortedIndexSections.map((key, i) => {
-            const m = sectionMeta[key];
-            const ins = sectionInsights[key];
-            // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-            const locked = lockedFor(key);
-            const lockedReason = key === 'sop'
-              ? undefined
-              : key === 'racm'
-                ? 'Available after the first SOP is uploaded.'
-                : 'Available after the first RACM is created.';
-            return (
-              <motion.div key={key} {...revealProps(i + 1)}>
+        {/* Coverage by section — a bordered panel with one clickable row per area, matching
+            the Engagements overview's SectionCard + Row pattern. Locked rows show on a fresh
+            process so the path ahead stays visible. */}
+        <motion.section className="rounded-xl border border-canvas-border bg-white p-4" {...revealProps(0)}>
+          <div className="mb-2">
+            <h3 className="text-[13px] font-semibold text-ink-800">Coverage by section</h3>
+          </div>
+          <div className="space-y-0.5">
+            {sortedIndexSections.map((key) => {
+              const m = sectionMeta[key];
+              const ins = sectionInsights[key];
+              // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
+              const locked = lockedFor(key);
+              const lockedReason = key === 'sop'
+                ? undefined
+                : key === 'racm'
+                  ? 'Available after the first SOP is uploaded.'
+                  : 'Available after the first RACM is created.';
+              const SECTION_ICON = { sop: FileText, racm: Grid3x3, risks: AlertTriangle, controls: ShieldCheck, workflows: Workflow } as const;
+              const SECTION_ICON_CLS = {
+                sop: 'bg-brand-50 text-brand-700',
+                racm: 'bg-brand-50 text-brand-700',
+                risks: 'bg-brand-50 text-brand-700',
+                controls: 'bg-brand-50 text-brand-700',
+                workflows: 'bg-brand-50 text-brand-700',
+              } as const;
+              const attention = (ins.openCount ?? 0) > 0;
+              return (
                 <SectionCard
+                  key={key}
                   title={m.title}
                   count={m.count}
                   ratio={ins.ratio}
-                  openCount={ins.openCount}
-                  openLabel={ins.openLabel}
                   healthRatioText={ins.healthRatioText}
-                  entries={ins.entries}
                   locked={locked}
                   lockedReason={lockedReason}
+                  icon={SECTION_ICON[key]}
+                  iconCls={SECTION_ICON_CLS[key]}
+                  attention={attention}
                   onClick={() => switchDrilledSection(key)}
                 />
-              </motion.div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </motion.section>
       </div>
     </div>
   );
