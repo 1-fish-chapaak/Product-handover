@@ -107,18 +107,18 @@ export default function NotificationRow({
 
       <div className="pl-6 pr-5 py-3.5">
         <div className="flex items-start justify-between gap-3">
-          <h3 className={`text-[13.5px] leading-snug font-medium truncate ${unread ? 'text-ink-900' : 'text-ink-600'}`}>
+          <h3 className={`text-[0.75rem] leading-snug font-medium truncate ${unread ? 'text-ink-900' : 'text-ink-600'}`}>
             {notification.title}
           </h3>
-          <span className="shrink-0 text-[11px] text-ink-400 tabular-nums whitespace-nowrap mt-[3px]">
+          <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap mt-[3px]">
             {timeAgo(notification.createdAt)}
           </span>
         </div>
-        <p className={`mt-0.5 text-[12.5px] leading-snug font-normal ${unread ? 'text-ink-600' : 'text-ink-500'}`}>
+        <p className={`mt-0.5 text-[0.75rem] leading-snug font-normal ${unread ? 'text-ink-600' : 'text-ink-500'}`}>
           {notification.message}
         </p>
         {notification.actor && (
-          <div className="mt-1.5 text-[11.5px] font-normal text-ink-400 truncate">
+          <div className="mt-1.5 text-[0.75rem] font-normal text-ink-400 truncate">
             {notification.actor}
           </div>
         )}
@@ -129,7 +129,7 @@ export default function NotificationRow({
             {actions.includes('accept') && (
               <button
                 onClick={(e) => handleAction(e, 'accept')}
-                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[0.75rem] font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
               >
                 <Check size={12} />
                 Accept
@@ -138,7 +138,7 @@ export default function NotificationRow({
             {actions.includes('decline') && (
               <button
                 onClick={(e) => handleAction(e, 'decline')}
-                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-medium text-ink-600 bg-canvas-elevated border border-canvas-border hover:border-risk hover:text-risk transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 bg-canvas-elevated border border-canvas-border hover:border-risk hover:text-risk transition-colors cursor-pointer"
               >
                 <X size={12} />
                 Decline
@@ -147,7 +147,7 @@ export default function NotificationRow({
             {actions.includes('comment') && (
               <button
                 onClick={(e) => handleAction(e, 'comment')}
-                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-medium text-ink-600 hover:bg-[#F4F2F7] hover:text-brand-700 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:bg-[#F4F2F7] hover:text-brand-700 transition-colors cursor-pointer"
               >
                 <MessageSquare size={12} />
                 Comment
@@ -178,21 +178,21 @@ export default function NotificationRow({
               }}
               placeholder="Add a comment…"
               rows={2}
-              className="w-full text-[12.5px] leading-relaxed text-ink-800 bg-canvas-elevated border border-canvas-border rounded-md px-2.5 py-1.5 resize-none placeholder:text-ink-400 focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-200/60"
+              className="w-full text-[0.75rem] leading-relaxed text-ink-800 bg-canvas-elevated border border-canvas-border rounded-md px-2.5 py-1.5 resize-none placeholder:text-ink-400 focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-200/60"
             />
             <div className="mt-1.5 flex items-center justify-between gap-2">
-              <span className="text-[10.5px] text-ink-400">⌘↵ to send · Esc to cancel</span>
+              <span className="text-[0.75rem] text-ink-400">⌘↵ to send · Esc to cancel</span>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={cancelComment}
-                  className="inline-flex items-center h-7 px-2.5 rounded-md text-[11.5px] font-medium text-ink-600 hover:bg-[#F4F2F7] hover:text-ink-800 transition-colors cursor-pointer"
+                  className="inline-flex items-center h-7 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:bg-[#F4F2F7] hover:text-ink-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={submitComment}
                   disabled={!commentText.trim()}
-                  className="inline-flex items-center h-7 px-3 rounded-md text-[11.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-ink-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="inline-flex items-center h-7 px-3 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:bg-ink-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   Send
                 </button>
@@ -210,13 +210,13 @@ function ActionPill({ state, onClear }: { state: NotificationActionState; onClea
   const Icon = state.type === 'accept' ? Check : state.type === 'decline' ? X : MessageSquare;
   return (
     <div className="mt-2.5 inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-      <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-medium ${tone.bg} ${tone.fg}`}>
+      <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[0.75rem] font-medium ${tone.bg} ${tone.fg}`}>
         <Icon size={12} />
         {tone.label} {timeAgo(state.takenAt)}
       </span>
       {state.type === 'comment' && state.comment && (
         <span
-          className="text-[11.5px] text-ink-500 italic max-w-[180px] truncate"
+          className="text-[0.75rem] text-ink-500 italic max-w-[180px] truncate"
           title={state.comment}
         >
           “{state.comment}”
@@ -225,7 +225,7 @@ function ActionPill({ state, onClear }: { state: NotificationActionState; onClea
       {onClear && (
         <button
           onClick={(e) => { e.stopPropagation(); onClear(); }}
-          className="text-[11px] text-ink-500 hover:text-brand-700 px-2 h-7 rounded-md hover:bg-[#F4F2F7] transition-colors cursor-pointer"
+          className="text-[0.6875rem] text-ink-500 hover:text-brand-700 px-2 h-7 rounded-md hover:bg-[#F4F2F7] transition-colors cursor-pointer"
         >
           Undo
         </button>

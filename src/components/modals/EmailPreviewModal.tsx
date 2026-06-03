@@ -36,8 +36,8 @@ export default function EmailPreviewModal({ recipientName, onClose }: Props) {
               <Mail size={16} />
             </div>
             <div>
-              <h3 className="text-[14px] font-semibold text-text">Email Preview</h3>
-              <p className="text-[12px] text-text-muted">Notification sent to risk owner</p>
+              <h3 className="text-[0.875rem] font-semibold text-text">Email Preview</h3>
+              <p className="text-[0.75rem] text-text-muted">Notification sent to risk owner</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-lg transition-colors cursor-pointer">
@@ -46,7 +46,7 @@ export default function EmailPreviewModal({ recipientName, onClose }: Props) {
         </div>
 
         {/* Email Chrome */}
-        <div className="px-5 py-3 border-b border-border-light bg-surface-2 space-y-2 text-[12px] shrink-0">
+        <div className="px-5 py-3 border-b border-border-light bg-surface-2 space-y-2 text-[0.75rem] shrink-0">
           <div className="flex items-center gap-2">
             <AtSign size={12} className="text-text-muted shrink-0" />
             <span className="text-text-muted">From:</span>
@@ -71,7 +71,7 @@ export default function EmailPreviewModal({ recipientName, onClose }: Props) {
 
         {/* Email Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <pre className="text-[13px] text-text leading-relaxed whitespace-pre-wrap font-sans">
+          <pre className="text-[0.8125rem] text-text leading-relaxed whitespace-pre-wrap font-sans">
             {emailBody}
           </pre>
         </div>
@@ -80,7 +80,7 @@ export default function EmailPreviewModal({ recipientName, onClose }: Props) {
         <div className="px-5 py-3 border-t border-border-light flex justify-end shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-primary text-white rounded-xl text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="px-4 py-2 bg-primary text-white rounded-xl text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             Close
           </button>

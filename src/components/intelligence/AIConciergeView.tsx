@@ -88,10 +88,10 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                 <Bot size={20} className="text-white" />
               </div>
               <div>
-                <h1 className="text-[28px] font-semibold text-ink-900">
+                <h1 className="text-[1.75rem] font-semibold text-ink-900">
                   AI Concierge
                 </h1>
-                <p className="text-[14px] text-ink-500 leading-relaxed">
+                <p className="text-[0.875rem] text-ink-500 leading-relaxed">
                   Specialized AI tools for document analysis and data extraction.
                 </p>
               </div>
@@ -112,7 +112,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                 placeholder="Search tools..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
+                className="w-full pl-10 pr-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
               />
               {search && (
                 <button
@@ -136,7 +136,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
           className="flex items-start gap-3 px-5 py-4 rounded-xl bg-brand-50 border border-brand-100"
         >
           <Info size={18} className="text-brand-600 mt-0.5 shrink-0" />
-          <p className="text-[13px] text-brand-700 leading-relaxed">
+          <p className="text-[0.8125rem] text-brand-700 leading-relaxed">
             Looking for <span className="font-semibold">RACM generation</span>? It's now embedded in{' '}
             <span className="font-semibold">Governance &gt; RACM</span>. Data profiling and anomaly detection
             is available directly in <span className="font-semibold">IRA AI chat</span>.
@@ -178,14 +178,14 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                         <Icon size={20} className="text-brand-700" />
                       </div>
                       {tool.beta && (
-                        <span className="inline-flex items-center px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-700 text-[12px] font-medium">
+                        <span className="inline-flex items-center px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-medium">
                           Beta
                         </span>
                       )}
                     </div>
 
                     {/* Title */}
-                    <h3 className="text-[15px] font-bold text-text mb-1.5 flex items-center gap-2">
+                    <h3 className="text-[0.9375rem] font-bold text-text mb-1.5 flex items-center gap-2">
                       {tool.title}
                       {tool.view && (
                         <Sparkles size={12} className="text-primary/40" />
@@ -193,7 +193,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                     </h3>
 
                     {/* Description */}
-                    <p className="text-[12.5px] text-text-secondary leading-relaxed mb-4">
+                    <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-4">
                       {tool.description}
                     </p>
 
@@ -202,7 +202,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                       {tool.tags.map((tag) => (
                         <span
                           key={tag.label}
-                          className={`px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tag.color}`}
+                          className={`px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${tag.color}`}
                         >
                           {tag.label}
                         </span>
@@ -222,10 +222,10 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
             className="text-center py-16"
           >
             <Search size={32} className="mx-auto text-text-muted/40 mb-3" />
-            <p className="text-[14px] text-text-muted">No tools match "{search}"</p>
+            <p className="text-[0.875rem] text-text-muted">No tools match "{search}"</p>
             <button
               onClick={() => setSearch('')}
-              className="mt-2 text-[12px] text-primary hover:underline cursor-pointer"
+              className="mt-2 text-[0.75rem] text-primary hover:underline cursor-pointer"
             >
               Clear search
             </button>

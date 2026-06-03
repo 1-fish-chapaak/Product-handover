@@ -75,15 +75,15 @@ export default function Vendor360View({ onBack }: Props) {
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back
         </button>
 
         {/* Header */}
         <div className="mb-5">
-          <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Vendor 360</div>
-          <h1 className="font-display text-[32px] font-bold text-text leading-tight">Vendor Risk Profile</h1>
-          <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl">
+          <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Vendor 360</div>
+          <h1 className="font-display text-[2rem] font-bold text-text leading-tight">Vendor Risk Profile</h1>
+          <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-2xl">
             Click any vendor to see every exception they appear in, across every engagement and workflow.
           </p>
         </div>
@@ -98,7 +98,7 @@ export default function Vendor360View({ onBack }: Props) {
                 placeholder="Search vendor, ID, or PAN..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 text-[13px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                className="w-full pl-9 pr-3 py-2.5 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
               />
             </div>
             <div className="space-y-1.5">
@@ -117,24 +117,24 @@ export default function Vendor360View({ onBack }: Props) {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <Building2 size={13} className="text-text-muted shrink-0" />
-                      <span className="text-[13px] font-semibold text-text truncate">{v.name}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text truncate">{v.name}</span>
                       {count > 0 && (
-                        <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-risk-700 bg-risk-50 px-1.5 h-4 rounded shrink-0">
+                        <span className="ml-auto inline-flex items-center gap-1 text-[0.625rem] font-bold text-risk-700 bg-risk-50 px-1.5 h-4 rounded shrink-0">
                           {count}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-[10.5px] text-text-muted">
+                    <div className="flex items-center gap-2 text-[0.75rem] text-text-muted">
                       <span className="font-mono">{v.id.toUpperCase()}</span>
                       <span className="text-border">·</span>
                       <span>{v.category}</span>
-                      <span className={`ml-auto px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wide border ${RISK_CLS[v.risk]}`}>{v.risk}</span>
+                      <span className={`ml-auto px-1.5 h-4 rounded text-[0.75rem] font-bold uppercase tracking-wide border ${RISK_CLS[v.risk]}`}>{v.risk}</span>
                     </div>
                   </button>
                 );
               })}
               {filtered.length === 0 && (
-                <div className="text-[12px] text-text-muted text-center py-4">No vendors match.</div>
+                <div className="text-[0.75rem] text-text-muted text-center py-4">No vendors match.</div>
               )}
             </div>
           </div>
@@ -146,10 +146,10 @@ export default function Vendor360View({ onBack }: Props) {
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
-                      <h2 className="font-display text-[22px] font-bold text-text">{selected.name}</h2>
-                      <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-bold uppercase tracking-wide border ${RISK_CLS[selected.risk]}`}>{selected.risk} Risk</span>
+                      <h2 className="font-display text-[1.375rem] font-bold text-text">{selected.name}</h2>
+                      <span className={`inline-flex items-center px-2 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide border ${RISK_CLS[selected.risk]}`}>{selected.risk} Risk</span>
                     </div>
-                    <dl className="flex items-center gap-4 text-[12px] text-text-muted flex-wrap">
+                    <dl className="flex items-center gap-4 text-[0.75rem] text-text-muted flex-wrap">
                       <div className="flex items-center gap-1.5"><dt>ID:</dt><dd className="font-mono text-text-secondary">{selected.id.toUpperCase()}</dd></div>
                       <div className="flex items-center gap-1.5"><dt>PAN:</dt><dd className="font-mono text-text-secondary">{selected.pan}</dd></div>
                       <div className="flex items-center gap-1.5"><dt>Category:</dt><dd className="text-text-secondary">{selected.category}</dd></div>
@@ -166,7 +166,7 @@ export default function Vendor360View({ onBack }: Props) {
                 {totalOpen > 0 && (
                   <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                     {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map(sev => sevCounts[sev] > 0 && (
-                      <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide border ${SEV_CLS[sev]}`}>
+                      <span key={sev} className={`inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide border ${SEV_CLS[sev]}`}>
                         {sevCounts[sev]} {sev}
                       </span>
                     ))}
@@ -177,23 +177,23 @@ export default function Vendor360View({ onBack }: Props) {
               {/* Engagements where this vendor appears */}
               {engagementsWith.length > 0 && (
                 <div className="glass-card rounded-xl p-5">
-                  <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Appears in these engagements</h3>
+                  <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Appears in these engagements</h3>
                   <div className="space-y-2">
                     {engagementsWith.map(eng => {
                       const cnt = vendorExceptions.filter(e => e.engagementId === eng.id).length;
                       return (
                         <div key={eng.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border-light hover:border-primary/20 transition-colors">
                           <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                            className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-[0.6875rem] font-bold shrink-0"
                             style={{ background: PROCESS_COLORS[eng.process] }}
                           >
                             {eng.process}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[13px] font-medium text-text truncate">{eng.name}</div>
-                            <div className="text-[11px] text-text-muted">{eng.framework} · Owner {eng.owner}</div>
+                            <div className="text-[0.8125rem] font-medium text-text truncate">{eng.name}</div>
+                            <div className="text-[0.6875rem] text-text-muted">{eng.framework} · Owner {eng.owner}</div>
                           </div>
-                          <span className="text-[12px] font-bold text-risk-700 tabular-nums">{cnt}</span>
+                          <span className="text-[0.75rem] font-bold text-risk-700 tabular-nums">{cnt}</span>
                           <ChevronRight size={14} className="text-text-muted" />
                         </div>
                       );
@@ -205,16 +205,16 @@ export default function Vendor360View({ onBack }: Props) {
               {/* Exception list for this vendor */}
               <div className="glass-card rounded-xl overflow-hidden">
                 <div className="px-5 py-3 border-b border-border-light flex items-center justify-between">
-                  <h3 className="text-[13px] font-semibold text-text">All exceptions <span className="text-text-muted font-normal">({vendorExceptions.length})</span></h3>
-                  <button className="text-[11px] font-semibold text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+                  <h3 className="text-[0.8125rem] font-semibold text-text">All exceptions <span className="text-text-muted font-normal">({vendorExceptions.length})</span></h3>
+                  <button className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
                     Bulk-classify <ExternalLink size={10} />
                   </button>
                 </div>
                 {vendorExceptions.length === 0 ? (
                   <div className="p-10 text-center">
                     <CheckCircle2 size={28} className="text-compliant mx-auto mb-3" />
-                    <p className="text-[13px] font-semibold text-text mb-1">No exceptions on file for this vendor</p>
-                    <p className="text-[12px] text-text-muted">Clean record across all monitored workflows.</p>
+                    <p className="text-[0.8125rem] font-semibold text-text mb-1">No exceptions on file for this vendor</p>
+                    <p className="text-[0.75rem] text-text-muted">Clean record across all monitored workflows.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border-light/60">
@@ -226,11 +226,11 @@ export default function Vendor360View({ onBack }: Props) {
                         transition={{ delay: i * 0.025 }}
                         className="flex items-center gap-4 px-5 py-3 hover:bg-surface-2/40 cursor-pointer transition-colors"
                       >
-                        <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide border ${SEV_CLS[ex.severity]} shrink-0`}>{ex.severity}</span>
-                        <span className="font-mono text-[11.5px] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
+                        <span className={`inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide border ${SEV_CLS[ex.severity]} shrink-0`}>{ex.severity}</span>
+                        <span className="font-mono text-[0.75rem] text-text-secondary tabular-nums shrink-0 w-20">{ex.ref}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] text-text truncate">{ex.title}</div>
-                          <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+                          <div className="text-[0.8125rem] text-text truncate">{ex.title}</div>
+                          <div className="text-[0.6875rem] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
                             <span className="inline-flex items-center gap-1"><Workflow size={10} />{ex.workflowName}</span>
                             <span className="text-border">·</span>
                             <span>{ex.assignee}</span>
@@ -239,7 +239,7 @@ export default function Vendor360View({ onBack }: Props) {
                             {ex.amount && <><span className="text-border">·</span><span className="font-medium text-text-secondary">{ex.amount}</span></>}
                           </div>
                         </div>
-                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center shrink-0 ${STATUS_CLS[ex.status]}`}>{ex.status}</span>
+                        <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center shrink-0 ${STATUS_CLS[ex.status]}`}>{ex.status}</span>
                       </motion.div>
                     ))}
                   </div>
@@ -257,10 +257,10 @@ function KpiTile({ label, value, icon: Icon, tone }: { label: string; value: num
   return (
     <div className="rounded-xl border border-border-light bg-white p-3">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
+        <span className="text-[0.625rem] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
         <Icon size={12} className="text-text-muted" />
       </div>
-      <div className={`text-[22px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
+      <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
     </div>
   );
 }

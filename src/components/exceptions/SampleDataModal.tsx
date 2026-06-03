@@ -39,7 +39,7 @@ const CONDITION_OPTIONS = [
 ];
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[12px] text-ink-500">{children}</span>;
+  return <span className="text-[0.75rem] text-ink-500">{children}</span>;
 }
 
 function Select({
@@ -60,7 +60,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
+        className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 appearance-none focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 cursor-pointer"
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(o => (
@@ -147,8 +147,8 @@ export default function SampleDataModal({
               <Wand2 size={18} />
             </div>
             <div>
-              <h2 className="text-[17px] font-semibold text-ink-900 leading-tight">Sample the Data</h2>
-              <p className="text-[12.5px] text-ink-500 mt-1 leading-snug">
+              <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">Sample the Data</h2>
+              <p className="text-[0.75rem] text-ink-500 mt-1 leading-snug">
                 Create a filtered or partial sample of your data to review, investigate, and resolve audit cases more efficiently.
               </p>
             </div>
@@ -170,7 +170,7 @@ export default function SampleDataModal({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1.5 w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="mt-1.5 w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
           </div>
 
@@ -185,8 +185,8 @@ export default function SampleDataModal({
                 className="sr-only"
               />
               <Radio checked={mode === 'filter'} />
-              <span className="text-[13px] font-medium text-ink-800">Filter Rows by</span>
-              <span className="text-[12px] text-ink-500">(Optional)</span>
+              <span className="text-[0.8125rem] font-medium text-ink-800">Filter Rows by</span>
+              <span className="text-[0.75rem] text-ink-500">(Optional)</span>
             </label>
 
             {mode === 'filter' && (
@@ -227,7 +227,7 @@ export default function SampleDataModal({
                 ))}
                 <button
                   onClick={addFilter}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[12.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 cursor-pointer"
                 >
                   <Plus size={13} />
                   Add another item
@@ -247,7 +247,7 @@ export default function SampleDataModal({
                 className="sr-only"
               />
               <Radio checked={mode === 'sample'} />
-              <span className="text-[13px] font-medium text-ink-800">Sample Rows (%)</span>
+              <span className="text-[0.8125rem] font-medium text-ink-800">Sample Rows (%)</span>
             </label>
 
             {mode === 'sample' && (
@@ -262,9 +262,9 @@ export default function SampleDataModal({
                       const v = Number(e.target.value);
                       setSamplePct(Number.isFinite(v) ? Math.max(1, Math.min(100, v)) : 1);
                     }}
-                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                    className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-500">%</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[0.75rem] text-ink-500">%</span>
                 </div>
                 <input
                   type="range"
@@ -282,7 +282,7 @@ export default function SampleDataModal({
           {/* Info note */}
           <div className="flex items-start gap-2 bg-evidence-50/60 border border-evidence-50 rounded-[8px] px-3 py-2.5">
             <Info size={13} className="text-evidence-700 mt-0.5 shrink-0" />
-            <p className="text-[12.5px] text-ink-700 leading-snug">
+            <p className="text-[0.75rem] text-ink-700 leading-snug">
               <span className="font-semibold">Note:</span> New Sample Data Sheet will be created.{' '}
               <span className="tabular-nums">{availableCount}/{totalCount}</span> Sample data sets available.
             </p>
@@ -293,7 +293,7 @@ export default function SampleDataModal({
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -308,7 +308,7 @@ export default function SampleDataModal({
               });
             }}
             disabled={!canCreate}
-            className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
+            className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors ${
               canCreate
                 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                 : 'bg-brand-600/50 text-white/80 cursor-not-allowed'

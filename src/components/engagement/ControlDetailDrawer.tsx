@@ -44,7 +44,7 @@ function AttrResultChip({ result }: { result: string }) {
     na: { cls: 'bg-paper-50 text-ink-400', label: 'N/A' },
   };
   const s = map[result] || map.pending;
-  return <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-bold ${s.cls}`}>{s.label}</span>;
+  return <span className={`inline-flex items-center px-2 h-5 rounded text-[0.625rem] font-bold ${s.cls}`}>{s.label}</span>;
 }
 
 function SampleStatusDot({ status }: { status: string }) {
@@ -65,7 +65,7 @@ function StatusLabel({ status }: { status: string }) {
     'ineffective': { cls: 'bg-risk-50 text-risk-700', label: 'Concluded — Ineffective' },
   };
   const s = map[status] || map['not-started'];
-  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[11px] font-semibold ${s.cls}`}>{s.label}</span>;
+  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold ${s.cls}`}>{s.label}</span>;
 }
 
 function StepIndicator({ steps, current, onStep }: { steps: { id: TestingStep; label: string; icon: React.ElementType }[]; current: TestingStep; onStep: (s: TestingStep) => void }) {
@@ -80,7 +80,7 @@ function StepIndicator({ steps, current, onStep }: { steps: { id: TestingStep; l
           <div key={step.id} className="flex items-center gap-1 shrink-0">
             {i > 0 && <ChevronRight size={10} className="text-ink-300 mx-0.5" />}
             <button onClick={() => onStep(step.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                 isActive ? 'bg-primary text-white' : isPast ? 'bg-compliant-50 text-compliant-700' : 'text-ink-500 hover:bg-surface-2'
               }`}>
               {isPast ? <CheckCircle2 size={11} /> : <Icon size={11} />}
@@ -168,11 +168,11 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
       <div className="rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-4">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold text-primary uppercase">Next Action</span>
-            <p className="text-[13px] font-semibold text-text mt-0.5">{nextAction.label}</p>
+            <span className="text-[0.625rem] font-bold text-primary uppercase">Next Action</span>
+            <p className="text-[0.8125rem] font-semibold text-text mt-0.5">{nextAction.label}</p>
           </div>
           <button onClick={() => onGoToStep(nextAction.step)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${nextAction.cls}`}>
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[0.75rem] font-semibold transition-all cursor-pointer ${nextAction.cls}`}>
             <nextAction.icon size={13} />
             {nextAction.label}
           </button>
@@ -181,64 +181,64 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
 
       {/* ── TEST INSTANCE DETAILS ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Test Instance Details</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Test Instance Details</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Linked Workflows</span><p className="text-[12px] font-semibold text-brand-700">{workflows.length === 1 ? `${ctrl.workflowName} ${ctrl.workflowVersion}` : `${workflows.length} workflows`}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Attributes</span><p className="text-[12px] text-text">{totalAttrs} attributes{workflows.length > 1 ? ` across ${workflows.length} workflows` : ''}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Testing Round</span><p className="text-[12px] text-text">{ctrl.testingRound > 0 ? `Round ${ctrl.testingRound}` : 'Not started'}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Population Source</span><p className="text-[12px] text-text truncate" title={ctrl.populationSource}>{ctrl.populationSource || '—'}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Sampling Method</span><p className="text-[12px] text-text">{ctrl.samplingMethod || '—'}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Population Size</span><p className="text-[12px] font-mono text-text">{ctrl.populationSize > 0 ? ctrl.populationSize.toLocaleString() : '—'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Linked Workflows</span><p className="text-[0.75rem] font-semibold text-brand-700">{workflows.length === 1 ? `${ctrl.workflowName} ${ctrl.workflowVersion}` : `${workflows.length} workflows`}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Attributes</span><p className="text-[0.75rem] text-text">{totalAttrs} attributes{workflows.length > 1 ? ` across ${workflows.length} workflows` : ''}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Testing Round</span><p className="text-[0.75rem] text-text">{ctrl.testingRound > 0 ? `Round ${ctrl.testingRound}` : 'Not started'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Population Source</span><p className="text-[0.75rem] text-text truncate" title={ctrl.populationSource}>{ctrl.populationSource || '—'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Sampling Method</span><p className="text-[0.75rem] text-text">{ctrl.samplingMethod || '—'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Population Size</span><p className="text-[0.75rem] font-mono text-text">{ctrl.populationSize > 0 ? ctrl.populationSize.toLocaleString() : '—'}</p></div>
           </div>
         </div>
       </div>
 
       {/* ── EXECUTION METRICS ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Execution Metrics</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Execution Metrics</h4>
         <div className="grid grid-cols-5 gap-2">
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{tested}/{totalSamples}</div>
-            <div className="text-[9px] text-text-muted uppercase">Samples Tested</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Samples Tested</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${ctrl.exceptions > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{ctrl.samples.filter(s => s.status === 'fail' || s.status === 'exception').length}</div>
-            <div className="text-[9px] text-text-muted uppercase">Failed Samples</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Failed Samples</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-brand-700 tabular-nums">{attrCompletion}%</div>
-            <div className="text-[9px] text-text-muted uppercase">Attr Complete</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Attr Complete</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${evidenceCompletion < 100 ? 'text-high-700' : 'text-compliant-700'}`}>{evidenceCompletion}%</div>
-            <div className="text-[9px] text-text-muted uppercase">Evidence</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Evidence</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${ctrl.status === 'pending-review' ? 'text-mitigated-700' : 'text-text-muted'}`}>{ctrl.status === 'pending-review' ? '1' : '0'}</div>
-            <div className="text-[9px] text-text-muted uppercase">Pending Review</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Pending Review</div>
           </div>
         </div>
       </div>
 
       {/* ── LINKED WORKFLOWS & ATTRIBUTE COVERAGE ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Linked Workflows & Attribute Coverage</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Linked Workflows & Attribute Coverage</h4>
 
         {/* Summary chips */}
         <div className="flex items-center gap-2 mb-3">
-          <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700">
+          <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-brand-50 text-brand-700">
             <Workflow size={10} />{workflows.length} linked workflow{workflows.length !== 1 ? 's' : ''}
           </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-evidence-50 text-evidence-700">
+          <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-evidence-50 text-evidence-700">
             <Target size={10} />{totalAttrs} attribute{totalAttrs !== 1 ? 's' : ''} covered
           </span>
           {unmappedAttrs.length > 0 ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-risk-50 text-risk-700">
+            <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-risk-50 text-risk-700">
               <AlertTriangle size={10} />{unmappedAttrs.length} unmapped
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-compliant-50 text-compliant-700">
+            <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-compliant-50 text-compliant-700">
               <CheckCircle2 size={10} />0 unmapped
             </span>
           )}
@@ -248,21 +248,21 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
           /* Empty state */
           <div className="glass-card rounded-xl p-6 text-center">
             <Workflow size={24} className="mx-auto text-ink-300 mb-2" />
-            <p className="text-[12px] font-semibold text-ink-600 mb-0.5">No workflows linked</p>
-            <p className="text-[10px] text-ink-400">Link workflows to test this control's attributes.</p>
+            <p className="text-[0.75rem] font-semibold text-ink-600 mb-0.5">No workflows linked</p>
+            <p className="text-[0.625rem] text-ink-400">Link workflows to test this control's attributes.</p>
           </div>
         ) : (
           /* Workflow ↔ attribute table */
           <div className="glass-card rounded-xl overflow-hidden">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Workflow</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-14">Ver.</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-20">Attrs</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Assertions</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-16">Status</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-14">Action</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Workflow</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-14">Ver.</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-20">Attrs</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Assertions</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-16">Status</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-14">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -277,31 +277,31 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <Workflow size={11} className="text-brand-600 shrink-0" />
-                          <span className="text-[11px] font-medium text-text">{wf.name}</span>
+                          <span className="text-[0.6875rem] font-medium text-text">{wf.name}</span>
                           {i === 0 && hasMultipleWorkflows && (
-                            <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-brand-50 text-brand-700 inline-flex items-center shrink-0">PRIMARY</span>
+                            <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-brand-50 text-brand-700 inline-flex items-center shrink-0">PRIMARY</span>
                           )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[10px] font-mono text-text-muted">{wf.version}</span>
+                        <span className="text-[0.625rem] font-mono text-text-muted">{wf.version}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="text-[11px] text-text">{wfAttrs.length} attr{wfAttrs.length !== 1 ? 's' : ''}</span>
+                        <span className="text-[0.6875rem] text-text">{wfAttrs.length} attr{wfAttrs.length !== 1 ? 's' : ''}</span>
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap gap-1">
                           {Array.from(wfAssertions).map(a => (
-                            <span key={a} className="px-1.5 h-4 rounded text-[9px] font-medium bg-brand-50/70 text-brand-700 inline-flex items-center">{a}</span>
+                            <span key={a} className="px-1.5 h-4 rounded text-[0.5625rem] font-medium bg-brand-50/70 text-brand-700 inline-flex items-center">{a}</span>
                           ))}
-                          {wfAssertions.size === 0 && <span className="text-[10px] text-ink-300">—</span>}
+                          {wfAssertions.size === 0 && <span className="text-[0.625rem] text-ink-300">—</span>}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <AttrResultChip result={wfStatus} />
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <button onClick={() => onGoToStep('testing')} className="text-[10px] font-semibold text-brand-600 hover:underline cursor-pointer">View</button>
+                        <button onClick={() => onGoToStep('testing')} className="text-[0.625rem] font-semibold text-brand-600 hover:underline cursor-pointer">View</button>
                       </td>
                     </tr>
                   );
@@ -315,7 +315,7 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
         {unmappedAttrs.length > 0 && (
           <div className="mt-2 rounded-lg border border-risk/20 bg-risk-50/50 px-3 py-2 flex items-center gap-2">
             <AlertTriangle size={12} className="text-risk-700 shrink-0" />
-            <span className="text-[10px] text-risk-700">{unmappedAttrs.length} attribute{unmappedAttrs.length !== 1 ? 's are' : ' is'} not mapped to a workflow.</span>
+            <span className="text-[0.625rem] text-risk-700">{unmappedAttrs.length} attribute{unmappedAttrs.length !== 1 ? 's are' : ' is'} not mapped to a workflow.</span>
           </div>
         )}
       </div>
@@ -325,19 +325,19 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
 
       {/* ── CONTROL TEST OVERVIEW ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Control Test Overview</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Control Test Overview</h4>
         <div className="glass-card rounded-xl p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Control ID</span><p className="text-[12px] font-mono text-text">{ctrl.controlId}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Domain</span><p className="text-[12px] text-text">{ctrl.domain}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Frequency</span><p className="text-[12px] text-text">{ctrl.frequency}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Control Owner</span><p className="text-[12px] text-text">{ctrl.controlOwner}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Domain</span><p className="text-[0.75rem] text-text">{ctrl.domain}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Frequency</span><p className="text-[0.75rem] text-text">{ctrl.frequency}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Control Owner</span><p className="text-[0.75rem] text-text">{ctrl.controlOwner}</p></div>
           </div>
-          <div><span className="text-[10px] text-text-muted uppercase">Objective</span><p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{ctrl.objective}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Objective</span><p className="text-[0.75rem] text-text-secondary leading-relaxed mt-0.5">{ctrl.objective}</p></div>
           <div className="flex flex-wrap gap-2">
-            {ctrl.isKey && <span className="px-2.5 h-6 rounded-full text-[11px] font-semibold bg-mitigated-50 text-mitigated-700 inline-flex items-center">Key Control</span>}
+            {ctrl.isKey && <span className="px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold bg-mitigated-50 text-mitigated-700 inline-flex items-center">Key Control</span>}
             {ctrl.assertions.map(a => (
-              <span key={a} className="px-2.5 h-6 rounded-full text-[11px] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
+              <span key={a} className="px-2.5 h-6 rounded-full text-[0.6875rem] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
             ))}
           </div>
         </div>
@@ -391,25 +391,25 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h4 className="text-[11px] font-bold text-text-muted uppercase">Attributes & Workflow Mapping</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Attributes & Workflow Mapping</h4>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-text-muted">{attrStats.length} total</span>
-          <span className="text-[10px] text-compliant-700 font-medium">{mappedCount} mapped</span>
-          {unmappedCount > 0 && <span className="text-[10px] text-risk-700 font-medium">{unmappedCount} unmapped</span>}
+          <span className="text-[0.625rem] text-text-muted">{attrStats.length} total</span>
+          <span className="text-[0.625rem] text-compliant-700 font-medium">{mappedCount} mapped</span>
+          {unmappedCount > 0 && <span className="text-[0.625rem] text-risk-700 font-medium">{unmappedCount} unmapped</span>}
         </div>
       </div>
       <div className="glass-card rounded-xl overflow-hidden relative">
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
-                <th className="px-2.5 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-6">#</th>
-                <th className="px-2.5 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Attribute</th>
-                <th className="px-2.5 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-[110px]">Assertion</th>
-                <th className="px-2.5 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-[140px]">Linked Workflow</th>
-                <th className="px-2.5 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase w-16">Evidence</th>
-                <th className="px-2.5 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-16">Status</th>
-                <th className="px-2.5 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-12">Exc.</th>
+                <th className="px-2.5 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-6">#</th>
+                <th className="px-2.5 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Attribute</th>
+                <th className="px-2.5 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-[110px]">Assertion</th>
+                <th className="px-2.5 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-[140px]">Linked Workflow</th>
+                <th className="px-2.5 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-16">Evidence</th>
+                <th className="px-2.5 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-16">Status</th>
+                <th className="px-2.5 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-12">Exc.</th>
               </tr>
             </thead>
             <tbody>
@@ -421,12 +421,12 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
                 return (
                   <tr key={attr.id} className={`border-b border-border/40 transition-colors ${isUnmapped ? 'bg-risk-50/20' : 'hover:bg-surface-2/30'}`}>
                     {/* # */}
-                    <td className="px-2.5 py-2 text-[10px] font-mono text-text-muted">{i + 1}</td>
+                    <td className="px-2.5 py-2 text-[0.625rem] font-mono text-text-muted">{i + 1}</td>
 
                     {/* Attribute */}
                     <td className="px-2.5 py-2">
-                      <div className="text-[11px] font-medium text-text">{attr.name}</div>
-                      <div className="text-[9.5px] text-text-muted truncate max-w-[180px]">{attr.description}</div>
+                      <div className="text-[0.6875rem] font-medium text-text">{attr.name}</div>
+                      <div className="text-[0.75rem] text-text-muted truncate max-w-[180px]">{attr.description}</div>
                     </td>
 
                     {/* Assertion badges */}
@@ -434,11 +434,11 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
                       {attr.assertions && attr.assertions.length > 0 ? (
                         <div className="flex flex-wrap gap-0.5">
                           {attr.assertions.map(a => (
-                            <span key={a} className="px-1.5 h-[18px] rounded text-[9px] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
+                            <span key={a} className="px-1.5 h-[18px] rounded text-[0.5625rem] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-[9px] text-ink-300">—</span>
+                        <span className="text-[0.5625rem] text-ink-300">—</span>
                       )}
                     </td>
 
@@ -446,11 +446,11 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
                     <td className="px-2.5 py-2">
                       {isUnmapped ? (
                         <div className="flex items-center gap-1">
-                          <span className="px-1.5 h-[18px] rounded text-[9px] font-bold bg-risk-50 text-risk-700 inline-flex items-center">Unmapped</span>
+                          <span className="px-1.5 h-[18px] rounded text-[0.5625rem] font-bold bg-risk-50 text-risk-700 inline-flex items-center">Unmapped</span>
                           <select
                             value=""
                             onChange={e => { if (e.target.value) handleRemap(attr.id, e.target.value); }}
-                            className="w-[70px] px-1 py-0.5 rounded border border-risk/30 bg-white text-[9px] text-risk-700 outline-none cursor-pointer focus:border-brand-500/60"
+                            className="w-[70px] px-1 py-0.5 rounded border border-risk/30 bg-white text-[0.5625rem] text-risk-700 outline-none cursor-pointer focus:border-brand-500/60"
                           >
                             <option value="">Link…</option>
                             {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -461,7 +461,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
                         <select
                           value={currentWfId}
                           onChange={e => handleRemap(attr.id, e.target.value)}
-                          className="w-full px-1.5 py-1 rounded border border-border/60 bg-white text-[10px] text-text outline-none cursor-pointer hover:border-brand-500/40 focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/10 transition-colors"
+                          className="w-full px-1.5 py-1 rounded border border-border/60 bg-white text-[0.625rem] text-text outline-none cursor-pointer hover:border-brand-500/40 focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/10 transition-colors"
                           title={ownerWf ? `${ownerWf.name} ${ownerWf.version}` : ''}
                         >
                           {workflows.map(w => <option key={w.id} value={w.id}>{w.name} {w.version}</option>)}
@@ -471,14 +471,14 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
                     </td>
 
                     {/* Evidence */}
-                    <td className="px-2.5 py-2 text-[10px] text-text-muted">{attr.requiredEvidence ? 'Required' : '—'}</td>
+                    <td className="px-2.5 py-2 text-[0.625rem] text-text-muted">{attr.requiredEvidence ? 'Required' : '—'}</td>
 
                     {/* Status */}
                     <td className="px-2.5 py-2 text-center"><AttrResultChip result={attr.status} /></td>
 
                     {/* Exceptions */}
                     <td className="px-2.5 py-2 text-center">
-                      {attr.exceptionCount > 0 ? <span className="text-[11px] font-bold text-risk-700">{attr.exceptionCount}</span> : <span className="text-ink-300">—</span>}
+                      {attr.exceptionCount > 0 ? <span className="text-[0.6875rem] font-bold text-risk-700">{attr.exceptionCount}</span> : <span className="text-ink-300">—</span>}
                     </td>
                   </tr>
                 );
@@ -494,7 +494,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-lg bg-ink-800 text-white text-[11px] font-medium shadow-lg flex items-center gap-2"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-lg bg-ink-800 text-white text-[0.6875rem] font-medium shadow-lg flex items-center gap-2"
             >
               <CheckCircle2 size={12} className="text-compliant shrink-0" />
               {toastMsg}
@@ -506,7 +506,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
       {/* Governance notice */}
       <div className="mt-2 rounded-lg border border-border/50 bg-surface-2/50 px-3 py-2 flex items-start gap-2">
         <Shield size={11} className="text-ink-400 mt-0.5 shrink-0" />
-        <span className="text-[9.5px] text-ink-400 leading-relaxed">
+        <span className="text-[0.75rem] text-ink-400 leading-relaxed">
           Workflow mapping defines how each attribute will be tested. Workflows are not executed until the Testing step.
         </span>
       </div>
@@ -605,10 +605,10 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
       {/* ── A. Select Population Source ── */}
       {popState === 'NO_DATA_SELECTED' && (
         <div>
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Database size={11} />
             Select Population Source
-            <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ml-auto bg-draft-50 text-draft-700">No Data Selected</span>
+            <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ml-auto bg-draft-50 text-draft-700">No Data Selected</span>
           </h4>
 
           {/* Source mode selection — radio cards */}
@@ -623,9 +623,9 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
                 {sourceMode === 'existing'
                   ? <CheckCircle2 size={14} className="text-primary" />
                   : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300" />}
-                <span className="text-[12px] font-semibold text-text">Use Existing Dataset</span>
+                <span className="text-[0.75rem] font-semibold text-text">Use Existing Dataset</span>
               </div>
-              <p className="text-[10px] text-text-muted ml-5.5">Select from previously uploaded or connected data sources.</p>
+              <p className="text-[0.625rem] text-text-muted ml-5.5">Select from previously uploaded or connected data sources.</p>
             </button>
             <button onClick={() => setSourceMode('upload')}
               className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
@@ -637,16 +637,16 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
                 {sourceMode === 'upload'
                   ? <CheckCircle2 size={14} className="text-primary" />
                   : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300" />}
-                <span className="text-[12px] font-semibold text-text">Upload New Dataset</span>
+                <span className="text-[0.75rem] font-semibold text-text">Upload New Dataset</span>
               </div>
-              <p className="text-[10px] text-text-muted ml-5.5">Upload a CSV or XLSX file as a new population source.</p>
+              <p className="text-[0.625rem] text-text-muted ml-5.5">Upload a CSV or XLSX file as a new population source.</p>
             </button>
           </div>
 
           {/* Option A: Existing dataset list */}
           {sourceMode === 'existing' && (
             <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="text-[11px] font-semibold text-text-muted uppercase">Available Datasets</p>
+              <p className="text-[0.6875rem] font-semibold text-text-muted uppercase">Available Datasets</p>
               <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
                 {EXISTING_DATASETS.map(ds => (
                   <button key={ds.id} onClick={() => setSelectedDatasetId(ds.id)}
@@ -660,18 +660,18 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
                         {selectedDatasetId === ds.id
                           ? <CheckCircle2 size={13} className="text-primary shrink-0" />
                           : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300 shrink-0" />}
-                        <span className="text-[12px] font-medium text-text truncate">{ds.source}</span>
+                        <span className="text-[0.75rem] font-medium text-text truncate">{ds.source}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 mt-1 ml-5.5">
-                      <span className="text-[10px] text-text-muted"><span className="font-mono font-semibold text-text">{ds.records.toLocaleString()}</span> records</span>
-                      <span className="text-[10px] text-text-muted">Updated {ds.lastUpdated}</span>
+                      <span className="text-[0.625rem] text-text-muted"><span className="font-mono font-semibold text-text">{ds.records.toLocaleString()}</span> records</span>
+                      <span className="text-[0.625rem] text-text-muted">Updated {ds.lastUpdated}</span>
                     </div>
                   </button>
                 ))}
               </div>
               <button onClick={handleSelectDataset} disabled={!selectedDatasetId}
-                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
                 <Database size={12} />Select Dataset
               </button>
             </div>
@@ -688,9 +688,9 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
                   isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'
                 }`}>
                 <CloudUpload size={32} className={`mx-auto mb-3 ${isDragging ? 'text-primary' : 'text-text-muted'}`} />
-                <p className="text-[12px] font-semibold text-text mb-1">Drag & drop your file here</p>
-                <p className="text-[10px] text-text-muted mb-3">Accepted formats: CSV, XLSX</p>
-                <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+                <p className="text-[0.75rem] font-semibold text-text mb-1">Drag & drop your file here</p>
+                <p className="text-[0.625rem] text-text-muted mb-3">Accepted formats: CSV, XLSX</p>
+                <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
                   <Upload size={13} />Browse Files
                   <input type="file" accept=".csv,.xlsx" className="hidden"
                     onChange={e => {
@@ -706,7 +706,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
           {!sourceMode && (
             <div className="flex items-center gap-2 p-3 bg-surface-2/50 rounded-lg">
               <AlertTriangle size={12} className="text-text-muted shrink-0" />
-              <p className="text-[11px] text-text-muted">Choose a population source to continue with testing.</p>
+              <p className="text-[0.6875rem] text-text-muted">Choose a population source to continue with testing.</p>
             </div>
           )}
         </div>
@@ -715,29 +715,29 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
       {/* ── B. Population Dataset Card (after selection, before lock) ── */}
       {popState === 'DATA_SELECTED' && datasetInfo && (
         <div>
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Database size={11} />
             Population Dataset
-            <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ml-auto bg-evidence-50 text-evidence-700">Selected</span>
+            <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ml-auto bg-evidence-50 text-evidence-700">Selected</span>
           </h4>
           <div className="glass-card rounded-xl p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <div><span className="text-[10px] text-text-muted uppercase">Source</span><p className="text-[12px] text-text font-medium">{datasetInfo.source}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Records</span><p className="text-[12px] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Columns Detected</span><p className="text-[12px] text-text">{datasetInfo.columns}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Audit Period</span><p className="text-[12px] text-text">{datasetInfo.auditPeriod}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Source</span><p className="text-[0.75rem] text-text font-medium">{datasetInfo.source}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Records</span><p className="text-[0.75rem] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Columns Detected</span><p className="text-[0.75rem] text-text">{datasetInfo.columns}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Period</span><p className="text-[0.75rem] text-text">{datasetInfo.auditPeriod}</p></div>
             </div>
             <div className="flex items-start gap-2.5 p-2.5 bg-high-50/50 rounded-lg border border-high/20">
               <AlertTriangle size={12} className="text-high-700 mt-0.5 shrink-0" />
-              <p className="text-[10px] text-high-700">Once locked, this population cannot be replaced for this test instance.</p>
+              <p className="text-[0.625rem] text-high-700">Once locked, this population cannot be replaced for this test instance.</p>
             </div>
             <div className="flex gap-2">
               <button onClick={handleChangeSource}
-                className="flex-1 py-2.5 border border-border text-text-secondary rounded-xl text-[12px] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+                className="flex-1 py-2.5 border border-border text-text-secondary rounded-xl text-[0.75rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center justify-center gap-1.5">
                 <ArrowLeft size={12} />Change Source
               </button>
               <button onClick={handleLock} disabled={locking}
-                className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5">
+                className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5">
                 <Lock size={12} />{locking ? 'Locking…' : 'Lock Population Snapshot'}
               </button>
             </div>
@@ -748,24 +748,24 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
       {/* ── C. Population Dataset Card (locked) ── */}
       {popState === 'SNAPSHOT_CREATED' && datasetInfo && (
         <div>
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Database size={11} />
             Population Dataset
-            <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ml-auto bg-compliant-50 text-compliant-700">Snapshot Locked</span>
+            <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ml-auto bg-compliant-50 text-compliant-700">Snapshot Locked</span>
           </h4>
           <div className="glass-card rounded-xl p-4 space-y-3 border-compliant/20">
             <div className="grid grid-cols-2 gap-3">
-              <div><span className="text-[10px] text-text-muted uppercase">Source</span><p className="text-[12px] text-text font-medium">{datasetInfo.source}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Records</span><p className="text-[12px] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Snapshot ID</span><p className="text-[12px] font-mono text-brand-700">{datasetInfo.snapshotId}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Locked At</span><p className="text-[12px] text-text">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Source</span><p className="text-[0.75rem] text-text font-medium">{datasetInfo.source}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Records</span><p className="text-[0.75rem] font-mono text-text">{datasetInfo.records.toLocaleString()}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Snapshot ID</span><p className="text-[0.75rem] font-mono text-brand-700">{datasetInfo.snapshotId}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Locked At</span><p className="text-[0.75rem] text-text">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p></div>
             </div>
             <div className="flex items-center gap-2 p-2.5 bg-compliant-50/50 rounded-lg border border-compliant/20">
               <Lock size={11} className="text-compliant-700 shrink-0" />
-              <span className="text-[11px] text-compliant-700">Population snapshot locked. Next, choose how this control should be tested.</span>
+              <span className="text-[0.6875rem] text-compliant-700">Population snapshot locked. Next, choose how this control should be tested.</span>
             </div>
             <button onClick={() => onGoToStep?.('execution-mode')}
-              className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+              className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
               Continue to Execution Mode<ChevronRight size={12} />
             </button>
           </div>
@@ -800,8 +800,8 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-[14px] font-bold text-text mb-1">How do you want to test this control?</h3>
-        <p className="text-[12px] text-text-muted">Choose whether to test the full population or a sample subset.</p>
+        <h3 className="text-[0.875rem] font-bold text-text mb-1">How do you want to test this control?</h3>
+        <p className="text-[0.75rem] text-text-muted">Choose whether to test the full population or a sample subset.</p>
       </div>
 
       <div className="space-y-2">
@@ -816,10 +816,10 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
               {effectiveMode === opt.id
                 ? <CheckCircle2 size={14} className="text-primary" />
                 : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300" />}
-              <span className="text-[13px] font-semibold text-text">{opt.title}</span>
-              {opt.recommended && <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-primary/10 text-primary">Recommended</span>}
+              <span className="text-[0.8125rem] font-semibold text-text">{opt.title}</span>
+              {opt.recommended && <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-primary/10 text-primary">Recommended</span>}
             </div>
-            <p className="text-[11px] text-text-muted ml-5.5">{opt.subtitle}</p>
+            <p className="text-[0.6875rem] text-text-muted ml-5.5">{opt.subtitle}</p>
           </button>
         ))}
       </div>
@@ -827,14 +827,14 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
       {effectiveMode === 'full-run' && (
         <div className="flex items-center gap-2 p-3 bg-surface-2/50 rounded-lg">
           <Database size={12} className="text-text-muted shrink-0" />
-          <p className="text-[11px] text-text-muted">All records in the population will be tested. Sampling configuration will be skipped.</p>
+          <p className="text-[0.6875rem] text-text-muted">All records in the population will be tested. Sampling configuration will be skipped.</p>
         </div>
       )}
 
       {effectiveMode === 'sampling' && (
         <div className="flex items-center gap-2 p-3 bg-surface-2/50 rounded-lg">
           <Filter size={12} className="text-text-muted shrink-0" />
-          <p className="text-[11px] text-text-muted">You'll configure sampling method and size in the next step.</p>
+          <p className="text-[0.6875rem] text-text-muted">You'll configure sampling method and size in the next step.</p>
         </div>
       )}
 
@@ -848,7 +848,7 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
             onGoToStep('samples');
           }
         }}
-        className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+        className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
         {effectiveMode === 'full-run' ? 'Continue to Testing' : 'Configure Sampling'}
         <ChevronRight size={12} />
       </button>
@@ -908,33 +908,33 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-[14px] font-bold text-text mb-1">Select Samples for Testing</h3>
-        <p className="text-[12px] text-text-muted">Add the items you want to test manually. No population dataset is required.</p>
+        <h3 className="text-[0.875rem] font-bold text-text mb-1">Select Samples for Testing</h3>
+        <p className="text-[0.75rem] text-text-muted">Add the items you want to test manually. No population dataset is required.</p>
       </div>
       <div className="glass-card rounded-xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] text-text-muted uppercase block mb-1">Reference ID <span className="text-red-400">*</span></label>
+            <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Reference ID <span className="text-red-400">*</span></label>
             <input value={newRef} onChange={e => setNewRef(e.target.value)} placeholder="e.g. INV-2026-001"
-              className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white"
+              className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white"
               onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} />
           </div>
           <div>
-            <label className="text-[10px] text-text-muted uppercase block mb-1">Description</label>
+            <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Description</label>
             <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Optional"
-              className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white"
+              className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white"
               onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} />
           </div>
         </div>
-        <button onClick={handleAdd} disabled={!newRef.trim()} className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-[11px] font-semibold hover:bg-primary/20 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Plus size={11} />Add Sample</button>
+        <button onClick={handleAdd} disabled={!newRef.trim()} className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-[0.6875rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"><Plus size={11} />Add Sample</button>
       </div>
       {items.length > 0 && (
         <div className="glass-card rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead><tr className="border-b border-border bg-surface-2/50">
-              <th className="px-3 py-2 text-left text-[9px] font-semibold text-text-muted uppercase">Sample</th>
-              <th className="px-3 py-2 text-left text-[9px] font-semibold text-text-muted uppercase">Reference</th>
-              <th className="px-3 py-2 text-left text-[9px] font-semibold text-text-muted uppercase">Description</th>
+              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase">Sample</th>
+              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase">Reference</th>
+              <th className="px-3 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase">Description</th>
               <th className="px-3 py-2 w-8"></th>
             </tr></thead>
             <tbody>{items.map((s, i) => (
@@ -949,7 +949,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
         </div>
       )}
       <button onClick={handleConfirm} disabled={items.length === 0}
-        className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+        className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
         Confirm {items.length} Sample{items.length !== 1 ? 's' : ''} & Proceed to Evidence
       </button>
     </div>
@@ -988,9 +988,9 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
     return (
       <div className="text-center py-14">
         <Lock size={28} className="text-text-muted mx-auto mb-3" />
-        <p className="text-[14px] font-semibold text-text mb-1">Population not available</p>
-        <p className="text-[12px] text-text-muted mb-4">Upload and lock the population dataset before configuring sampling.</p>
-        <button onClick={() => onGoToStep?.('population')} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">Go to Population</button>
+        <p className="text-[0.875rem] font-semibold text-text mb-1">Population not available</p>
+        <p className="text-[0.75rem] text-text-muted mb-4">Upload and lock the population dataset before configuring sampling.</p>
+        <button onClick={() => onGoToStep?.('population')} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">Go to Population</button>
       </div>
     );
   }
@@ -1000,13 +1000,13 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-[14px] font-bold text-text mb-1">Sampling Configuration</h3>
-          <p className="text-[12px] text-text-muted">Configure how transactions will be selected from the population for testing.</p>
+          <h3 className="text-[0.875rem] font-bold text-text mb-1">Sampling Configuration</h3>
+          <p className="text-[0.75rem] text-text-muted">Configure how transactions will be selected from the population for testing.</p>
         </div>
 
         {/* Sampling Method */}
         <div>
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Sampling Method</h4>
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Sampling Method</h4>
           <div className="space-y-1.5">
             {([
               { id: 'random' as const, label: 'Random Sampling', desc: 'Randomly select transactions from the population', enabled: true },
@@ -1023,10 +1023,10 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
                 }`}>
                 <div className="flex items-center gap-2">
                   {samplingMethod === m.id ? <CheckCircle2 size={13} className="text-primary shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-300 shrink-0" />}
-                  <span className="text-[12px] font-semibold text-text">{m.label}</span>
-                  {!m.enabled && <span className="px-1.5 h-4 rounded text-[8px] font-bold bg-gray-100 text-gray-400 ml-auto">Coming Soon</span>}
+                  <span className="text-[0.75rem] font-semibold text-text">{m.label}</span>
+                  {!m.enabled && <span className="px-1.5 h-4 rounded text-[0.5rem] font-bold bg-gray-100 text-gray-400 ml-auto">Coming Soon</span>}
                 </div>
-                <p className="text-[10px] text-text-muted mt-0.5 ml-5.5">{m.desc}</p>
+                <p className="text-[0.625rem] text-text-muted mt-0.5 ml-5.5">{m.desc}</p>
               </button>
             ))}
           </div>
@@ -1034,25 +1034,25 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
 
         {/* Sample Size */}
         <div>
-          <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Sample Size</h4>
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Sample Size</h4>
           <div className="glass-card rounded-xl p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] text-text-muted uppercase block mb-1">Number of Samples</label>
+                <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Number of Samples</label>
                 <input type="number" min={1} max={populationSize} value={sampleSize}
                   onChange={e => setSampleSize(Math.max(1, Math.min(populationSize, parseInt(e.target.value) || 1)))}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white" />
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white" />
               </div>
               <div>
-                <label className="text-[10px] text-text-muted uppercase block mb-1">Population Size</label>
-                <div className="px-3 py-2 border border-border rounded-lg text-[12px] font-mono text-text bg-gray-50 cursor-not-allowed">{populationSize.toLocaleString()}</div>
+                <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Population Size</label>
+                <div className="px-3 py-2 border border-border rounded-lg text-[0.75rem] font-mono text-text bg-gray-50 cursor-not-allowed">{populationSize.toLocaleString()}</div>
               </div>
             </div>
-            <p className="text-[10px] text-text-muted">Recommended: {recommendedMin}–{recommendedMax} samples for this dataset.</p>
+            <p className="text-[0.625rem] text-text-muted">Recommended: {recommendedMin}–{recommendedMax} samples for this dataset.</p>
             {sampleSize > populationSize && (
               <div className="flex items-center gap-2 p-2.5 bg-amber-50/50 rounded-lg border border-amber-200/50">
                 <AlertTriangle size={11} className="text-amber-500 shrink-0" />
-                <span className="text-[10px] text-amber-700">Sample size exceeds population. All records will be selected.</span>
+                <span className="text-[0.625rem] text-amber-700">Sample size exceeds population. All records will be selected.</span>
               </div>
             )}
           </div>
@@ -1061,21 +1061,21 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
         {/* Preview */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-[11px] font-bold text-text-muted uppercase">Preview</h4>
-            <button onClick={handlePreview} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">Refresh Preview</button>
+            <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Preview</h4>
+            <button onClick={handlePreview} className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer">Refresh Preview</button>
           </div>
           <div className="glass-card rounded-xl p-4">
             <div className="grid grid-cols-3 gap-3 mb-3">
-              <div><span className="text-[10px] text-text-muted uppercase">Population</span><p className="text-[12px] font-mono text-text">{populationSize.toLocaleString()}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Sample Size</span><p className="text-[12px] font-mono text-primary">{Math.min(sampleSize, populationSize)}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Method</span><p className="text-[12px] text-text capitalize">{samplingMethod}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Population</span><p className="text-[0.75rem] font-mono text-text">{populationSize.toLocaleString()}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Sample Size</span><p className="text-[0.75rem] font-mono text-primary">{Math.min(sampleSize, populationSize)}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Method</span><p className="text-[0.75rem] text-text capitalize">{samplingMethod}</p></div>
             </div>
             {previewIndices.length > 0 ? (
               <div>
-                <p className="text-[10px] text-text-muted mb-1.5">Sample preview (first 5 rows):</p>
+                <p className="text-[0.625rem] text-text-muted mb-1.5">Sample preview (first 5 rows):</p>
                 <div className="space-y-1">
                   {previewIndices.slice(0, 5).map((idx, i) => (
-                    <div key={i} className="flex items-center gap-3 px-3 py-1.5 rounded bg-surface-2/50 text-[11px]">
+                    <div key={i} className="flex items-center gap-3 px-3 py-1.5 rounded bg-surface-2/50 text-[0.6875rem]">
                       <span className="text-text-muted font-mono w-8">#{idx + 1}</span>
                       <span className="text-text">Transaction Row {idx + 1}</span>
                       <span className="text-text-muted ml-auto font-mono">₹{(Math.random() * 50000 + 1000).toFixed(0)}</span>
@@ -1084,14 +1084,14 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-text-muted text-center py-3">Click "Refresh Preview" to see sample rows.</p>
+              <p className="text-[0.6875rem] text-text-muted text-center py-3">Click "Refresh Preview" to see sample rows.</p>
             )}
           </div>
         </div>
 
         {/* CTA */}
         <button onClick={handleGenerate} disabled={generating}
-          className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5">
+          className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5">
           <Zap size={12} />{generating ? 'Generating…' : 'Select Transactions for Testing'}
         </button>
       </div>
@@ -1114,53 +1114,53 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
     <div className="space-y-5">
       {/* ── A. Sample Selection Summary ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Database size={11} />Sample Selection Summary
         </h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-3 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Population Snapshot</span><p className="text-[12px] font-mono text-brand-700">POP-SNAP-{ctrl.controlId}-001</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Population Size</span><p className="text-[12px] font-mono text-text">{ctrl.populationSize.toLocaleString()}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Sampling Method</span><p className="text-[12px] text-text">{ctrl.samplingMethod || 'Random'}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Sample Size</span><p className="text-[12px] font-mono text-brand-700">{ctrl.samples.length}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Generated At</span><p className="text-[12px] text-text">Apr 6, 2026 10:30 AM</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Generated By</span><p className="text-[12px] text-text">{ctrl.assignee}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Population Snapshot</span><p className="text-[0.75rem] font-mono text-brand-700">POP-SNAP-{ctrl.controlId}-001</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Population Size</span><p className="text-[0.75rem] font-mono text-text">{ctrl.populationSize.toLocaleString()}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Sampling Method</span><p className="text-[0.75rem] text-text">{ctrl.samplingMethod || 'Random'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Sample Size</span><p className="text-[0.75rem] font-mono text-brand-700">{ctrl.samples.length}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Generated At</span><p className="text-[0.75rem] text-text">Apr 6, 2026 10:30 AM</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Generated By</span><p className="text-[0.75rem] text-text">{ctrl.assignee}</p></div>
           </div>
         </div>
       </div>
 
       {/* ── B. Required Evidence per Sample ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <FileText size={11} />Required Evidence for Each Sample
         </h4>
         <div className="glass-card rounded-xl p-3">
           <div className="flex flex-wrap gap-1.5">
             {ctrl.workflowAttributes.filter(a => a.requiredEvidence).map(a => (
-              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-100">
+              <span key={a.id} className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-100">
                 <Paperclip size={9} />{a.requiredEvidence.split(',')[0].split(' or ')[0].trim()}
               </span>
             ))}
           </div>
-          <p className="text-[10px] text-text-muted mt-2">{requiredEvidenceCount} evidence items expected per sample · {readyCt} ready · {partialCt} partial · {neededCt} needed</p>
+          <p className="text-[0.625rem] text-text-muted mt-2">{requiredEvidenceCount} evidence items expected per sample · {readyCt} ready · {partialCt} partial · {neededCt} needed</p>
         </div>
       </div>
 
       {/* ── C. Sample Table ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">
           Samples ({ctrl.samples.length})
         </h4>
         <div className="glass-card rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Sample ID</th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Reference</th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-text-muted uppercase">Amount</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Evidence</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Readiness</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Action</th>
+                <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Sample ID</th>
+                <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Reference</th>
+                <th className="px-3 py-2.5 text-right text-[0.625rem] font-semibold text-text-muted uppercase">Amount</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Evidence</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Readiness</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1169,21 +1169,21 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
                 return (
                   <tr key={s.id} className="border-b border-border/40 hover:bg-surface-2/30 transition-colors">
                     <td className="px-3 py-2.5">
-                      <span className="text-[12px] font-medium text-text">{s.label}</span>
+                      <span className="text-[0.75rem] font-medium text-text">{s.label}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-[11px] font-mono text-text-muted">{s.referenceId}</td>
-                    <td className="px-3 py-2.5 text-right text-[11px] tabular-nums text-text-secondary">{s.amount}</td>
+                    <td className="px-3 py-2.5 text-[0.6875rem] font-mono text-text-muted">{s.referenceId}</td>
+                    <td className="px-3 py-2.5 text-right text-[0.6875rem] tabular-nums text-text-secondary">{s.amount}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`text-[10px] font-bold ${s.evidenceFiles.length > 0 ? 'text-text-secondary' : 'text-ink-400'}`}>
+                      <span className={`text-[0.625rem] font-bold ${s.evidenceFiles.length > 0 ? 'text-text-secondary' : 'text-ink-400'}`}>
                         {s.evidenceFiles.length}/{requiredEvidenceCount}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-bold ${readiness.cls}`}>{readiness.label}</span>
+                      <span className={`inline-flex items-center px-2 h-5 rounded text-[0.625rem] font-bold ${readiness.cls}`}>{readiness.label}</span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => onGoToStep?.('evidence')} className="text-[10px] font-semibold text-primary hover:underline cursor-pointer">
+                        <button onClick={() => onGoToStep?.('evidence')} className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer">
                           {s.evidenceFiles.length === 0 ? 'Upload' : 'View'}
                         </button>
                       </div>
@@ -1200,15 +1200,15 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
       <div className="grid grid-cols-3 gap-3">
         <div className="glass-card rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-compliant-700 tabular-nums">{readyCt}</div>
-          <div className="text-[9px] text-text-muted uppercase">Evidence Ready</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Ready</div>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${partialCt > 0 ? 'text-high-700' : 'text-text-muted'}`}>{partialCt}</div>
-          <div className="text-[9px] text-text-muted uppercase">Partial</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Partial</div>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${neededCt > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{neededCt}</div>
-          <div className="text-[9px] text-text-muted uppercase">Needed</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Needed</div>
         </div>
       </div>
 
@@ -1216,13 +1216,13 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
       {neededCt > 0 && (
         <div className="flex items-center gap-2 p-3 bg-high-50/30 rounded-lg border border-high/10">
           <FileText size={12} className="text-high-700 shrink-0" />
-          <p className="text-[11px] text-high-700">{neededCt} samples still need evidence. Upload evidence before proceeding to attribute testing.</p>
+          <p className="text-[0.6875rem] text-high-700">{neededCt} samples still need evidence. Upload evidence before proceeding to attribute testing.</p>
         </div>
       )}
       {neededCt === 0 && (
         <div className="flex items-center gap-2 p-3 bg-compliant-50/30 rounded-lg border border-compliant/10">
           <CheckCircle2 size={12} className="text-compliant-700 shrink-0" />
-          <p className="text-[11px] text-compliant-700">All samples have evidence. Ready to proceed to attribute testing.</p>
+          <p className="text-[0.6875rem] text-compliant-700">All samples have evidence. Ready to proceed to attribute testing.</p>
         </div>
       )}
     </div>
@@ -1254,8 +1254,8 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
     return (
       <div className="text-center py-14">
         <FileText size={28} className="text-text-muted mx-auto mb-3" />
-        <p className="text-[14px] font-semibold text-text mb-1">No samples to collect evidence for</p>
-        <p className="text-[12px] text-text-muted">Generate samples from the Population tab first.</p>
+        <p className="text-[0.875rem] font-semibold text-text mb-1">No samples to collect evidence for</p>
+        <p className="text-[0.75rem] text-text-muted">Generate samples from the Population tab first.</p>
       </div>
     );
   }
@@ -1268,11 +1268,11 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
           <div className="flex items-center gap-2.5">
             <CloudUpload size={16} className="text-text-muted" />
             <div>
-              <p className="text-[12px] font-medium text-text">Bulk upload evidence files</p>
-              <p className="text-[10px] text-text-muted">Files will need to be mapped to specific samples below</p>
+              <p className="text-[0.75rem] font-medium text-text">Bulk upload evidence files</p>
+              <p className="text-[0.625rem] text-text-muted">Files will need to be mapped to specific samples below</p>
             </div>
           </div>
-          <button className="px-3 py-1.5 border border-border text-text-secondary rounded-lg text-[11px] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center gap-1.5">
+          <button className="px-3 py-1.5 border border-border text-text-secondary rounded-lg text-[0.6875rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center gap-1.5">
             <Upload size={11} />Browse Files
           </button>
         </div>
@@ -1280,30 +1280,30 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
 
       {/* ── B. Evidence Summary ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Evidence Status</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Evidence Status</h4>
         <div className="grid grid-cols-4 gap-2">
           <div className="glass-card rounded-xl p-2.5 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{totalFiles}</div>
-            <div className="text-[9px] text-text-muted uppercase">Files Uploaded</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Files Uploaded</div>
           </div>
           <div className="glass-card rounded-xl p-2.5 text-center">
             <div className="text-lg font-bold text-compliant-700 tabular-nums">{completeCt}</div>
-            <div className="text-[9px] text-text-muted uppercase">Complete</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Complete</div>
           </div>
           <div className="glass-card rounded-xl p-2.5 text-center">
             <div className={`text-lg font-bold tabular-nums ${partialCt > 0 ? 'text-high-700' : 'text-text-muted'}`}>{partialCt}</div>
-            <div className="text-[9px] text-text-muted uppercase">Partial</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Partial</div>
           </div>
           <div className="glass-card rounded-xl p-2.5 text-center">
             <div className={`text-lg font-bold tabular-nums ${missingCt > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{missingCt}</div>
-            <div className="text-[9px] text-text-muted uppercase">Missing</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Missing</div>
           </div>
         </div>
       </div>
 
       {/* ── C. Sample-wise Evidence Cards ── */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Evidence by Sample</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Evidence by Sample</h4>
         <div className="space-y-2">
           {ctrl.samples.map(sample => {
             const evStatus = getEvidenceStatus(sample);
@@ -1318,15 +1318,15 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
                     <div className={`w-2 h-2 rounded-full shrink-0 ${evStatus.label === 'Complete' ? 'bg-compliant' : evStatus.label === 'Partial' ? 'bg-high' : 'bg-risk'}`} />
                     <div className="text-left min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-semibold text-text">{sample.label}</span>
-                        <span className="text-[10px] font-mono text-text-muted">{sample.referenceId}</span>
-                        <span className="text-[10px] text-text-muted">{sample.amount}</span>
+                        <span className="text-[0.75rem] font-semibold text-text">{sample.label}</span>
+                        <span className="text-[0.625rem] font-mono text-text-muted">{sample.referenceId}</span>
+                        <span className="text-[0.625rem] text-text-muted">{sample.amount}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] tabular-nums text-text-muted">{sample.evidenceFiles.length}/{requiredCount}</span>
-                    <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-bold ${evStatus.cls}`}>{evStatus.label}</span>
+                    <span className="text-[0.625rem] tabular-nums text-text-muted">{sample.evidenceFiles.length}/{requiredCount}</span>
+                    <span className={`inline-flex items-center px-2 h-5 rounded text-[0.625rem] font-bold ${evStatus.cls}`}>{evStatus.label}</span>
                     <ChevronDown size={12} className={`text-text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
                 </button>
@@ -1336,7 +1336,7 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
                   <div className="px-4 pb-4 border-t border-border-light/60 pt-3 space-y-3">
                     {/* Required evidence checklist */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Required Evidence</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Required Evidence</span>
                       <div className="mt-1.5 space-y-1">
                         {requiredTypes.map((type, i) => {
                           // Try to match uploaded files to required types
@@ -1352,14 +1352,14 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
                             <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-surface-2/40">
                               <div className="flex items-center gap-2">
                                 {fileForSlot ? <CheckCircle2 size={12} className="text-compliant-700 shrink-0" /> : <div className="w-3 h-3 rounded-full border-2 border-ink-300 shrink-0" />}
-                                <span className={`text-[11px] font-medium ${fileForSlot ? 'text-text' : 'text-text-muted'}`}>{type}</span>
+                                <span className={`text-[0.6875rem] font-medium ${fileForSlot ? 'text-text' : 'text-text-muted'}`}>{type}</span>
                               </div>
                               {fileForSlot ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
+                                <span className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
                                   <Paperclip size={8} />{fileForSlot}
                                 </span>
                               ) : (
-                                <button className="text-[10px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
+                                <button className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
                                   <Upload size={9} />Upload
                                 </button>
                               )}
@@ -1372,10 +1372,10 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
                     {/* Additional uploaded files not matching required types */}
                     {sample.evidenceFiles.length > requiredCount && (
                       <div>
-                        <span className="text-[10px] font-bold text-text-muted uppercase">Additional Files</span>
+                        <span className="text-[0.625rem] font-bold text-text-muted uppercase">Additional Files</span>
                         <div className="flex flex-wrap gap-1.5 mt-1">
                           {sample.evidenceFiles.slice(requiredCount).map(f => (
-                            <span key={f} className="inline-flex items-center gap-1 text-[10px] font-medium text-text-secondary bg-surface-2 px-2 py-0.5 rounded border border-border-light">
+                            <span key={f} className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-text-secondary bg-surface-2 px-2 py-0.5 rounded border border-border-light">
                               <Paperclip size={8} />{f}
                             </span>
                           ))}
@@ -1385,11 +1385,11 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
 
                     {/* Sample actions */}
                     <div className="flex items-center gap-2 pt-1">
-                      <button className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[10px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5">
+                      <button className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.625rem] font-semibold transition-colors cursor-pointer flex items-center gap-1.5">
                         <Upload size={10} />Upload Evidence
                       </button>
                       {sample.evidenceFiles.length > 0 && (
-                        <button className="px-3 py-1.5 border border-border text-text-secondary rounded-lg text-[10px] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center gap-1.5">
+                        <button className="px-3 py-1.5 border border-border text-text-secondary rounded-lg text-[0.625rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer flex items-center gap-1.5">
                           <Eye size={10} />View Files
                         </button>
                       )}
@@ -1406,19 +1406,19 @@ function EvidenceStep({ ctrl }: { ctrl: ControlDetail }) {
       {missingCt > 0 && (
         <div className="flex items-center gap-2 p-3 bg-high-50/30 rounded-lg border border-high/10">
           <AlertTriangle size={12} className="text-high-700 shrink-0" />
-          <p className="text-[11px] text-high-700">Upload required evidence for all {missingCt} samples before proceeding to attribute testing.</p>
+          <p className="text-[0.6875rem] text-high-700">Upload required evidence for all {missingCt} samples before proceeding to attribute testing.</p>
         </div>
       )}
       {missingCt === 0 && partialCt > 0 && (
         <div className="flex items-center gap-2 p-3 bg-high-50/20 rounded-lg border border-high/10">
           <FileText size={12} className="text-high-700 shrink-0" />
-          <p className="text-[11px] text-high-700">{partialCt} samples have partial evidence. Consider uploading remaining files.</p>
+          <p className="text-[0.6875rem] text-high-700">{partialCt} samples have partial evidence. Consider uploading remaining files.</p>
         </div>
       )}
       {missingCt === 0 && partialCt === 0 && (
         <div className="flex items-center gap-2 p-3 bg-compliant-50/30 rounded-lg border border-compliant/10">
           <CheckCircle2 size={12} className="text-compliant-700 shrink-0" />
-          <p className="text-[11px] text-compliant-700">All samples have complete evidence. Ready for attribute testing.</p>
+          <p className="text-[0.6875rem] text-compliant-700">All samples have complete evidence. Ready for attribute testing.</p>
         </div>
       )}
     </div>
@@ -1436,8 +1436,8 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
     return (
       <div className="text-center py-14">
         <Lock size={28} className="text-text-muted mx-auto mb-3" />
-        <p className="text-[14px] font-semibold text-text mb-1">Select transactions before testing</p>
-        <p className="text-[12px] text-text-muted">Choose an execution mode and generate test items first.</p>
+        <p className="text-[0.875rem] font-semibold text-text mb-1">Select transactions before testing</p>
+        <p className="text-[0.75rem] text-text-muted">Choose an execution mode and generate test items first.</p>
       </div>
     );
   }
@@ -1493,8 +1493,8 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
     <div className="space-y-4">
       {/* Header + progress */}
       <div className="flex items-center justify-between">
-        <h4 className="text-[14px] font-bold text-text">Attribute Testing</h4>
-        <span className="text-[10px] text-text-muted">{completedCells}/{totalCells} attributes tested · {progressPct}%</span>
+        <h4 className="text-[0.875rem] font-bold text-text">Attribute Testing</h4>
+        <span className="text-[0.625rem] text-text-muted">{completedCells}/{totalCells} attributes tested · {progressPct}%</span>
       </div>
 
       {/* Progress bar */}
@@ -1505,17 +1505,17 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
       <div className="flex gap-4">
         {/* Sample sidebar */}
         <div className="w-44 shrink-0">
-          <div className="text-[10px] font-bold text-text-muted uppercase mb-2">Samples ({testedSamples}/{totalSamples})</div>
+          <div className="text-[0.625rem] font-bold text-text-muted uppercase mb-2">Samples ({testedSamples}/{totalSamples})</div>
           <div className="space-y-1 max-h-[450px] overflow-y-auto">
             {ctrl.samples.map(s => {
               const result = getSampleResult(s);
               return (
                 <button key={s.id} onClick={() => setSelectedSample(s.id)}
-                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[11px] transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-[0.6875rem] transition-all cursor-pointer ${
                     selectedSample === s.id ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/20' : 'hover:bg-surface-2 text-text-secondary'
                   }`}>
                   <SampleStatusDot status={result === 'pass' ? 'pass' : result === 'fail' ? 'fail' : s.status} />
-                  <div className="min-w-0 flex-1"><div className="truncate font-medium">{s.label}</div><div className="text-[10px] text-text-muted truncate">{s.amount}</div></div>
+                  <div className="min-w-0 flex-1"><div className="truncate font-medium">{s.label}</div><div className="text-[0.625rem] text-text-muted truncate">{s.amount}</div></div>
                 </button>
               );
             })}
@@ -1529,14 +1529,14 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
               {/* Sample header */}
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-light">
                 <div>
-                  <span className="text-[13px] font-semibold text-text">{sample.label}</span>
-                  <span className="text-[11px] text-text-muted ml-2">{sample.referenceId} · {sample.amount}</span>
+                  <span className="text-[0.8125rem] font-semibold text-text">{sample.label}</span>
+                  <span className="text-[0.6875rem] text-text-muted ml-2">{sample.referenceId} · {sample.amount}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-text-muted">{sample.evidenceFiles.length} evidence</span>
+                  <span className="text-[0.625rem] text-text-muted">{sample.evidenceFiles.length} evidence</span>
                   {(() => {
                     const r = getSampleResult(sample);
-                    return <span className={`px-2 h-5 rounded-full text-[9px] font-bold inline-flex items-center ${r === 'pass' ? 'bg-compliant-50 text-compliant-700' : r === 'fail' ? 'bg-risk-50 text-risk-700' : 'bg-gray-100 text-gray-500'}`}>
+                    return <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center ${r === 'pass' ? 'bg-compliant-50 text-compliant-700' : r === 'fail' ? 'bg-risk-50 text-risk-700' : 'bg-gray-100 text-gray-500'}`}>
                       {r === 'pass' ? 'Passed' : r === 'fail' ? 'Failed' : 'Pending'}
                     </span>;
                   })()}
@@ -1553,10 +1553,10 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                     <div className="flex items-center justify-between px-3 py-2 bg-surface-2/50 rounded-lg mb-2">
                       <div className="flex items-center gap-2">
                         <Shield size={11} className="text-brand-600" />
-                        <span className="text-[11px] font-bold text-text">{assertion}</span>
-                        <span className="text-[9px] text-text-muted">({attrs.length} attribute{attrs.length !== 1 ? 's' : ''})</span>
+                        <span className="text-[0.6875rem] font-bold text-text">{assertion}</span>
+                        <span className="text-[0.5625rem] text-text-muted">({attrs.length} attribute{attrs.length !== 1 ? 's' : ''})</span>
                       </div>
-                      <span className="text-[9px] text-text-muted">{completedInGroup}/{attrs.length} done</span>
+                      <span className="text-[0.5625rem] text-text-muted">{completedInGroup}/{attrs.length} done</span>
                     </div>
 
                     {/* Attribute rows */}
@@ -1571,15 +1571,15 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 mb-0.5">
-                                  <span className="text-[12px] font-medium text-text">{attr.name}</span>
-                                  <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  <span className="text-[0.75rem] font-medium text-text">{attr.name}</span>
+                                  <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${isAuto ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-500'}`}>
                                     {isAuto ? 'Auto' : 'Manual'}
                                   </span>
                                 </div>
-                                {wfName && <div className="text-[9px] text-text-muted flex items-center gap-1"><Workflow size={8} />{wfName}</div>}
-                                <p className="text-[10px] text-text-muted mt-1">{attr.description}</p>
+                                {wfName && <div className="text-[0.5625rem] text-text-muted flex items-center gap-1"><Workflow size={8} />{wfName}</div>}
+                                <p className="text-[0.625rem] text-text-muted mt-1">{attr.description}</p>
                                 {evCount > 0 && (
-                                  <div className="text-[9px] text-brand-600 mt-1 flex items-center gap-1"><Paperclip size={8} />{evCount} evidence file{evCount !== 1 ? 's' : ''}</div>
+                                  <div className="text-[0.5625rem] text-brand-600 mt-1 flex items-center gap-1"><Paperclip size={8} />{evCount} evidence file{evCount !== 1 ? 's' : ''}</div>
                                 )}
                               </div>
 
@@ -1589,13 +1589,13 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                                 {!isAuto ? (
                                   <div className="flex gap-0.5">
                                     {(['pass', 'fail', 'na'] as const).map(r => (
-                                      <button key={r} className={`w-6 h-6 rounded text-[9px] font-bold cursor-pointer transition-all flex items-center justify-center ${
+                                      <button key={r} className={`w-6 h-6 rounded text-[0.5625rem] font-bold cursor-pointer transition-all flex items-center justify-center ${
                                         result === r ? (r === 'pass' ? 'bg-compliant text-white' : r === 'fail' ? 'bg-risk text-white' : 'bg-ink-500 text-white') : 'bg-surface-2 text-text-muted hover:bg-primary/10'
                                       }`}>{r === 'pass' ? '✓' : r === 'fail' ? '✗' : '—'}</button>
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="text-[8px] text-evidence-600">Auto-evaluated</span>
+                                  <span className="text-[0.5rem] text-evidence-600">Auto-evaluated</span>
                                 )}
                               </div>
                             </div>
@@ -1617,7 +1617,7 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                       {r === 'pass' && <CheckCircle2 size={13} className="text-compliant-700" />}
                       {r === 'fail' && <XCircle size={13} className="text-risk-700" />}
                       {r === 'pending' && <Clock size={13} className="text-text-muted" />}
-                      <span className={`text-[12px] font-semibold ${r === 'pass' ? 'text-compliant-700' : r === 'fail' ? 'text-risk-700' : 'text-text-muted'}`}>
+                      <span className={`text-[0.75rem] font-semibold ${r === 'pass' ? 'text-compliant-700' : r === 'fail' ? 'text-risk-700' : 'text-text-muted'}`}>
                         Sample Result: {r === 'pass' ? 'Passed' : r === 'fail' ? `Failed (${failedAttrs.length} attribute${failedAttrs.length !== 1 ? 's' : ''} failed)` : 'Pending'}
                       </span>
                     </div>
@@ -1625,7 +1625,7 @@ function AttributeTestingStep({ ctrl }: { ctrl: ControlDetail }) {
                 );
               })()}
             </div>
-          ) : <div className="text-center py-12 text-text-muted text-[13px]">Select a sample</div>}
+          ) : <div className="text-center py-12 text-text-muted text-[0.8125rem]">Select a sample</div>}
         </div>
       </div>
     </div>
@@ -1647,10 +1647,10 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
     <div className="space-y-5">
       {/* ── Header + Download ── */}
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold text-text-muted uppercase">Working Paper</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Working Paper</h4>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-text-muted">System-generated · Append-only</span>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-primary/30 bg-primary/5 text-primary rounded-lg text-[10px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
+          <span className="text-[0.625rem] text-text-muted">System-generated · Append-only</span>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-primary/30 bg-primary/5 text-primary rounded-lg text-[0.625rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer">
             <Download size={10} />Download
           </button>
         </div>
@@ -1659,28 +1659,28 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
       {/* ── Test Instance Header ── */}
       <div className="glass-card rounded-xl p-4">
         <div className="grid grid-cols-2 gap-3">
-          <div><span className="text-[10px] text-text-muted uppercase">Test Instance</span><p className="text-[12px] font-mono text-text">{wp.testInstanceId}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Control</span><p className="text-[12px] text-text">{wp.controlName}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Workflow</span><p className="text-[12px] text-brand-700">{wp.workflowName} {wp.workflowVersion}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Rounds</span><p className="text-[12px] text-text">{wp.rounds.length || 'None yet'}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Test Instance</span><p className="text-[0.75rem] font-mono text-text">{wp.testInstanceId}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] text-text">{wp.controlName}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Workflow</span><p className="text-[0.75rem] text-brand-700">{wp.workflowName} {wp.workflowVersion}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Rounds</span><p className="text-[0.75rem] text-text">{wp.rounds.length || 'None yet'}</p></div>
         </div>
       </div>
 
       {/* ── 1. CONTROL DESIGN SECTION ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Shield size={11} />Control Design
         </h5>
         <div className="glass-card rounded-xl p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><span className="text-[10px] text-text-muted uppercase">Control Description</span><p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{ctrl.description}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Control Owner</span><p className="text-[12px] text-text">{ctrl.controlOwner}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Frequency</span><p className="text-[12px] text-text">{ctrl.frequency}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Business Process</span><p className="text-[12px] text-text">{ctrl.domain}</p></div>
+            <div className="col-span-2"><span className="text-[0.625rem] text-text-muted uppercase">Control Description</span><p className="text-[0.75rem] text-text-secondary leading-relaxed mt-0.5">{ctrl.description}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Control Owner</span><p className="text-[0.75rem] text-text">{ctrl.controlOwner}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Frequency</span><p className="text-[0.75rem] text-text">{ctrl.frequency}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Business Process</span><p className="text-[0.75rem] text-text">{ctrl.domain}</p></div>
             {ctrl.assertions.length > 0 && (
-              <div><span className="text-[10px] text-text-muted uppercase">Assertions</span>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Assertions</span>
                 <div className="flex flex-wrap gap-1 mt-0.5">{ctrl.assertions.map(a => (
-                  <span key={a} className="px-2 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-100">{a}</span>
+                  <span key={a} className="px-2 py-0.5 rounded text-[0.625rem] font-medium bg-brand-50 text-brand-700 border border-brand-100">{a}</span>
                 ))}</div>
               </div>
             )}
@@ -1690,24 +1690,24 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
 
       {/* ── 2. TEST ATTRIBUTES SECTION ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Target size={11} />Test Attributes
         </h5>
         <div className="glass-card rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-text-muted uppercase w-10">Ref</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-text-muted uppercase">Attribute</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-text-muted uppercase">Description</th>
+                <th className="px-3 py-2 text-left text-[0.625rem] font-semibold text-text-muted uppercase w-10">Ref</th>
+                <th className="px-3 py-2 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Attribute</th>
+                <th className="px-3 py-2 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Description</th>
               </tr>
             </thead>
             <tbody>
               {ctrl.workflowAttributes.map((attr, i) => (
                 <tr key={attr.id} className="border-b border-border/40">
-                  <td className="px-3 py-2 text-[11px] font-bold text-brand-700">{String.fromCharCode(65 + i)}</td>
-                  <td className="px-3 py-2 text-[11px] font-medium text-text">{attr.name}</td>
-                  <td className="px-3 py-2 text-[10px] text-text-muted">{attr.description}</td>
+                  <td className="px-3 py-2 text-[0.6875rem] font-bold text-brand-700">{String.fromCharCode(65 + i)}</td>
+                  <td className="px-3 py-2 text-[0.6875rem] font-medium text-text">{attr.name}</td>
+                  <td className="px-3 py-2 text-[0.625rem] text-text-muted">{attr.description}</td>
                 </tr>
               ))}
             </tbody>
@@ -1717,7 +1717,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
 
       {/* ── 3–5. ROUND CARDS (enhanced with population, sample table, evidence, exceptions) ── */}
       {wp.rounds.length === 0 ? (
-        <div className="text-center py-8 text-text-muted text-[12px]">No testing rounds recorded yet.</div>
+        <div className="text-center py-8 text-text-muted text-[0.75rem]">No testing rounds recorded yet.</div>
       ) : (
         <div className="space-y-3">
           {wp.rounds.map(round => {
@@ -1728,14 +1728,14 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                 <button onClick={() => setExpandedRound(isExpanded ? null : round.round)} className="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-2/30 transition-colors">
                   <div className="flex items-center gap-3">
                     {isExpanded ? <ChevronDown size={12} className="text-text-muted" /> : <ChevronRight size={12} className="text-text-muted" />}
-                    <span className="text-[12px] font-bold text-text">Round {round.round}</span>
+                    <span className="text-[0.75rem] font-bold text-text">Round {round.round}</span>
                     {isLocked && <Lock size={10} className="text-ink-400" />}
-                    <span className="text-[11px] text-text-muted">{round.date} · {round.tester}</span>
+                    <span className="text-[0.6875rem] text-text-muted">{round.date} · {round.tester}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {round.reviewerStatus === 'approved' && <span className="text-[10px] font-bold bg-compliant-50 text-compliant-700 px-2 py-0.5 rounded-full">Approved</span>}
-                    {round.reviewerStatus === 'pending' && <span className="text-[10px] font-bold bg-high-50 text-high-700 px-2 py-0.5 rounded-full">Pending Review</span>}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isLocked ? 'bg-compliant-50 text-compliant-700' : 'bg-evidence-50 text-evidence-700'}`}>{isLocked ? 'Complete' : 'In Progress'}</span>
+                    {round.reviewerStatus === 'approved' && <span className="text-[0.625rem] font-bold bg-compliant-50 text-compliant-700 px-2 py-0.5 rounded-full">Approved</span>}
+                    {round.reviewerStatus === 'pending' && <span className="text-[0.625rem] font-bold bg-high-50 text-high-700 px-2 py-0.5 rounded-full">Pending Review</span>}
+                    <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full ${isLocked ? 'bg-compliant-50 text-compliant-700' : 'bg-evidence-50 text-evidence-700'}`}>{isLocked ? 'Complete' : 'In Progress'}</span>
                   </div>
                 </button>
                 {isExpanded && (
@@ -1743,20 +1743,20 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
 
                     {/* 3. Population Details (enhanced) */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Population & Sampling</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Population & Sampling</span>
                       <div className="grid grid-cols-3 gap-3 mt-1.5">
-                        <div><span className="text-[10px] text-text-muted uppercase">Population Size</span><p className="text-[12px] tabular-nums text-text">{round.populationSize.toLocaleString()}</p></div>
-                        <div><span className="text-[10px] text-text-muted uppercase">Sample Size</span><p className="text-[12px] tabular-nums text-text">{round.sampleSize}</p></div>
-                        <div><span className="text-[10px] text-text-muted uppercase">Tester</span><p className="text-[12px] text-text">{round.tester}</p></div>
-                        <div><span className="text-[10px] text-text-muted uppercase">Population Source</span><p className="text-[12px] text-text truncate" title={ctrl.populationSource}>{ctrl.populationSource || '—'}</p></div>
-                        <div><span className="text-[10px] text-text-muted uppercase">Sampling Method</span><p className="text-[12px] text-text">{ctrl.samplingMethod || 'Random'}</p></div>
-                        <div><span className="text-[10px] text-text-muted uppercase">Period Covered</span><p className="text-[12px] text-text">Apr 2025 — Mar 2026</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Population Size</span><p className="text-[0.75rem] tabular-nums text-text">{round.populationSize.toLocaleString()}</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Sample Size</span><p className="text-[0.75rem] tabular-nums text-text">{round.sampleSize}</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Tester</span><p className="text-[0.75rem] text-text">{round.tester}</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Population Source</span><p className="text-[0.75rem] text-text truncate" title={ctrl.populationSource}>{ctrl.populationSource || '—'}</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Sampling Method</span><p className="text-[0.75rem] text-text">{ctrl.samplingMethod || 'Random'}</p></div>
+                        <div><span className="text-[0.625rem] text-text-muted uppercase">Period Covered</span><p className="text-[0.75rem] text-text">Apr 2025 — Mar 2026</p></div>
                       </div>
                     </div>
 
                     {/* Existing Attribute Results (kept intact) */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Attribute Results</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Attribute Results</span>
                       <div className="mt-1.5 space-y-1">
                         {round.attributeResults.map((ar, i) => {
                           const attr = ctrl.workflowAttributes.find(a => a.id === ar.attrId);
@@ -1765,13 +1765,13 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                           return (
                             <div key={ar.attrId} className="flex items-center justify-between p-2 rounded-lg bg-surface-2/40">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-brand-700 w-4">{String.fromCharCode(65 + i)}</span>
-                                <span className="text-[11px] font-medium text-text">{attr?.name || ar.attrId}</span>
+                                <span className="text-[0.625rem] font-bold text-brand-700 w-4">{String.fromCharCode(65 + i)}</span>
+                                <span className="text-[0.6875rem] font-medium text-text">{attr?.name || ar.attrId}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-compliant-700 font-bold">{ar.passCount}P</span>
-                                {ar.failCount > 0 && <span className="text-[10px] text-risk-700 font-bold">{ar.failCount}F</span>}
-                                {ar.naCount > 0 && <span className="text-[10px] text-ink-400 font-bold">{ar.naCount}NA</span>}
+                                <span className="text-[0.625rem] text-compliant-700 font-bold">{ar.passCount}P</span>
+                                {ar.failCount > 0 && <span className="text-[0.625rem] text-risk-700 font-bold">{ar.failCount}F</span>}
+                                {ar.naCount > 0 && <span className="text-[0.625rem] text-ink-400 font-bold">{ar.naCount}NA</span>}
                                 <div className="w-12 h-1.5 bg-surface-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${ar.failCount > 0 ? 'bg-risk' : 'bg-compliant'}`} style={{ width: `${rate}%` }} /></div>
                               </div>
                             </div>
@@ -1782,11 +1782,11 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
 
                     {/* 4. Sample Testing Table (NEW — CRITICAL) */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Sample Testing Details</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Sample Testing Details</span>
                       {ctrl.samples.length > 0 ? (
                         <div className="mt-1.5 rounded-lg overflow-hidden border border-border-light/60">
                           <div className="overflow-x-auto">
-                            <table className="w-full text-[10px]">
+                            <table className="w-full text-[0.625rem]">
                               <thead>
                                 <tr className="bg-surface-2/60 border-b border-border">
                                   <th className="px-2.5 py-2 text-left font-semibold text-text-muted uppercase">Sample ID</th>
@@ -1813,7 +1813,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                                         return <td key={attr.id} className={`px-2 py-1.5 text-center ${cls}`}>{label}</td>;
                                       })}
                                       <td className="px-2.5 py-1.5 text-center">
-                                        <span className={`inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold ${
+                                        <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.5625rem] font-bold ${
                                           s.status === 'pass' ? 'bg-compliant-50 text-compliant-700' :
                                           s.status === 'fail' || s.status === 'exception' ? 'bg-risk-50 text-risk-700' :
                                           'bg-draft-50 text-draft-700'
@@ -1828,14 +1828,14 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                         </div>
                       ) : (
                         <div className="mt-1.5 p-4 bg-surface-2/30 rounded-lg text-center">
-                          <p className="text-[11px] text-text-muted">Sample-level testing will appear once samples are evaluated.</p>
+                          <p className="text-[0.6875rem] text-text-muted">Sample-level testing will appear once samples are evaluated.</p>
                         </div>
                       )}
                     </div>
 
                     {/* 6. Exceptions Section (NEW) */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Exceptions Identified</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Exceptions Identified</span>
                       {failedSamples.length > 0 ? (
                         <div className="mt-1.5 space-y-1.5">
                           {failedSamples.map(s => {
@@ -1844,10 +1844,10 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                               <div key={s.id} className="p-2.5 rounded-lg bg-risk-50/20 border border-risk/10">
                                 <div className="flex items-center gap-2 mb-0.5">
                                   <AlertTriangle size={10} className="text-risk-700 shrink-0" />
-                                  <span className="text-[11px] font-semibold text-risk-700">{s.label}</span>
-                                  <span className="text-[10px] text-text-muted">({s.referenceId} · {s.amount})</span>
+                                  <span className="text-[0.6875rem] font-semibold text-risk-700">{s.label}</span>
+                                  <span className="text-[0.625rem] text-text-muted">({s.referenceId} · {s.amount})</span>
                                 </div>
-                                <p className="text-[10px] text-risk-700/80 ml-4.5">
+                                <p className="text-[0.625rem] text-risk-700/80 ml-4.5">
                                   {failedAttrs.length > 0
                                     ? `Failed: ${failedAttrs.map(a => a.name).join(', ')}`
                                     : 'Exception flagged during testing'}
@@ -1859,23 +1859,23 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                       ) : (
                         <div className="mt-1.5 flex items-center gap-2 p-2.5 bg-compliant-50/30 rounded-lg border border-compliant/10">
                           <CheckCircle2 size={11} className="text-compliant-700 shrink-0" />
-                          <span className="text-[11px] text-compliant-700">No exceptions identified.</span>
+                          <span className="text-[0.6875rem] text-compliant-700">No exceptions identified.</span>
                         </div>
                       )}
                     </div>
 
                     {/* 5. Evidence References (enhanced — grouped) */}
                     <div>
-                      <span className="text-[10px] font-bold text-text-muted uppercase">Evidence References</span>
+                      <span className="text-[0.625rem] font-bold text-text-muted uppercase">Evidence References</span>
                       {round.evidenceRefs.length > 0 || ctrl.samples.some(s => s.evidenceFiles.length > 0) ? (
                         <div className="mt-1.5 space-y-2">
                           {/* Per-sample evidence grouping */}
                           {ctrl.samples.filter(s => s.evidenceFiles.length > 0).map(s => (
                             <div key={s.id} className="p-2 rounded-lg bg-surface-2/30">
-                              <span className="text-[10px] font-semibold text-text-muted">{s.label} ({s.referenceId})</span>
+                              <span className="text-[0.625rem] font-semibold text-text-muted">{s.label} ({s.referenceId})</span>
                               <div className="flex flex-wrap gap-1.5 mt-1">
                                 {s.evidenceFiles.map(f => (
-                                  <span key={f} className="inline-flex items-center gap-1 text-[10px] text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
+                                  <span key={f} className="inline-flex items-center gap-1 text-[0.625rem] text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
                                     <Paperclip size={8} />{f}
                                   </span>
                                 ))}
@@ -1885,21 +1885,21 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                           {ctrl.samples.every(s => s.evidenceFiles.length === 0) && round.evidenceRefs.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {round.evidenceRefs.map(r => (
-                                <span key={r} className="inline-flex items-center gap-1 text-[10px] text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100"><Paperclip size={8} />{r}</span>
+                                <span key={r} className="inline-flex items-center gap-1 text-[0.625rem] text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-100"><Paperclip size={8} />{r}</span>
                               ))}
                             </div>
                           )}
                         </div>
                       ) : (
                         <div className="mt-1.5 p-2.5 bg-surface-2/30 rounded-lg">
-                          <p className="text-[11px] text-text-muted">No evidence uploaded.</p>
+                          <p className="text-[0.6875rem] text-text-muted">No evidence uploaded.</p>
                         </div>
                       )}
                     </div>
 
                     {/* Existing round conclusion & reviewer notes (kept intact) */}
-                    {round.conclusion && (<div><span className="text-[10px] font-bold text-text-muted uppercase">Round Conclusion</span><p className="text-[12px] text-text-secondary mt-1 p-2.5 rounded-lg bg-surface-2/60 leading-relaxed">{round.conclusion}</p></div>)}
-                    {round.reviewerNotes && (<div><span className="text-[10px] font-bold text-text-muted uppercase">Reviewer Notes</span><p className="text-[12px] text-text-secondary mt-1 p-2.5 rounded-lg bg-evidence-50/40 border border-evidence-50 leading-relaxed"><MessageSquare size={10} className="inline mr-1 text-evidence-700" />{round.reviewerNotes}</p></div>)}
+                    {round.conclusion && (<div><span className="text-[0.625rem] font-bold text-text-muted uppercase">Round Conclusion</span><p className="text-[0.75rem] text-text-secondary mt-1 p-2.5 rounded-lg bg-surface-2/60 leading-relaxed">{round.conclusion}</p></div>)}
+                    {round.reviewerNotes && (<div><span className="text-[0.625rem] font-bold text-text-muted uppercase">Reviewer Notes</span><p className="text-[0.75rem] text-text-secondary mt-1 p-2.5 rounded-lg bg-evidence-50/40 border border-evidence-50 leading-relaxed"><MessageSquare size={10} className="inline mr-1 text-evidence-700" />{round.reviewerNotes}</p></div>)}
                   </div>
                 )}
               </div>
@@ -1910,7 +1910,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
 
       {/* ── 7. Work Performed & Notes (renamed from Comments) ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <MessageSquare size={11} />Work Performed & Notes
         </h5>
         {wp.comments.length > 0 ? (
@@ -1918,39 +1918,39 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
             {wp.comments.map((c, i) => (
               <div key={i} className={`p-2.5 rounded-lg ${c.role === 'Reviewer' ? 'bg-evidence-50/40 border border-evidence-50' : 'bg-surface-2/40 border border-border-light/60'}`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[11px] font-bold text-text">{c.author}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${c.role === 'Reviewer' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>{c.role}</span>
-                  <span className="text-[10px] text-text-muted">{c.date}</span>
+                  <span className="text-[0.6875rem] font-bold text-text">{c.author}</span>
+                  <span className={`text-[0.5625rem] font-bold px-1.5 py-0.5 rounded ${c.role === 'Reviewer' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>{c.role}</span>
+                  <span className="text-[0.625rem] text-text-muted">{c.date}</span>
                 </div>
-                <p className="text-[12px] text-text-secondary leading-relaxed">{c.text}</p>
+                <p className="text-[0.75rem] text-text-secondary leading-relaxed">{c.text}</p>
               </div>
             ))}
           </div>
         ) : (
           <div className="p-3 bg-surface-2/30 rounded-lg text-center mb-3">
-            <p className="text-[11px] text-text-muted">No work notes recorded yet.</p>
+            <p className="text-[0.6875rem] text-text-muted">No work notes recorded yet.</p>
           </div>
         )}
         {!isReviewSubmitted && (
           <div className="flex gap-2">
-            <input type="text" placeholder="Add a note..." value={newComment} onChange={e => setNewComment(e.target.value)} className="flex-1 px-3 py-2 text-[12px] border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted" />
-            <button className="flex items-center gap-1 px-3 py-2 bg-primary text-white rounded-lg text-[12px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"><Send size={12} /></button>
+            <input type="text" placeholder="Add a note..." value={newComment} onChange={e => setNewComment(e.target.value)} className="flex-1 px-3 py-2 text-[0.75rem] border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted" />
+            <button className="flex items-center gap-1 px-3 py-2 bg-primary text-white rounded-lg text-[0.75rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"><Send size={12} /></button>
           </div>
         )}
       </div>
 
       {/* ── 8. Review & Approval Status ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Users size={11} />Review & Approval
         </h5>
 
         {/* 9. Reviewer info */}
         <div className="glass-card rounded-xl p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Reviewer</span><p className="text-[12px] font-medium text-text">{ctrl.reviewer}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Status</span>
-              <p className="text-[12px] font-semibold mt-0.5">{
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span><p className="text-[0.75rem] font-medium text-text">{ctrl.reviewer}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Status</span>
+              <p className="text-[0.75rem] font-semibold mt-0.5">{
                 wp.rounds.some(r => r.reviewerStatus === 'approved')
                   ? <span className="text-compliant-700">Approved</span>
                   : ctrl.status === 'pending-review'
@@ -1960,23 +1960,23 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
                   : <span className="text-text-muted">Not Submitted</span>
               }</p>
             </div>
-            <div><span className="text-[10px] text-text-muted uppercase">Tester</span><p className="text-[12px] text-text">{ctrl.assignee}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Samples</span><p className="text-[12px] tabular-nums text-text">{tested}/{ctrl.samples.length} tested · {failed} exception{failed !== 1 ? 's' : ''}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Tester</span><p className="text-[0.75rem] text-text">{ctrl.assignee}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Samples</span><p className="text-[0.75rem] tabular-nums text-text">{tested}/{ctrl.samples.length} tested · {failed} exception{failed !== 1 ? 's' : ''}</p></div>
           </div>
 
           {/* State A: Not submitted — always show CTA */}
           {!isReviewSubmitted && (
             <div className="pt-3 border-t border-border-light/60 space-y-2.5">
               {ctrl.samples.length > 0 && ctrl.samples.every(s => s.status !== 'not-tested') ? (
-                <p className="text-[11px] text-brand-700/80">All samples tested. Submitting will lock attribute results and evidence, and send to {ctrl.reviewer} for review.</p>
+                <p className="text-[0.6875rem] text-brand-700/80">All samples tested. Submitting will lock attribute results and evidence, and send to {ctrl.reviewer} for review.</p>
               ) : (
                 <div className="flex items-start gap-2 p-2.5 bg-high-50/30 rounded-lg border border-high/10">
                   <AlertTriangle size={11} className="text-high-700 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-high-700">Some testing steps are incomplete. You can still submit, but the reviewer may send it back.</p>
+                  <p className="text-[0.6875rem] text-high-700">Some testing steps are incomplete. You can still submit, but the reviewer may send it back.</p>
                 </div>
               )}
               <button onClick={() => onSubmitForReview?.()}
-                className="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[12px] font-bold transition-colors cursor-pointer flex items-center justify-center gap-2">
+                className="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[0.75rem] font-bold transition-colors cursor-pointer flex items-center justify-center gap-2">
                 <Send size={13} />Submit for Review
               </button>
             </div>
@@ -1987,7 +1987,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
             <div className="pt-3 border-t border-border-light/60">
               <div className="flex items-center gap-2 p-2.5 bg-mitigated-50/30 rounded-lg border border-mitigated/10">
                 <Clock size={11} className="text-mitigated-700 shrink-0" />
-                <p className="text-[11px] text-mitigated-700">Submitted for review. Testing and evidence are locked until reviewer responds.</p>
+                <p className="text-[0.6875rem] text-mitigated-700">Submitted for review. Testing and evidence are locked until reviewer responds.</p>
               </div>
             </div>
           )}
@@ -1997,7 +1997,7 @@ function WorkingPaperStep({ ctrl, onSubmitForReview }: { ctrl: ControlDetail; on
             <div className="pt-3 border-t border-border-light/60">
               <div className="flex items-center gap-2 p-2.5 bg-compliant-50/30 rounded-lg border border-compliant/10">
                 <CheckCircle2 size={11} className="text-compliant-700 shrink-0" />
-                <p className="text-[11px] text-compliant-700">Review approved by {ctrl.reviewer}. Working paper is finalized and locked.</p>
+                <p className="text-[0.6875rem] text-compliant-700">Review approved by {ctrl.reviewer}. Working paper is finalized and locked.</p>
               </div>
             </div>
           )}
@@ -2063,8 +2063,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <h4 className="text-[11px] font-bold text-text-muted uppercase">Submit for Review</h4>
-          <span className="px-2.5 h-6 rounded-full text-[10px] font-bold inline-flex items-center bg-evidence-50 text-evidence-700">
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Submit for Review</h4>
+          <span className="px-2.5 h-6 rounded-full text-[0.625rem] font-bold inline-flex items-center bg-evidence-50 text-evidence-700">
             Tester → Reviewer
           </span>
         </div>
@@ -2076,8 +2076,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
               <Users size={13} className="text-primary" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-text">{ctrl.assignee}</p>
-              <p className="text-[9px] text-text-muted uppercase">Tester</p>
+              <p className="text-[0.6875rem] font-semibold text-text">{ctrl.assignee}</p>
+              <p className="text-[0.5625rem] text-text-muted uppercase">Tester</p>
             </div>
           </div>
           <ArrowRight size={14} className="text-primary shrink-0" />
@@ -2086,25 +2086,25 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
               <Eye size={13} className="text-evidence-700" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-text">{ctrl.reviewer}</p>
-              <p className="text-[9px] text-text-muted uppercase">Reviewer</p>
+              <p className="text-[0.6875rem] font-semibold text-text">{ctrl.reviewer}</p>
+              <p className="text-[0.5625rem] text-text-muted uppercase">Reviewer</p>
             </div>
           </div>
         </div>
 
         {/* Submission summary */}
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Shield size={11} />Submission Summary
           </h5>
           <div className="glass-card rounded-xl p-4">
             <div className="grid grid-cols-2 gap-3">
-              <div><span className="text-[10px] text-text-muted uppercase">Control</span><p className="text-[12px] font-medium text-text">{ctrl.controlName}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Control ID</span><p className="text-[12px] font-mono text-text">{ctrl.controlId}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Workflow</span><p className="text-[12px] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Testing Round</span><p className="text-[12px] text-text">Round {ctrl.testingRound || 1}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Submitted By</span><p className="text-[12px] text-text">{ctrl.assignee}</p></div>
-              <div><span className="text-[10px] text-text-muted uppercase">Assigned Reviewer</span><p className="text-[12px] font-medium text-primary">{ctrl.reviewer}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Workflow</span><p className="text-[0.75rem] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Testing Round</span><p className="text-[0.75rem] text-text">Round {ctrl.testingRound || 1}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Submitted By</span><p className="text-[0.75rem] text-text">{ctrl.assignee}</p></div>
+              <div><span className="text-[0.625rem] text-text-muted uppercase">Assigned Reviewer</span><p className="text-[0.75rem] font-medium text-primary">{ctrl.reviewer}</p></div>
             </div>
           </div>
         </div>
@@ -2113,21 +2113,21 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         <div className="grid grid-cols-3 gap-3">
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{tested}/{ctrl.samples.length}</div>
-            <div className="text-[9px] text-text-muted uppercase">Samples Tested</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Samples Tested</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-compliant-700'}`}>{failed}</div>
-            <div className="text-[9px] text-text-muted uppercase">Failed Samples</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Failed Samples</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{evidenceCount}</div>
-            <div className="text-[9px] text-text-muted uppercase">Evidence Files</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Files</div>
           </div>
         </div>
 
         {/* Readiness checklist */}
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <CheckCircle2 size={11} />Readiness Checklist
           </h5>
           <div className="glass-card rounded-xl p-4 space-y-2">
@@ -2136,8 +2136,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
                 {item.done
                   ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" />
                   : <XCircle size={14} className="text-risk-700 shrink-0" />}
-                <span className={`text-[12px] font-medium ${item.done ? 'text-text' : 'text-risk-700'}`}>{item.label}</span>
-                {!item.done && <span className="text-[10px] text-risk-700 ml-auto font-semibold">Incomplete</span>}
+                <span className={`text-[0.75rem] font-medium ${item.done ? 'text-text' : 'text-risk-700'}`}>{item.label}</span>
+                {!item.done && <span className="text-[0.625rem] text-risk-700 ml-auto font-semibold">Incomplete</span>}
               </div>
             ))}
           </div>
@@ -2147,8 +2147,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         <div className="flex items-start gap-2.5 p-3 bg-brand-50/30 rounded-xl border border-brand-100">
           <Lock size={12} className="text-brand-700 mt-0.5 shrink-0" />
           <div>
-            <p className="text-[11px] font-semibold text-brand-700 mb-0.5">On submission:</p>
-            <ul className="text-[10px] text-brand-700/80 space-y-0.5">
+            <p className="text-[0.6875rem] font-semibold text-brand-700 mb-0.5">On submission:</p>
+            <ul className="text-[0.625rem] text-brand-700/80 space-y-0.5">
               <li>Evidence, attribute results, and samples will be locked</li>
               <li>Working paper snapshot will be generated</li>
               <li>Reviewer ({ctrl.reviewer}) will be notified</li>
@@ -2160,13 +2160,13 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
         {!allReady && (
           <div className="flex items-start gap-2.5 p-3 bg-high-50/30 rounded-lg border border-high/10">
             <AlertTriangle size={12} className="text-high-700 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-high-700">Some checklist items are incomplete. You can still submit, but the reviewer may reject this test.</p>
+            <p className="text-[0.6875rem] text-high-700">Some checklist items are incomplete. You can still submit, but the reviewer may reject this test.</p>
           </div>
         )}
 
         {/* Submit CTA — always enabled */}
         <button onClick={() => { if (!allReady) { setShowConfirmModal(true); } else { handleSubmit(); } }} disabled={submitting}
-          className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[13px] font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+          className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-[0.8125rem] font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
           {submitting ? (
             <><Clock size={14} className="animate-spin" />Submitting…</>
           ) : (
@@ -2184,18 +2184,18 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
                   <div className="w-9 h-9 rounded-full bg-high-50 flex items-center justify-center shrink-0">
                     <AlertTriangle size={18} className="text-high-700" />
                   </div>
-                  <h3 className="text-[14px] font-bold text-text">Submit with incomplete testing?</h3>
+                  <h3 className="text-[0.875rem] font-bold text-text">Submit with incomplete testing?</h3>
                 </div>
-                <p className="text-[12px] text-text-muted leading-relaxed">
+                <p className="text-[0.75rem] text-text-muted leading-relaxed">
                   Some required steps (e.g., attribute testing, evidence) are not completed. This may lead to rejection during review.
                 </p>
                 <div className="flex gap-2.5">
                   <button onClick={() => setShowConfirmModal(false)}
-                    className="flex-1 py-2.5 border border-border text-text-secondary rounded-xl text-[12px] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
+                    className="flex-1 py-2.5 border border-border text-text-secondary rounded-xl text-[0.75rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
                     Cancel
                   </button>
                   <button onClick={() => { setShowConfirmModal(false); handleSubmit(); }}
-                    className="flex-1 py-2.5 bg-high hover:brightness-110 text-white rounded-xl text-[12px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                    className="flex-1 py-2.5 bg-high hover:brightness-110 text-white rounded-xl text-[0.75rem] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5">
                     <Send size={12} />Submit Anyway
                   </button>
                 </div>
@@ -2216,8 +2216,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold text-text-muted uppercase">Review & Approval</h4>
-        <span className={`px-2.5 h-6 rounded-full text-[10px] font-bold inline-flex items-center ${
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Review & Approval</h4>
+        <span className={`px-2.5 h-6 rounded-full text-[0.625rem] font-bold inline-flex items-center ${
           isApproved || isConcluded(ctrl.status) ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'
         }`}>{isApproved || isConcluded(ctrl.status) ? 'Approved' : 'Pending Review'}</span>
       </div>
@@ -2230,8 +2230,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
               <CheckCircle2 size={14} className="text-mitigated-700" />
             </div>
             <div>
-              <p className="text-[12px] font-bold text-mitigated-700">Submitted — Awaiting Review</p>
-              <p className="text-[10px] text-mitigated-700/80">Evidence, attribute results, and samples are now locked. Reviewer ({ctrl.reviewer}) has been notified.</p>
+              <p className="text-[0.75rem] font-bold text-mitigated-700">Submitted — Awaiting Review</p>
+              <p className="text-[0.625rem] text-mitigated-700/80">Evidence, attribute results, and samples are now locked. Reviewer ({ctrl.reviewer}) has been notified.</p>
             </div>
           </div>
         </div>
@@ -2241,23 +2241,23 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
       {isSameUser && (
         <div className="flex items-center gap-2.5 p-3 bg-risk-50 rounded-xl border border-risk">
           <AlertTriangle size={14} className="text-risk-700 shrink-0" />
-          <span className="text-[12px] text-risk-700 font-medium">Conflict: Tester and reviewer are the same person.</span>
+          <span className="text-[0.75rem] text-risk-700 font-medium">Conflict: Tester and reviewer are the same person.</span>
         </div>
       )}
 
       {/* ── A. Control Summary ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Shield size={11} />Control Summary
         </h5>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Control</span><p className="text-[12px] font-medium text-text">{ctrl.controlName}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Control ID</span><p className="text-[12px] font-mono text-text">{ctrl.controlId}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Workflow</span><p className="text-[12px] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Testing Round</span><p className="text-[12px] text-text">Round {ctrl.testingRound}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Tester</span><p className="text-[12px] text-text">{ctrl.assignee}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Reviewer</span><p className="text-[12px] font-medium text-primary">{ctrl.reviewer}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Workflow</span><p className="text-[0.75rem] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Testing Round</span><p className="text-[0.75rem] text-text">Round {ctrl.testingRound}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Tester</span><p className="text-[0.75rem] text-text">{ctrl.assignee}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span><p className="text-[0.75rem] font-medium text-primary">{ctrl.reviewer}</p></div>
           </div>
         </div>
       </div>
@@ -2266,43 +2266,43 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
       <div className="grid grid-cols-4 gap-3">
         <div className="glass-card rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-text tabular-nums">{tested}/{ctrl.samples.length}</div>
-          <div className="text-[9px] text-text-muted uppercase">Tested</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Tested</div>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-compliant-700 tabular-nums">{passed}</div>
-          <div className="text-[9px] text-text-muted uppercase">Passed</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Passed</div>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
-          <div className="text-[9px] text-text-muted uppercase">Failed</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Failed</div>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-text tabular-nums">{ctrl.samples.reduce((sum, s) => sum + s.evidenceFiles.length, 0)}</div>
-          <div className="text-[9px] text-text-muted uppercase">Evidence Files</div>
+          <div className="text-[0.5625rem] text-text-muted uppercase">Evidence Files</div>
         </div>
       </div>
 
       {/* ── B. Sample-Level Table ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Database size={11} />Sample-Level Results ({ctrl.samples.length})
         </h5>
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="border-b border-border bg-surface-2/50">
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Sample</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Reference</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-text-muted uppercase">Amount</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Evidence</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Sample</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Reference</th>
+                  <th className="px-3 py-2.5 text-right text-[0.625rem] font-semibold text-text-muted uppercase">Amount</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Evidence</th>
                   {ctrl.workflowAttributes.map(attr => (
-                    <th key={attr.id} className="px-2 py-2.5 text-center text-[9px] font-semibold text-text-muted uppercase max-w-[60px]" title={attr.name}>
+                    <th key={attr.id} className="px-2 py-2.5 text-center text-[0.5625rem] font-semibold text-text-muted uppercase max-w-[60px]" title={attr.name}>
                       {attr.name.length > 8 ? attr.name.slice(0, 8) + '…' : attr.name}
                     </th>
                   ))}
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Status</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase">Exception</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Status</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Exception</th>
                 </tr>
               </thead>
               <tbody>
@@ -2310,12 +2310,12 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
                   const hasException = s.status === 'fail' || s.status === 'exception' || Object.values(s.attributes).some(v => v === 'fail');
                   return (
                     <tr key={s.id} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${hasException ? 'bg-risk-50/20' : ''}`}>
-                      <td className="px-3 py-2.5 text-[11px] font-medium text-text">{s.label}</td>
-                      <td className="px-3 py-2.5 text-[10px] font-mono text-text-muted">{s.referenceId}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] tabular-nums text-text-secondary">{s.amount}</td>
+                      <td className="px-3 py-2.5 text-[0.6875rem] font-medium text-text">{s.label}</td>
+                      <td className="px-3 py-2.5 text-[0.625rem] font-mono text-text-muted">{s.referenceId}</td>
+                      <td className="px-3 py-2.5 text-right text-[0.6875rem] tabular-nums text-text-secondary">{s.amount}</td>
                       <td className="px-3 py-2.5 text-center">
                         <button onClick={() => setExpandedEvidence(expandedEvidence === s.id ? null : s.id)}
-                          className="text-[10px] font-semibold text-brand-700 hover:underline cursor-pointer">
+                          className="text-[0.625rem] font-semibold text-brand-700 hover:underline cursor-pointer">
                           {s.evidenceFiles.length} file{s.evidenceFiles.length !== 1 ? 's' : ''}
                         </button>
                       </td>
@@ -2325,7 +2325,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
                         </td>
                       ))}
                       <td className="px-3 py-2.5 text-center">
-                        <span className={`inline-flex items-center px-2 h-5 rounded text-[10px] font-bold ${
+                        <span className={`inline-flex items-center px-2 h-5 rounded text-[0.625rem] font-bold ${
                           s.status === 'pass' ? 'bg-compliant-50 text-compliant-700' :
                           s.status === 'fail' || s.status === 'exception' ? 'bg-risk-50 text-risk-700' :
                           'bg-draft-50 text-draft-700'
@@ -2350,20 +2350,20 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
             return (
               <div className="px-4 py-3 bg-brand-50/30 border-t border-brand-100">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-text-muted uppercase">Evidence — {sample.label}</span>
-                  <button onClick={() => setExpandedEvidence(null)} className="text-[10px] text-text-muted hover:text-text cursor-pointer">Close</button>
+                  <span className="text-[0.625rem] font-bold text-text-muted uppercase">Evidence — {sample.label}</span>
+                  <button onClick={() => setExpandedEvidence(null)} className="text-[0.625rem] text-text-muted hover:text-text cursor-pointer">Close</button>
                 </div>
                 {sample.evidenceFiles.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {sample.evidenceFiles.map(f => (
-                      <span key={f} className="inline-flex items-center gap-1.5 text-[10px] font-medium text-brand-700 bg-white px-2.5 py-1 rounded-lg border border-brand-100 cursor-pointer hover:bg-brand-50 transition-colors">
+                      <span key={f} className="inline-flex items-center gap-1.5 text-[0.625rem] font-medium text-brand-700 bg-white px-2.5 py-1 rounded-lg border border-brand-100 cursor-pointer hover:bg-brand-50 transition-colors">
                         <Paperclip size={9} />{f}
                         <Download size={9} className="text-brand-500" />
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[10px] text-text-muted">No evidence files attached.</p>
+                  <p className="text-[0.625rem] text-text-muted">No evidence files attached.</p>
                 )}
               </div>
             );
@@ -2373,19 +2373,19 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
 
       {/* ── C. Attribute Summary ── */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <BarChart3 size={11} />Attribute Summary
         </h5>
         <div className="glass-card rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[0.6875rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">Attribute</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-16">Pass</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-16">Fail</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-16">N/A</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-20">Rate</th>
-                <th className="px-3 py-2.5 text-center text-[10px] font-semibold text-text-muted uppercase w-20">Exception</th>
+                <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Attribute</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-16">Pass</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-16">Fail</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-16">N/A</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-20">Rate</th>
+                <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold text-text-muted uppercase w-20">Exception</th>
               </tr>
             </thead>
             <tbody>
@@ -2395,24 +2395,24 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
                 return (
                   <tr key={attr.id} className={`border-b border-border/40 ${attr.hasExceptions ? 'bg-risk-50/20' : ''}`}>
                     <td className="px-3 py-2.5">
-                      <div className="text-[11px] font-medium text-text">{attr.name}</div>
+                      <div className="text-[0.6875rem] font-medium text-text">{attr.name}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-[11px] font-bold text-compliant-700 tabular-nums">{attr.passCount}</td>
-                    <td className="px-3 py-2.5 text-center text-[11px] font-bold tabular-nums">
+                    <td className="px-3 py-2.5 text-center text-[0.6875rem] font-bold text-compliant-700 tabular-nums">{attr.passCount}</td>
+                    <td className="px-3 py-2.5 text-center text-[0.6875rem] font-bold tabular-nums">
                       <span className={attr.failCount > 0 ? 'text-risk-700' : 'text-text-muted'}>{attr.failCount}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-[11px] tabular-nums text-text-muted">{attr.naCount}</td>
+                    <td className="px-3 py-2.5 text-center text-[0.6875rem] tabular-nums text-text-muted">{attr.naCount}</td>
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex items-center gap-1.5 justify-center">
                         <div className="w-10 h-1.5 bg-surface-3 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${rate === 100 ? 'bg-compliant' : rate >= 80 ? 'bg-high' : 'bg-risk'}`} style={{ width: `${rate}%` }} />
                         </div>
-                        <span className="text-[10px] tabular-nums text-text-muted">{rate}%</span>
+                        <span className="text-[0.625rem] tabular-nums text-text-muted">{rate}%</span>
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {attr.hasExceptions
-                        ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-risk-700"><AlertTriangle size={10} />{attr.failCount}</span>
+                        ? <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold text-risk-700"><AlertTriangle size={10} />{attr.failCount}</span>
                         : <span className="text-ink-300">—</span>}
                     </td>
                   </tr>
@@ -2426,20 +2426,20 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
       {/* ── D. Review Decision ── */}
       {(ctrl.status === 'pending-review' || isSubmitted) && !isSameUser && !isApproved && !isConcluded(ctrl.status) && (
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <Users size={11} />Reviewer Decision
           </h5>
 
           {!showSendBackForm ? (
             <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="text-[11px] text-text-muted">Review the sample results and attribute details above. Then approve or send back for further testing.</p>
+              <p className="text-[0.6875rem] text-text-muted">Review the sample results and attribute details above. Then approve or send back for further testing.</p>
               <div className="flex gap-3">
                 <button onClick={() => onApprove?.()}
-                  className="flex-1 py-2.5 bg-compliant hover:brightness-110 text-white rounded-xl text-[12px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                  className="flex-1 py-2.5 bg-compliant hover:brightness-110 text-white rounded-xl text-[0.75rem] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5">
                   <CheckCircle2 size={13} />Approve
                 </button>
                 <button onClick={() => setShowSendBackForm(true)}
-                  className="flex-1 py-2.5 border-2 border-high text-high-700 hover:bg-high-50 rounded-xl text-[12px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                  className="flex-1 py-2.5 border-2 border-high text-high-700 hover:bg-high-50 rounded-xl text-[0.75rem] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5">
                   <ArrowLeft size={13} />Send Back
                 </button>
               </div>
@@ -2448,24 +2448,24 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
             <div className="glass-card rounded-xl p-4 space-y-3 border-high/20">
               <div className="flex items-center gap-2">
                 <ArrowLeft size={12} className="text-high-700" />
-                <span className="text-[12px] font-bold text-high-700">Send Back for Rework</span>
+                <span className="text-[0.75rem] font-bold text-high-700">Send Back for Rework</span>
               </div>
-              <p className="text-[11px] text-text-muted">A comment is required. This will unlock testing for the tester and return the status to In Progress.</p>
+              <p className="text-[0.6875rem] text-text-muted">A comment is required. This will unlock testing for the tester and return the status to In Progress.</p>
               <textarea
                 value={sendBackComment}
                 onChange={e => setSendBackComment(e.target.value)}
                 placeholder="Describe what needs to be corrected or re-tested..."
                 rows={3}
-                className="w-full px-3 py-2 text-[12px] border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-high/20 focus:border-high/40 transition-all placeholder:text-text-muted resize-none"
+                className="w-full px-3 py-2 text-[0.75rem] border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-high/20 focus:border-high/40 transition-all placeholder:text-text-muted resize-none"
               />
               <div className="flex gap-2">
                 <button onClick={() => { setShowSendBackForm(false); setSendBackComment(''); }}
-                  className="flex-1 py-2 border border-border text-text-secondary rounded-xl text-[12px] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
+                  className="flex-1 py-2 border border-border text-text-secondary rounded-xl text-[0.75rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
                   Cancel
                 </button>
                 <button onClick={() => { if (sendBackComment.trim()) { onSendBack?.(sendBackComment.trim()); setShowSendBackForm(false); setSendBackComment(''); } }}
                   disabled={!sendBackComment.trim()}
-                  className="flex-1 py-2 bg-high hover:brightness-110 text-white rounded-xl text-[12px] font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+                  className="flex-1 py-2 bg-high hover:brightness-110 text-white rounded-xl text-[0.75rem] font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
                   <Send size={12} />Send Back
                 </button>
               </div>
@@ -2478,8 +2478,8 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
       {(isApproved || isConcluded(ctrl.status)) && (
         <div className="flex items-center gap-2 p-3 bg-compliant-50 rounded-xl border border-compliant">
           <CheckCircle2 size={14} className="text-compliant-700" />
-          <span className="text-[12px] text-compliant-700 font-semibold">Review approved by {ctrl.reviewer}</span>
-          <span className="text-[10px] text-compliant-700/70 ml-auto">Conclusion auto-generated</span>
+          <span className="text-[0.75rem] text-compliant-700 font-semibold">Review approved by {ctrl.reviewer}</span>
+          <span className="text-[0.625rem] text-compliant-700/70 ml-auto">Conclusion auto-generated</span>
         </div>
       )}
 
@@ -2487,7 +2487,7 @@ function ReviewStep({ ctrl, onApprove, onSendBack, onSubmitForReview, isSubmitte
       {(ctrl.status === 'pending-review' || isSubmitted) && isSameUser && !isApproved && !isConcluded(ctrl.status) && (
         <div className="flex items-center gap-2 p-3 bg-high-50/30 rounded-lg border border-high/10">
           <AlertTriangle size={12} className="text-high-700 shrink-0" />
-          <p className="text-[11px] text-high-700">Review actions disabled — tester and reviewer cannot be the same person.</p>
+          <p className="text-[0.6875rem] text-high-700">Review actions disabled — tester and reviewer cannot be the same person.</p>
         </div>
       )}
     </div>
@@ -2531,8 +2531,8 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <h4 className="text-[11px] font-bold text-text-muted uppercase">Control Conclusion</h4>
-          <span className="px-2.5 h-6 rounded-full text-[10px] font-bold inline-flex items-center bg-draft-50 text-draft-700">Locked</span>
+          <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Control Conclusion</h4>
+          <span className="px-2.5 h-6 rounded-full text-[0.625rem] font-bold inline-flex items-center bg-draft-50 text-draft-700">Locked</span>
         </div>
 
         {/* Locked state card */}
@@ -2540,8 +2540,8 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
           <div className="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center mx-auto mb-3">
             <Lock size={22} className="text-ink-400" />
           </div>
-          <p className="text-[15px] font-bold text-text mb-1">Conclusion Locked</p>
-          <p className="text-[12px] text-text-muted max-w-sm mx-auto">
+          <p className="text-[0.9375rem] font-bold text-text mb-1">Conclusion Locked</p>
+          <p className="text-[0.75rem] text-text-muted max-w-sm mx-auto">
             The conclusion will be automatically generated after the reviewer approves testing results.
             No manual input is required.
           </p>
@@ -2551,8 +2551,8 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Current Status</span>
-              <p className="text-[12px] font-semibold text-text mt-0.5">{
+              <span className="text-[0.625rem] text-text-muted uppercase">Current Status</span>
+              <p className="text-[0.75rem] font-semibold text-text mt-0.5">{
                 isPendingReview ? 'Pending Review' :
                 ctrl.status === 'in-progress' ? 'Testing In Progress' :
                 ctrl.status === 'not-started' ? 'Not Started' :
@@ -2560,23 +2560,23 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
               }</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Reviewer</span>
-              <p className="text-[12px] text-text mt-0.5">{ctrl.reviewer}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span>
+              <p className="text-[0.75rem] text-text mt-0.5">{ctrl.reviewer}</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Samples</span>
-              <p className="text-[12px] tabular-nums text-text mt-0.5">{tested}/{ctrl.samples.length} tested</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Samples</span>
+              <p className="text-[0.75rem] tabular-nums text-text mt-0.5">{tested}/{ctrl.samples.length} tested</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Tester</span>
-              <p className="text-[12px] text-text mt-0.5">{ctrl.assignee}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Tester</span>
+              <p className="text-[0.75rem] text-text mt-0.5">{ctrl.assignee}</p>
             </div>
           </div>
         </div>
 
         {/* Progress tracker */}
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2">Progress to Conclusion</h5>
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Progress to Conclusion</h5>
           <div className="glass-card rounded-xl p-4 space-y-1.5">
             {progressSteps.map((step, i) => (
               <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg">
@@ -2585,13 +2585,13 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
                   : i === progressSteps.findIndex(s => !s.done)
                     ? <div className="w-3.5 h-3.5 rounded-full border-2 border-primary bg-primary/20 shrink-0 animate-pulse" />
                     : <div className="w-3.5 h-3.5 rounded-full border-2 border-ink-200 shrink-0" />}
-                <span className={`text-[12px] font-medium ${
+                <span className={`text-[0.75rem] font-medium ${
                   step.done ? 'text-text line-through opacity-60' :
                   i === progressSteps.findIndex(s => !s.done) ? 'text-primary font-semibold' :
                   'text-text-muted'
                 }`}>{step.label}</span>
                 {i === progressSteps.findIndex(s => !s.done) && (
-                  <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded ml-auto">CURRENT</span>
+                  <span className="text-[0.5625rem] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded ml-auto">CURRENT</span>
                 )}
               </div>
             ))}
@@ -2601,7 +2601,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         {/* Guidance */}
         <div className="flex items-start gap-2.5 p-3 bg-brand-50/30 rounded-xl border border-brand-100">
           <Shield size={12} className="text-brand-700 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-brand-700">
+          <p className="text-[0.6875rem] text-brand-700">
             The conclusion is system-derived and read-only. It cannot be manually set or overridden.
             This ensures audit defensibility and SOX compliance.
           </p>
@@ -2611,23 +2611,23 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
         {tested > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <h5 className="text-[11px] font-bold text-text-muted uppercase">Projected Conclusion</h5>
-              <span className="text-[9px] font-bold text-ink-400 bg-ink-100 px-1.5 py-0.5 rounded">PREVIEW</span>
+              <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase">Projected Conclusion</h5>
+              <span className="text-[0.5625rem] font-bold text-ink-400 bg-ink-100 px-1.5 py-0.5 rounded">PREVIEW</span>
             </div>
             <div className={`p-4 rounded-xl border-2 border-dashed opacity-70 ${
               failed > 0 ? 'border-risk/40 bg-risk-50/10' : 'border-compliant/40 bg-compliant-50/10'
             }`}>
               <div className="flex items-center gap-2 mb-1">
                 {failed > 0 ? <XCircle size={14} className="text-risk-700" /> : <CheckCircle2 size={14} className="text-compliant-700" />}
-                <span className="text-[13px] font-bold text-text">{failed > 0 ? 'Ineffective' : 'Effective'}</span>
-                <span className="text-[10px] text-text-muted ml-auto">Based on current results</span>
+                <span className="text-[0.8125rem] font-bold text-text">{failed > 0 ? 'Ineffective' : 'Effective'}</span>
+                <span className="text-[0.625rem] text-text-muted ml-auto">Based on current results</span>
               </div>
-              <p className="text-[11px] text-text-muted ml-5">
+              <p className="text-[0.6875rem] text-text-muted ml-5">
                 {failed > 0
                   ? `${failed} sample${failed !== 1 ? 's' : ''} failed → would be marked INEFFECTIVE`
                   : `${passed} of ${ctrl.samples.length} samples passed → would be marked EFFECTIVE`}
               </p>
-              <p className="text-[10px] text-text-muted mt-2 ml-5 italic">This preview will become final after reviewer approval.</p>
+              <p className="text-[0.625rem] text-text-muted mt-2 ml-5 italic">This preview will become final after reviewer approval.</p>
             </div>
           </div>
         )}
@@ -2639,8 +2639,8 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-bold text-text-muted uppercase">Control Conclusion</h4>
-        <span className="px-2.5 h-6 rounded-full text-[10px] font-bold inline-flex items-center bg-compliant-50 text-compliant-700">System Derived — Read Only</span>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase">Control Conclusion</h4>
+        <span className="px-2.5 h-6 rounded-full text-[0.625rem] font-bold inline-flex items-center bg-compliant-50 text-compliant-700">System Derived — Read Only</span>
       </div>
 
       {/* Conclusion result — prominent */}
@@ -2653,14 +2653,14 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
           {derivedConclusion === 'Effective' ? <CheckCircle2 size={20} className="text-compliant-700" /> :
            derivedConclusion === 'Ineffective' ? <XCircle size={20} className="text-risk-700" /> :
            <AlertTriangle size={20} className="text-high-700" />}
-          <span className="text-[18px] font-bold text-text">{derivedConclusion}</span>
+          <span className="text-[1.125rem] font-bold text-text">{derivedConclusion}</span>
         </div>
 
         {/* Derivation reason */}
         <div className={`ml-7 p-2.5 rounded-lg mt-2 ${
           derivedConclusion === 'Effective' ? 'bg-compliant-50/50' : 'bg-risk-50/50'
         }`}>
-          <p className={`text-[12px] font-semibold ${
+          <p className={`text-[0.75rem] font-semibold ${
             derivedConclusion === 'Effective' ? 'text-compliant-700' : 'text-risk-700'
           }`}>
             {derivedConclusion === 'Effective'
@@ -2669,7 +2669,7 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
           </p>
         </div>
 
-        <div className="mt-3 ml-7 flex items-center gap-2 text-[10px] text-text-muted">
+        <div className="mt-3 ml-7 flex items-center gap-2 text-[0.625rem] text-text-muted">
           <Lock size={9} />
           <span>Derived by system · Approved by {ctrl.reviewer} · All data locked</span>
         </div>
@@ -2677,27 +2677,27 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
 
       {/* Execution metrics */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2">Execution Summary</h5>
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Execution Summary</h5>
         <div className="grid grid-cols-5 gap-2">
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{ctrl.samples.length}</div>
-            <div className="text-[9px] text-text-muted uppercase">Total Samples</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Total Samples</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-compliant-700 tabular-nums">{passed}</div>
-            <div className="text-[9px] text-text-muted uppercase">Passed</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Passed</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
-            <div className="text-[9px] text-text-muted uppercase">Failed</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Failed</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div>
-            <div className="text-[9px] text-text-muted uppercase">Exceptions</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Exceptions</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{evidenceCount}</div>
-            <div className="text-[9px] text-text-muted uppercase">Evidence</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Evidence</div>
           </div>
         </div>
       </div>
@@ -2705,30 +2705,30 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
       {/* Control details */}
       <div className="glass-card rounded-xl p-4">
         <div className="grid grid-cols-2 gap-3">
-          <div><span className="text-[10px] text-text-muted uppercase">Control</span><p className="text-[12px] font-medium text-text">{ctrl.controlName}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Control ID</span><p className="text-[12px] font-mono text-text">{ctrl.controlId}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Tester</span><p className="text-[12px] text-text">{ctrl.assignee}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Approved By</span><p className="text-[12px] text-text">{ctrl.reviewer}</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Execution Status</span><p className="text-[12px] font-semibold text-compliant-700">Concluded</p></div>
-          <div><span className="text-[10px] text-text-muted uppercase">Edit Status</span><p className="text-[12px] font-semibold text-text flex items-center gap-1"><Lock size={10} className="text-ink-400" />Locked</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Control</span><p className="text-[0.75rem] font-medium text-text">{ctrl.controlName}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Control ID</span><p className="text-[0.75rem] font-mono text-text">{ctrl.controlId}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Tester</span><p className="text-[0.75rem] text-text">{ctrl.assignee}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Approved By</span><p className="text-[0.75rem] text-text">{ctrl.reviewer}</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Execution Status</span><p className="text-[0.75rem] font-semibold text-compliant-700">Concluded</p></div>
+          <div><span className="text-[0.625rem] text-text-muted uppercase">Edit Status</span><p className="text-[0.75rem] font-semibold text-text flex items-center gap-1"><Lock size={10} className="text-ink-400" />Locked</p></div>
         </div>
       </div>
 
       {/* Failed samples detail (if any) */}
       {failedSamples.length > 0 && (
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
             <AlertTriangle size={11} className="text-risk-700" />Failed Samples ({failedSamples.length})
           </h5>
           <div className="glass-card rounded-xl overflow-hidden">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[0.6875rem]">
               <thead>
                 <tr className="border-b border-border bg-risk-50/20">
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-text-muted uppercase">Sample</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-text-muted uppercase">Reference</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-text-muted uppercase">Amount</th>
-                  <th className="px-3 py-2 text-center text-[10px] font-semibold text-text-muted uppercase">Failed Attrs</th>
-                  <th className="px-3 py-2 text-center text-[10px] font-semibold text-text-muted uppercase">Evidence</th>
+                  <th className="px-3 py-2 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Sample</th>
+                  <th className="px-3 py-2 text-left text-[0.625rem] font-semibold text-text-muted uppercase">Reference</th>
+                  <th className="px-3 py-2 text-right text-[0.625rem] font-semibold text-text-muted uppercase">Amount</th>
+                  <th className="px-3 py-2 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Failed Attrs</th>
+                  <th className="px-3 py-2 text-center text-[0.625rem] font-semibold text-text-muted uppercase">Evidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -2736,11 +2736,11 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
                   const failedAttrs = Object.entries(s.attributes).filter(([, v]) => v === 'fail').length;
                   return (
                     <tr key={s.id} className="border-b border-border/40 bg-risk-50/10">
-                      <td className="px-3 py-2 text-[11px] font-medium text-text">{s.label}</td>
-                      <td className="px-3 py-2 text-[10px] font-mono text-text-muted">{s.referenceId}</td>
-                      <td className="px-3 py-2 text-right text-[11px] tabular-nums text-text-secondary">{s.amount}</td>
-                      <td className="px-3 py-2 text-center"><span className="text-[10px] font-bold text-risk-700">{failedAttrs}</span></td>
-                      <td className="px-3 py-2 text-center text-[10px] text-text-muted">{s.evidenceFiles.length} files</td>
+                      <td className="px-3 py-2 text-[0.6875rem] font-medium text-text">{s.label}</td>
+                      <td className="px-3 py-2 text-[0.625rem] font-mono text-text-muted">{s.referenceId}</td>
+                      <td className="px-3 py-2 text-right text-[0.6875rem] tabular-nums text-text-secondary">{s.amount}</td>
+                      <td className="px-3 py-2 text-center"><span className="text-[0.625rem] font-bold text-risk-700">{failedAttrs}</span></td>
+                      <td className="px-3 py-2 text-center text-[0.625rem] text-text-muted">{s.evidenceFiles.length} files</td>
                     </tr>
                   );
                 })}
@@ -2753,24 +2753,24 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
       {/* Reviewer notes */}
       {ctrl.workingPaper.rounds.filter(r => r.reviewerNotes).map(r => (
         <div key={r.round} className="glass-card rounded-xl p-4">
-          <span className="text-[10px] font-bold text-text-muted uppercase">Reviewer Comments — Round {r.round}</span>
-          <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">{r.reviewerNotes}</p>
-          <p className="text-[10px] text-text-muted mt-1">{ctrl.reviewer} · {r.date}</p>
+          <span className="text-[0.625rem] font-bold text-text-muted uppercase">Reviewer Comments — Round {r.round}</span>
+          <p className="text-[0.75rem] text-text-secondary mt-1 leading-relaxed">{r.reviewerNotes}</p>
+          <p className="text-[0.625rem] text-text-muted mt-1">{ctrl.reviewer} · {r.date}</p>
         </div>
       ))}
 
       {/* Linked findings */}
       {linkedFindings.length > 0 && (
         <div>
-          <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2">Linked Findings</h5>
+          <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Linked Findings</h5>
           {linkedFindings.map(f => (
             <div key={f.id} className="glass-card rounded-xl p-4 border-l-4 border-risk mb-2">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[12px] font-mono font-bold text-risk-700">{f.id}</span>
-                <span className={`px-2 h-5 rounded-full text-[10px] font-bold inline-flex items-center ${f.severity === 'Material Weakness' ? 'bg-risk-50 text-risk-700' : f.severity === 'Significant Deficiency' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{f.severity}</span>
+                <span className="text-[0.75rem] font-mono font-bold text-risk-700">{f.id}</span>
+                <span className={`px-2 h-5 rounded-full text-[0.625rem] font-bold inline-flex items-center ${f.severity === 'Material Weakness' ? 'bg-risk-50 text-risk-700' : f.severity === 'Significant Deficiency' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{f.severity}</span>
               </div>
-              <p className="text-[12px] font-medium text-text mb-1">{f.title}</p>
-              <p className="text-[11px] text-text-muted">Failed: {f.failedAttribute}</p>
+              <p className="text-[0.75rem] font-medium text-text mb-1">{f.title}</p>
+              <p className="text-[0.6875rem] text-text-muted">Failed: {f.failedAttribute}</p>
             </div>
           ))}
         </div>
@@ -2779,38 +2779,38 @@ function ConclusionStep({ ctrl, reviewApproved, onGoToStep }: { ctrl: ControlDet
       {/* Lock confirmation */}
       <div className="flex items-start gap-2.5 p-3 bg-surface-2/50 rounded-xl border border-border-light">
         <Lock size={12} className="text-ink-400 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-text-muted">
+        <p className="text-[0.6875rem] text-text-muted">
           All testing data is locked. Samples, evidence, and attribute results cannot be modified after conclusion.
         </p>
       </div>
 
       {/* Supporting links */}
       <div>
-        <h5 className="text-[11px] font-bold text-text-muted uppercase mb-2">Supporting Data</h5>
+        <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Supporting Data</h5>
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => onGoToStep?.('working-paper')}
             className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <Copy size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
-            <p className="text-[11px] font-semibold text-text">Working Paper</p>
-            <p className="text-[9px] text-text-muted">View full record</p>
+            <p className="text-[0.6875rem] font-semibold text-text">Working Paper</p>
+            <p className="text-[0.5625rem] text-text-muted">View full record</p>
           </button>
           <button onClick={() => onGoToStep?.('samples')}
             className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <Database size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
-            <p className="text-[11px] font-semibold text-text">Samples</p>
-            <p className="text-[9px] text-text-muted">{ctrl.samples.length} items</p>
+            <p className="text-[0.6875rem] font-semibold text-text">Samples</p>
+            <p className="text-[0.5625rem] text-text-muted">{ctrl.samples.length} items</p>
           </button>
           <button onClick={() => onGoToStep?.('evidence')}
             className="glass-card rounded-xl p-3 text-center hover:bg-surface-2/50 transition-colors cursor-pointer group">
             <FileText size={16} className="text-brand-600 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
-            <p className="text-[11px] font-semibold text-text">Evidence</p>
-            <p className="text-[9px] text-text-muted">{evidenceCount} files</p>
+            <p className="text-[0.6875rem] font-semibold text-text">Evidence</p>
+            <p className="text-[0.5625rem] text-text-muted">{evidenceCount} files</p>
           </button>
         </div>
       </div>
 
       {/* Download */}
-      <button className="w-full py-2.5 border border-primary/30 bg-primary/5 text-primary rounded-xl text-[12px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center gap-2">
+      <button className="w-full py-2.5 border border-primary/30 bg-primary/5 text-primary rounded-xl text-[0.75rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center gap-2">
         <FileText size={13} />Download Working Paper
       </button>
     </div>
@@ -2891,7 +2891,7 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
         {/* ── EXECUTION-AWARE HEADER ── */}
         <div className="px-5 py-4 border-b border-border-light">
           {/* Engagement context bar */}
-          <div className="flex items-center gap-2 mb-2 text-[10px]">
+          <div className="flex items-center gap-2 mb-2 text-[0.625rem]">
             <span className="text-text-muted">{eng.name}</span>
             <span className="text-ink-300">·</span>
             <Calendar size={9} className="text-text-muted" />
@@ -2904,20 +2904,20 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-mono text-text-muted">{ctrl.controlId}</span>
-                {ctrl.isKey && <span className="px-1.5 h-4 rounded text-[9px] font-bold bg-mitigated-50 text-mitigated-700 inline-flex items-center">KEY</span>}
+                <span className="text-[0.625rem] font-mono text-text-muted">{ctrl.controlId}</span>
+                {ctrl.isKey && <span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700 inline-flex items-center">KEY</span>}
                 <StatusLabel status={ctrl.status} />
-                <span className={`px-1.5 h-4 rounded text-[8px] font-bold inline-flex items-center ${controlType === 'Automated' ? 'bg-evidence-50 text-evidence-700' : controlType === 'Manual' ? 'bg-gray-100 text-gray-600' : 'bg-brand-50 text-brand-700'}`}>{controlType}</span>
+                <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center ${controlType === 'Automated' ? 'bg-evidence-50 text-evidence-700' : controlType === 'Manual' ? 'bg-gray-100 text-gray-600' : 'bg-brand-50 text-brand-700'}`}>{controlType}</span>
               </div>
-              <h2 className="text-[14px] font-bold text-text truncate">{ctrl.controlName}</h2>
+              <h2 className="text-[0.875rem] font-bold text-text truncate">{ctrl.controlName}</h2>
               <div className="flex items-center gap-2 mt-1">
                 <Workflow size={10} className="text-brand-500" />
-                <span className="text-[11px] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</span>
+                <span className="text-[0.6875rem] text-brand-700 font-medium">{ctrl.workflowName} {ctrl.workflowVersion}</span>
                 <span className="text-ink-300">·</span>
-                <span className="text-[11px] text-text-muted">Round {ctrl.testingRound || '—'}</span>
+                <span className="text-[0.6875rem] text-text-muted">Round {ctrl.testingRound || '—'}</span>
                 <span className="text-ink-300">·</span>
                 <Users size={10} className="text-text-muted" />
-                <span className="text-[11px] text-text-muted">{ctrl.assignee} → {ctrl.reviewer}</span>
+                <span className="text-[0.6875rem] text-text-muted">{ctrl.assignee} → {ctrl.reviewer}</span>
               </div>
             </div>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0 ml-3"><X size={16} className="text-text-muted" /></button>
@@ -2947,18 +2947,18 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
         <div className="flex items-center justify-between px-5 py-3 border-t border-border-light bg-surface-2/30">
           <button onClick={() => { const idx = steps.findIndex(s => s.id === activeStep); if (idx > 0) setActiveStep(steps[idx - 1].id); }}
             disabled={activeStep === 'overview'}
-            className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+            className="flex items-center gap-1.5 px-3 py-2 text-[0.75rem] font-medium text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
             <ArrowLeft size={12} />Previous
           </button>
-          <div className="text-[11px] text-text-muted">{steps.findIndex(s => s.id === activeStep) + 1} of {steps.length}</div>
+          <div className="text-[0.6875rem] text-text-muted">{steps.findIndex(s => s.id === activeStep) + 1} of {steps.length}</div>
           {activeStep !== 'conclusion' ? (
             <button onClick={() => { const idx = steps.findIndex(s => s.id === activeStep); if (idx < steps.length - 1) setActiveStep(steps[idx + 1].id); }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
               Next<ArrowRight size={12} />
             </button>
           ) : (
             <button onClick={onClose}
-              className="flex items-center gap-1.5 px-4 py-2 border border-border text-text-secondary rounded-lg text-[12px] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
+              className="flex items-center gap-1.5 px-4 py-2 border border-border text-text-secondary rounded-lg text-[0.75rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer">
               Close
             </button>
           )}

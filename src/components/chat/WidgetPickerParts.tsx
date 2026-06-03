@@ -40,7 +40,7 @@ export function SectionHeader({ title, count, total, collapsed, onToggle, onTogg
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-700 cursor-pointer min-h-[32px] px-1 -mx-1 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700 cursor-pointer min-h-[32px] px-1 -mx-1 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <ChevronDown size={14} className={`transition-transform motion-reduce:transition-none ${collapsed ? '-rotate-90' : ''}`} />
         {title}
@@ -50,7 +50,7 @@ export function SectionHeader({ title, count, total, collapsed, onToggle, onTogg
         type="button"
         onClick={() => onToggleAll(!allSelected)}
         title={allSelected ? `Deselect all ${title.toLowerCase()}` : `Select all ${title.toLowerCase()}`}
-        className={`text-[11px] font-medium cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${ACCENT[accent].toggle}`}
+        className={`text-[0.6875rem] font-medium cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${ACCENT[accent].toggle}`}
       >
         {allSelected ? 'None' : 'All'}
       </button>
@@ -88,8 +88,8 @@ export function KpiPreviewRow({ kpi, checked, onChange, accent = 'brand' }: {
       }`}
     >
       <Checkbox checked={checked} accent={accent} />
-      <span className="text-[11px] text-ink-500 flex-1 truncate">{kpi.label}</span>
-      <span className={`text-[13px] font-bold tabular-nums shrink-0 ${kpi.color}`}>{kpi.value}</span>
+      <span className="text-[0.6875rem] text-ink-500 flex-1 truncate">{kpi.label}</span>
+      <span className={`text-[0.8125rem] font-bold tabular-nums shrink-0 ${kpi.color}`}>{kpi.value}</span>
     </button>
   );
 }
@@ -120,8 +120,8 @@ export function ChartPreviewRow({ chart, checked, onChange, accent = 'brand' }: 
       <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
         <Checkbox checked={checked} accent={accent} />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[13px] font-semibold text-ink-900 truncate">{chart.label}</h3>
-          <p className="text-[10px] text-ink-500 truncate mt-0.5">{cfg.description}</p>
+          <h3 className="text-[0.8125rem] font-semibold text-ink-900 truncate">{chart.label}</h3>
+          <p className="text-[0.625rem] text-ink-500 truncate mt-0.5">{cfg.description}</p>
         </div>
       </div>
       <div className="pointer-events-none relative flex-1 overflow-hidden" style={{ minHeight: 180 }}>
@@ -158,23 +158,23 @@ export function TablePreviewRow({ columns, sampleRows, checked, onChange, accent
     >
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
         <Checkbox checked={checked} accent={accent} />
-        <span className="text-[11px] font-medium text-ink-700">Results Table</span>
-        <span className="text-[10px] text-ink-400">{columns.length} columns &middot; {sampleRows.length} rows</span>
+        <span className="text-[0.6875rem] font-medium text-ink-700">Results Table</span>
+        <span className="text-[0.625rem] text-ink-400">{columns.length} columns &middot; {sampleRows.length} rows</span>
       </div>
       <div className="px-3 pb-3">
         <div className="rounded-md border border-canvas-border overflow-hidden">
           <div className="flex bg-paper-50">
             {cols.map(c => (
-              <div key={c} className="flex-1 px-2 py-1 text-[9px] font-semibold text-ink-500 truncate border-r border-canvas-border last:border-r-0">{c}</div>
+              <div key={c} className="flex-1 px-2 py-1 text-[0.5625rem] font-semibold text-ink-500 truncate border-r border-canvas-border last:border-r-0">{c}</div>
             ))}
-            {columns.length > 4 && <div className="w-8 px-1 py-1 text-[9px] text-ink-400 text-center shrink-0">+{columns.length - 4}</div>}
+            {columns.length > 4 && <div className="w-8 px-1 py-1 text-[0.5625rem] text-ink-400 text-center shrink-0">+{columns.length - 4}</div>}
           </div>
           {rows.map((row, ri) => (
             <div key={ri} className="flex border-t border-canvas-border">
               {cols.map((c, ci) => (
-                <div key={c} className="flex-1 px-2 py-1 text-[9px] text-ink-600 truncate border-r border-canvas-border last:border-r-0">{row[ci] || ''}</div>
+                <div key={c} className="flex-1 px-2 py-1 text-[0.5625rem] text-ink-600 truncate border-r border-canvas-border last:border-r-0">{row[ci] || ''}</div>
               ))}
-              {columns.length > 4 && <div className="w-8 px-1 py-1 text-[9px] text-ink-400 text-center shrink-0">…</div>}
+              {columns.length > 4 && <div className="w-8 px-1 py-1 text-[0.5625rem] text-ink-400 text-center shrink-0">…</div>}
             </div>
           ))}
         </div>

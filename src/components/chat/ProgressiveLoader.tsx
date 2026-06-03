@@ -124,7 +124,7 @@ export default function ProgressiveLoader({
                           className={ACCENT_TEXT[step.type]}
                         />
                       </motion.div>
-                      <span className="text-[13px] font-medium text-text-muted">
+                      <span className="text-[0.8125rem] font-medium text-text-muted">
                         {step.label}
                       </span>
                     </div>
@@ -165,7 +165,7 @@ export default function ProgressiveLoader({
                             size={15}
                             className={ACCENT_TEXT[step.type]}
                           />
-                          <span className="text-[13px] font-semibold text-text">
+                          <span className="text-[0.8125rem] font-semibold text-text">
                             {step.title}
                           </span>
                         </div>
@@ -179,7 +179,7 @@ export default function ProgressiveLoader({
                       </div>
 
                       {/* Content preview */}
-                      <p className="text-[12px] text-text-muted leading-relaxed line-clamp-2">
+                      <p className="text-[0.75rem] text-text-muted leading-relaxed line-clamp-2">
                         {step.content}
                       </p>
                     </div>

@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -86,10 +87,10 @@ interface TrailEvent {
   time: string;
 }
 
-const SECTION_LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-ink-500';
+const SECTION_LABEL = 'text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500';
 const INPUT_CLS =
-  'w-full px-3 py-2 border border-canvas-border rounded-lg text-[13px] text-ink-900 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:text-ink-400';
-const LABEL_CLS = 'text-[11.5px] font-semibold text-ink-600 block mb-1.5';
+  'w-full px-3 py-2 border border-canvas-border rounded-lg text-[0.8125rem] text-ink-900 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all placeholder:text-ink-400';
+const LABEL_CLS = 'text-[0.75rem] font-semibold text-ink-600 block mb-1.5';
 
 function initialsFor(name: string): string {
   return name
@@ -205,21 +206,21 @@ export default function EngagementExceptionDrawer({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className={`w-2 h-2 rounded-full ${SEV_DOT[exception.severity]}`} aria-hidden="true" />
-                <span className="font-mono text-[11.5px] tracking-tight text-ink-500">{exception.ref}</span>
-                <span className={`ml-auto px-2 h-5 rounded-full text-[10.5px] font-semibold inline-flex items-center ${STATUS_PILL[exception.status]}`}>
+                <span className="font-mono text-[0.75rem] tracking-tight text-ink-500">{exception.ref}</span>
+                <span className={`ml-auto px-2 h-5 rounded-full text-[0.75rem] font-semibold inline-flex items-center ${STATUS_PILL[exception.status]}`}>
                   {exception.status}
                 </span>
               </div>
-              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight leading-snug">
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight leading-snug">
                 {exception.title}
               </h2>
               <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10.5px] font-bold uppercase border ${SEV_CHIP[exception.severity]}`}>
+                <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.75rem] font-bold uppercase border ${SEV_CHIP[exception.severity]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${SEV_DOT[exception.severity]}`} aria-hidden="true" />
                   {exception.severity}
                 </span>
                 {exception.amount && (
-                  <span className="inline-flex items-center px-2 h-5 rounded-full text-[10.5px] font-semibold bg-[#F4F2F7] text-ink-700 font-mono">
+                  <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.75rem] font-semibold bg-[#F4F2F7] text-ink-700 font-mono">
                     {exception.amount}
                   </span>
                 )}
@@ -231,7 +232,7 @@ export default function EngagementExceptionDrawer({
         {/* ─── Body (scrollable) ─── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
           {/* Meta strip */}
-          <section aria-label="Exception metadata" className="flex items-center gap-2 flex-wrap text-[11.5px]">
+          <section aria-label="Exception metadata" className="flex items-center gap-2 flex-wrap text-[0.75rem]">
             <span className="inline-flex items-center gap-1 px-2 h-6 rounded-full bg-[#F4F2F7] text-ink-700">
               <Tag size={11} className="text-ink-500" />
               {exception.severity}
@@ -267,7 +268,7 @@ export default function EngagementExceptionDrawer({
           {exception.detail && (
             <section aria-label="Description" className="space-y-2">
               <h3 className={SECTION_LABEL}>Description</h3>
-              <p className="text-[13px] leading-relaxed text-ink-700 bg-canvas border border-canvas-border rounded-xl px-4 py-3">
+              <p className="text-[0.8125rem] leading-relaxed text-ink-700 bg-canvas border border-canvas-border rounded-xl px-4 py-3">
                 {exception.detail}
               </p>
             </section>
@@ -280,7 +281,7 @@ export default function EngagementExceptionDrawer({
               {classification && (
                 <button
                   onClick={() => setClassification(undefined)}
-                  className="text-[11px] font-medium text-ink-500 hover:text-ink-800 cursor-pointer"
+                  className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-800 cursor-pointer"
                 >
                   Clear
                 </button>
@@ -302,10 +303,10 @@ export default function EngagementExceptionDrawer({
                         : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-brand-50/30'
                     }`}
                   >
-                    <div className={`text-[12.5px] font-semibold ${active ? 'text-brand-700' : 'text-ink-900'}`}>
+                    <div className={`text-[0.75rem] font-semibold ${active ? 'text-brand-700' : 'text-ink-900'}`}>
                       {c.label}
                     </div>
-                    <div className="text-[11px] text-ink-500 mt-0.5 leading-snug">{c.description}</div>
+                    <div className="text-[0.6875rem] text-ink-500 mt-0.5 leading-snug">{c.description}</div>
                   </button>
                 );
               })}
@@ -351,10 +352,8 @@ export default function EngagementExceptionDrawer({
               </div>
               <div>
                 <label className={LABEL_CLS} htmlFor="plan-due">Due date</label>
-                <input
-                  id="plan-due"
-                  type="date"
-                  value={planDue}
+                <DatePicker
+                  id="plan-due" value={planDue}
                   onChange={(e) => setPlanDue(e.target.value)}
                   className={INPUT_CLS + ' cursor-pointer'}
                 />
@@ -377,20 +376,20 @@ export default function EngagementExceptionDrawer({
           <section aria-label="Comments" className="space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className={SECTION_LABEL}>Comments</h3>
-              <span className="text-[11px] text-ink-400 tabular-nums">{comments.length}</span>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{comments.length}</span>
             </div>
             <ul className="space-y-2.5">
               {comments.map((c) => (
                 <li key={c.id} className="flex gap-3">
-                  <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[10px] font-semibold tracking-wider">
+                  <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[0.625rem] font-semibold tracking-wider">
                     {c.initials}
                   </div>
                   <div className="flex-1 min-w-0 rounded-xl bg-canvas border border-canvas-border px-3 py-2.5">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[12px] font-semibold text-ink-900">{c.author}</span>
-                      <span className="text-[10.5px] text-ink-400 tabular-nums">{c.time}</span>
+                      <span className="text-[0.75rem] font-semibold text-ink-900">{c.author}</span>
+                      <span className="text-[0.75rem] text-ink-400 tabular-nums">{c.time}</span>
                     </div>
-                    <p className="text-[12.5px] leading-relaxed text-ink-700">{c.body}</p>
+                    <p className="text-[0.75rem] leading-relaxed text-ink-700">{c.body}</p>
                   </div>
                 </li>
               ))}
@@ -407,7 +406,7 @@ export default function EngagementExceptionDrawer({
               <button
                 onClick={handlePostComment}
                 disabled={!newComment.trim()}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 <Send size={12} />
                 Post
@@ -419,7 +418,7 @@ export default function EngagementExceptionDrawer({
           <section aria-label="Action trail" className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className={SECTION_LABEL}>Action Trail · ATR</h3>
-              <span className="text-[11px] text-ink-400 tabular-nums">{trail.length}</span>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{trail.length}</span>
             </div>
             <ol className="relative border-l-2 border-canvas-border pl-5 ml-3 space-y-3">
               {trail.map((ev) => {
@@ -432,8 +431,8 @@ export default function EngagementExceptionDrawer({
                     >
                       <Icon size={11} />
                     </span>
-                    <div className="text-[12.5px] font-medium text-ink-900 leading-snug">{ev.title}</div>
-                    <div className="text-[11px] text-ink-500 mt-0.5">
+                    <div className="text-[0.75rem] font-medium text-ink-900 leading-snug">{ev.title}</div>
+                    <div className="text-[0.6875rem] text-ink-500 mt-0.5">
                       {ev.actor} · <span className="tabular-nums">{ev.time}</span>
                     </div>
                   </li>
@@ -448,7 +447,7 @@ export default function EngagementExceptionDrawer({
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} approved`, 'success')}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Check size={13} />
             Approve
@@ -456,14 +455,14 @@ export default function EngagementExceptionDrawer({
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} rejected`, 'error')}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-risk-50 text-risk-700 hover:bg-risk-50 text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-risk-50 text-risk-700 hover:bg-risk-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             Reject
           </button>
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} reassigned`, 'info')}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-canvas-border text-ink-700 hover:bg-canvas text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-canvas-border text-ink-700 hover:bg-canvas text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             Reassign
           </button>
@@ -472,7 +471,7 @@ export default function EngagementExceptionDrawer({
             onClick={() => closeWith(`${exception.ref} closed`, 'success')}
             disabled={!canClose}
             title={canClose ? 'Close this exception case' : 'Select a classification before closing'}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-compliant-50 text-compliant-700 hover:bg-compliant-50 text-[12.5px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-compliant-50 text-compliant-700 hover:bg-compliant-50 text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
             Close case
           </button>

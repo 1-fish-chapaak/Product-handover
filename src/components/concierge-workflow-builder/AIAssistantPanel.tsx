@@ -194,7 +194,7 @@ export default function AIAssistantPanel({
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
           >
             <ArrowLeft size={13} />
             Back to AI Concierge
@@ -236,7 +236,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[92%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -257,7 +257,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[96%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -278,7 +278,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[96%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -299,7 +299,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[96%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -320,7 +320,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[96%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -341,7 +341,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[92%] min-w-0 w-full">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -363,7 +363,7 @@ export default function AIAssistantPanel({
                 >
                   <div className="max-w-[78%] min-w-0">
                     {isFirstOfRun && (
-                      <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                      <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                         Ira
                       </div>
                     )}
@@ -374,7 +374,7 @@ export default function AIAssistantPanel({
                         className="w-2 h-2 rounded-full bg-brand-500"
                       />
                       <span
-                        className="text-[13.5px] font-medium leading-[1.65] bg-clip-text text-transparent"
+                        className="text-[0.75rem] font-medium leading-[1.65] bg-clip-text text-transparent"
                         style={{
                           backgroundImage:
                             'linear-gradient(90deg, rgba(31,28,46,0.35) 0%, rgba(31,28,46,0.95) 50%, rgba(31,28,46,0.35) 100%)',
@@ -406,7 +406,7 @@ export default function AIAssistantPanel({
                     <Icon size={11} />
                   </span>
                   <span
-                    className="text-[12.5px] text-ink-500 leading-[1.45] min-w-0 flex-1"
+                    className="text-[0.75rem] text-ink-500 leading-[1.45] min-w-0 flex-1"
                     dangerouslySetInnerHTML={{
                       __html: renderInline(m.text, 'event'),
                     }}
@@ -425,18 +425,18 @@ export default function AIAssistantPanel({
               >
                 <div className="max-w-[78%] min-w-0">
                   {m.role === 'assistant' && isFirstOfRun && (
-                    <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+                    <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                       Ira
                     </div>
                   )}
                   {m.role === 'user' ? (
-                    <div className="px-3 py-2 rounded-2xl rounded-br-md bg-brand-50 border border-brand-200 text-ink-800 text-[13px] leading-relaxed break-words">
+                    <div className="px-3 py-2 rounded-2xl rounded-br-md bg-brand-50 border border-brand-200 text-ink-800 text-[0.8125rem] leading-relaxed break-words">
                       <span
                         dangerouslySetInnerHTML={{ __html: renderInline(m.text, 'user') }}
                       />
                     </div>
                   ) : (
-                    <div className="text-[13.5px] leading-[1.65] text-ink-800 break-words">
+                    <div className="text-[0.75rem] leading-[1.65] text-ink-800 break-words">
                       <span
                         dangerouslySetInnerHTML={{
                           __html: renderInline(m.text, 'assistant'),
@@ -458,7 +458,7 @@ export default function AIAssistantPanel({
             className="flex justify-start mt-5"
           >
             <div className="max-w-[78%]">
-              <div className="mb-1 font-mono text-[10.5px] text-ink-400 uppercase tracking-[0.14em]">
+              <div className="mb-1 font-mono text-[0.75rem] text-ink-400 uppercase tracking-[0.14em]">
                 Ira
               </div>
               <div className="inline-flex items-center gap-1.5">
@@ -492,7 +492,7 @@ export default function AIAssistantPanel({
                   key={r.id}
                   type="button"
                   onClick={r.onClick}
-                  className="rounded-full text-[12px] font-semibold px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
+                  className="rounded-full text-[0.75rem] font-semibold px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
                 >
                   {r.label}
                 </button>
@@ -523,11 +523,11 @@ export default function AIAssistantPanel({
                 <Link2 size={13} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] font-semibold text-ink-800 truncate">
+                <div className="text-[0.75rem] font-semibold text-ink-800 truncate">
                   {contextChip.title}
                 </div>
                 {contextChip.subtitle && (
-                  <div className="text-[11.5px] text-ink-500 truncate">
+                  <div className="text-[0.75rem] text-ink-500 truncate">
                     {contextChip.subtitle}
                   </div>
                 )}
@@ -554,7 +554,7 @@ export default function AIAssistantPanel({
                   key={r.id}
                   type="button"
                   onClick={r.onClick}
-                  className="rounded-full text-[12px] text-ink-700 px-3 py-1 border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 transition-colors cursor-pointer"
+                  className="rounded-full text-[0.75rem] text-ink-700 px-3 py-1 border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 transition-colors cursor-pointer"
                 >
                   {r.label}
                 </button>
@@ -568,7 +568,7 @@ export default function AIAssistantPanel({
               onClick={primaryAction.onClick}
               disabled={!primaryAction.enabled}
               className={[
-                'w-full inline-flex items-center justify-center gap-2 rounded-xl text-[13px] font-semibold px-4 py-3 transition-all',
+                'w-full inline-flex items-center justify-center gap-2 rounded-xl text-[0.8125rem] font-semibold px-4 py-3 transition-all',
                 primaryAction.enabled
                   ? 'bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-[0_1px_0_rgba(106,18,205,0.08),0_8px_20px_-8px_rgba(106,18,205,0.45)]'
                   : 'bg-brand-100 text-brand-300 cursor-not-allowed',
@@ -578,7 +578,7 @@ export default function AIAssistantPanel({
               {primaryAction.label}
             </button>
             {primaryAction.hint && !primaryAction.enabled && (
-              <div className="mt-1.5 text-[11.5px] text-ink-400 text-center">
+              <div className="mt-1.5 text-[0.75rem] text-ink-400 text-center">
                 {primaryAction.hint}
               </div>
             )}
@@ -601,7 +601,7 @@ export default function AIAssistantPanel({
               }}
               rows={1}
               placeholder={placeholder ?? 'Describe what you need…'}
-              className="w-full bg-transparent border-none outline-none resize-none pt-3 pb-10 px-3 text-[13px] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[140px] rounded-[12px]"
+              className="w-full bg-transparent border-none outline-none resize-none pt-3 pb-10 px-3 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 min-h-[44px] max-h-[140px] rounded-[12px]"
             />
             <div className="absolute left-2 bottom-2 flex items-center gap-1">
               <button
@@ -707,16 +707,16 @@ function InlineClarifyCard({
     >
       <div className="px-4 pt-3.5 pb-3">
         {stepLabel && (
-          <div className="text-[10.5px] font-bold text-brand-600 uppercase tracking-[0.14em] mb-2">
+          <div className="text-[0.75rem] font-bold text-brand-600 uppercase tracking-[0.14em] mb-2">
             {stepLabel}
           </div>
         )}
         <div className="flex items-start justify-between gap-3">
-          <div className="text-[14px] font-semibold text-ink-800 leading-snug">
+          <div className="text-[0.875rem] font-semibold text-ink-800 leading-snug">
             {question.title}
           </div>
           {total > 1 && (
-            <div className="text-[11.5px] text-ink-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5">
+            <div className="text-[0.75rem] text-ink-400 whitespace-nowrap tabular-nums shrink-0 mt-0.5">
               {index + 1} of {total}
             </div>
           )}
@@ -736,7 +736,7 @@ function InlineClarifyCard({
                   isSelected ? 'bg-brand-50/60' : 'hover:bg-canvas',
                 ].join(' ')}
               >
-                <span className="flex-1 text-[13.5px] text-ink-800">{opt}</span>
+                <span className="flex-1 text-[0.75rem] text-ink-800">{opt}</span>
                 {isSelected && (
                   <span className="text-ink-400">
                     <CornerDownLeft size={13} />
@@ -759,12 +759,12 @@ function InlineClarifyCard({
             }
           }}
           placeholder="Type something else..."
-          className="flex-1 bg-transparent border-none outline-none text-[13px] text-ink-800 placeholder:text-ink-400"
+          className="flex-1 bg-transparent border-none outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
         />
         <button
           type="button"
           onClick={() => onSkip(question.id)}
-          className="text-[12.5px] font-semibold text-ink-600 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
+          className="text-[0.75rem] font-semibold text-ink-600 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
         >
           Skip
         </button>
@@ -781,7 +781,7 @@ export function ViewPreviewCard({ onClick, revealed }: ViewPreviewCardProps) {
       transition={{ duration: 0.2 }}
       className="flex items-center gap-2"
     >
-      <span className="text-[12.5px] text-ink-600 leading-snug">
+      <span className="text-[0.75rem] text-ink-600 leading-snug">
         Review the output schema on the right, then open the preview when ready.
       </span>
       <button
@@ -789,7 +789,7 @@ export function ViewPreviewCard({ onClick, revealed }: ViewPreviewCardProps) {
         onClick={onClick}
         disabled={revealed}
         className={[
-          'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all shrink-0',
+          'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold transition-all shrink-0',
           revealed
             ? 'bg-brand-50 text-brand-400 cursor-not-allowed'
             : 'text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] cursor-pointer',
@@ -843,12 +843,12 @@ export function ToleranceAdjustCard({
           <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
             <SlidersHorizontal size={14} />
           </span>
-          <span className="text-[14px] font-semibold text-ink-800">Tolerance rules</span>
-          <span className="text-[10.5px] font-bold tracking-wider rounded-md px-2 py-0.5 bg-brand-50 text-brand-700">
+          <span className="text-[0.875rem] font-semibold text-ink-800">Tolerance rules</span>
+          <span className="text-[0.75rem] font-bold tracking-wider rounded-md px-2 py-0.5 bg-brand-50 text-brand-700">
             INTERACTIVE
           </span>
         </div>
-        <span className="text-[11.5px] text-ink-400 font-medium whitespace-nowrap">
+        <span className="text-[0.75rem] text-ink-400 font-medium whitespace-nowrap">
           {state.enabled ? '1 active' : 'Off'}
         </span>
       </div>
@@ -866,16 +866,16 @@ export function ToleranceAdjustCard({
               </span>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[13.5px] font-semibold text-ink-800">Amount</span>
-                  <span className="text-[11.5px] text-ink-500 tabular-nums">{summary}</span>
+                  <span className="text-[0.75rem] font-semibold text-ink-800">Amount</span>
+                  <span className="text-[0.75rem] text-ink-500 tabular-nums">{summary}</span>
                   <span
-                    className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                    className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
                     style={{ background: sev.bg, color: sev.color }}
                   >
                     {sev.label}
                   </span>
                 </div>
-                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-500">
+                <div className="mt-0.5 flex items-center gap-1 text-[0.6875rem] text-ink-500">
                   <span className="inline-flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                     Invoice Amount
@@ -928,7 +928,7 @@ export function ToleranceAdjustCard({
                     key={m}
                     type="button"
                     onClick={() => onChange({ ...state, mode: m })}
-                    className="flex-1 py-1.5 text-[11px] font-semibold transition-all cursor-pointer capitalize"
+                    className="flex-1 py-1.5 text-[0.6875rem] font-semibold transition-all cursor-pointer capitalize"
                     style={
                       active
                         ? { background: '#6A12CD', color: '#fff' }
@@ -944,11 +944,11 @@ export function ToleranceAdjustCard({
             {state.mode === 'percentage' ? (
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[18px] font-bold tabular-nums min-w-[40px] text-brand-700">
+                  <span className="text-[1.125rem] font-bold tabular-nums min-w-[40px] text-brand-700">
                     {state.percentage}%
                   </span>
                   <span
-                    className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                    className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
                     style={{ background: sev.bg, color: sev.color }}
                   >
                     {sev.label}
@@ -971,13 +971,13 @@ export function ToleranceAdjustCard({
                 />
                 <div className="flex justify-between mt-1.5">
                   <span
-                    className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+                    className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
                     style={{ background: 'rgba(220,38,38,0.08)', color: '#DC2626' }}
                   >
                     0% Strict
                   </span>
                   <span
-                    className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded"
+                    className="text-[0.75rem] font-semibold px-1.5 py-0.5 rounded"
                     style={{ background: 'rgba(15,110,86,0.08)', color: '#0F6E56' }}
                   >
                     20% Relaxed
@@ -988,7 +988,7 @@ export function ToleranceAdjustCard({
               <div>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center flex-1 border border-canvas-border rounded-lg overflow-hidden focus-within:border-brand-400/50 focus-within:ring-2 focus-within:ring-brand-100 transition-all bg-white">
-                    <span className="text-[11px] font-semibold text-ink-400 pl-3 pr-1 select-none">$</span>
+                    <span className="text-[0.6875rem] font-semibold text-ink-400 pl-3 pr-1 select-none">$</span>
                     <input
                       type="number"
                       min={0}
@@ -1000,11 +1000,11 @@ export function ToleranceAdjustCard({
                           absolute: Math.max(0, Number(e.target.value) || 0),
                         })
                       }
-                      className="flex-1 py-1.5 pr-3 text-[13px] font-semibold bg-transparent outline-none tabular-nums text-brand-700"
+                      className="flex-1 py-1.5 pr-3 text-[0.8125rem] font-semibold bg-transparent outline-none tabular-nums text-brand-700"
                     />
                   </div>
                   <span
-                    className="text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                    className="text-[0.75rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
                     style={{ background: sev.bg, color: sev.color }}
                   >
                     {sev.label}
@@ -1016,7 +1016,7 @@ export function ToleranceAdjustCard({
                       key={v}
                       type="button"
                       onClick={() => onChange({ ...state, absolute: v })}
-                      className="flex-1 py-1 text-[10.5px] font-semibold rounded-md border transition-all cursor-pointer"
+                      className="flex-1 py-1 text-[0.75rem] font-semibold rounded-md border transition-all cursor-pointer"
                       style={
                         state.absolute === v
                           ? {
@@ -1044,7 +1044,7 @@ export function ToleranceAdjustCard({
           onClick={() => onRun(state)}
           disabled={disabled || !!running}
           className={[
-            'flex-1 inline-flex items-center justify-center gap-2 rounded-lg text-[12.5px] font-semibold px-3 py-2 transition-all',
+            'flex-1 inline-flex items-center justify-center gap-2 rounded-lg text-[0.75rem] font-semibold px-3 py-2 transition-all',
             disabled || running
               ? 'bg-brand-100 text-brand-400 cursor-not-allowed'
               : 'bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)]',
@@ -1066,7 +1066,7 @@ export function ToleranceAdjustCard({
           type="button"
           onClick={onReset}
           disabled={disabled || !!running}
-          className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-ink-500 hover:text-brand-600 px-2.5 py-2 rounded-lg hover:bg-brand-50/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 px-2.5 py-2 rounded-lg hover:bg-brand-50/60 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RotateCcw size={12} />
           Reset

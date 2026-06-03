@@ -38,8 +38,8 @@ const SEVERITY_STYLE: Record<string, string> = {
 const EVIDENCE_TYPES: EvidenceType[] = ['PO', 'Invoice', 'GRN', 'Approval', 'System Log', 'Other'];
 
 /* ─── Shared styles ─── */
-const inputClass = 'w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all';
-const labelClass = 'block text-[12.5px] font-semibold text-ink-700 mb-1.5';
+const inputClass = 'w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all';
+const labelClass = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
 
 /* ─── Component ─── */
 export default function ControlDetailView({ control, onBack, onUpdate }: Props) {
@@ -246,7 +246,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
         {/* Back */}
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back to Control Library
         </button>
 
@@ -254,7 +254,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
             <h1 className="text-xl font-bold text-text mb-1.5">{control.name}</h1>
-            <div className="flex items-center gap-2 text-[12px] text-ink-500 mb-1">
+            <div className="flex items-center gap-2 text-[0.75rem] text-ink-500 mb-1">
               <span className="font-mono text-ink-400">Control ID: {control.controlId}</span>
               <span className="text-ink-300">|</span>
               <span>Type: {control.classification}</span>
@@ -263,13 +263,13 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
               <span className="text-ink-300">|</span>
               <span>Automation: {control.automation}</span>
             </div>
-            <div className="text-[12px] text-ink-400">
+            <div className="text-[0.75rem] text-ink-400">
               Used in: {controlRACMs.length} RACM{controlRACMs.length !== 1 ? 's' : ''} · {control.linkedWorkflowIds.length} Workflow{control.linkedWorkflowIds.length !== 1 ? 's' : ''}
             </div>
           </div>
           <button
             onClick={() => addToast({ message: `Editing ${control.name}`, type: 'info' })}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[13px] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
           >
             <Pencil size={14} />Edit Control
           </button>
@@ -282,10 +282,10 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             const active = activeTab === tab.id;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
                 <Icon size={14} />{tab.label}
                 {tab.count != null && tab.count > 0 && (
-                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{tab.count}</span>
+                  <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{tab.count}</span>
                 )}
               </button>
             );
@@ -302,32 +302,32 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 {/* Description & Objective */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="glass-card rounded-xl p-5">
-                    <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-2">Description</h3>
-                    <p className="text-[13px] text-ink-700 leading-relaxed">{control.description || 'No description provided.'}</p>
+                    <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Description</h3>
+                    <p className="text-[0.8125rem] text-ink-700 leading-relaxed">{control.description || 'No description provided.'}</p>
                   </div>
                   <div className="glass-card rounded-xl p-5">
-                    <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-2">Objective</h3>
-                    <p className="text-[13px] text-ink-700 leading-relaxed">{control.objective || 'No objective defined.'}</p>
+                    <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-2">Objective</h3>
+                    <p className="text-[0.8125rem] text-ink-700 leading-relaxed">{control.objective || 'No objective defined.'}</p>
                   </div>
                 </div>
 
                 {/* Assertions */}
                 <div className="glass-card rounded-xl p-5">
-                  <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Assertions</h3>
+                  <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Assertions</h3>
                   {control.assertions.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
-                      {control.assertions.map(a => (<span key={a} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 text-[12px] font-medium border border-gray-200/60"><Check size={11} className="text-gray-400" />{ASSERTION_LABELS[a] || a}</span>))}
+                      {control.assertions.map(a => (<span key={a} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 text-[0.75rem] font-medium border border-gray-200/60"><Check size={11} className="text-gray-400" />{ASSERTION_LABELS[a] || a}</span>))}
                     </div>
-                  ) : <p className="text-[12.5px] text-ink-400">No assertions defined.</p>}
+                  ) : <p className="text-[0.75rem] text-ink-400">No assertions defined.</p>}
                 </div>
 
                 {/* Details */}
                 <div className="glass-card rounded-xl p-5">
-                  <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-4">Details</h3>
+                  <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Details</h3>
                   <div className="grid grid-cols-3 gap-6">
-                    <div><div className="text-[11px] text-ink-400 mb-1">Owner</div><div className="flex items-center gap-1.5 text-[13px] font-medium text-ink-700"><User size={13} className="text-ink-400" />{control.owner}</div></div>
-                    <div><div className="text-[11px] text-ink-400 mb-1">Created</div><div className="flex items-center gap-1.5 text-[13px] font-medium text-ink-700"><Calendar size={13} className="text-ink-400" />{control.createdAt}</div></div>
-                    <div><div className="text-[11px] text-ink-400 mb-1">Last Updated</div><div className="flex items-center gap-1.5 text-[13px] font-medium text-ink-700"><Calendar size={13} className="text-ink-400" />{control.updatedAt}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Owner</div><div className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700"><User size={13} className="text-ink-400" />{control.owner}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Created</div><div className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700"><Calendar size={13} className="text-ink-400" />{control.createdAt}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Last Updated</div><div className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700"><Calendar size={13} className="text-ink-400" />{control.updatedAt}</div></div>
                   </div>
                 </div>
               </div>
@@ -338,10 +338,10 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
               <div className="space-y-6">
                 <div className="glass-card rounded-xl p-5">
                   <div className="grid grid-cols-4 gap-6">
-                    <div><div className="text-[11px] text-ink-400 mb-1">Importance</div><div className="text-[13px] font-semibold text-ink-800">{control.classification}</div></div>
-                    <div><div className="text-[11px] text-ink-400 mb-1">Nature</div><div className="text-[13px] font-medium text-ink-700">{control.nature}</div></div>
-                    <div><div className="text-[11px] text-ink-400 mb-1">Automation</div><div className="text-[13px] font-medium text-ink-700">{control.automation}</div></div>
-                    <div><div className="text-[11px] text-ink-400 mb-1">Frequency</div><div className="text-[13px] font-medium text-ink-700">{control.frequency || '—'}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Importance</div><div className="text-[0.8125rem] font-semibold text-ink-800">{control.classification}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Nature</div><div className="text-[0.8125rem] font-medium text-ink-700">{control.nature}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Automation</div><div className="text-[0.8125rem] font-medium text-ink-700">{control.automation}</div></div>
+                    <div><div className="text-[0.6875rem] text-ink-400 mb-1">Frequency</div><div className="text-[0.8125rem] font-medium text-ink-700">{control.frequency || '—'}</div></div>
                   </div>
                 </div>
               </div>
@@ -368,8 +368,8 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 {/* Top status indicator */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-semibold text-ink-700">Workflow Status</span>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border ${wfStatusStyle}`}>
+                    <span className="text-[0.8125rem] font-semibold text-ink-700">Workflow Status</span>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.6875rem] font-semibold border ${wfStatusStyle}`}>
                       {wfStatus === 'Ready' && <CheckCircle2 size={12} />}
                       {wfStatus === 'Partially Configured' && <AlertTriangle size={12} />}
                       {wfStatus === 'No Workflow' && <X size={12} />}
@@ -378,7 +378,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowLinkDrawer(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+                      className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                       <Plus size={14} />Add Workflow
                     </button>
                   </div>
@@ -389,12 +389,12 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                   <div className="rounded-xl border border-risk/20 bg-risk-50/30 p-5 flex items-start gap-3">
                     <AlertTriangle size={18} className="text-risk-600 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[13px] font-semibold text-risk-800 mb-0.5">No workflow linked</p>
-                      <p className="text-[12px] text-risk-600">This control cannot be tested until a workflow is added. Link an existing workflow or create a new one.</p>
+                      <p className="text-[0.8125rem] font-semibold text-risk-800 mb-0.5">No workflow linked</p>
+                      <p className="text-[0.75rem] text-risk-600">This control cannot be tested until a workflow is added. Link an existing workflow or create a new one.</p>
                       <div className="flex items-center gap-2 mt-3">
-                        <button onClick={() => setShowLinkDrawer(true)} className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5"><Link2 size={12} />Link Existing Workflow</button>
-                        <button onClick={() => addToast({ message: 'Opening Ask IRA to build a workflow for this control...', type: 'info' })} className="px-3 py-1.5 rounded-lg border border-border text-[12px] text-text-secondary hover:bg-white cursor-pointer transition-colors flex items-center gap-1.5"><Zap size={12} />Create New Workflow</button>
-                        <button onClick={() => addToast({ message: 'Workflow can be added later.', type: 'info' })} className="px-3 py-1.5 rounded-lg text-[12px] text-ink-400 hover:text-ink-600 cursor-pointer transition-colors">Create Later</button>
+                        <button onClick={() => setShowLinkDrawer(true)} className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5"><Link2 size={12} />Link Existing Workflow</button>
+                        <button onClick={() => addToast({ message: 'Opening Ask IRA to build a workflow for this control...', type: 'info' })} className="px-3 py-1.5 rounded-lg border border-border text-[0.75rem] text-text-secondary hover:bg-white cursor-pointer transition-colors flex items-center gap-1.5"><Zap size={12} />Create New Workflow</button>
+                        <button onClick={() => addToast({ message: 'Workflow can be added later.', type: 'info' })} className="px-3 py-1.5 rounded-lg text-[0.75rem] text-ink-400 hover:text-ink-600 cursor-pointer transition-colors">Create Later</button>
                       </div>
                     </div>
                   </div>
@@ -403,14 +403,14 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 {/* Workflow table */}
                 {linkedWorkflowObjects.length > 0 && (
                   <div className="border border-border-light rounded-xl overflow-hidden">
-                    <table className="w-full text-[12px]">
+                    <table className="w-full text-[0.75rem]">
                       <thead className="bg-white border-b border-border-light">
                         <tr>
-                          <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">Workflow Name</th>
-                          <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[140px]">Type</th>
-                          <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[250px]">Attributes Covered</th>
-                          <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[120px]">Status</th>
-                          <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[140px]"></th>
+                          <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">Workflow Name</th>
+                          <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[140px]">Type</th>
+                          <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[250px]">Attributes Covered</th>
+                          <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[120px]">Status</th>
+                          <th className="px-4 py-3 text-right text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[140px]"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -427,18 +427,18 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               {/* Workflow Name — clickable */}
                               <td className="px-4 py-3.5 align-top">
                                 <button onClick={() => addToast({ message: `Opening workflow "${wf.name}"`, type: 'info' })}
-                                  className="text-[13px] font-medium text-brand-700 hover:text-brand-600 hover:underline cursor-pointer text-left">
+                                  className="text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 hover:underline cursor-pointer text-left">
                                   {wf.name}
                                 </button>
-                                <span className="text-[10px] font-mono text-ink-400 block mt-0.5">{wf.id}</span>
+                                <span className="text-[0.625rem] font-mono text-ink-400 block mt-0.5">{wf.id}</span>
                               </td>
                               {/* Type */}
                               <td className="px-4 py-3.5 align-top">
                                 <div className="flex flex-wrap gap-1">
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${wf.type === 'automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
+                                  <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${wf.type === 'automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>
                                     {wf.type === 'automated' ? 'Automated' : 'Manual'}
                                   </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-surface-2 text-ink-600">
+                                  <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-surface-2 text-ink-600">
                                     {(wf as Record<string, unknown>).controlNature as string || 'Detective'}
                                   </span>
                                 </div>
@@ -446,11 +446,11 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               {/* Attributes Covered */}
                               <td className="px-4 py-3.5 align-top">
                                 {attrs.length === 0 ? (
-                                  <span className="text-[11px] text-ink-400 italic">No attributes mapped</span>
+                                  <span className="text-[0.6875rem] text-ink-400 italic">No attributes mapped</span>
                                 ) : (
                                   <div className="space-y-1">
                                     {attrs.map(attr => (
-                                      <div key={attr.id} className="flex items-center gap-1.5 text-[11px]">
+                                      <div key={attr.id} className="flex items-center gap-1.5 text-[0.6875rem]">
                                         {attr.status === 'Active' ? (
                                           <Check size={11} className="text-compliant-600 shrink-0" />
                                         ) : (
@@ -464,7 +464,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               </td>
                               {/* Status */}
                               <td className="px-4 py-3.5 align-top">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold inline-flex items-center ${rowStatusStyle}`}>{wfRowStatus}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${rowStatusStyle}`}>{wfRowStatus}</span>
                               </td>
                               {/* Actions */}
                               <td className="px-4 py-3.5 align-top text-right">
@@ -495,7 +495,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 {linkedWorkflowObjects.length > 0 && (
                   <div className="rounded-lg border border-canvas-border bg-canvas p-3 flex items-start gap-2.5">
                     <Info size={14} className="text-ink-400 mt-0.5 shrink-0" />
-                    <div className="text-[12px] text-ink-500">
+                    <div className="text-[0.75rem] text-ink-500">
                       <span className="font-semibold text-ink-600">Validation:</span> Every test attribute must be covered by at least one workflow. Multiple workflows can share attributes, and one workflow can cover multiple attributes.
                     </div>
                   </div>
@@ -508,14 +508,14 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {activeTab === 'execution-logic' && (
               <div className="space-y-5">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setShowLinkDrawer(true)} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"><Link2 size={14} />Link Existing Workflow</button>
-                  <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[13px] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow from Control</button>
+                  <button onClick={() => setShowLinkDrawer(true)} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Link2 size={14} />Link Existing Workflow</button>
+                  <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow from Control</button>
                 </div>
                 {linkedWorkflowObjects.length === 0 ? (
                   <div className="glass-card rounded-xl p-8 text-center">
                     <Workflow size={32} className="mx-auto text-ink-300 mb-3" />
-                    <p className="text-[14px] font-semibold text-ink-600 mb-1">No workflows linked</p>
-                    <p className="text-[12.5px] text-ink-400">Link a workflow to define how this control will be tested during engagements.</p>
+                    <p className="text-[0.875rem] font-semibold text-ink-600 mb-1">No workflows linked</p>
+                    <p className="text-[0.75rem] text-ink-400">Link a workflow to define how this control will be tested during engagements.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -527,12 +527,12 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1.5">
                                 <Workflow size={15} className="text-brand-600" />
-                                <span className="text-[14px] font-semibold text-ink-800">{wf.name}</span>
-                                {i === 0 && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700">PRIMARY</span>}
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${wf.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status}</span>
+                                <span className="text-[0.875rem] font-semibold text-ink-800">{wf.name}</span>
+                                {i === 0 && <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-brand-50 text-brand-700">PRIMARY</span>}
+                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${wf.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{wf.status}</span>
                               </div>
-                              <p className="text-[12.5px] text-ink-500 mb-3">{wf.desc}</p>
-                              <div className="grid grid-cols-5 gap-4 text-[12px]">
+                              <p className="text-[0.75rem] text-ink-500 mb-3">{wf.desc}</p>
+                              <div className="grid grid-cols-5 gap-4 text-[0.75rem]">
                                 <div><span className="text-ink-400">Type</span><div className="font-medium text-ink-700 mt-0.5">{wf.type}</div></div>
                                 <div><span className="text-ink-400">Steps</span><div className="font-medium text-ink-700 mt-0.5">{wf.steps.length} steps</div></div>
                                 <div><span className="text-ink-400">Attributes</span><div className="font-medium text-ink-700 mt-0.5">{attrCount}</div></div>
@@ -541,8 +541,8 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-4">
-                              <button onClick={() => addToast({ message: `Opening workflow "${wf.name}"`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[12px] font-medium hover:bg-primary/20 transition-colors cursor-pointer"><ArrowRight size={12} />View Workflow</button>
-                              <button onClick={() => handleUnlinkWorkflow(wf.id, wf.name)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-canvas-border text-[12px] text-ink-500 hover:text-risk-700 hover:border-risk/30 hover:bg-risk-50 transition-colors cursor-pointer"><Unlink size={12} />Unlink</button>
+                              <button onClick={() => addToast({ message: `Opening workflow "${wf.name}"`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.75rem] font-medium hover:bg-primary/20 transition-colors cursor-pointer"><ArrowRight size={12} />View Workflow</button>
+                              <button onClick={() => handleUnlinkWorkflow(wf.id, wf.name)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-canvas-border text-[0.75rem] text-ink-500 hover:text-risk-700 hover:border-risk/30 hover:bg-risk-50 transition-colors cursor-pointer"><Unlink size={12} />Unlink</button>
                             </div>
                           </div>
                         </div>
@@ -552,7 +552,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 )}
                 <div className="rounded-lg border border-canvas-border bg-canvas p-3 flex items-start gap-2.5">
                   <Shield size={14} className="text-ink-400 mt-0.5 shrink-0" />
-                  <div className="text-[12px] text-ink-500"><span className="font-semibold text-ink-600">Note:</span> Linking a workflow defines how this control will be tested. Execution happens within an engagement.</div>
+                  <div className="text-[0.75rem] text-ink-500"><span className="font-semibold text-ink-600">Note:</span> Linking a workflow defines how this control will be tested. Execution happens within an engagement.</div>
                 </div>
               </div>
             )}
@@ -563,18 +563,18 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                 {control.linkedWorkflowIds.length === 0 ? (
                   <div className="glass-card rounded-xl p-10 text-center">
                     <ClipboardList size={36} className="mx-auto text-ink-300 mb-3" />
-                    <p className="text-[15px] font-semibold text-ink-600 mb-1">No workflow linked</p>
-                    <p className="text-[13px] text-ink-400 mb-5 max-w-md mx-auto">Link or create a workflow to define test conditions. These describe what evidence and criteria are validated during testing.</p>
+                    <p className="text-[0.9375rem] font-semibold text-ink-600 mb-1">No workflow linked</p>
+                    <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">Link or create a workflow to define test conditions. These describe what evidence and criteria are validated during testing.</p>
                     <div className="flex items-center justify-center gap-3">
-                      <button onClick={() => setShowLinkDrawerFromAttrs(true)} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"><Link2 size={14} />Link Workflow</button>
-                      <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[13px] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow</button>
+                      <button onClick={() => setShowLinkDrawerFromAttrs(true)} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Link2 size={14} />Link Workflow</button>
+                      <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow</button>
                     </div>
                   </div>
                 ) : (
                   <>
                     <div className="rounded-lg border border-mitigated/30 bg-mitigated-50 p-3 flex items-start gap-2.5">
                       <Info size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
-                      <div className="text-[12px] text-mitigated-700">Changes to attributes affect future engagements only. Existing engagement snapshots are not changed.</div>
+                      <div className="text-[0.75rem] text-mitigated-700">Changes to attributes affect future engagements only. Existing engagement snapshots are not changed.</div>
                     </div>
                     <div className="glass-card rounded-xl p-4">
                       <div className="flex items-center justify-between">
@@ -582,38 +582,38 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                           <Workflow size={15} className="text-brand-600" />
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[13px] font-semibold text-ink-800">{primaryWf?.name}</span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700">PRIMARY</span>
+                              <span className="text-[0.8125rem] font-semibold text-ink-800">{primaryWf?.name}</span>
+                              <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-brand-50 text-brand-700">PRIMARY</span>
                               {draftVersionCreated ? (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-mitigated-50 text-mitigated-700">DRAFT v2</span>
+                                <span className="px-2 py-0.5 rounded text-[0.625rem] font-bold bg-mitigated-50 text-mitigated-700">DRAFT v2</span>
                               ) : (
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${primaryWf?.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`px-2 py-0.5 rounded text-[0.625rem] font-bold uppercase ${primaryWf?.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>
                                   {primaryWf?.status === 'active' ? 'PUBLISHED v1' : primaryWf?.status}
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11.5px] text-ink-400 mt-0.5">{primaryAttributes.length} attribute{primaryAttributes.length !== 1 ? 's' : ''} defined</div>
+                            <div className="text-[0.75rem] text-ink-400 mt-0.5">{primaryAttributes.length} attribute{primaryAttributes.length !== 1 ? 's' : ''} defined</div>
                           </div>
                         </div>
-                        <button onClick={() => { setEditingAttribute(null); setShowAddModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"><Plus size={14} />Add Attribute</button>
+                        <button onClick={() => { setEditingAttribute(null); setShowAddModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Plus size={14} />Add Attribute</button>
                       </div>
                     </div>
                     {primaryWf?.status === 'active' && !draftVersionCreated && (
                       <div className="rounded-lg border border-canvas-border bg-canvas p-3 flex items-start gap-2.5">
                         <Lock size={13} className="text-ink-400 mt-0.5 shrink-0" />
-                        <div className="text-[12px] text-ink-500">This workflow is <span className="font-semibold text-ink-600">published</span>. Editing attributes will create a new draft version (v2) automatically.</div>
+                        <div className="text-[0.75rem] text-ink-500">This workflow is <span className="font-semibold text-ink-600">published</span>. Editing attributes will create a new draft version (v2) automatically.</div>
                       </div>
                     )}
                     {primaryAttributes.length === 0 ? (
                       <div className="glass-card rounded-xl p-8 text-center">
                         <ClipboardList size={28} className="mx-auto text-ink-300 mb-2" />
-                        <p className="text-[13px] text-ink-500">No attributes defined yet.</p>
-                        <p className="text-[12px] text-ink-400 mt-0.5">Add attributes to define what is tested and what evidence is required.</p>
+                        <p className="text-[0.8125rem] text-ink-500">No attributes defined yet.</p>
+                        <p className="text-[0.75rem] text-ink-400 mt-0.5">Add attributes to define what is tested and what evidence is required.</p>
                       </div>
                     ) : (
                       <div className="glass-card rounded-xl overflow-hidden">
                         <div className="overflow-x-auto">
-                          <table className="w-full text-[12.5px]">
+                          <table className="w-full text-[0.75rem]">
                             <thead><tr className="bg-canvas border-b border-canvas-border">
                               <th className="px-4 py-2.5 text-left font-semibold text-ink-500" style={{ width: '80px' }}>ID</th>
                               <th className="px-4 py-2.5 text-left font-semibold text-ink-500">Attribute Name</th>
@@ -626,12 +626,12 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                             <tbody>
                               {primaryAttributes.map((attr, i) => (
                                 <tr key={attr.id} className={`border-b border-canvas-border last:border-0 hover:bg-brand-50/30 transition-colors ${i % 2 === 1 ? 'bg-canvas/30' : ''}`}>
-                                  <td className="px-4 py-3"><span className="font-mono text-[11px] text-ink-500">{attr.label}</span></td>
-                                  <td className="px-4 py-3"><div className="font-medium text-ink-800">{attr.name}</div><div className="text-[11.5px] text-ink-400 mt-0.5 line-clamp-1">{attr.description}</div></td>
-                                  <td className="px-4 py-3"><div className="text-[11.5px] text-ink-600 line-clamp-2">{attr.passCriteria}</div></td>
-                                  <td className="px-4 py-3 text-center">{attr.evidenceRequired ? (<span className="inline-flex items-center gap-1 text-evidence-700 text-[11px] font-semibold"><Paperclip size={10} />{attr.evidenceType || 'Yes'}</span>) : <span className="text-[11px] text-ink-400">No</span>}</td>
-                                  <td className="px-4 py-3 text-center">{attr.mandatory ? (<span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-risk-50 text-risk-700">Required</span>) : (<span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-500">Optional</span>)}</td>
-                                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${attr.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${attr.status === 'Active' ? 'bg-compliant' : 'bg-gray-400'}`} />{attr.status}</span></td>
+                                  <td className="px-4 py-3"><span className="font-mono text-[0.6875rem] text-ink-500">{attr.label}</span></td>
+                                  <td className="px-4 py-3"><div className="font-medium text-ink-800">{attr.name}</div><div className="text-[0.75rem] text-ink-400 mt-0.5 line-clamp-1">{attr.description}</div></td>
+                                  <td className="px-4 py-3"><div className="text-[0.75rem] text-ink-600 line-clamp-2">{attr.passCriteria}</div></td>
+                                  <td className="px-4 py-3 text-center">{attr.evidenceRequired ? (<span className="inline-flex items-center gap-1 text-evidence-700 text-[0.6875rem] font-semibold"><Paperclip size={10} />{attr.evidenceType || 'Yes'}</span>) : <span className="text-[0.6875rem] text-ink-400">No</span>}</td>
+                                  <td className="px-4 py-3 text-center">{attr.mandatory ? (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-risk-50 text-risk-700">Required</span>) : (<span className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-medium bg-gray-100 text-gray-500">Optional</span>)}</td>
+                                  <td className="px-4 py-3 text-center"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${attr.status === 'Active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${attr.status === 'Active' ? 'bg-compliant' : 'bg-gray-400'}`} />{attr.status}</span></td>
                                   <td className="px-4 py-3 text-center"><div className="flex items-center justify-center gap-1">
                                     <button onClick={() => { setEditingAttribute(attr); setShowAddModal(true); }} title="Edit" className="p-1.5 rounded-md hover:bg-gray-100 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"><Pencil size={12} /></button>
                                     <button onClick={() => handleRemoveAttribute(attr.id)} title="Remove" className="p-1.5 rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer"><Trash2 size={12} /></button>
@@ -652,12 +652,12 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {activeTab === 'usage' && (
               <div className="space-y-5">
                 <div className="glass-card rounded-xl p-5">
-                  <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-4">RACM Matrices Using This Control ({controlRACMs.length})</h3>
+                  <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">RACM Matrices Using This Control ({controlRACMs.length})</h3>
                   {controlRACMs.length === 0 ? (
                     <div className="text-center py-8">
                       <LayoutGrid size={28} className="mx-auto text-ink-300 mb-2" />
-                      <p className="text-[13px] text-ink-500">This control is not used in any RACM yet.</p>
-                      <p className="text-[12px] text-ink-400 mt-0.5">Add it to a Risk & Control Matrix to track its usage.</p>
+                      <p className="text-[0.8125rem] text-ink-500">This control is not used in any RACM yet.</p>
+                      <p className="text-[0.75rem] text-ink-400 mt-0.5">Add it to a Risk & Control Matrix to track its usage.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -665,13 +665,13 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                         <div key={racm.id} className="flex items-center gap-4 px-4 py-3 rounded-lg border border-canvas-border bg-white hover:bg-canvas transition-colors">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className="font-mono text-[11px] text-ink-500">{racm.id}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${racm.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{racm.status}</span>
+                              <span className="font-mono text-[0.6875rem] text-ink-500">{racm.id}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase ${racm.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-gray-100 text-gray-600'}`}>{racm.status}</span>
                             </div>
-                            <div className="text-[13px] font-medium text-ink-800">{racm.name}</div>
+                            <div className="text-[0.8125rem] font-medium text-ink-800">{racm.name}</div>
                           </div>
-                          <div className="text-[11px] text-ink-400">{racm.fw}</div>
-                          <div className="text-[11px] text-ink-400">{racm.owner}</div>
+                          <div className="text-[0.6875rem] text-ink-400">{racm.fw}</div>
+                          <div className="text-[0.6875rem] text-ink-400">{racm.owner}</div>
                         </div>
                       ))}
                     </div>
@@ -683,7 +683,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {/* ═══ CHANGE HISTORY ═══ */}
             {activeTab === 'change-history' && (
               <div className="glass-card rounded-xl p-5">
-                <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-4">Change History ({fullHistory.length})</h3>
+                <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Change History ({fullHistory.length})</h3>
                 <div className="relative">
                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-canvas-border" />
                   <div className="space-y-4">
@@ -691,8 +691,8 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                       <div key={i} className="flex items-start gap-4 relative">
                         <div className={`w-[15px] h-[15px] rounded-full bg-white border-2 shrink-0 mt-0.5 z-10 ${i < liveHistory.length ? 'border-brand-600' : 'border-brand-300'}`} />
                         <div className="flex-1">
-                          <div className="text-[12.5px] text-ink-800">{entry.action}</div>
-                          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-ink-400">
+                          <div className="text-[0.75rem] text-ink-800">{entry.action}</div>
+                          <div className="flex items-center gap-3 mt-0.5 text-[0.6875rem] text-ink-400">
                             <span className="flex items-center gap-1"><User size={10} />{entry.user}</span>
                             <span className="flex items-center gap-1"><Calendar size={10} />{entry.date}</span>
                           </div>
@@ -759,8 +759,8 @@ function AttributeModal({ existing, onClose, onSave }: {
           transition={{ duration: 0.2 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[560px] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
             <div>
-              <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Attribute' : 'Add Attribute'}</h2>
-              <p className="text-[12.5px] text-ink-500 mt-0.5">Define a test condition for the linked workflow.</p>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">{isEdit ? 'Edit Attribute' : 'Add Attribute'}</h2>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a test condition for the linked workflow.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
@@ -770,29 +770,29 @@ function AttributeModal({ existing, onClose, onSave }: {
             <div>
               <label className={labelClass}>Evidence Required</label>
               <div className="grid grid-cols-2 gap-3">
-                {[true, false].map(v => (<button key={String(v)} onClick={() => { setEvidenceRequired(v); if (!v) setEvidenceType(''); }} className={`px-4 py-2.5 rounded-lg border text-[13px] font-medium transition-all cursor-pointer ${evidenceRequired === v ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{v ? 'Yes' : 'No'}</button>))}
+                {[true, false].map(v => (<button key={String(v)} onClick={() => { setEvidenceRequired(v); if (!v) setEvidenceType(''); }} className={`px-4 py-2.5 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${evidenceRequired === v ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{v ? 'Yes' : 'No'}</button>))}
               </div>
             </div>
             {evidenceRequired && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                 <label className={labelClass}>Evidence Type</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {EVIDENCE_TYPES.map(t => (<button key={t} onClick={() => setEvidenceType(evidenceType === t ? '' : t)} className={`px-3 py-2 rounded-lg border text-[12.5px] font-medium transition-all cursor-pointer ${evidenceType === t ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{t}</button>))}
+                  {EVIDENCE_TYPES.map(t => (<button key={t} onClick={() => setEvidenceType(evidenceType === t ? '' : t)} className={`px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${evidenceType === t ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{t}</button>))}
                 </div>
               </motion.div>
             )}
             <div>
               <label className={labelClass}>Mandatory</label>
               <div className="grid grid-cols-2 gap-3">
-                {[true, false].map(v => (<button key={String(v)} onClick={() => setMandatory(v)} className={`px-4 py-2.5 rounded-lg border text-[13px] font-medium transition-all cursor-pointer ${mandatory === v ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{v ? 'Yes — Required' : 'No — Optional'}</button>))}
+                {[true, false].map(v => (<button key={String(v)} onClick={() => setMandatory(v)} className={`px-4 py-2.5 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${mandatory === v ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{v ? 'Yes — Required' : 'No — Optional'}</button>))}
               </div>
             </div>
             <div><label className={labelClass}>Pass Criteria <span className="text-risk">*</span></label><textarea value={passCriteria} onChange={e => setPassCriteria(e.target.value)} placeholder="Define what constitutes a pass..." rows={2} className={inputClass + ' resize-none'} /></div>
             <div><label className={labelClass}>Failure Criteria</label><textarea value={failureCriteria} onChange={e => setFailureCriteria(e.target.value)} placeholder="Define what constitutes a failure..." rows={2} className={inputClass + ' resize-none'} /></div>
           </div>
           <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-            <button onClick={handleSubmit} disabled={!isValid} className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">{isEdit ? 'Save Changes' : 'Add Attribute'}</button>
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+            <button onClick={handleSubmit} disabled={!isValid} className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">{isEdit ? 'Save Changes' : 'Add Attribute'}</button>
           </div>
         </motion.div>
       </motion.div>

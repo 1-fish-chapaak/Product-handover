@@ -14,9 +14,9 @@ import {
   type InternalAuditScopeState,
 } from './internalAuditScopeData';
 
-const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[12.5px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11.5px] font-semibold text-text-muted block mb-1.5';
+const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 const READINESS_CLS = { 'Draft Scope': 'bg-gray-100 text-gray-600', 'Needs Details': 'bg-amber-50 text-amber-700', 'Scope Ready': 'bg-emerald-50 text-emerald-700' };
 
 interface Props {
@@ -79,32 +79,32 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
       {/* ═══ Page Header ═══ */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[17px] font-bold text-text tracking-tight">Scope</h3>
-          <p className="text-[12.5px] text-text-muted mt-1 leading-relaxed max-w-[600px]">
+          <h3 className="text-[1.0625rem] font-bold text-text tracking-tight">Scope</h3>
+          <p className="text-[0.75rem] text-text-muted mt-1 leading-relaxed max-w-[600px]">
             Define what this internal audit will cover and attach the source documents that drive RACM, controls, and workflows.
           </p>
         </div>
-        <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold shrink-0 ${READINESS_CLS[status]}`}>{status}</span>
+        <span className={`px-3 py-1.5 rounded-full text-[0.625rem] font-bold shrink-0 ${READINESS_CLS[status]}`}>{status}</span>
       </div>
 
       {/* ═══ A. Scope Context — compact summary bar ═══ */}
       <div className="rounded-xl border border-border-light bg-surface-2/30 p-4">
-        <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-3">Scope Context</h4>
-        <div className="grid grid-cols-4 gap-4 text-[12px]">
+        <h4 className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider mb-3">Scope Context</h4>
+        <div className="grid grid-cols-4 gap-4 text-[0.75rem]">
           <div>
-            <span className="text-[10px] text-gray-400 block mb-0.5">Assignment</span>
+            <span className="text-[0.625rem] text-gray-400 block mb-0.5">Assignment</span>
             <span className="text-text font-semibold">{engagement.name}</span>
           </div>
           <div>
-            <span className="text-[10px] text-gray-400 block mb-0.5">Scope Level</span>
+            <span className="text-[0.625rem] text-gray-400 block mb-0.5">Scope Level</span>
             <span className="text-text font-semibold">{SCOPE_LEVEL_LABELS[scope.scopeLevel]?.label || scope.scopeLevel}</span>
           </div>
           <div>
-            <span className="text-[10px] text-gray-400 block mb-0.5">Entity</span>
+            <span className="text-[0.625rem] text-gray-400 block mb-0.5">Entity</span>
             <span className="text-text font-semibold">{engagement.entityOrLocation || '—'}</span>
           </div>
           <div>
-            <span className="text-[10px] text-gray-400 block mb-0.5">Process Owner</span>
+            <span className="text-[0.625rem] text-gray-400 block mb-0.5">Process Owner</span>
             <span className="text-text font-semibold">{cfg.processOwner || '—'}</span>
           </div>
         </div>
@@ -119,22 +119,22 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
           {/* ═══ B. Define Scope ═══ */}
           <div className="rounded-xl border border-border-light bg-white p-6 space-y-6">
             <div>
-              <h4 className="text-[13px] font-bold text-text">Define Scope</h4>
-              <p className="text-[11.5px] text-text-muted mt-0.5">Choose the audit coverage level and primary business process.</p>
+              <h4 className="text-[0.8125rem] font-bold text-text">Define Scope</h4>
+              <p className="text-[0.75rem] text-text-muted mt-0.5">Choose the audit coverage level and primary business process.</p>
             </div>
 
             {/* Scope Level */}
             <div className="space-y-3">
-              <label className="text-[11.5px] font-semibold text-text block">Scope Level</label>
+              <label className="text-[0.75rem] font-semibold text-text block">Scope Level</label>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(SCOPE_LEVEL_LABELS).map(([key, { label }]) => (
                   <button key={key} onClick={() => update('scopeLevel', key)}
-                    className={`px-4 py-2 rounded-lg text-[11px] font-semibold cursor-pointer transition-all border ${scope.scopeLevel === key ? 'border-primary bg-primary/8 text-primary shadow-sm shadow-primary/10' : 'border-border-light text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}>
+                    className={`px-4 py-2 rounded-lg text-[0.6875rem] font-semibold cursor-pointer transition-all border ${scope.scopeLevel === key ? 'border-primary bg-primary/8 text-primary shadow-sm shadow-primary/10' : 'border-border-light text-gray-500 hover:border-gray-300 hover:bg-gray-50'}`}>
                     {label}
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-gray-400 leading-relaxed">{SCOPE_LEVEL_LABELS[scope.scopeLevel]?.desc || ''}</p>
+              <p className="text-[0.6875rem] text-gray-400 leading-relaxed">{SCOPE_LEVEL_LABELS[scope.scopeLevel]?.desc || ''}</p>
             </div>
 
             <div className="border-t border-border-light/60" />
@@ -144,7 +144,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
               <div className="flex items-center justify-between">
                 <label className={labelCls + ' mb-0'}>Business Process <span className="text-red-400">*</span></label>
                 <button onClick={() => alert('Create Business Process — will be connected to Process Hub.')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-primary/8 hover:bg-primary/15 cursor-pointer transition-colors border border-primary/15">
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold text-primary bg-primary/8 hover:bg-primary/15 cursor-pointer transition-colors border border-primary/15">
                   <Plus size={10} />Create Business Process
                 </button>
               </div>
@@ -161,7 +161,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                   <label className={labelCls + ' mb-0'}>Sub-processes {scope.scopeLevel !== 'PROCESS' && <span className="text-red-400">*</span>}</label>
                   {scope.businessProcessId && (
                     <button onClick={() => { setShowAddSubProc(true); setSubProcValidation(''); }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-primary hover:bg-primary/8 cursor-pointer transition-colors">
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold text-primary hover:bg-primary/8 cursor-pointer transition-colors">
                       <Plus size={10} />Add Sub-process
                     </button>
                   )}
@@ -169,9 +169,9 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex flex-wrap gap-2">
                   {allSubProcesses.map(sp => (
                     <button key={sp.id} onClick={() => toggleMulti('subProcessIds', sp.id)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all flex items-center gap-1.5 border ${scope.subProcessIds.includes(sp.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm shadow-primary/5' : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:border-gray-200'}`}>
+                      className={`px-3 py-1.5 rounded-lg text-[0.6875rem] font-medium cursor-pointer transition-all flex items-center gap-1.5 border ${scope.subProcessIds.includes(sp.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm shadow-primary/5' : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:border-gray-200'}`}>
                       {sp.name}
-                      {sp.isCustom && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-purple-50 text-purple-600">Custom</span>}
+                      {sp.isCustom && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-purple-50 text-purple-600">Custom</span>}
                       {sp.isCustom && scope.subProcessIds.includes(sp.id) && (
                         <span onClick={e => { e.stopPropagation(); removeCustomSubProcess(sp.id); }} className="ml-0.5 text-gray-400 hover:text-red-500 cursor-pointer"><X size={9} /></span>
                       )}
@@ -180,12 +180,12 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 </div>
                 {showAddSubProc && (
                   <div className="mt-2 flex items-center gap-2">
-                    <input value={newSubProcName} onChange={e => { setNewSubProcName(e.target.value); setSubProcValidation(''); }} placeholder="Sub-process name..." className="flex-1 px-3 py-2 border border-border rounded-lg text-[11.5px] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addCustomSubProcess(); }} />
-                    <button onClick={addCustomSubProcess} disabled={!newSubProcName.trim()} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
-                    <button onClick={() => { setShowAddSubProc(false); setNewSubProcName(''); setSubProcValidation(''); }} className="px-3 py-2 rounded-lg text-[11px] text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
+                    <input value={newSubProcName} onChange={e => { setNewSubProcName(e.target.value); setSubProcValidation(''); }} placeholder="Sub-process name..." className="flex-1 px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addCustomSubProcess(); }} />
+                    <button onClick={addCustomSubProcess} disabled={!newSubProcName.trim()} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
+                    <button onClick={() => { setShowAddSubProc(false); setNewSubProcName(''); setSubProcValidation(''); }} className="px-3 py-2 rounded-lg text-[0.6875rem] text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
                   </div>
                 )}
-                {subProcValidation && <p className="text-[10px] text-red-500 mt-1">{subProcValidation}</p>}
+                {subProcValidation && <p className="text-[0.625rem] text-red-500 mt-1">{subProcValidation}</p>}
               </div>
             )}
 
@@ -195,19 +195,19 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex items-center justify-between">
                   <label className={labelCls + ' mb-0'}>Sub-processes {scope.scopeLevel !== 'PROCESS' && <span className="text-red-400">*</span>}</label>
                   <button onClick={() => { setShowAddSubProc(true); setSubProcValidation(''); }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-primary hover:bg-primary/8 cursor-pointer transition-colors">
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold text-primary hover:bg-primary/8 cursor-pointer transition-colors">
                     <Plus size={10} />Add Sub-process
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 italic">No predefined sub-processes for this business process. Add a custom one.</p>
+                <p className="text-[0.6875rem] text-gray-400 italic">No predefined sub-processes for this business process. Add a custom one.</p>
                 {showAddSubProc && (
                   <div className="mt-2 flex items-center gap-2">
-                    <input value={newSubProcName} onChange={e => { setNewSubProcName(e.target.value); setSubProcValidation(''); }} placeholder="Sub-process name..." className="flex-1 px-3 py-2 border border-border rounded-lg text-[11.5px] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addCustomSubProcess(); }} />
-                    <button onClick={addCustomSubProcess} disabled={!newSubProcName.trim()} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
-                    <button onClick={() => { setShowAddSubProc(false); setNewSubProcName(''); setSubProcValidation(''); }} className="px-3 py-2 rounded-lg text-[11px] text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
+                    <input value={newSubProcName} onChange={e => { setNewSubProcName(e.target.value); setSubProcValidation(''); }} placeholder="Sub-process name..." className="flex-1 px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40" onKeyDown={e => { if (e.key === 'Enter') addCustomSubProcess(); }} />
+                    <button onClick={addCustomSubProcess} disabled={!newSubProcName.trim()} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add</button>
+                    <button onClick={() => { setShowAddSubProc(false); setNewSubProcName(''); setSubProcValidation(''); }} className="px-3 py-2 rounded-lg text-[0.6875rem] text-gray-500 hover:text-text hover:bg-gray-100 cursor-pointer transition-colors">Cancel</button>
                   </div>
                 )}
-                {subProcValidation && <p className="text-[10px] text-red-500 mt-1">{subProcValidation}</p>}
+                {subProcValidation && <p className="text-[0.625rem] text-red-500 mt-1">{subProcValidation}</p>}
               </div>
             )}
 
@@ -218,7 +218,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex flex-wrap gap-2">
                   {availableActivities.map(a => (
                     <button key={a.id} onClick={() => toggleMulti('activityIds', a.id)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all border ${scope.activityIds.includes(a.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm shadow-primary/5' : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:border-gray-200'}`}>
+                      className={`px-3 py-1.5 rounded-lg text-[0.6875rem] font-medium cursor-pointer transition-all border ${scope.activityIds.includes(a.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm shadow-primary/5' : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:border-gray-200'}`}>
                       {a.name}
                     </button>
                   ))}
@@ -239,8 +239,8 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
           {/* ═══ C. Attach Scope Sources ═══ */}
           <div className="rounded-xl border border-border-light bg-white p-6 space-y-5">
             <div>
-              <h4 className="text-[13px] font-bold text-text">Attach Scope Sources</h4>
-              <p className="text-[11.5px] text-text-muted mt-0.5">Attach SOPs, checklists, or RACMs to define what will be reviewed.</p>
+              <h4 className="text-[0.8125rem] font-bold text-text">Attach Scope Sources</h4>
+              <p className="text-[0.75rem] text-text-muted mt-0.5">Attach SOPs, checklists, or RACMs to define what will be reviewed.</p>
             </div>
 
             {/* SOPs */}
@@ -249,22 +249,22 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-md bg-blue-50"><FileText size={12} className="text-blue-600" /></div>
                   <div>
-                    <span className="text-[12px] font-semibold text-text block">SOPs</span>
-                    <span className="text-[10px] text-gray-400">Recommended</span>
+                    <span className="text-[0.75rem] font-semibold text-text block">SOPs</span>
+                    <span className="text-[0.625rem] text-gray-400">Recommended</span>
                   </div>
                 </div>
                 <button onClick={() => alert('Upload SOP will be connected later.')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
                   <Upload size={10} />Upload SOP
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {SOPS.map(s => (
                   <button key={s.id} onClick={() => toggleMulti('sopIds', s.id)}
-                    className={`group px-3.5 py-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.sopIds.includes(s.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
+                    className={`group px-3.5 py-2 rounded-lg text-[0.6875rem] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.sopIds.includes(s.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
                     <FileText size={11} className={scope.sopIds.includes(s.id) ? 'text-primary' : 'text-gray-400'} />
                     <span>{s.name}</span>
-                    <span className={`text-[9px] ${scope.sopIds.includes(s.id) ? 'text-primary/60' : 'text-gray-400'}`}>{s.version}</span>
+                    <span className={`text-[0.5625rem] ${scope.sopIds.includes(s.id) ? 'text-primary/60' : 'text-gray-400'}`}>{s.version}</span>
                     {scope.sopIds.includes(s.id) && <CheckCircle2 size={11} className="text-primary ml-0.5" />}
                   </button>
                 ))}
@@ -277,22 +277,22 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-md bg-emerald-50"><ClipboardCheck size={12} className="text-emerald-600" /></div>
                   <div>
-                    <span className="text-[12px] font-semibold text-text block">Checklists</span>
-                    <span className="text-[10px] text-gray-400">Optional</span>
+                    <span className="text-[0.75rem] font-semibold text-text block">Checklists</span>
+                    <span className="text-[0.625rem] text-gray-400">Optional</span>
                   </div>
                 </div>
                 <button onClick={() => alert('Upload Checklist will be connected later.')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
                   <Upload size={10} />Upload Checklist
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {CHECKLISTS.map(c => (
                   <button key={c.id} onClick={() => toggleMulti('checklistIds', c.id)}
-                    className={`group px-3.5 py-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.checklistIds.includes(c.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
+                    className={`group px-3.5 py-2 rounded-lg text-[0.6875rem] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.checklistIds.includes(c.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
                     <ClipboardCheck size={11} className={scope.checklistIds.includes(c.id) ? 'text-primary' : 'text-gray-400'} />
                     <span>{c.name}</span>
-                    <span className={`text-[9px] ${scope.checklistIds.includes(c.id) ? 'text-primary/60' : 'text-gray-400'}`}>· {c.items} items</span>
+                    <span className={`text-[0.5625rem] ${scope.checklistIds.includes(c.id) ? 'text-primary/60' : 'text-gray-400'}`}>· {c.items} items</span>
                     {scope.checklistIds.includes(c.id) && <CheckCircle2 size={11} className="text-primary ml-0.5" />}
                   </button>
                 ))}
@@ -305,22 +305,22 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-md bg-purple-50"><Shield size={12} className="text-purple-600" /></div>
                   <div>
-                    <span className="text-[12px] font-semibold text-text block">RACM</span>
-                    <span className="text-[10px] text-gray-400">Optional</span>
+                    <span className="text-[0.75rem] font-semibold text-text block">RACM</span>
+                    <span className="text-[0.625rem] text-gray-400">Optional</span>
                   </div>
                 </div>
                 <button onClick={() => alert('Upload RACM will be connected later.')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.625rem] font-semibold text-primary bg-white hover:bg-primary/5 cursor-pointer transition-colors border border-border-light">
                   <Upload size={10} />Upload RACM
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {RACMS.map(r => (
                   <button key={r.id} onClick={() => toggleMulti('racmVersionIds', r.id)}
-                    className={`group px-3.5 py-2 rounded-lg text-[11px] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.racmVersionIds.includes(r.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
+                    className={`group px-3.5 py-2 rounded-lg text-[0.6875rem] font-medium cursor-pointer transition-all flex items-center gap-2 border ${scope.racmVersionIds.includes(r.id) ? 'bg-primary/8 text-primary border-primary/25 shadow-sm' : 'bg-white text-gray-600 border-border-light hover:border-gray-300 hover:shadow-sm'}`}>
                     <Shield size={11} className={scope.racmVersionIds.includes(r.id) ? 'text-primary' : 'text-gray-400'} />
                     <span>{r.name}</span>
-                    <span className={`text-[9px] ${scope.racmVersionIds.includes(r.id) ? 'text-primary/60' : 'text-gray-400'}`}>{r.version}</span>
+                    <span className={`text-[0.5625rem] ${scope.racmVersionIds.includes(r.id) ? 'text-primary/60' : 'text-gray-400'}`}>{r.version}</span>
                     {scope.racmVersionIds.includes(r.id) && <CheckCircle2 size={11} className="text-primary ml-0.5" />}
                   </button>
                 ))}
@@ -331,8 +331,8 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
           {/* ═══ Scope Narrative ═══ */}
           <div className="rounded-xl border border-border-light bg-white p-6 space-y-5">
             <div>
-              <h4 className="text-[13px] font-bold text-text">Scope Narrative</h4>
-              <p className="text-[11.5px] text-text-muted mt-0.5">Describe the audit objective, in-scope, and out-of-scope areas.</p>
+              <h4 className="text-[0.8125rem] font-bold text-text">Scope Narrative</h4>
+              <p className="text-[0.75rem] text-text-muted mt-0.5">Describe the audit objective, in-scope, and out-of-scope areas.</p>
             </div>
             <div>
               <label className={labelCls}>Audit Objective <span className="text-red-400">*</span></label>
@@ -360,8 +360,8 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
 
           {/* ═══ Scope Summary ═══ */}
           <div className="rounded-xl border border-border-light bg-white p-5 space-y-4 sticky top-4">
-            <h4 className="text-[12px] font-bold text-text">Scope Summary</h4>
-            <p className="text-[11.5px] text-text leading-relaxed">
+            <h4 className="text-[0.75rem] font-bold text-text">Scope Summary</h4>
+            <p className="text-[0.75rem] text-text leading-relaxed">
               {selectedBP ? (
                 <><span className="font-semibold">{selectedBP.code} — {selectedBP.name}</span>
                   {engagement.entityOrLocation ? ` at ${engagement.entityOrLocation}` : ''}
@@ -372,21 +372,21 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
               ) : <span className="text-gray-400 italic">Select a business process to see scope summary.</span>}
             </p>
 
-            <div className="space-y-2.5 text-[11px]">
+            <div className="space-y-2.5 text-[0.6875rem]">
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 w-[72px] shrink-0 text-[10px]">Level</span>
+                <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem]">Level</span>
                 <span className="text-text font-medium">{SCOPE_LEVEL_LABELS[scope.scopeLevel]?.label || '—'}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 w-[72px] shrink-0 text-[10px]">Process</span>
+                <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem]">Process</span>
                 <span className="text-text font-medium">{selectedBP?.name || '—'}</span>
               </div>
               {scope.subProcessIds.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">Sub-proc</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">Sub-proc</span>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedSubProcesses.map(sp => (
-                      <span key={sp.id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-semibold">
+                      <span key={sp.id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.625rem] font-semibold">
                         {sp.name}{sp.isCustom ? ' · Custom' : ''}
                       </span>
                     ))}
@@ -395,38 +395,38 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
               )}
               {scope.sopIds.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">SOPs</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">SOPs</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {scope.sopIds.map(id => { const s = SOPS.find(x => x.id === id); return s ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-semibold">{s.name}</span> : null; })}
+                    {scope.sopIds.map(id => { const s = SOPS.find(x => x.id === id); return s ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.625rem] font-semibold">{s.name}</span> : null; })}
                   </div>
                 </div>
               )}
               {scope.checklistIds.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">Checklists</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">Checklists</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {scope.checklistIds.map(id => { const c = CHECKLISTS.find(x => x.id === id); return c ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-semibold">{c.name}</span> : null; })}
+                    {scope.checklistIds.map(id => { const c = CHECKLISTS.find(x => x.id === id); return c ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.625rem] font-semibold">{c.name}</span> : null; })}
                   </div>
                 </div>
               )}
               {scope.racmVersionIds.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">RACM</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">RACM</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {scope.racmVersionIds.map(id => { const r = RACMS.find(x => x.id === id); return r ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-semibold">{r.name}</span> : null; })}
+                    {scope.racmVersionIds.map(id => { const r = RACMS.find(x => x.id === id); return r ? <span key={id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.625rem] font-semibold">{r.name}</span> : null; })}
                   </div>
                 </div>
               )}
               {scope.inScopeItems && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">In Scope</span>
-                  <span className="text-text text-[11px]">{scope.inScopeItems}</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">In Scope</span>
+                  <span className="text-text text-[0.6875rem]">{scope.inScopeItems}</span>
                 </div>
               )}
               {scope.outOfScopeItems && (
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 w-[72px] shrink-0 text-[10px] pt-0.5">Out Scope</span>
-                  <span className="text-text text-[11px]">{scope.outOfScopeItems}</span>
+                  <span className="text-gray-400 w-[72px] shrink-0 text-[0.625rem] pt-0.5">Out Scope</span>
+                  <span className="text-text text-[0.6875rem]">{scope.outOfScopeItems}</span>
                 </div>
               )}
             </div>
@@ -436,21 +436,21 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
           <div className="rounded-xl border border-border-light bg-white p-5 space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <h4 className="text-[12px] font-bold text-text">Scope Readiness</h4>
-                <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold ${READINESS_CLS[status]}`}>{status}</span>
+                <h4 className="text-[0.75rem] font-bold text-text">Scope Readiness</h4>
+                <span className={`px-2.5 py-1 rounded-full text-[0.5625rem] font-bold ${READINESS_CLS[status]}`}>{status}</span>
               </div>
-              <p className="text-[10.5px] text-text-muted leading-relaxed">Complete the required scope details before sending the audit announcement.</p>
+              <p className="text-[0.75rem] text-text-muted leading-relaxed">Complete the required scope details before sending the audit announcement.</p>
             </div>
 
             <div className="space-y-2.5">
               {checks.map(c => (
-                <div key={c.label} className="flex items-center gap-2.5 text-[11px]">
+                <div key={c.label} className="flex items-center gap-2.5 text-[0.6875rem]">
                   {c.ok
                     ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
                     : <AlertCircle size={13} className={`shrink-0 ${c.required ? 'text-amber-400' : 'text-gray-300'}`} />
                   }
                   <span className={`flex-1 ${c.ok ? 'text-gray-500' : c.required ? 'text-text font-medium' : 'text-gray-400'}`}>{c.label}</span>
-                  {!c.required && <span className="text-[9px] text-gray-300 shrink-0">Optional</span>}
+                  {!c.required && <span className="text-[0.5625rem] text-gray-300 shrink-0">Optional</span>}
                 </div>
               ))}
             </div>
@@ -458,7 +458,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
             {/* ═══ E. Continue Action ═══ */}
             <div className="pt-2 border-t border-border-light/60">
               <button onClick={() => onNavigateTab?.('announcement')} disabled={status === 'Draft Scope'}
-                className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-primary/20">
+                className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-primary/20">
                 Continue to Announcement <ChevronRight size={12} />
               </button>
             </div>

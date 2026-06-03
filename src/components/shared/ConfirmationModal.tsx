@@ -60,9 +60,9 @@ export default function ConfirmationModal({
                 <AlertTriangle size={18} />
               </div>
               <div className="flex-1 min-w-0 pt-1">
-                <h3 className="text-[14px] font-semibold text-ink-800">{title}</h3>
+                <h3 className="text-[0.875rem] font-semibold text-ink-800">{title}</h3>
                 {description && (
-                  <p className="text-[12.5px] text-ink-500 mt-1 leading-relaxed">{description}</p>
+                  <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">{description}</p>
                 )}
               </div>
             </div>
@@ -71,7 +71,7 @@ export default function ConfirmationModal({
                 type="button"
                 onClick={onClose}
                 disabled={pending}
-                className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[12.5px] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {cancelLabel}
               </button>
@@ -79,7 +79,7 @@ export default function ConfirmationModal({
                 type="button"
                 onClick={onConfirm}
                 disabled={pending}
-                className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-md text-white text-[12.5px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-md text-white text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
                   isDestructive
                     ? 'bg-risk hover:bg-risk-700 active:bg-risk-700 disabled:bg-risk/40'
                     : 'bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-brand-600/40'

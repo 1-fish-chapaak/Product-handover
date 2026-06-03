@@ -18,7 +18,7 @@ const TONE_CLASS: Record<Tone, string> = {
 function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center px-2.5 h-6 rounded-full text-[12px] leading-[16px] font-medium whitespace-nowrap tabular-nums ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] font-medium whitespace-nowrap tabular-nums ${TONE_CLASS[tone]}`}
     >
       {children}
     </span>

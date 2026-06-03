@@ -327,6 +327,21 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
 .skeleton-title { height: 18px; width: 60%; border-radius: 6px; }
 .skeleton-card  { border-radius: 12px; min-height: 80px; }
 
+/* Cool, neutral shimmer for Knowledge Hub skeletons — a soft highlight sweeps
+   across translucent ink, so the load reads as alive rather than a flat block
+   of grey. No warm paper tint. */
+.skeleton-cool {
+  background: linear-gradient(90deg,
+    rgb(15 8 30 / 0.045) 0%,
+    rgb(15 8 30 / 0.10) 50%,
+    rgb(15 8 30 / 0.045) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-cool { animation: none; background: rgb(15 8 30 / 0.07); }
+}
+
 /* ── AI thinking dots — three brand-400 dots, 900ms stagger ── */
 @keyframes ai-pulse {
   0%, 60%, 100% { opacity: 0.3; transform: scale(0.85); }
@@ -448,7 +463,8 @@ button:focus-visible,
   border-radius: var(--radius-md);
 }
 
-/* Opt-out: suppress the focus ring on any element tagged .no-focus-ring */
+/* Opt-out: suppress the global focus ring on anything tagged .no-focus-ring
+   (e.g. full-bleed list rows that show focus via a background tint instead). */
 input.no-focus-ring:focus-visible,
 textarea.no-focus-ring:focus-visible,
 select.no-focus-ring:focus-visible,
@@ -471,6 +487,20 @@ button.no-focus-ring:focus,
 .reports-focus-noring select:focus,
 .reports-focus-noring select:focus-visible {
   box-shadow: none;
+}
+
+/* Knowledge Hub (+ its data-picker modal): no focus ring anywhere inside
+   (client request). Tag the page root and the picker dialog with
+   .kh-no-focus-ring — the dialog is portal-rendered to <body>, so it carries
+   the class itself rather than inheriting it from the page tree.
+   Blanket-kills every focus box-shadow — the global :focus-visible ring AND
+   any Tailwind focus:ring-* utility (rename/title/search inputs) — for all
+   focusable descendants. !important so it beats the global rule and the ring
+   utilities. Selection affordances use border / background, not box-shadow,
+   so they are untouched. */
+.kh-no-focus-ring :is(a, button, [role="button"], input, textarea, select, [tabindex]):is(:focus, :focus-visible) {
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 /* ── Reduced motion ── */

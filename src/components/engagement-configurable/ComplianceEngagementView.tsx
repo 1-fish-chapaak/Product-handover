@@ -110,7 +110,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
   return (
     <div className="space-y-6">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer">
         <ArrowLeft size={14} />Back to Engagement Library
       </button>
 
@@ -126,7 +126,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
           <p className="text-sm text-text-secondary mt-1 ml-9">Compliance control testing engagements across your business.</p>
         </div>
         <button onClick={onCreateNew}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">
           <Plus size={14} />Plan Engagement
         </button>
       </div>
@@ -134,24 +134,24 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
       {/* KPI strip */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-          <span className="text-[11px] text-text-muted">Engagements</span>
-          <span className="text-[15px] font-bold text-text tabular-nums">{engagements.length}</span>
+          <span className="text-[0.6875rem] text-text-muted">Engagements</span>
+          <span className="text-[0.9375rem] font-bold text-text tabular-nums">{engagements.length}</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-          <span className="text-[11px] text-text-muted">Controls</span>
-          <span className="text-[15px] font-bold text-text tabular-nums">{totalControls}</span>
+          <span className="text-[0.6875rem] text-text-muted">Controls</span>
+          <span className="text-[0.9375rem] font-bold text-text tabular-nums">{totalControls}</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-          <span className="text-[11px] text-text-muted">Tested</span>
-          <span className="text-[15px] font-bold text-evidence-700 tabular-nums">{totalTested}</span>
+          <span className="text-[0.6875rem] text-text-muted">Tested</span>
+          <span className="text-[0.9375rem] font-bold text-evidence-700 tabular-nums">{totalTested}</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-          <span className="text-[11px] text-text-muted">Effective</span>
-          <span className="text-[15px] font-bold text-compliant-700 tabular-nums">{totalEffective}</span>
+          <span className="text-[0.6875rem] text-text-muted">Effective</span>
+          <span className="text-[0.9375rem] font-bold text-compliant-700 tabular-nums">{totalEffective}</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-          <span className="text-[11px] text-text-muted">Deficiencies</span>
-          <span className={`text-[15px] font-bold tabular-nums ${totalDeficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{totalDeficiencies}</span>
+          <span className="text-[0.6875rem] text-text-muted">Deficiencies</span>
+          <span className={`text-[0.9375rem] font-bold tabular-nums ${totalDeficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{totalDeficiencies}</span>
         </div>
       </div>
 
@@ -160,11 +160,11 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
         <div className="relative max-w-md flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search engagements..."
-            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
+            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => setStatusFilter('')}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50'}`}>
+            className={`px-3 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50'}`}>
             All ({engagements.length})
           </button>
           {statuses.map(s => {
@@ -172,7 +172,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
             if (count === 0) return null;
             return (
               <button key={s.key} onClick={() => setStatusFilter(statusFilter === s.key ? '' : s.key)}
-                className={`px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${statusFilter === s.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50'}`}>
+                className={`px-3 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${statusFilter === s.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50'}`}>
                 {s.label} ({count})
               </button>
             );
@@ -203,31 +203,31 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
                       <Briefcase size={18} className="text-primary" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[15px] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
-                      <div className="text-[12px] text-text-muted mt-0.5 flex items-center gap-2">
+                      <div className="text-[0.9375rem] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
+                      <div className="text-[0.75rem] text-text-muted mt-0.5 flex items-center gap-2">
                         <span className="font-mono">{eng.id.toUpperCase()}</span>
                         <span className="text-text-muted/50">·</span>
                         <span>{eng.type}</span>
                       </div>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center px-2 h-6 rounded-full text-[11px] font-semibold whitespace-nowrap ${tone.bg} ${tone.text}`}>
+                  <span className={`inline-flex items-center px-2 h-6 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${tone.bg} ${tone.text}`}>
                     {tone.label}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-5">
                   <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-                    <div className="text-[18px] font-semibold text-text tabular-nums leading-none mb-1">{eng.controls}</div>
-                    <div className="text-[11px] text-text-muted">Controls</div>
+                    <div className="text-[1.125rem] font-semibold text-text tabular-nums leading-none mb-1">{eng.controls}</div>
+                    <div className="text-[0.6875rem] text-text-muted">Controls</div>
                   </div>
                   <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-                    <div className="text-[18px] font-semibold text-text tabular-nums leading-none mb-1">{eng.tested}</div>
-                    <div className="text-[11px] text-text-muted">Tested</div>
+                    <div className="text-[1.125rem] font-semibold text-text tabular-nums leading-none mb-1">{eng.tested}</div>
+                    <div className="text-[0.6875rem] text-text-muted">Tested</div>
                   </div>
                   <div className="rounded-lg bg-surface-2/80 border border-border-light/50 p-2.5">
-                    <div className={`text-[18px] font-semibold tabular-nums leading-none mb-1 ${eng.deficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{eng.deficiencies}</div>
-                    <div className="text-[11px] text-text-muted">Deficiencies</div>
+                    <div className={`text-[1.125rem] font-semibold tabular-nums leading-none mb-1 ${eng.deficiencies > 0 ? 'text-risk-700' : 'text-text'}`}>{eng.deficiencies}</div>
+                    <div className="text-[0.6875rem] text-text-muted">Deficiencies</div>
                   </div>
                 </div>
 
@@ -235,17 +235,17 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
                   <div className="flex-1 h-1.5 bg-surface-2 rounded-full overflow-hidden">
                     <motion.div initial={{ width: 0 }} animate={{ width: `${progressPct}%` }} transition={{ duration: 0.6, delay: 0.15 + i * 0.05 }} className="h-full rounded-full bg-primary" />
                   </div>
-                  <span className="text-[12px] font-semibold text-text-secondary tabular-nums">{progressPct}%</span>
+                  <span className="text-[0.75rem] font-semibold text-text-secondary tabular-nums">{progressPct}%</span>
                 </div>
 
-                <div className="flex items-center justify-between text-[12px] text-text-muted">
+                <div className="flex items-center justify-between text-[0.75rem] text-text-muted">
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-1.5"><Users size={11} />{eng.owner}</span>
                     <span className="text-text-muted/50">·</span>
                     <span className="flex items-center gap-1.5"><Calendar size={11} />{eng.start} – {eng.end}</span>
                   </div>
                   {eng.tested > 0 && (
-                    <span className="font-mono text-[11px]">{effectivePct}% effective</span>
+                    <span className="font-mono text-[0.6875rem]">{effectivePct}% effective</span>
                   )}
                 </div>
               </motion.button>
@@ -255,7 +255,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-16 text-[13px] text-text-muted">No engagements match your search.</div>
+        <div className="text-center py-16 text-[0.8125rem] text-text-muted">No engagements match your search.</div>
       )}
     </div>
   );

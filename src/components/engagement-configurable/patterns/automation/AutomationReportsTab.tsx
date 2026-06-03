@@ -202,13 +202,13 @@ function WorkflowExceptionDetails({ exceptions, automationState: _as, openExc, r
   const [expanded, setExpanded] = useState(false);
   return (
     <div>
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2 cursor-pointer hover:text-text transition-colors">
+      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1.5 text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2 cursor-pointer hover:text-text transition-colors">
         {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         Exception Details ({exceptions.length})
       </button>
       {expanded && (
         <>
-          <div className="flex items-center gap-3 text-[11px] mb-2">
+          <div className="flex items-center gap-3 text-[0.6875rem] mb-2">
             {openExc > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">{openExc} Open</span>}
             {reviewedExc > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{reviewedExc} Reviewed</span>}
             {dismissedExc > 0 && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{dismissedExc} Dismissed</span>}
@@ -216,8 +216,8 @@ function WorkflowExceptionDetails({ exceptions, automationState: _as, openExc, r
           </div>
           <div className="space-y-1">
             {exceptions.map(ex => (
-              <div key={ex.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2/20 text-[11px]">
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${EX_SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
+              <div key={ex.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2/20 text-[0.6875rem]">
+                <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${EX_SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
                 <span className="font-medium text-text flex-1">{ex.title}</span>
                 <span className="text-text-muted">{EX_CAT_LABELS[ex.category]}</span>
                 {ex.deficiencyType && <span className="text-text-muted">{DEFICIENCY_LABELS[ex.deficiencyType as DeficiencyType] || ex.deficiencyType}</span>}
@@ -255,12 +255,12 @@ export default function AutomationReportsTab({ engagement, automationState, repo
   if (completedRuns.length === 0) {
     return (
       <div className="space-y-4">
-        <div><h3 className="text-[15px] font-bold text-text mb-0.5">Reports</h3><p className="text-[12px] text-text-muted">Generate automation output reports.</p></div>
+        <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Reports</h3><p className="text-[0.75rem] text-text-muted">Generate automation output reports.</p></div>
         <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
           <Lock size={28} className="text-gray-300 mx-auto" />
-          <h4 className="text-[14px] font-semibold text-text">Reports Locked</h4>
-          <p className="text-[12px] text-text-muted">Complete at least one automation run before generating a report.</p>
-          <button onClick={() => onNavigateTab?.('workflows')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Workflows <ChevronRight size={12} /></button>
+          <h4 className="text-[0.875rem] font-semibold text-text">Reports Locked</h4>
+          <p className="text-[0.75rem] text-text-muted">Complete at least one automation run before generating a report.</p>
+          <button onClick={() => onNavigateTab?.('workflows')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Workflows <ChevronRight size={12} /></button>
         </div>
       </div>
     );
@@ -295,13 +295,13 @@ export default function AutomationReportsTab({ engagement, automationState, repo
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-[15px] font-bold text-text mb-0.5">Reports</h3>
-            <p className="text-[12px] text-text-muted">Generate automation output reports from runs, outputs, exceptions, and cases.</p>
+            <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Reports</h3>
+            <p className="text-[0.75rem] text-text-muted">Generate automation output reports from runs, outputs, exceptions, and cases.</p>
           </div>
         </div>
 
         {noApproved && hasReportOutput && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
             <AlertCircle size={11} className="shrink-0 mt-0.5" /><span>No approved outputs yet. Review and approve outputs before finalizing the report.</span>
           </div>
         )}
@@ -317,16 +317,16 @@ export default function AutomationReportsTab({ engagement, automationState, repo
             { label: 'Approved', value: approvedCount, cls: 'text-emerald-600' },
           ].map(s => (
             <div key={s.label} className="rounded-lg border border-border-light p-2 text-center">
-              <div className={`text-[15px] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-              <div className="text-[8px] text-gray-400 font-medium">{s.label}</div>
+              <div className={`text-[0.9375rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
+              <div className="text-[0.5rem] text-gray-400 font-medium">{s.label}</div>
             </div>
           ))}
         </div>
 
         <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/5 p-6 text-center space-y-3">
-          <h4 className="text-[13px] font-semibold text-text">Generate Draft Report</h4>
-          <p className="text-[11px] text-text-muted">Create a comprehensive report from completed runs, approved outputs, exceptions, and cases — grouped by workflow.</p>
-          <button onClick={handleGenerate} className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary-medium text-white text-[12px] font-semibold hover:from-primary-hover hover:to-primary cursor-pointer transition-all">Generate Draft Report</button>
+          <h4 className="text-[0.8125rem] font-semibold text-text">Generate Draft Report</h4>
+          <p className="text-[0.6875rem] text-text-muted">Create a comprehensive report from completed runs, approved outputs, exceptions, and cases — grouped by workflow.</p>
+          <button onClick={handleGenerate} className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-primary-medium text-white text-[0.75rem] font-semibold hover:from-primary-hover hover:to-primary cursor-pointer transition-all">Generate Draft Report</button>
         </div>
 
       </div>
@@ -341,20 +341,20 @@ export default function AutomationReportsTab({ engagement, automationState, repo
         <div className="flex items-center gap-2">
           {reportsState.reports.map(r => (
             <button key={r.id} onClick={() => setSelectedReportId(r.id)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${selectedReportId === r.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-              {r.title.length > 30 ? r.title.slice(0, 29) + '...' : r.title} <span className={`ml-1 px-1 py-0.5 rounded text-[7px] font-bold ${REPORT_STATUS_CLS[r.status]}`}>{r.status}</span>
+              className={`px-2.5 py-1 rounded-full text-[0.625rem] font-semibold cursor-pointer transition-colors ${selectedReportId === r.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              {r.title.length > 30 ? r.title.slice(0, 29) + '...' : r.title} <span className={`ml-1 px-1 py-0.5 rounded text-[0.4375rem] font-bold ${REPORT_STATUS_CLS[r.status]}`}>{r.status}</span>
             </button>
           ))}
-          <button onClick={handleGenerate} className="px-2.5 py-1 rounded-full text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">+ New Report</button>
+          <button onClick={handleGenerate} className="px-2.5 py-1 rounded-full text-[0.625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">+ New Report</button>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => alert('Apply Template — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={() => alert('Apply Template — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Layout size={13} /> Apply Template
           </button>
-          <button onClick={() => alert('Share — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={() => alert('Share — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Share2 size={13} /> Share
           </button>
-          <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Download size={13} /> Download
           </button>
         </div>
@@ -378,11 +378,11 @@ export default function AutomationReportsTab({ engagement, automationState, repo
               />
             </div>
             <div className="relative z-10 px-8 py-7">
-              <p className="text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-1">Automation Project Report</p>
+              <p className="text-white/50 text-[0.6875rem] font-semibold uppercase tracking-wider mb-1">Automation Project Report</p>
               <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{selectedReport.title}</h1>
-              <p className="text-white/60 text-[13px] mb-3">{engagement.description || 'Comprehensive automation project report with workflow-wise results.'}</p>
+              <p className="text-white/60 text-[0.8125rem] mb-3">{engagement.description || 'Comprehensive automation project report with workflow-wise results.'}</p>
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[13px]">
+                <div className="flex items-center gap-2 text-[0.8125rem]">
                   <span className="font-semibold text-white">{engagement.owner}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{selectedReport.generatedAt}</span>
@@ -392,13 +392,13 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                   <span className="text-white/70">{completedRuns.length} run{completedRuns.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-1 rounded-[10px] text-[11px] font-bold ${isFinal ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>
+                  <span className={`px-2.5 py-1 rounded-[10px] text-[0.6875rem] font-bold ${isFinal ? 'bg-white/20 text-white' : 'bg-white/10 text-white/80'}`}>
                     {selectedReport.status}
                   </span>
                   {!isFinal && (
                     <button
                       onClick={handleGenerate}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-primary bg-white rounded-[10px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
                     >
                       <Sparkles size={13} />
                       Regenerate
@@ -411,19 +411,19 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
           {/* ── Report metadata ── */}
           <div className="bg-white rounded-xl border border-border-light p-5">
-            <div className="grid grid-cols-3 gap-x-8 gap-y-3 text-[12px]">
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Project Name</span><span className="text-text font-semibold">{engagement.name}</span></div>
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Business Process</span><span className="text-text font-semibold">{engagement.businessProcess || 'P2P'}</span></div>
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Entity</span><span className="text-text font-semibold">{engagement.entityOrLocation || '—'}</span></div>
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Data Period</span><span className="text-text font-semibold">{engagement.dataPeriodStart || '—'} to {engagement.dataPeriodEnd || '—'}</span></div>
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Run Type</span><span className="text-text font-semibold">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
-              <div><span className="text-text-muted block text-[10px] font-medium mb-0.5">Report Generated</span><span className="text-text font-semibold">{selectedReport.generatedAt}</span></div>
+            <div className="grid grid-cols-3 gap-x-8 gap-y-3 text-[0.75rem]">
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Project Name</span><span className="text-text font-semibold">{engagement.name}</span></div>
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Business Process</span><span className="text-text font-semibold">{engagement.businessProcess || 'P2P'}</span></div>
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Entity</span><span className="text-text font-semibold">{engagement.entityOrLocation || '—'}</span></div>
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Data Period</span><span className="text-text font-semibold">{engagement.dataPeriodStart || '—'} to {engagement.dataPeriodEnd || '—'}</span></div>
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Run Type</span><span className="text-text font-semibold">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
+              <div><span className="text-text-muted block text-[0.625rem] font-medium mb-0.5">Report Generated</span><span className="text-text font-semibold">{selectedReport.generatedAt}</span></div>
             </div>
           </div>
 
           {/* ── Executive Summary ── */}
           <div className="bg-white rounded-xl border border-border-light p-5">
-            <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
+            <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
             <div className="grid grid-cols-4 gap-3 mb-4">
               {[
                 { icon: BarChart3, label: 'Records Processed', value: totalRecords.toLocaleString(), color: 'text-primary bg-primary/10' },
@@ -435,21 +435,21 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                   <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon size={16} /></div>
                   <div>
                     <div className="text-xl font-bold text-text">{stat.value}</div>
-                    <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
+                    <div className="text-[0.625rem] text-text-muted tracking-wide">{stat.label}</div>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-[12px] text-text-secondary leading-relaxed">{selectedReport.executiveSummary}</p>
+            <p className="text-[0.75rem] text-text-secondary leading-relaxed">{selectedReport.executiveSummary}</p>
             {/* Output approval breakdown */}
-            <div className="mt-3 flex items-center gap-3 text-[11px]">
+            <div className="mt-3 flex items-center gap-3 text-[0.6875rem]">
               <span className="text-text-muted">Outputs:</span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold">{approvedCount} approved for report</span>
               {excludedCount > 0 && <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 font-semibold">{excludedCount} excluded</span>}
               {pendingCount > 0 && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">{pendingCount} pending review</span>}
             </div>
             {approvedCount === 0 && (
-              <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
+              <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.6875rem] text-amber-700">
                 <AlertCircle size={12} className="shrink-0 mt-0.5" />
                 <span>No outputs have been approved for this report yet. Approve outputs in Output Review to include them.</span>
               </div>
@@ -491,55 +491,55 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                     <div className="flex-1 min-w-0">
                       {/* Tags row */}
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                        <span className="text-[9px] font-bold text-primary/50 uppercase tracking-wider">WORKFLOW {sectionIdx + 1}</span>
+                        <span className="text-[0.5625rem] font-bold text-primary/50 uppercase tracking-wider">WORKFLOW {sectionIdx + 1}</span>
                         <span className="text-gray-200 mx-0.5">·</span>
                         {section.tags.map(tag => (
-                          <span key={tag} className={`px-1.5 py-0.5 rounded border text-[8px] font-bold uppercase tracking-wide ${TAG_CLS[tag] || 'bg-gray-50 text-gray-500 border-gray-200'}`}>{tag}</span>
+                          <span key={tag} className={`px-1.5 py-0.5 rounded border text-[0.5rem] font-bold uppercase tracking-wide ${TAG_CLS[tag] || 'bg-gray-50 text-gray-500 border-gray-200'}`}>{tag}</span>
                         ))}
                       </div>
-                      <h4 className="text-[15px] font-bold text-text leading-tight">{section.workflowName}</h4>
+                      <h4 className="text-[0.9375rem] font-bold text-text leading-tight">{section.workflowName}</h4>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">{approvedOuts.length}/{section.outputs.length} approved</span>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${statusStyle.bg} ${statusStyle.text}`}>{statusStyle.label}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[0.625rem] font-bold">{approvedOuts.length}/{section.outputs.length} approved</span>
+                      <span className={`px-2.5 py-1 rounded-full text-[0.625rem] font-bold ${statusStyle.bg} ${statusStyle.text}`}>{statusStyle.label}</span>
                     </div>
                   </div>
                   {/* Workflow description */}
-                  <p className="text-[12px] text-text-secondary leading-relaxed mt-2 ml-[44px]">{section.description}</p>
+                  <p className="text-[0.75rem] text-text-secondary leading-relaxed mt-2 ml-[44px]">{section.description}</p>
                 </div>
 
                 <div className="p-5 space-y-5">
                   {/* ── Exception Metrics (mini stat cards like Image 1) ── */}
                   {section.exceptions.length > 0 ? (
                     <div>
-                      <h5 className="text-[11px] font-bold text-text flex items-center gap-1.5 mb-2.5">
+                      <h5 className="text-[0.6875rem] font-bold text-text flex items-center gap-1.5 mb-2.5">
                         <AlertTriangle size={12} className="text-amber-500" /> Exception Metrics
                       </h5>
                       <div className="grid grid-cols-5 gap-2">
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[16px] font-bold tabular-nums text-text">{section.exceptions.length}</div>
-                          <div className="text-[8px] text-gray-400 font-medium">Total</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-text">{section.exceptions.length}</div>
+                          <div className="text-[0.5rem] text-gray-400 font-medium">Total</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[16px] font-bold tabular-nums text-red-600">{section.severityBreakdown['CRITICAL'] || 0}</div>
-                          <div className="text-[8px] text-gray-400 font-medium">Critical</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-red-600">{section.severityBreakdown['CRITICAL'] || 0}</div>
+                          <div className="text-[0.5rem] text-gray-400 font-medium">Critical</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[16px] font-bold tabular-nums text-amber-600">{section.severityBreakdown['HIGH'] || 0}</div>
-                          <div className="text-[8px] text-gray-400 font-medium">High</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-amber-600">{section.severityBreakdown['HIGH'] || 0}</div>
+                          <div className="text-[0.5rem] text-gray-400 font-medium">High</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[16px] font-bold tabular-nums text-blue-600">{section.severityBreakdown['MEDIUM'] || 0}</div>
-                          <div className="text-[8px] text-gray-400 font-medium">Medium</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-blue-600">{section.severityBreakdown['MEDIUM'] || 0}</div>
+                          <div className="text-[0.5rem] text-gray-400 font-medium">Medium</div>
                         </div>
                         <div className="rounded-lg border border-border-light p-2.5 text-center">
-                          <div className="text-[16px] font-bold tabular-nums text-gray-500">{section.severityBreakdown['LOW'] || 0}</div>
-                          <div className="text-[8px] text-gray-400 font-medium">Low</div>
+                          <div className="text-[1rem] font-bold tabular-nums text-gray-500">{section.severityBreakdown['LOW'] || 0}</div>
+                          <div className="text-[0.5rem] text-gray-400 font-medium">Low</div>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100 text-[11px] text-emerald-700">
+                    <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100 text-[0.6875rem] text-emerald-700">
                       <CheckCircle2 size={12} className="shrink-0 mt-0.5" />
                       <span className="font-medium">Exception metrics not generated yet — clean execution with no exceptions identified.</span>
                     </div>
@@ -547,12 +547,12 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
                   {/* ── Findings (summary statements) ── */}
                   <div>
-                    <h5 className="text-[11px] font-bold text-text flex items-center gap-1.5 mb-2">
+                    <h5 className="text-[0.6875rem] font-bold text-text flex items-center gap-1.5 mb-2">
                       <ListChecks size={12} className="text-primary" /> Findings
                     </h5>
                     <div className="space-y-1.5">
                       {section.findings.map((finding, fi) => (
-                        <div key={fi} className="flex items-start gap-2 text-[12px] text-text-secondary leading-relaxed">
+                        <div key={fi} className="flex items-start gap-2 text-[0.75rem] text-text-secondary leading-relaxed">
                           <span className="text-primary mt-0.5 shrink-0 font-bold">{'>'}</span>
                           <span>{finding}</span>
                         </div>
@@ -562,12 +562,12 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
                   {/* ── Observations (detailed data-driven insights — like Image 1) ── */}
                   <div>
-                    <h5 className="text-[11px] font-bold text-text flex items-center gap-1.5 mb-2">
+                    <h5 className="text-[0.6875rem] font-bold text-text flex items-center gap-1.5 mb-2">
                       <Eye size={12} className="text-primary" /> Observations
                     </h5>
                     <div className="rounded-lg bg-surface-2/30 border border-border-light/60 p-4 space-y-2">
                       {section.observations.map((obs, oi) => (
-                        <div key={oi} className="flex items-start gap-2.5 text-[12px] text-text-secondary leading-relaxed">
+                        <div key={oi} className="flex items-start gap-2.5 text-[0.75rem] text-text-secondary leading-relaxed">
                           <span className="text-primary mt-1 shrink-0">&#8226;</span>
                           <span>{obs}</span>
                         </div>
@@ -578,10 +578,10 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                   {/* ── Category breakdown (if exceptions exist) ── */}
                   {Object.keys(section.categoryBreakdown).length > 0 && (
                     <div>
-                      <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Exception Categories</h5>
+                      <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Exception Categories</h5>
                       <div className="flex flex-wrap gap-2">
                         {Object.entries(section.categoryBreakdown).map(([cat, count]) => (
-                          <span key={cat} className="px-2.5 py-1 rounded-lg bg-surface-2 border border-border-light text-[11px] text-text font-medium">
+                          <span key={cat} className="px-2.5 py-1 rounded-lg bg-surface-2 border border-border-light text-[0.6875rem] text-text font-medium">
                             {cat}: <span className="font-bold">{count}</span>
                           </span>
                         ))}
@@ -600,9 +600,9 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
                   {/* ── Output list ── */}
                   <div>
-                    <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Outputs</h5>
+                    <h5 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Outputs</h5>
                     {section.outputs.length === 0 ? (
-                      <p className="text-[12px] text-text-muted italic">No outputs generated.</p>
+                      <p className="text-[0.75rem] text-text-muted italic">No outputs generated.</p>
                     ) : (
                       <div className="space-y-1.5">
                         {section.outputs.map(o => {
@@ -612,12 +612,12 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                           return (
                             <div key={o.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light/50 ${isExcluded ? 'bg-gray-50 opacity-60' : isPending ? 'bg-amber-50/20' : 'bg-surface-2/30'}`}>
                               <FileText size={13} className={isApproved ? 'text-primary shrink-0' : 'text-gray-400 shrink-0'} />
-                              <span className={`text-[12px] font-medium flex-1 ${isExcluded ? 'text-gray-400 line-through' : 'text-text'}`}>{o.name}</span>
-                              <span className="text-[10px] text-text-muted">{o.outputType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span>
-                              {o.recordCount && <span className="text-[10px] text-text-muted tabular-nums">{o.recordCount} records</span>}
-                              {isApproved && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-bold">Included in Report</span>}
-                              {isExcluded && <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[9px] font-bold">Excluded</span>}
-                              {isPending && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9px] font-bold">Pending Review</span>}
+                              <span className={`text-[0.75rem] font-medium flex-1 ${isExcluded ? 'text-gray-400 line-through' : 'text-text'}`}>{o.name}</span>
+                              <span className="text-[0.625rem] text-text-muted">{o.outputType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span>
+                              {o.recordCount && <span className="text-[0.625rem] text-text-muted tabular-nums">{o.recordCount} records</span>}
+                              {isApproved && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold">Included in Report</span>}
+                              {isExcluded && <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[0.5625rem] font-bold">Excluded</span>}
+                              {isPending && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[0.5625rem] font-bold">Pending Review</span>}
                             </div>
                           );
                         })}
@@ -627,7 +627,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
                   {/* Case/classification for this workflow */}
                   {section.caseCount > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-50/50 border border-purple-100 text-[11px]">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-50/50 border border-purple-100 text-[0.6875rem]">
                       <Shield size={12} className="text-purple-600" />
                       <span className="text-purple-700 font-medium">{section.caseCount} case{section.caseCount !== 1 ? 's' : ''} assigned from this workflow's exceptions</span>
                     </div>
@@ -640,7 +640,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           {/* ── Cases / Exception Classification Summary ── */}
           {caseCount > 0 && (
             <div className="bg-white rounded-xl border border-border-light p-5">
-              <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Shield size={14} className="text-primary" /> Cases & Classification Summary</h3>
+              <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><Shield size={14} className="text-primary" /> Cases & Classification Summary</h3>
               <div className="grid grid-cols-4 gap-2 mb-3">
                 {[
                   { label: 'Total Cases', value: caseCount },
@@ -649,8 +649,8 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                   { label: 'Closed', value: closedCases, cls: 'text-emerald-600' },
                 ].map(s => (
                   <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
-                    <div className={`text-[16px] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-                    <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
+                    <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
+                    <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -665,10 +665,10 @@ export default function AutomationReportsTab({ engagement, automationState, repo
                 if (entries.length === 0) return null;
                 return (
                   <div className="space-y-1">
-                    <h5 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Deficiency Classification</h5>
+                    <h5 className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Deficiency Classification</h5>
                     <div className="flex flex-wrap gap-2">
                       {entries.map(([type, count]) => (
-                        <span key={type} className="px-2.5 py-1 rounded-lg bg-surface-2 border border-border-light text-[11px] text-text font-medium">
+                        <span key={type} className="px-2.5 py-1 rounded-lg bg-surface-2 border border-border-light text-[0.6875rem] text-text font-medium">
                           {DEFICIENCY_LABELS[type as DeficiencyType] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}: <span className="font-bold">{count}</span>
                         </span>
                       ))}
@@ -681,8 +681,8 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
           {/* ── Key Metrics ── */}
           <div className="bg-white rounded-xl border border-border-light p-5">
-            <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Key Metrics</h3>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-[12px]">
+            <h3 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Key Metrics</h3>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-[0.75rem]">
               {[
                 { label: 'Records Processed', value: totalRecords.toLocaleString() },
                 { label: 'Outputs Generated', value: allOutputs.length },
@@ -706,10 +706,10 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           {/* ── Recommendations ── */}
           {selectedReport.recommendations && (
             <div className="bg-white rounded-xl border border-border-light p-5">
-              <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Recommendations</h3>
+              <h3 className="text-[0.8125rem] font-bold text-text mb-2 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Recommendations</h3>
               <ul className="space-y-1">
                 {selectedReport.recommendations.split('\n').filter(Boolean).map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[12px] text-text-secondary leading-relaxed">
+                  <li key={i} className="flex items-start gap-2 text-[0.75rem] text-text-secondary leading-relaxed">
                     <span className="text-primary mt-1 shrink-0">•</span>
                     <span>{rec}</span>
                   </li>
@@ -722,12 +722,12 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           <div className="flex items-center gap-3">
             {(selectedReport.status === 'DRAFT' || selectedReport.status === 'READY') && (
               <button onClick={() => finalize(selectedReport.id)}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
                 <CheckCircle2 size={13} />Finalize Report
               </button>
             )}
             {isFinal && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700 flex-1">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[0.6875rem] text-emerald-700 flex-1">
                 <CheckCircle2 size={13} className="shrink-0 mt-0.5" /><span>Report finalized on {selectedReport.finalizedAt} by {selectedReport.finalizedBy}.</span>
               </div>
             )}
@@ -736,17 +736,17 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           {/* ── History ── */}
           {selectedReport.history.length > 0 && (
             <div className="rounded-lg border border-border-light p-4">
-              <h4 className="text-[11px] font-bold text-text mb-1">Report History</h4>
+              <h4 className="text-[0.6875rem] font-bold text-text mb-1">Report History</h4>
               <div className="space-y-1">{selectedReport.history.map(h => (
-                <div key={h.id} className="text-[9px] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+                <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
               ))}</div>
             </div>
           )}
 
           {/* ── Report Notes ── */}
           <div className="rounded-lg border border-border-light p-4 space-y-2">
-            <h4 className="text-[11px] font-bold text-text">Report Notes</h4>
-            <textarea value={reportsState.reportNotes} onChange={e => onUpdateReports({ ...reportsState, reportNotes: e.target.value })} rows={2} placeholder="Report assumptions, notes..." className="w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" />
+            <h4 className="text-[0.6875rem] font-bold text-text">Report Notes</h4>
+            <textarea value={reportsState.reportNotes} onChange={e => onUpdateReports({ ...reportsState, reportNotes: e.target.value })} rows={2} placeholder="Report assumptions, notes..." className="w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" />
           </div>
 
         </>

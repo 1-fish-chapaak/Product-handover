@@ -59,25 +59,25 @@ export default function EngagementCompareView({ onBack }: Props) {
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back
         </button>
 
         <div className="mb-5 flex items-end justify-between">
           <div>
-            <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Audit Quality</div>
-            <h1 className="font-display text-[32px] font-bold text-text leading-tight flex items-center gap-3">
+            <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Audit Quality</div>
+            <h1 className="font-display text-[2rem] font-bold text-text leading-tight flex items-center gap-3">
               <GitCompare size={28} className="text-primary" />
               Engagement compare
             </h1>
-            <p className="text-[13px] text-text-secondary mt-1.5 max-w-2xl">
+            <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-2xl">
               Pick 2-4 engagements to compare health, exception trends, and MTTR side-by-side.
             </p>
           </div>
           {selected.length < 4 && (
             <button
               onClick={() => setPickerOpen(p => !p)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />Add engagement
             </button>
@@ -87,7 +87,7 @@ export default function EngagementCompareView({ onBack }: Props) {
         {/* Picker dropdown */}
         {pickerOpen && (
           <div className="mb-4 glass-card rounded-xl p-3 max-w-md">
-            <p className="text-[11px] text-text-muted uppercase tracking-wide font-semibold mb-2">Pick an engagement</p>
+            <p className="text-[0.6875rem] text-text-muted uppercase tracking-wide font-semibold mb-2">Pick an engagement</p>
             <div className="space-y-1 max-h-[280px] overflow-y-auto">
               {ENGAGEMENTS.filter(e => !selectedIds.includes(e.id)).map(e => (
                 <button
@@ -95,12 +95,12 @@ export default function EngagementCompareView({ onBack }: Props) {
                   onClick={() => addEngagement(e.id)}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
                 >
-                  <div className="w-7 h-7 rounded-lg text-white text-[10px] font-bold flex items-center justify-center shrink-0" style={{ background: PROCESS_COLORS[e.process] }}>
+                  <div className="w-7 h-7 rounded-lg text-white text-[0.625rem] font-bold flex items-center justify-center shrink-0" style={{ background: PROCESS_COLORS[e.process] }}>
                     {e.process}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-text truncate">{e.name}</div>
-                    <div className="text-[10.5px] text-text-muted">{e.type} · {e.code}</div>
+                    <div className="text-[0.75rem] font-medium text-text truncate">{e.name}</div>
+                    <div className="text-[0.75rem] text-text-muted">{e.type} · {e.code}</div>
                   </div>
                 </button>
               ))}
@@ -111,8 +111,8 @@ export default function EngagementCompareView({ onBack }: Props) {
         {selected.length < 2 ? (
           <div className="border border-border-light rounded-xl p-14 text-center bg-white">
             <GitCompare size={28} className="text-text-muted mx-auto mb-3" />
-            <p className="text-[14px] font-semibold text-text mb-1">Pick at least 2 engagements to compare</p>
-            <p className="text-[12px] text-text-muted">Add another from the dropdown above.</p>
+            <p className="text-[0.875rem] font-semibold text-text mb-1">Pick at least 2 engagements to compare</p>
+            <p className="text-[0.75rem] text-text-muted">Add another from the dropdown above.</p>
           </div>
         ) : (
           <div className={`grid gap-4 ${selected.length === 2 ? 'grid-cols-2' : selected.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
@@ -134,21 +134,21 @@ export default function EngagementCompareView({ onBack }: Props) {
                     <X size={12} />
                   </button>
                   <div className="flex items-start gap-3 mb-4 pr-6">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-[12px] font-bold shrink-0" style={{ background: PROCESS_COLORS[eng.process] }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-[0.75rem] font-bold shrink-0" style={{ background: PROCESS_COLORS[eng.process] }}>
                       {eng.process}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[13.5px] font-bold text-text leading-snug">{eng.name}</div>
-                      <div className="text-[11px] text-text-muted mt-0.5">{eng.type}{eng.subtype ? ` · ${eng.subtype}` : ''}</div>
-                      <div className="text-[10.5px] text-text-muted mt-0.5 font-mono">{eng.code}</div>
+                      <div className="text-[0.75rem] font-bold text-text leading-snug">{eng.name}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5">{eng.type}{eng.subtype ? ` · ${eng.subtype}` : ''}</div>
+                      <div className="text-[0.75rem] text-text-muted mt-0.5 font-mono">{eng.code}</div>
                     </div>
                   </div>
 
                   {/* Health */}
                   <div className="mb-4">
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-[10px] uppercase tracking-wide font-semibold text-text-muted">Health</span>
-                      <span className={`text-[24px] font-bold tabular-nums leading-none ${HEALTH_TEXT(m.health)}`}>{m.health}%</span>
+                      <span className="text-[0.625rem] uppercase tracking-wide font-semibold text-text-muted">Health</span>
+                      <span className={`text-[1.5rem] font-bold tabular-nums leading-none ${HEALTH_TEXT(m.health)}`}>{m.health}%</span>
                     </div>
                     <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
                       <div className={`h-full ${HEALTH_BAR(m.health)} transition-all`} style={{ width: `${m.health}%` }} />
@@ -156,7 +156,7 @@ export default function EngagementCompareView({ onBack }: Props) {
                   </div>
 
                   {/* Metrics list */}
-                  <dl className="space-y-2 text-[12px] mb-4">
+                  <dl className="space-y-2 text-[0.75rem] mb-4">
                     <Row icon={Shield} label="Controls / Workflows" value={m.controls} />
                     <Row icon={AlertTriangle} label="Open issues" value={m.openIssues} tone={m.openIssues > 0 ? 'text-risk-700' : 'text-text'} />
                     <Row icon={CheckCircle2} label="Resolved" value={m.closed} tone="text-compliant-700" />
@@ -166,7 +166,7 @@ export default function EngagementCompareView({ onBack }: Props) {
                   </dl>
 
                   {/* Owner / Period */}
-                  <div className="pt-3 border-t border-border-light/60 text-[11px] text-text-muted">
+                  <div className="pt-3 border-t border-border-light/60 text-[0.6875rem] text-text-muted">
                     <div><span className="text-text-muted">Owner:</span> <span className="text-text-secondary">{eng.owner}</span></div>
                     <div className="mt-0.5"><span className="text-text-muted">Period:</span> <span className="text-text-secondary">{eng.periodStart} – {eng.periodEnd}</span></div>
                   </div>
@@ -179,8 +179,8 @@ export default function EngagementCompareView({ onBack }: Props) {
         {/* Differences callout */}
         {selected.length >= 2 && (
           <div className="mt-6 glass-card rounded-xl p-5">
-            <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Differences worth a closer look</h3>
-            <ul className="space-y-2 text-[12.5px] text-text-secondary">
+            <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Differences worth a closer look</h3>
+            <ul className="space-y-2 text-[0.75rem] text-text-secondary">
               {(() => {
                 const items: React.ReactNode[] = [];
                 const healthRange = Math.max(...selected.map(e => e.health)) - Math.min(...selected.map(e => e.health));

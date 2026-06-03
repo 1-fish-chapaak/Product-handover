@@ -838,7 +838,7 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} />
               Back to AI Concierge

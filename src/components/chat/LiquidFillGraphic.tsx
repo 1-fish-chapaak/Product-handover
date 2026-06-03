@@ -161,7 +161,7 @@ export default function LiquidFillGraphic({ fillPercent, currentStage, className
               <text
                 x={beakerX + beakerW + 36}
                 y={centerY + 4}
-                className="text-[12px]"
+                className="text-[0.75rem]"
                 fill={isActive || isFilled ? '#0e0b1e' : '#9e96b8'}
                 fontWeight={isActive ? '700' : '500'}
                 fontFamily="var(--font-sans)"
@@ -177,7 +177,7 @@ export default function LiquidFillGraphic({ fillPercent, currentStage, className
           x={beakerX + beakerW / 2}
           y={beakerBottom + 22}
           textAnchor="middle"
-          className="text-[13px]"
+          className="text-[0.8125rem]"
           fill="#6a12cd"
           fontWeight="700"
           fontFamily="var(--font-sans)"
@@ -191,7 +191,7 @@ export default function LiquidFillGraphic({ fillPercent, currentStage, className
         key={currentStage}
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-[12px] font-semibold text-primary mt-1"
+        className="text-[0.75rem] font-semibold text-primary mt-1"
       >
         {currentStage === 'Ready' ? 'Analysis ready!' : `Understanding ${currentStage.toLowerCase()}...`}
       </motion.div>
