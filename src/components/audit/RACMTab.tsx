@@ -24,6 +24,7 @@ import {
   racmRowsForProcess,
   groupRacmBySubProcess,
   generateRacmForProcess,
+  attrCode,
   type RACMRow,
   type ControlAttribute,
   type ControlType,
@@ -949,7 +950,7 @@ function AttributesList({ attributes }: { attributes: ControlAttribute[] }) {
               className="grid grid-cols-[88px_1fr] gap-3 items-start"
             >
               <span className="text-[10.5px] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 tabular-nums leading-tight inline-flex items-center justify-center text-center">
-                {attr.id}
+                {attrCode(attr.id)}
               </span>
               <div className="min-w-0">
                 <p className="text-[12px] text-text leading-snug">
@@ -1064,7 +1065,7 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
               {row.attributes.map(a => (
                 <div key={a.id} className="rounded-lg border border-border-light p-3 bg-white">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="px-1.5 h-4 rounded text-[10px] font-bold bg-brand-50 text-brand-700 font-mono">{a.id}</span>
+                    <span className="px-1.5 h-4 rounded text-[10px] font-bold bg-brand-50 text-brand-700 font-mono">{attrCode(a.id)}</span>
                     <span className="text-[12.5px] font-semibold text-text">{a.description}</span>
                   </div>
                   <p className="text-[11.5px] italic text-text-muted mb-2">{a.testProcedure}</p>

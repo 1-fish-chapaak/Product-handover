@@ -16,18 +16,18 @@
  * Generic attributes do not consume samples.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FolderOpen, FileText, Upload, Sparkles, CheckCircle2, XCircle,
   Clock, ChevronRight, ChevronDown, X, Plus, AlertTriangle, Filter, Search,
   Eye, Activity, BookText, Download, RefreshCw, Layers, Shield, ListChecks, User,
   Database, Shuffle, Settings2, Workflow as WorkflowIcon, Wand2, RotateCcw,
-  Check, Lock, Paperclip,
+  Check, Lock, Paperclip, MessageSquare,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
-import { racmRowsForProcess, type RACMRow, type ControlAttribute } from '../../data/racm';
+import { racmRowsForProcess, attrCode, type RACMRow, type ControlAttribute } from '../../data/racm';
 import { CURRENT_USER } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 
@@ -821,18 +821,16 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
           <ControlStatusPill status={controlStatus(ctrl)} />
         </div>
 
-        {/* Workspace grid — vertical rail + content */}
-        <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6 min-h-[640px]">
-          {/* ── Vertical gamified checkpoint rail ── */}
-          <VerticalCheckpoints
-            phases={checkpoints}
-            active={activeCheckpoint}
-            onJump={(n) => setActiveCheckpoint(n)}
-            xp={{ samples: samps.length, validated: validatedCount, total: totalChecks, passed: passedCount, failed: failedCount }}
-          />
+        {/* Compact journey stepper on top — frees the full width for the testing content */}
+        <JourneyStepper
+          phases={checkpoints}
+          active={activeCheckpoint}
+          onJump={(n) => setActiveCheckpoint(n)}
+          xp={{ samples: samps.length, validated: validatedCount, total: totalChecks, passed: passedCount, failed: failedCount }}
+        />
 
-          {/* ── Active checkpoint content ── */}
-          <div className="min-w-0">
+        {/* ── Active checkpoint content (full width) ── */}
+        <div className="min-w-0">
             <AnimatePresence mode="wait">
               <motion.div key={activeCheckpoint} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="space-y-5">
 
@@ -979,7 +977,6 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
                 </div>
               </details>
             )}
-          </div>
         </div>
       </div>
     );
@@ -1377,6 +1374,9 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
   void ctrl;
   const bulkRef = useRef<HTMLInputElement | null>(null);
   const samplesWithEvidence = samples.filter(s => attr.requiredEvidence.every(et => !!s.evidence[attr.id]?.[et])).length;
+  // Fail → Pass overrides require a justification comment.
+  const [passOverride, setPassOverride] = useState<{ sampleId: string } | null>(null);
+  const [overrideComment, setOverrideComment] = useState('');
 
   return (
     <div className={`rounded-xl border ${expanded ? 'border-brand-200 bg-white' : 'border-canvas-border bg-white'} overflow-hidden`}>
@@ -1386,7 +1386,7 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           {disabled ? <Lock size={11} className="text-text-muted" /> : <ChevronDown size={12} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />}
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-text-muted">{attr.id}</span>
+              <span className="text-[10px] font-mono text-text-muted">{attrCode(attr.id)}</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-brand-50 text-brand-700 border border-brand-100">SAMPLE-BASED</span>
               {rounds.length > 1 && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-mitigated-50 text-mitigated-700">R{activeRound!.roundNumber}</span>}
             </div>
@@ -1445,7 +1445,7 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
 
           {/* Per-sample table */}
           <div className="rounded-lg border border-canvas-border overflow-hidden">
-            <table className="w-full text-[10.5px]">
+            <table className="w-full text-[11.5px]">
               <thead className="bg-canvas/40 border-b border-canvas-border">
                 <tr>
                   <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase">#</th>
@@ -1463,12 +1463,12 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
                   const effective = v?.useAi ? v?.aiVerdict : v?.humanVerdict;
                   return (
                     <tr key={s.id} className={`border-b border-canvas-border/60 last:border-b-0 ${inScope ? '' : 'opacity-40'}`}>
-                      <td className="px-3 py-1.5 text-text-muted tabular-nums">{idx + 1}</td>
-                      <td className="px-3 py-1.5 font-mono text-text">{s.id}</td>
+                      <td className="px-3 py-2.5 text-text-muted tabular-nums">{idx + 1}</td>
+                      <td className="px-3 py-2.5 font-mono text-text">{s.id}</td>
                       {attr.requiredEvidence.map(et => {
                         const file = s.evidence[attr.id]?.[et];
                         return (
-                          <td key={et} className="px-3 py-1.5">
+                          <td key={et} className="px-3 py-2.5">
                             {file ? (
                               <span className="inline-flex items-center gap-1 text-compliant-700">
                                 <Paperclip size={9} /><span className="truncate max-w-[140px]">{file.filename}</span>
@@ -1483,21 +1483,30 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
                           </td>
                         );
                       })}
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1">
-                          {effective === 'Pass' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-compliant-50 text-compliant-700">Pass</span>}
-                          {effective === 'Fail' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-risk-50 text-risk-700">Fail</span>}
-                          {effective === 'Hold' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-mitigated-50 text-mitigated-700">Hold</span>}
-                          {!effective && <span className="text-text-muted">—</span>}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <ResultPill effective={effective ?? null} overridden={!!v && !v.useAi} />
                           {effective && (
-                            <>
-                              <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Pass' })}
-                                className="ml-1 px-1 py-0.5 rounded text-[8px] text-text-muted hover:bg-compliant-50 hover:text-compliant-700 cursor-pointer">P</button>
-                              <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Fail' })}
-                                className="px-1 py-0.5 rounded text-[8px] text-text-muted hover:bg-risk-50 hover:text-risk-700 cursor-pointer">F</button>
-                            </>
+                            <div className="flex items-center gap-1">
+                              {effective !== 'Pass' && (
+                                <button onClick={() => { setPassOverride({ sampleId: s.id }); setOverrideComment(''); }}
+                                  title="Override to Pass (requires a comment)"
+                                  className="px-1.5 h-5 inline-flex items-center rounded text-[9.5px] font-semibold text-compliant-700 border border-compliant-100 hover:bg-compliant-50 cursor-pointer transition-colors">Pass</button>
+                              )}
+                              {effective !== 'Fail' && (
+                                <button onClick={() => onOverride(s.id, { useAi: false, humanVerdict: 'Fail' })}
+                                  title="Override to Fail"
+                                  className="px-1.5 h-5 inline-flex items-center rounded text-[9.5px] font-semibold text-risk-700 border border-risk-100 hover:bg-risk-50 cursor-pointer transition-colors">Fail</button>
+                              )}
+                            </div>
                           )}
                         </div>
+                        {v?.humanRemark && (
+                          <div className="flex items-start gap-1 mt-1 text-[9.5px] text-text-muted max-w-[260px]">
+                            <MessageSquare size={9} className="mt-0.5 shrink-0 text-mitigated-600" />
+                            <span className="line-clamp-2 italic">“{v.humanRemark}”</span>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1535,7 +1544,59 @@ function SampleBasedAttrSection({ ctrl, attr, expanded, onToggle, samples, round
           )}
         </div>
       )}
+
+      {/* Override-to-Pass justification (required) */}
+      {passOverride && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={() => setPassOverride(null)} />
+          <div className="relative w-full max-w-[460px] bg-white rounded-2xl shadow-2xl p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-compliant-50 shrink-0"><CheckCircle2 size={18} className="text-compliant-700" /></div>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-bold text-text">Override to Pass</h3>
+                <p className="text-[12px] text-text-muted mt-0.5">Sample <span className="font-mono font-semibold text-text">{passOverride.sampleId}</span> failed validation. A justification is required to override it to Pass.</p>
+              </div>
+            </div>
+            <textarea
+              autoFocus
+              value={overrideComment}
+              onChange={e => setOverrideComment(e.target.value)}
+              rows={3}
+              placeholder="Why does this sample pass despite the failure? (required)"
+              className="w-full px-3 py-2.5 text-[12.5px] border border-canvas-border rounded-lg outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none placeholder:text-text-muted leading-relaxed"
+            />
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setPassOverride(null)} className="px-3.5 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas cursor-pointer transition-colors">Cancel</button>
+              <button
+                onClick={() => { onOverride(passOverride.sampleId, { useAi: false, humanVerdict: 'Pass', humanRemark: overrideComment.trim() }); setPassOverride(null); }}
+                disabled={!overrideComment.trim()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant-500 hover:opacity-90 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold cursor-pointer transition-opacity"
+              >
+                <CheckCircle2 size={14} /> Override to Pass
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Result pill (sample verdict) ────────────────────────────────────────────
+
+function ResultPill({ effective, overridden }: { effective: 'Pass' | 'Fail' | 'Hold' | null; overridden: boolean }): JSX.Element {
+  if (!effective) return <span className="text-text-muted text-[13px]">—</span>;
+  const map = {
+    Pass: { cls: 'bg-compliant-50 text-compliant-700 border-compliant-100', Icon: CheckCircle2 },
+    Fail: { cls: 'bg-risk-50 text-risk-700 border-risk-100', Icon: XCircle },
+    Hold: { cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated-100', Icon: Clock },
+  } as const;
+  const { cls, Icon } = map[effective];
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 h-6 rounded-md text-[11.5px] font-bold border ${cls}`}>
+      <Icon size={13} />{effective}
+      {overridden && <span className="text-[8.5px] font-semibold uppercase tracking-wide opacity-70 ml-0.5">· you</span>}
+    </span>
   );
 }
 
@@ -1569,7 +1630,7 @@ function GenericAttrSection({ ctrl, attr, expanded, onToggle, result, running, v
           <ChevronDown size={12} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-text-muted">{attr.id}</span>
+              <span className="text-[10px] font-mono text-text-muted">{attrCode(attr.id)}</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100">GENERIC</span>
             </div>
             <div className="text-[12px] font-semibold text-text truncate">{attr.description}</div>
@@ -1866,96 +1927,63 @@ function WorkflowPicker({ workflow, open, onToggle, onSelect, onClear, onBuild }
 
 // ─── Vertical gamified checkpoint rail ───────────────────────────────────────
 
-function VerticalCheckpoints({ phases, active, onJump, xp }: {
+function JourneyStepper({ phases, active, onJump, xp }: {
   phases: { num: 1 | 2 | 3 | 4; label: string; sub: string; done: boolean }[];
   active: 1 | 2 | 3 | 4;
   onJump: (n: 1 | 2 | 3 | 4) => void;
   xp: { samples: number; validated: number; total: number; passed: number; failed: number };
 }): JSX.Element {
-  const doneCount = phases.filter(p => p.done).length;
-  const overallPct = Math.round((doneCount / phases.length) * 100);
+  const stat = (Icon: React.ElementType, value: number | string, label: string, tone: string) => (
+    <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap">
+      <Icon size={12} className={tone} />
+      <span className={`font-bold tabular-nums ${tone}`}>{value}</span>
+      <span className="text-text-muted">{label}</span>
+    </div>
+  );
 
   return (
-    <div className="glass-card rounded-2xl p-6 self-start sticky top-2 space-y-6">
-      {/* Header — overall journey progress */}
-      <div>
-        <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">Journey</span>
-          <span className="text-[10px] tabular-nums text-text-muted">{doneCount}/{phases.length}</span>
-        </div>
-        <div className="text-[24px] font-bold tabular-nums text-text leading-none">{overallPct}%</div>
-        <div className="mt-2 h-1.5 bg-canvas rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-500 ${overallPct === 100 ? 'bg-compliant-500' : 'bg-brand-500'}`} style={{ width: `${overallPct}%` }} />
-        </div>
-      </div>
-
-      {/* Checkpoint nodes */}
-      <div className="relative">
-        {/* connecting line */}
-        <div className="absolute left-[18px] top-3 bottom-3 w-0.5 bg-canvas-border" />
-        <div className="space-y-1">
+    <div className="glass-card rounded-2xl px-4 py-3">
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Horizontal stepper */}
+        <div className="flex items-center flex-1 min-w-0 overflow-x-auto">
           {phases.map((p, i) => {
             const isActive = active === p.num;
             const prev = i === 0 ? { done: true } : phases[i - 1]!;
             const canJump = p.done || prev.done || isActive;
             return (
-              <button key={p.num} onClick={() => canJump && onJump(p.num)} disabled={!canJump}
-                className={`relative w-full text-left px-1 py-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-3 ${
-                  isActive ? 'bg-brand-50/60'
-                    : canJump ? 'hover:bg-canvas/40'
-                    : 'opacity-50 cursor-not-allowed'
-                }`}>
-                {/* node bullet */}
-                <div className={`relative z-10 shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all ${
-                  p.done ? 'bg-compliant-500 border-compliant-500 text-white'
-                    : isActive ? 'bg-white border-brand-500 text-brand-700 ring-4 ring-brand-100'
-                    : !canJump ? 'bg-canvas border-canvas-border text-text-muted'
-                    : 'bg-white border-canvas-border text-text-muted'
-                }`}>
-                  {p.done ? <Check size={14} /> : !canJump ? <Lock size={11} /> : p.num}
-                </div>
-                <div className="flex-1 min-w-0 pt-1">
-                  <div className={`text-[12.5px] font-bold leading-tight ${
-                    p.done ? 'text-compliant-700' : isActive ? 'text-brand-700' : 'text-text'
-                  }`}>{p.label}</div>
-                  <div className="text-[10px] text-text-muted leading-tight mt-0.5 truncate">{p.sub}</div>
-                  {p.done && (
-                    <div className="text-[9px] text-compliant-700 font-semibold mt-1 inline-flex items-center gap-0.5">
-                      <CheckCircle2 size={9} />Cleared
-                    </div>
-                  )}
-                  {isActive && !p.done && (
-                    <div className="text-[9px] text-brand-700 font-semibold mt-1 inline-flex items-center gap-0.5 animate-pulse">
-                      <Sparkles size={9} />In progress
-                    </div>
-                  )}
-                </div>
-              </button>
+              <Fragment key={p.num}>
+                <button onClick={() => canJump && onJump(p.num)} disabled={!canJump}
+                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl shrink-0 transition-colors ${
+                    isActive ? 'bg-brand-50/70' : canJump ? 'hover:bg-canvas/50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                  }`}>
+                  <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all ${
+                    p.done ? 'bg-compliant-500 border-compliant-500 text-white'
+                      : isActive ? 'bg-white border-brand-500 text-brand-700 ring-4 ring-brand-100'
+                      : !canJump ? 'bg-canvas border-canvas-border text-text-muted'
+                      : 'bg-white border-canvas-border text-text-muted'
+                  }`}>
+                    {p.done ? <Check size={14} /> : !canJump ? <Lock size={11} /> : p.num}
+                  </div>
+                  <div className="text-left min-w-0">
+                    <div className={`text-[12px] font-bold leading-tight ${p.done ? 'text-compliant-700' : isActive ? 'text-brand-700' : 'text-text'}`}>{p.label}</div>
+                    <div className="text-[9.5px] text-text-muted leading-tight truncate max-w-[150px]">{p.sub}</div>
+                  </div>
+                </button>
+                {i < phases.length - 1 && (
+                  <div className={`h-0.5 flex-1 min-w-[14px] mx-1.5 rounded-full ${p.done ? 'bg-compliant-300' : 'bg-canvas-border'}`} />
+                )}
+              </Fragment>
             );
           })}
         </div>
-      </div>
-
-      {/* XP-style stats */}
-      <div className="rounded-xl border border-canvas-border bg-canvas/30 px-3 py-3">
-        <div className="text-[9px] font-bold text-text-muted uppercase tracking-wider mb-2">Progress this control</div>
-        <div className="space-y-1.5">
-          <XpRow label="Samples drawn" value={xp.samples} icon={Database} tone="text-text" />
-          <XpRow label="Validated" value={xp.total === 0 ? '—' : `${xp.validated}/${xp.total}`} icon={Sparkles} tone="text-evidence-700" />
-          <XpRow label="Passed" value={xp.passed} icon={CheckCircle2} tone="text-compliant-700" />
-          {xp.failed > 0 && <XpRow label="Failed" value={xp.failed} icon={XCircle} tone="text-risk-700" />}
+        {/* Compact progress stats */}
+        <div className="flex items-center gap-4 shrink-0 pl-4 border-l border-canvas-border">
+          {stat(Database, xp.samples, 'samples', 'text-text-secondary')}
+          {stat(Sparkles, xp.total === 0 ? '—' : `${xp.validated}/${xp.total}`, 'validated', 'text-evidence-700')}
+          {stat(CheckCircle2, xp.passed, 'passed', 'text-compliant-700')}
+          {xp.failed > 0 && stat(XCircle, xp.failed, 'failed', 'text-risk-700')}
         </div>
       </div>
-    </div>
-  );
-}
-
-function XpRow({ label, value, icon: Icon, tone }: { label: string; value: number | string; icon: React.ElementType; tone: string }): JSX.Element {
-  return (
-    <div className="flex items-center gap-2 text-[10.5px]">
-      <Icon size={10} className={tone} />
-      <span className="text-text-muted flex-1">{label}</span>
-      <span className={`font-bold tabular-nums ${tone}`}>{value}</span>
     </div>
   );
 }
@@ -1999,7 +2027,7 @@ function AttributeRail({ ctrl, sbAttrs, genAttrs, selectedAttrId, onSelect, attr
                   {done ? <Check size={8} /> : ''}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={`text-[10.5px] font-mono ${isSelected ? 'text-brand-700' : 'text-text-muted'}`}>{attr.id}</div>
+                  <div className={`text-[10.5px] font-mono ${isSelected ? 'text-brand-700' : 'text-text-muted'}`}>{attrCode(attr.id)}</div>
                   <div className="text-[11.5px] font-semibold text-text truncate leading-tight">{attr.description}</div>
                   <div className="flex items-center gap-1.5 mt-1 text-[9px]">
                     {passes > 0 && <span className="text-compliant-700 font-semibold tabular-nums">{passes}P</span>}
@@ -2033,7 +2061,7 @@ function AttributeRail({ ctrl, sbAttrs, genAttrs, selectedAttrId, onSelect, attr
                       : 'bg-canvas-border text-text-muted'
                   }`}>{done ? <Check size={8} /> : ''}</div>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[10.5px] font-mono ${isSelected ? 'text-mitigated-700' : 'text-text-muted'}`}>{attr.id}</div>
+                    <div className={`text-[10.5px] font-mono ${isSelected ? 'text-mitigated-700' : 'text-text-muted'}`}>{attrCode(attr.id)}</div>
                     <div className="text-[11.5px] font-semibold text-text truncate leading-tight">{attr.description}</div>
                     <div className="flex items-center gap-1.5 mt-1 text-[9px]">
                       {eff === 'Pass' && <span className="text-compliant-700 font-semibold">Pass</span>}

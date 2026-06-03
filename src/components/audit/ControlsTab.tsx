@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
-import { type ControlAttribute } from '../../data/racm';
+import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 
@@ -515,7 +515,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                   className="flex items-start gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
                                 >
                                   <span className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${attrExpanded ? 'bg-brand-600' : 'bg-ink-300'}`} />
-                                  <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attr.id}</span>
+                                  <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attrCode(attr.id)}</span>
                                   <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0">{attr.description}</span>
                                 </button>
                                 {/* Inline workflow mapping — linked workflow chips + a clearly visible link control. */}
@@ -956,7 +956,7 @@ function AttributeBlock(p: AttributeBlockProps): JSX.Element {
       {!p.compact && (
         <div className="px-4 py-3 border-b border-canvas-border bg-canvas/60">
           <div className="flex items-start gap-3">
-            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{p.attribute.id}</span>
+            <span className="font-mono text-[11.5px] font-semibold text-brand-700 shrink-0 mt-0.5">{attrCode(p.attribute.id)}</span>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink-800 leading-snug">{p.attribute.description}</p>
               <p className="text-[11.5px] italic text-ink-500 mt-0.5 leading-snug">{p.attribute.testProcedure}</p>
