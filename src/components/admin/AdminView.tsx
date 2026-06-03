@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -1502,9 +1503,9 @@ function AuditLogsTab() {
           </select>
           <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         </div>
-        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
+        <DatePicker className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
         <span className="text-[0.75rem] text-text-muted">to</span>
-        <input type="date" className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
+        <DatePicker className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
       </div>
 
       <SmartTable

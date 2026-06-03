@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -731,17 +732,13 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete }: 
                               Date Range
                             </label>
                             <div className="grid grid-cols-2 gap-2">
-                              <input
-                                type="date"
-                                value={parameters.dateFrom}
+                              <DatePicker value={parameters.dateFrom}
                                 onChange={(e) =>
                                   handleParametersChange({ ...parameters, dateFrom: e.target.value })
                                 }
                                 className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.75rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                               />
-                              <input
-                                type="date"
-                                value={parameters.dateTo}
+                              <DatePicker value={parameters.dateTo}
                                 onChange={(e) =>
                                   handleParametersChange({ ...parameters, dateTo: e.target.value })
                                 }

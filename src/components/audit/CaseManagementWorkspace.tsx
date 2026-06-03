@@ -7,6 +7,7 @@
  *
  * All bulk mutations are demo-only (local state + toast).
  */
+import DatePicker from '../shared/DatePicker';
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -302,7 +303,7 @@ function BulkDue({ onApply, count }: { onApply: (label: string) => void; count: 
       </div>
       <div>
         <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Custom date</label>
-        <input type="date" value={custom} onChange={(e) => setCustom(e.target.value)} className={INPUT_CLS} />
+        <DatePicker value={custom} onChange={(e) => setCustom(e.target.value)} className={INPUT_CLS} />
       </div>
       <button disabled={!custom} onClick={() => onApply(custom)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
@@ -379,7 +380,7 @@ function BulkSnooze({ onApply, count }: { onApply: (label: string) => void; coun
       </div>
       <div>
         <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Until date</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={INPUT_CLS} />
+        <DatePicker value={date} onChange={(e) => setDate(e.target.value)} className={INPUT_CLS} />
       </div>
       <button disabled={!date} onClick={() => onApply(`until ${date}`)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">

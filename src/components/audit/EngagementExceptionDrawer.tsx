@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState, type JSX } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -351,10 +352,8 @@ export default function EngagementExceptionDrawer({
               </div>
               <div>
                 <label className={LABEL_CLS} htmlFor="plan-due">Due date</label>
-                <input
-                  id="plan-due"
-                  type="date"
-                  value={planDue}
+                <DatePicker
+                  id="plan-due" value={planDue}
                   onChange={(e) => setPlanDue(e.target.value)}
                   className={INPUT_CLS + ' cursor-pointer'}
                 />

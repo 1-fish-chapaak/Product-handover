@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -1173,9 +1174,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               {frequency === 'Monthly' && (
                 <div>
                   <label className="text-[0.8125rem] font-semibold text-text block mb-2">Select date</label>
-                  <input
-                    type="date"
-                    value={monthlyDate}
+                  <DatePicker value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
                     placeholder="dd/mm/yyyy"
                     className="w-full h-11 px-3.5 rounded-xl border border-primary/40 text-[0.875rem] bg-white text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"

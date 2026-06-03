@@ -1,6 +1,7 @@
 // ─── Automation Project — Schedule Tab ────────────────────────────────────
 // Configure recurring automation runs. Final Automation Project tab.
 
+import DatePicker from '../../../shared/DatePicker';
 import React from 'react';
 import {
   CheckCircle2, AlertCircle, ChevronRight, Lock, Info, Play, Pause, Power, Clock,
@@ -132,8 +133,8 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
         <h4 className="text-[0.6875rem] font-bold text-text">Schedule Configuration</h4>
         <div className="grid grid-cols-3 gap-3">
           <div><label className={labelCls}>Frequency</label><select value={schedule.frequency || cfg.frequency || ''} onChange={e => update('frequency', e.target.value)} className={inputCls + ' cursor-pointer appearance-none'} disabled={isActive}>{FREQ_OPTIONS.map(f => <option key={f.v} value={f.v}>{f.l}</option>)}</select></div>
-          <div><label className={labelCls}>Start Date</label><input type="date" value={schedule.startDate} onChange={e => update('startDate', e.target.value)} className={inputCls} disabled={isActive} /></div>
-          <div><label className={labelCls}>End Date (optional)</label><input type="date" value={schedule.endDate} onChange={e => update('endDate', e.target.value)} className={inputCls} disabled={isActive} /></div>
+          <div><label className={labelCls}>Start Date</label><DatePicker value={schedule.startDate} onChange={e => update('startDate', e.target.value)} className={inputCls} disabled={isActive} /></div>
+          <div><label className={labelCls}>End Date (optional)</label><DatePicker value={schedule.endDate} onChange={e => update('endDate', e.target.value)} className={inputCls} disabled={isActive} /></div>
           <div><label className={labelCls}>Run Time</label><input type="time" value={schedule.runTime} onChange={e => update('runTime', e.target.value)} className={inputCls} disabled={isActive} /></div>
           <div><label className={labelCls}>Timezone</label><input value={schedule.timezone} onChange={e => update('timezone', e.target.value)} className={inputCls} disabled={isActive} /></div>
           <div><label className={labelCls}>Workflow{wfNames.length > 1 ? 's' : ''}</label><input value={wfName} disabled className={inputCls + ' bg-gray-50'} />{wfNames.length > 1 && <div className="flex flex-wrap gap-1 mt-1">{wfNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-purple-50 text-[0.5rem] text-purple-700">{n}</span>)}</div>}</div>

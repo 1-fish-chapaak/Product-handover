@@ -1,6 +1,7 @@
 // ─── Internal Audit — Requests / IDR Tab ──────────────────────────────────
 // Track initial data and document requests for audit analysis.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState } from 'react';
 import {
   Plus, Search, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle,
@@ -324,7 +325,7 @@ function CreateIDRForm({ onSave, onCancel }: { onSave: (r: IARequest) => void; o
         <div><label className={labelCls}>Linked Scope Type</label><select value={scopeType} onChange={e => setScopeType(e.target.value as IALinkedScopeType)} className={selectCls}>{Object.entries(SCOPE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
         <div><label className={labelCls}>Scope Label</label><input value={scopeLabel} onChange={e => setScopeLabel(e.target.value)} placeholder="e.g. Invoice Processing" className={inputCls} /></div>
         <div><label className={labelCls}>Requested From</label><input value={requestedFrom} onChange={e => setRequestedFrom(e.target.value)} placeholder="e.g. AP Manager" className={inputCls} /></div>
-        <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} /></div>
+        <div><label className={labelCls}>Due Date</label><DatePicker value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} /></div>
       </div>
       <div className="flex items-center justify-end gap-2">
         <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>

@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, type Variants } from 'motion/react';
@@ -3657,9 +3658,7 @@ function DateRangeDropdown({
                 <div className="border-t border-canvas-border/60 bg-paper-50/40 px-4 py-3 space-y-2">
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-ink-500 w-10">From</label>
-                    <input
-                      type="date"
-                      value={from}
+                    <DatePicker value={from}
                       max={to || undefined}
                       onChange={e => setFrom(e.target.value)}
                       className="flex-1 h-7 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-xs text-ink-900 focus:outline-none focus:border-brand-400"
@@ -3667,9 +3666,7 @@ function DateRangeDropdown({
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-ink-500 w-10">To</label>
-                    <input
-                      type="date"
-                      value={to}
+                    <DatePicker value={to}
                       min={from || undefined}
                       onChange={e => setTo(e.target.value)}
                       className="flex-1 h-7 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-xs text-ink-900 focus:outline-none focus:border-brand-400"

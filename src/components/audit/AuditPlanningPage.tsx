@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -579,14 +580,14 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
 
           {/* Audit Period */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="mb-3"><label className={labelCls}>Audit Period Start *</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} /></div>
-            <div className="mb-3"><label className={labelCls}>Audit Period End *</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} /></div>
+            <div className="mb-3"><label className={labelCls}>Audit Period Start *</label><DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} /></div>
+            <div className="mb-3"><label className={labelCls}>Audit Period End *</label><DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} /></div>
           </div>
 
           {/* Planned Start/End */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="mb-3"><label className={labelCls}>Planned Start *</label><input type="date" value={plannedStart} onChange={e => setPlannedStart(e.target.value)} className={inputCls} /></div>
-            <div className="mb-3"><label className={labelCls}>Planned End *</label><input type="date" value={plannedEnd} onChange={e => setPlannedEnd(e.target.value)} className={inputCls} /></div>
+            <div className="mb-3"><label className={labelCls}>Planned Start *</label><DatePicker value={plannedStart} onChange={e => setPlannedStart(e.target.value)} className={inputCls} /></div>
+            <div className="mb-3"><label className={labelCls}>Planned End *</label><DatePicker value={plannedEnd} onChange={e => setPlannedEnd(e.target.value)} className={inputCls} /></div>
           </div>
 
           {/* Owner & Reviewer */}

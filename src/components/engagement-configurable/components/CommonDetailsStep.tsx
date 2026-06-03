@@ -1,3 +1,4 @@
+import DatePicker from '../../shared/DatePicker';
 import React from 'react';
 import type { EngagementPatternType } from '../configurableEngagementTypes';
 import { PATTERN_DISPLAY_LABELS } from '../configurableEngagementTypes';
@@ -74,12 +75,12 @@ export default function CommonDetailsStep({ patternType, details, onChange, revi
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Planned Start Date</label>
-            <input type="date" value={details.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)} className={inputCls} />
+            <DatePicker value={details.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)} className={inputCls} />
             <p className="text-[0.5625rem] text-gray-400 mt-0.5">When work begins</p>
           </div>
           <div>
             <label className={labelCls}>Planned End Date</label>
-            <input type="date" value={details.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)} className={inputCls} />
+            <DatePicker value={details.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)} className={inputCls} />
             <p className="text-[0.5625rem] text-gray-400 mt-0.5">When work ends</p>
           </div>
         </div>
@@ -90,11 +91,11 @@ export default function CommonDetailsStep({ patternType, details, onChange, revi
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Data Period From</label>
-              <input type="date" value={details.dataPeriodStart} onChange={e => update('dataPeriodStart', e.target.value)} className={inputCls} />
+              <DatePicker value={details.dataPeriodStart} onChange={e => update('dataPeriodStart', e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Data Period To</label>
-              <input type="date" value={details.dataPeriodEnd} onChange={e => update('dataPeriodEnd', e.target.value)} className={inputCls} />
+              <DatePicker value={details.dataPeriodEnd} onChange={e => update('dataPeriodEnd', e.target.value)} className={inputCls} />
             </div>
           </div>
           {details.dataPeriodStart && details.dataPeriodEnd && details.dataPeriodStart > details.dataPeriodEnd && (

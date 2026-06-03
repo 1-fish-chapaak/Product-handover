@@ -801,7 +801,7 @@ function looksNumeric(v: string): boolean {
 // Presentational spreadsheet — sheet bar + row-number gutter + sticky header +
 // numeric-aware alignment. Shared by the live (parsed bytes) and sample
 // (synthesised, for files with no real bytes) previews.
-function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet, maxHeightClass = 'max-h-[360px]', bare = false }: {
+function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames, activeSheet = 0, onSelectSheet, maxHeightClass = 'max-h-[360px]', bare = false, fill = false }: {
   header: string[];
   body: string[][];
   totalRows: number;
@@ -812,6 +812,9 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
   onSelectSheet?: (i: number) => void;
   maxHeightClass?: string;
   bare?: boolean;
+  /** Stretch the card to fill its parent's height (reading pane) so a short
+   *  sheet doesn't leave a dead zone below it. */
+  fill?: boolean;
 }) {
   const multi = sheetNames.length > 1;
   const activeName = sheetNames[activeSheet] ?? sheetNames[0] ?? 'Sheet1';
@@ -834,7 +837,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
   const hasFlex = flexCol >= 0;
 
   return (
-    <div className={bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'}>
+    <div className={`${bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'} ${fill ? 'h-full flex flex-col' : ''}`}>
       {/* Sheet switcher up top — for multi-sheet workbooks this is the most
           important control, so it leads instead of hiding under the table. */}
       <div className="flex items-center justify-between gap-3 px-2.5 h-12 border-b border-canvas-border bg-canvas shrink-0">
@@ -869,7 +872,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
         </span>
       </div>
 
-      <div className={`overflow-auto ${maxHeightClass}`}>
+      <div className={fill ? 'flex-1 min-h-0 overflow-auto' : `overflow-auto ${maxHeightClass}`}>
         <table className="border-collapse text-[0.75rem] w-full">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -916,7 +919,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
         </table>
       </div>
 
-      <div className="px-3 h-9 flex items-center border-t border-canvas-border text-[0.75rem] text-ink-500 tabular-nums">
+      <div className="px-3 h-9 shrink-0 flex items-center border-t border-canvas-border text-[0.75rem] text-ink-500 tabular-nums">
         Showing first {body.length} {body.length === 1 ? 'row' : 'rows'}
         <span className="text-ink-400"> · {totalRows.toLocaleString()} total · {live ? 'live preview' : 'sample preview'}</span>
       </div>
@@ -938,7 +941,7 @@ function extractSheet(wb: XLSX.WorkBook, i: number): { rows: string[][]; total: 
   return { rows, total: Math.max(0, all.length - 1), cols };
 }
 
-function SpreadsheetPreview({ url, totalRows, maxHeightClass, bare = false }: { url: string; totalRows?: number; maxHeightClass?: string; bare?: boolean }) {
+function SpreadsheetPreview({ url, totalRows, maxHeightClass, bare = false, fill = false }: { url: string; totalRows?: number; maxHeightClass?: string; bare?: boolean; fill?: boolean }) {
   const wbRef = useRef<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [active, setActive] = useState(0);
@@ -1037,6 +1040,7 @@ function SpreadsheetPreview({ url, totalRows, maxHeightClass, bare = false }: { 
       onSelectSheet={selectSheet}
       maxHeightClass={maxHeightClass}
       bare={bare}
+      fill={fill}
       live
     />
   );
@@ -1052,9 +1056,9 @@ const SAMPLE_ASSETS = {
 } as const;
 
 // CSV/XLSX demo files → parse and render the real bundled sample spreadsheet.
-function SampleSheetPreview({ file, maxHeightClass, bare = false }: { file: DatasetFile; maxHeightClass?: string; bare?: boolean }) {
+function SampleSheetPreview({ file, maxHeightClass, bare = false, fill = false }: { file: DatasetFile; maxHeightClass?: string; bare?: boolean; fill?: boolean }) {
   const url = file.format === 'CSV' ? SAMPLE_ASSETS.csv : SAMPLE_ASSETS.xlsx;
-  return <SpreadsheetPreview url={url} maxHeightClass={maxHeightClass} bare={bare} />;
+  return <SpreadsheetPreview url={url} maxHeightClass={maxHeightClass} bare={bare} fill={fill} />;
 }
 
 // Renders one real PDF page to a canvas via pdf.js, scaled to targetWidth.
@@ -1239,7 +1243,7 @@ function triggerDownload(file: DatasetFile) {
 // The actual preview surface for a file, picked by type + whether real uploaded
 // bytes exist. Shared by the inline single-file view, the split preview pane,
 // and the full-screen overlay.
-function FilePreviewBody({ file, tall = false, bare = false }: { file: DatasetFile; tall?: boolean; bare?: boolean }) {
+function FilePreviewBody({ file, tall = false, bare = false, fill = false }: { file: DatasetFile; tall?: boolean; bare?: boolean; fill?: boolean }) {
   const isPdf = file.pages != null;
   const blob = useFileBlob(file.id);
   const realPdf = isPdf && !!blob && (blob.mime === 'application/pdf' || file.format === 'PDF');
@@ -1249,13 +1253,13 @@ function FilePreviewBody({ file, tall = false, bare = false }: { file: DatasetFi
   // preview's own card chrome when it already sits inside a card (reading pane).
   const mh = tall ? 'max-h-[62vh]' : undefined;
   return realSheet ? (
-    <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} maxHeightClass={mh} bare={bare} />
+    <SpreadsheetPreview url={blob!.url} totalRows={file.rows ?? undefined} maxHeightClass={mh} bare={bare} fill={fill} />
   ) : realPdf ? (
     <PdfCanvasViewer source={blob!.url} fileName={file.name} bare={bare} />
   ) : isPdf ? (
     <SamplePdfPreview file={file} bare={bare} />
   ) : (
-    <SampleSheetPreview file={file} maxHeightClass={mh} bare={bare} />
+    <SampleSheetPreview file={file} maxHeightClass={mh} bare={bare} fill={fill} />
   );
 }
 
@@ -1423,9 +1427,19 @@ function PreviewPane({ file }: { file: DatasetFile }) {
           <p className="text-[0.8125rem] text-ink-700 font-medium">Processing failed</p>
           <p className="text-[0.75rem] text-ink-500">This file couldn’t be processed — the format may not be supported.</p>
         </div>
-      ) : (
+      ) : file.pages != null ? (
+        /* PDF — the page viewer is already tall; flow it + details. */
         <div className="flex-1 min-h-0 overflow-auto p-4">
           <FilePreviewBlock file={file} />
+        </div>
+      ) : (
+        /* Sheet — stretch the preview card to fill the pane so a short file
+           leaves no dead zone; Details pinned beneath. */
+        <div className="flex-1 min-h-0 p-4 flex flex-col gap-4">
+          <div className="flex-1 min-h-0">
+            <FilePreviewBody key={file.id} file={file} fill />
+          </div>
+          <PreviewDetails file={file} />
         </div>
       )}
     </>

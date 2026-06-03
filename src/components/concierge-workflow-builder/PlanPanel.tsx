@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useRef, useState } from 'react';
 import {
   ListChecks,
@@ -488,15 +489,11 @@ function InputConfigSection({
                 Date Range
               </label>
               <div className="grid grid-cols-2 gap-1.5">
-                <input
-                  type="date"
-                  value={parameters.dateFrom}
+                <DatePicker value={parameters.dateFrom}
                   onChange={(e) => updateParam('dateFrom', e.target.value)}
                   className="rounded-lg border border-canvas-border bg-canvas-elevated px-2 py-1.5 text-[0.75rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                 />
-                <input
-                  type="date"
-                  value={parameters.dateTo}
+                <DatePicker value={parameters.dateTo}
                   onChange={(e) => updateParam('dateTo', e.target.value)}
                   className="rounded-lg border border-canvas-border bg-canvas-elevated px-2 py-1.5 text-[0.75rem] font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                 />

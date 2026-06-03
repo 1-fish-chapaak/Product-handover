@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -1629,14 +1630,14 @@ function EngagementDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div className="mb-3">
                 <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Audit Period Start *</label>
-                <input type="date" value={form.auditPeriodStart} onChange={e => update('auditPeriodStart', e.target.value)}
+                <DatePicker value={form.auditPeriodStart} onChange={e => update('auditPeriodStart', e.target.value)}
                   disabled={readOnly || isInExecution}
                   className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
               <div className="mb-3">
                 <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Audit Period End *</label>
-                <input type="date" value={form.auditPeriodEnd} onChange={e => update('auditPeriodEnd', e.target.value)}
+                <DatePicker value={form.auditPeriodEnd} onChange={e => update('auditPeriodEnd', e.target.value)}
                   disabled={readOnly || isInExecution}
                   className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
@@ -1647,14 +1648,14 @@ function EngagementDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div className="mb-3">
                 <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Planned Start *</label>
-                <input type="date" value={form.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)}
+                <DatePicker value={form.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)}
                   disabled={readOnly || isInExecution}
                   className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
               <div className="mb-3">
                 <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Planned End *</label>
-                <input type="date" value={form.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)}
+                <DatePicker value={form.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)}
                   disabled={readOnly || isInExecution}
                   className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />

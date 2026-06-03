@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -826,9 +827,7 @@ export function ClassifyExceptionDrawer({
                 Due Date <span className="text-risk">*</span>
               </label>
               <div className="relative w-[220px]">
-                <input
-                  type="date"
-                  value={dueDate}
+                <DatePicker value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   className="w-full h-10 pl-3 pr-9 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                 />

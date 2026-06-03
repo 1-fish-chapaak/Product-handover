@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -129,22 +130,22 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Audit Period Start</label>
-              <input type="date" value={eng.auditPeriodStart} onChange={e => onUpdate?.(eng.id, { auditPeriodStart: e.target.value })}
+              <DatePicker value={eng.auditPeriodStart} onChange={e => onUpdate?.(eng.id, { auditPeriodStart: e.target.value })}
                 className="w-full px-2.5 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
             </div>
             <div>
               <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Audit Period End</label>
-              <input type="date" value={eng.auditPeriodEnd} onChange={e => onUpdate?.(eng.id, { auditPeriodEnd: e.target.value })}
+              <DatePicker value={eng.auditPeriodEnd} onChange={e => onUpdate?.(eng.id, { auditPeriodEnd: e.target.value })}
                 className="w-full px-2.5 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
             </div>
             <div>
               <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Planned Start *</label>
-              <input type="date" value={eng.plannedStartDate} onChange={e => onUpdate?.(eng.id, { plannedStartDate: e.target.value })}
+              <DatePicker value={eng.plannedStartDate} onChange={e => onUpdate?.(eng.id, { plannedStartDate: e.target.value })}
                 className={`w-full px-2.5 py-2 border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedStartDate ? 'border-risk/40' : 'border-border'}`} />
             </div>
             <div>
               <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Planned End *</label>
-              <input type="date" value={eng.plannedEndDate} onChange={e => onUpdate?.(eng.id, { plannedEndDate: e.target.value })}
+              <DatePicker value={eng.plannedEndDate} onChange={e => onUpdate?.(eng.id, { plannedEndDate: e.target.value })}
                 className={`w-full px-2.5 py-2 border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedEndDate ? 'border-risk/40' : 'border-border'}`} />
             </div>
           </div>

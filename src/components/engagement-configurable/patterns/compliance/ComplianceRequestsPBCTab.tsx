@@ -2,6 +2,7 @@
 // Tracks sample, data, and evidence requests from process owners.
 // Setup/governance only — no testing execution.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState } from 'react';
 import {
   Plus, ChevronDown, ChevronRight, Clock, CheckCircle2, AlertCircle,
@@ -403,7 +404,7 @@ function CreateRequestForm({ onSave, onCancel }: { onSave: (r: PBCRequest) => vo
         </div>
         <div>
           <label className={labelCls}>Due Date</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
+          <DatePicker value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
         </div>
       </div>
 

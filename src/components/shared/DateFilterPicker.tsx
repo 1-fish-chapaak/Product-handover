@@ -1,3 +1,4 @@
+import DatePicker from './DatePicker';
 import { useEffect, useState } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 
@@ -141,9 +142,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">From</label>
-                  <input
-                    type="date"
-                    value={from}
+                  <DatePicker value={from}
                     max={to || todayIso}
                     onChange={(e) => setFrom(e.target.value)}
                     className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
@@ -151,9 +150,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                 </div>
                 <div>
                   <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">To</label>
-                  <input
-                    type="date"
-                    value={to}
+                  <DatePicker value={to}
                     min={from || undefined}
                     max={todayIso}
                     onChange={(e) => setTo(e.target.value)}

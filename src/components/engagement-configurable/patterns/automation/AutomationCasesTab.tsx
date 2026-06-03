@@ -3,6 +3,7 @@
 // fed with V3 automation run exceptions.
 // Supports bulk "Mark as Case & Assign" from selected exceptions.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState, useMemo, useCallback } from 'react';
 import { Lock, ChevronRight, Info, Workflow, X, AlertCircle } from 'lucide-react';
 import type { ConfigurableEngagement, AutomationProjectConfig } from '../../configurableEngagementTypes';
@@ -285,7 +286,7 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
             </div>
             <div>
               <label className={labelCls}>Due Date <span className="text-red-400">*</span></label>
-              <input type="date" value={dueDate} onChange={e => { setDueDate(e.target.value); setValidationMsg(''); }} className={inputCls + ' max-w-[200px]'} />
+              <DatePicker value={dueDate} onChange={e => { setDueDate(e.target.value); setValidationMsg(''); }} className={inputCls + ' max-w-[200px]'} />
             </div>
             <div>
               <label className={labelCls}>Notes for Owner</label>

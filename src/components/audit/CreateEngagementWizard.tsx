@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -301,11 +302,11 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>Period start <span className="text-risk-700">*</span></label>
-                      <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} className={inputCls} />
+                      <DatePicker value={periodStart} onChange={e => setPeriodStart(e.target.value)} className={inputCls} />
                     </div>
                     <div>
                       <label className={labelCls}>Period end <span className="text-risk-700">*</span></label>
-                      <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className={inputCls} />
+                      <DatePicker value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className={inputCls} />
                     </div>
                   </div>
                   {periodStart && periodEnd && periodStart > periodEnd && <Hint text="End must be after start" />}

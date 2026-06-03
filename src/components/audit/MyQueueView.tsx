@@ -3,6 +3,7 @@
  * Shows every open exception assigned to CURRENT_USER, sorted by SLA urgency,
  * with inline triage actions and a "delegate while you're away" affordance.
  */
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -565,10 +566,10 @@ function DelegationCard({
                   Range
                 </label>
                 <div className="flex items-center gap-1.5">
-                  <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                  <DatePicker value={from} onChange={e => setFrom(e.target.value)}
                     className="flex-1 min-w-0 px-2 py-1 text-[0.6875rem] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
                   <span className="text-text-muted text-[0.6875rem]">→</span>
-                  <input type="date" value={until} onChange={e => setUntil(e.target.value)}
+                  <DatePicker value={until} onChange={e => setUntil(e.target.value)}
                     className="flex-1 min-w-0 px-2 py-1 text-[0.6875rem] border border-border-light rounded-md text-text outline-none focus:border-primary/40 bg-white" />
                 </div>
               </div>

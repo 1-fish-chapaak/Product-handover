@@ -1,6 +1,7 @@
 // ─── Internal Audit — Discussion Tab ──────────────────────────────────────
 // Capture process owner responses and agreement on observations.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState, useEffect } from 'react';
 import {
   Send, CheckCircle2, AlertCircle, XCircle, ChevronRight, X, Info, Plus, Clock, RotateCcw,
@@ -283,7 +284,7 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
               <input value={action} onChange={e => setAction(e.target.value)} placeholder="What will be done to remediate?" className={inputCls} />
             </div>
             <div><label className={labelCls}>Action Owner</label><input value={owner} onChange={e => setOwner(e.target.value)} placeholder="Who is responsible?" className={inputCls} /></div>
-            <div><label className={labelCls}>Target Date</label><input type="date" value={target} onChange={e => setTarget(e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>Target Date</label><DatePicker value={target} onChange={e => setTarget(e.target.value)} className={inputCls} /></div>
             <div className="col-span-2">
               <label className="flex items-center gap-2 text-[0.6875rem] text-text cursor-pointer">
                 <input type="checkbox" checked={remediation} onChange={e => setRemediation(e.target.checked)} className="w-3.5 h-3.5 rounded border-border accent-[#6a12cd] cursor-pointer" />

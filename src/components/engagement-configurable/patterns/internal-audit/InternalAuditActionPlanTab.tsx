@@ -1,6 +1,7 @@
 // ─── Internal Audit — Action Plan Tab ─────────────────────────────────────
 // Track agreed remediation actions after Final Report is issued.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState, useEffect } from 'react';
 import {
   Plus, CheckCircle2, AlertCircle, ChevronRight, X, Lock, Play, FileText, Info,
@@ -256,7 +257,7 @@ function CreateActionForm({ engagement, onSave, onCancel }: { engagement: Config
         <div className="col-span-2"><label className={labelCls}>Description</label><textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="What needs to be done?" className={inputCls + ' resize-none'} /></div>
         <div><label className={labelCls}>Owner</label><input value={owner} onChange={e => setOwner(e.target.value)} placeholder="Action owner" className={inputCls} /></div>
         <div><label className={labelCls}>Priority</label><select value={priority} onChange={e => setPriority(e.target.value as ActionPriority)} className={selectCls}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-        <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} /></div>
+        <div><label className={labelCls}>Due Date</label><DatePicker value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} /></div>
       </div>
       <div className="flex items-center justify-end gap-2">
         <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
@@ -291,7 +292,7 @@ function ActionDetailPanel({ item, onUpdate, onTransition, onAddEvidence, onClos
         <div className="col-span-2"><label className={labelCls}>Description</label><textarea value={draft.description} onChange={e => upd('description', e.target.value)} rows={2} className={inputCls + ' resize-none'} /></div>
         <div><label className={labelCls}>Owner</label><input value={draft.owner} onChange={e => upd('owner', e.target.value)} className={inputCls} /></div>
         <div><label className={labelCls}>Priority</label><select value={draft.priority} onChange={e => upd('priority', e.target.value as ActionPriority)} className={selectCls}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-        <div><label className={labelCls}>Due Date</label><input type="date" value={draft.dueDate} onChange={e => upd('dueDate', e.target.value)} className={inputCls} /></div>
+        <div><label className={labelCls}>Due Date</label><DatePicker value={draft.dueDate} onChange={e => upd('dueDate', e.target.value)} className={inputCls} /></div>
         <div><label className={labelCls}>Comments</label><input value={draft.comments} onChange={e => upd('comments', e.target.value)} placeholder="Notes..." className={inputCls} /></div>
       </div>
 

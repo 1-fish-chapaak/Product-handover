@@ -3,6 +3,7 @@
 // Business Process RACM, Compliance Controls/Evidence/WorkingPaper, and shared
 // Activity Trail components.
 
+import DatePicker from '../shared/DatePicker';
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -261,11 +262,11 @@ function AutomationCreateModal({ onClose, onCreate }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={fieldLabelCls}>Planned Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+              <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
             </div>
             <div>
               <label className={fieldLabelCls}>Planned End Date</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+              <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
             </div>
           </div>
 
@@ -425,21 +426,21 @@ function IACreateModal({ onClose, onCreate }: {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Planned Start Date</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+                <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Planned End Date</label>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+                <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Data / Audit Period From</label>
-                <input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className={fieldCls} />
+                <DatePicker value={periodFrom} onChange={e => setPeriodFrom(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Data / Audit Period To</label>
-                <input type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)} className={fieldCls} />
+                <DatePicker value={periodTo} onChange={e => setPeriodTo(e.target.value)} className={fieldCls} />
               </div>
             </div>
           </div>
@@ -624,11 +625,11 @@ function ComplianceCreateModal({ onClose, onCreate }: {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabelCls}>Planned Start Date</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
+                <DatePicker value={startDate} onChange={e => setStartDate(e.target.value)} className={fieldCls} />
               </div>
               <div>
                 <label className={fieldLabelCls}>Planned End Date</label>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
+                <DatePicker value={endDate} onChange={e => setEndDate(e.target.value)} className={fieldCls} />
               </div>
             </div>
           </div>

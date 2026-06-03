@@ -1,6 +1,7 @@
 // ─── Internal Audit — Announcement Tab ────────────────────────────────────
 // Prepare and track audit kickoff communication to stakeholders.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useEffect } from 'react';
 import {
   Send, CheckCircle2, AlertCircle, ChevronRight, Clock, RefreshCw, Info, Save,
@@ -177,10 +178,10 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
             <div className="rounded-lg border border-border-light p-4 space-y-3">
               <h4 className="text-[0.6875rem] font-bold text-text">Timeline</h4>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className={labelCls}>Announcement Date</label><input type="date" value={announcement.announcementDate} onChange={e => update('announcementDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-                <div><label className={labelCls}>Response Due</label><input type="date" value={announcement.responseDueDate} onChange={e => update('responseDueDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-                <div><label className={labelCls}>Expected Start</label><input type="date" value={announcement.expectedStartDate} onChange={e => update('expectedStartDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
-                <div><label className={labelCls}>Expected End</label><input type="date" value={announcement.expectedEndDate} onChange={e => update('expectedEndDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Announcement Date</label><DatePicker value={announcement.announcementDate} onChange={e => update('announcementDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Response Due</label><DatePicker value={announcement.responseDueDate} onChange={e => update('responseDueDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Expected Start</label><DatePicker value={announcement.expectedStartDate} onChange={e => update('expectedStartDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
+                <div><label className={labelCls}>Expected End</label><DatePicker value={announcement.expectedEndDate} onChange={e => update('expectedEndDate', e.target.value)} className={inputCls} disabled={isSent} /></div>
               </div>
             </div>
           )}

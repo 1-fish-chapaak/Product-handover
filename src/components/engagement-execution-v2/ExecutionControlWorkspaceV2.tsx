@@ -3,6 +3,7 @@
 // Dynamic steps based on control type (Automated / Manual / Hybrid).
 // Step internals are placeholders — will be built in subsequent prompts.
 
+import DatePicker from '../shared/DatePicker';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -1437,7 +1438,7 @@ function RequestPBCStep({ ctrl, onNavigate }: {
             </div>
             <div>
               <label className="text-[0.625rem] font-medium text-text-muted block mb-1">Due Date</label>
-              <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
+              <DatePicker value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
                 className="w-full px-2.5 h-8 rounded-lg border border-border bg-white text-[0.6875rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
             </div>
           </div>

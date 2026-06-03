@@ -1,6 +1,7 @@
 // ─── Internal Audit — Observations Tab ────────────────────────────────────
 // Convert potential observations to formal findings. Mandatory section.
 
+import DatePicker from '../../../shared/DatePicker';
 import React, { useState } from 'react';
 import {
   Plus, CheckCircle2, AlertCircle, AlertTriangle, ChevronRight, X, Info, XCircle, RotateCcw, Send,
@@ -440,7 +441,7 @@ function CreateObservationForm({ engagement, cfg, onSave, onCancel }: {
         <div><label className={labelCls}>Recommendation</label><input value={recommendation} onChange={e => setRecommendation(e.target.value)} placeholder="What should be done?" className={inputCls} /></div>
         <div><label className={labelCls}>Linked Scope</label><input value={scopeLabel} onChange={e => setScopeLabel(e.target.value)} placeholder="e.g. Payment Approval" className={inputCls} /></div>
         <div><label className={labelCls}>Link Control</label><select value={linkedControl} onChange={e => setLinkedControl(e.target.value)} className={selectCls}><option value="">Select control...</option>{KNOWN_CONTROLS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div><label className={labelCls}>Target Remediation</label><input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className={inputCls} /></div>
+        <div><label className={labelCls}>Target Remediation</label><DatePicker value={targetDate} onChange={e => setTargetDate(e.target.value)} className={inputCls} /></div>
       </div>
       <div className="flex items-center justify-end gap-2">
         <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
@@ -474,7 +475,7 @@ function EditObservationPanel({ obs, onSave, onClose, onMarkReady }: {
         <div><label className={labelCls}>Impact</label><input value={draft.impact} onChange={e => update('impact', e.target.value)} className={inputCls} /></div>
         <div><label className={labelCls}>Recommendation</label><input value={draft.recommendation} onChange={e => update('recommendation', e.target.value)} className={inputCls} /></div>
         <div><label className={labelCls}>Process Owner</label><input value={draft.processOwner} onChange={e => update('processOwner', e.target.value)} className={inputCls} /></div>
-        <div><label className={labelCls}>Target Remediation</label><input type="date" value={draft.targetRemediationDate} onChange={e => update('targetRemediationDate', e.target.value)} className={inputCls} /></div>
+        <div><label className={labelCls}>Target Remediation</label><DatePicker value={draft.targetRemediationDate} onChange={e => update('targetRemediationDate', e.target.value)} className={inputCls} /></div>
       </div>
       {missing.length > 0 && draft.status === 'DRAFT' && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">

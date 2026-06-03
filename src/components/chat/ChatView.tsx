@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
@@ -1813,10 +1814,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, onCancel, 
               {frequency === 'Monthly' && (
                 <div>
                   <label htmlFor="wf-monthly-date" className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
-                  <input
-                    id="wf-monthly-date"
-                    type="date"
-                    value={monthlyDate}
+                  <DatePicker
+                    id="wf-monthly-date" value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
                     className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                   />
