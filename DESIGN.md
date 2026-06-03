@@ -218,16 +218,29 @@ A vocabulary, not a heatmap. Each color is a noun that names a state; they do no
 
 **Character:** Source Serif 4 is the voice of authority — present at the hero, on chat thread titles, and on evidence quotes. It is set at a heavier weight than typical serif headlines (420–500) because confidence reads as substance, not as elegance. Inter does the working surface: dense, legible, opinionated about its alternates (`ss01`, `cv11`, `tnum` enabled globally). JetBrains Mono carries every number, every ID, every SQL snippet, and every citation chip. The pairing reads editorial-precise, never decorative.
 
-### Hierarchy
+### Type scale (4-base · rem)
 
-- **Display** (Source Serif 4, weight 420, `clamp(2rem, 4vw, 3rem)`, line-height 1.2): Hero on the empty Auditify Chat home (`hello`, `Audit smarter. Not harder.`). Used once per page maximum.
-- **Headline** (Source Serif 4, weight 500, 1.5rem, line-height 1.25, letter-spacing -0.01em): Section openers, chat thread titles, workspace tile titles.
-- **Title** (Inter, weight 600, 1rem, line-height 1.35): Card headings, dialog titles, accordion labels.
-- **Body** (Inter, weight 400, 0.9375rem / 15px, line-height 1.65): Chat messages, body copy, AI responses. **Max line length: 65–75ch.** AI responses cap at 66ch.
-- **Meta** (Inter, weight 500, 0.8125rem / 13px, line-height 1.4): Dense labels, timestamps, secondary chrome. The `--text-meta` token.
-- **Mono** (JetBrains Mono, weight 400, 0.75rem / 12px, line-height 1.5): Citation chips, code, IDs, evidence excerpts, metadata above AI responses.
+**rem only.** Root = 16px; base step `0.25rem` (4px). Every size is a **whole** multiple of it (×3–×14), lowest = `0.75rem` (12px). Eleven steps span body to hero.
+
+| Token | rem | Step | Role | Font · weight | Line-height |
+|---|---|---|---|---|---|
+| `text-xs` | 0.75rem | ×3 | Caption, meta, labels, mono, IDs, chips | Inter / JetBrains Mono · 400 | 1.4 |
+| `text-base` | 1rem | ×4 | Body — copy, chat, AI prose (cap 66ch) | Inter · 400 | 1.6 |
+| `text-lg` | 1.25rem | ×5 | Large body, subheading | Inter · 500 | 1.5 |
+| `text-xl` | 1.5rem | ×6 | Heading — section / card / dialog title | Source Serif 4 · 500 | 1.25 |
+| `text-2xl` | 1.75rem | ×7 | KPI value, prominent heading | Inter · 700 / Source Serif 4 | 1.2 |
+| `text-3xl` | 2rem | ×8 | Display — small | Source Serif 4 · 480 | 1.2 |
+| `text-4xl` | 2.25rem | ×9 | Display | Source Serif 4 · 460 | 1.15 |
+| `text-5xl` | 2.5rem | ×10 | Display | Source Serif 4 · 440 | 1.1 |
+| `text-6xl` | 2.75rem | ×11 | Display — large | Source Serif 4 · 420 | 1.1 |
+| `text-7xl` | 3rem | ×12 | Display — large | Source Serif 4 · 400 | 1.05 |
+| `display` | 3.5rem | ×14 | Hero — empty-state, once per page | Source Serif 4 · 420 | 1.05 |
+
+(`×13` / `3.25rem` is intentionally skipped — nothing in the build lands there.)
 
 ### Named Rules
+
+**The rem-Only Rule.** Font sizes are **always declared in `rem`, never `px`.** If a size comes in as px, convert it before use — `rem = px ÷ 16` (root font-size is 16px). px may appear only as a parenthetical reference for design-tool parity, never in code. This keeps type responsive to the user's browser font-size (an accessibility requirement) and on the `0.25rem` (4px) base grid. Quick map: `12px → 0.75rem`, `16px → 1rem`, `20px → 1.25rem`, `24px → 1.5rem`, `28px → 1.75rem`, `32px → 2rem`, `36px → 2.25rem`, `40px → 2.5rem`, `48px → 3rem`, `56px → 3.5rem`.
 
 **The Tabular Number Rule.** Every numeric value in the product — KPIs, table cells, timestamps, percentages, currency, IDs, version numbers — uses `font-variant-numeric: tabular-nums`. Mixed-width numerals are a bug. There is a `.tabular` utility for any element that escaped the global setting.
 
