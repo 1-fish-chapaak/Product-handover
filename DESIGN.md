@@ -218,16 +218,29 @@ A vocabulary, not a heatmap. Each color is a noun that names a state; they do no
 
 **Character:** Source Serif 4 is the voice of authority — present at the hero, on chat thread titles, and on evidence quotes. It is set at a heavier weight than typical serif headlines (420–500) because confidence reads as substance, not as elegance. Inter does the working surface: dense, legible, opinionated about its alternates (`ss01`, `cv11`, `tnum` enabled globally). JetBrains Mono carries every number, every ID, every SQL snippet, and every citation chip. The pairing reads editorial-precise, never decorative.
 
-### Hierarchy
+### Type scale (4-base · rem)
 
-- **Display** (Source Serif 4, weight 420, `clamp(2rem, 4vw, 3rem)`, line-height 1.2): Hero on the empty Auditify Chat home (`hello`, `Audit smarter. Not harder.`). Used once per page maximum.
-- **Headline** (Source Serif 4, weight 500, 1.5rem, line-height 1.25, letter-spacing -0.01em): Section openers, chat thread titles, workspace tile titles.
-- **Title** (Inter, weight 600, 1rem, line-height 1.35): Card headings, dialog titles, accordion labels.
-- **Body** (Inter, weight 400, 0.9375rem / 15px, line-height 1.65): Chat messages, body copy, AI responses. **Max line length: 65–75ch.** AI responses cap at 66ch.
-- **Meta** (Inter, weight 500, 0.8125rem / 13px, line-height 1.4): Dense labels, timestamps, secondary chrome. The `--text-meta` token.
-- **Mono** (JetBrains Mono, weight 400, 0.75rem / 12px, line-height 1.5): Citation chips, code, IDs, evidence excerpts, metadata above AI responses.
+**rem only.** Root = 16px; base step `0.25rem` (4px). Every size is a **whole** multiple of it (×3–×14), lowest = `0.75rem` (12px). Eleven steps span body to hero.
+
+| Token | rem | Step | Role | Font · weight | Line-height |
+|---|---|---|---|---|---|
+| `text-xs` | 0.75rem | ×3 | Caption, meta, labels, mono, IDs, chips | Inter / JetBrains Mono · 400 | 1.4 |
+| `text-base` | 1rem | ×4 | Body — copy, chat, AI prose (cap 66ch) | Inter · 400 | 1.6 |
+| `text-lg` | 1.25rem | ×5 | Large body, subheading | Inter · 500 | 1.5 |
+| `text-xl` | 1.5rem | ×6 | Heading — section / card / dialog title | Source Serif 4 · 500 | 1.25 |
+| `text-2xl` | 1.75rem | ×7 | KPI value, prominent heading | Inter · 700 / Source Serif 4 | 1.2 |
+| `text-3xl` | 2rem | ×8 | Display — small | Source Serif 4 · 480 | 1.2 |
+| `text-4xl` | 2.25rem | ×9 | Display | Source Serif 4 · 460 | 1.15 |
+| `text-5xl` | 2.5rem | ×10 | Display | Source Serif 4 · 440 | 1.1 |
+| `text-6xl` | 2.75rem | ×11 | Display — large | Source Serif 4 · 420 | 1.1 |
+| `text-7xl` | 3rem | ×12 | Display — large | Source Serif 4 · 400 | 1.05 |
+| `display` | 3.5rem | ×14 | Hero — empty-state, once per page | Source Serif 4 · 420 | 1.05 |
+
+(`×13` / `3.25rem` is intentionally skipped — nothing in the build lands there.)
 
 ### Named Rules
+
+**The rem-Only Rule.** Font sizes are **always declared in `rem`, never `px`.** If a size comes in as px, convert it before use — `rem = px ÷ 16` (root font-size is 16px). px may appear only as a parenthetical reference for design-tool parity, never in code. This keeps type responsive to the user's browser font-size (an accessibility requirement) and on the `0.25rem` (4px) base grid. Quick map: `12px → 0.75rem`, `16px → 1rem`, `20px → 1.25rem`, `24px → 1.5rem`, `28px → 1.75rem`, `32px → 2rem`, `36px → 2.25rem`, `40px → 2.5rem`, `48px → 3rem`, `56px → 3.5rem`.
 
 **The Tabular Number Rule.** Every numeric value in the product — KPIs, table cells, timestamps, percentages, currency, IDs, version numbers — uses `font-variant-numeric: tabular-nums`. Mixed-width numerals are a bug. There is a `.tabular` utility for any element that escaped the global setting.
 
@@ -243,10 +256,9 @@ The Editorial GRC doctrine is **borders before shadows, shadows sparingly, tinte
 
 ### Shadow Vocabulary
 
-- **Hairline at rest** (`box-shadow: 0 1px 2px rgba(15, 8, 30, 0.04)`): The AI input border and a handful of elevated surfaces wear this almost-imperceptible shadow. The ink color matches `ink-900` so the shadow inherits the brand's warmth.
-- **Lifted hover** (`box-shadow: 0 8px 24px rgba(15, 8, 30, 0.04)`): Hovering large surfaces (the AI border, primary CTAs in some contexts). Diffuse, never crisp.
-- **Focus glow** (`box-shadow: 0 12px 32px rgba(106, 18, 205, 0.10), 0 0 0 4px rgba(106, 18, 205, 0.10)`): The focus-within state on the AI input. The 4px outer ring is the global focus signature.
-- **Focus ring** (`box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24)`): Applied globally to every interactive element on `:focus-visible`. The single most consistent visual signature in the product.
+- **Flat at rest** (`box-shadow: none`): The default for every surface — cards, KPI tiles, the AI input composer, the AI response surface. Depth comes from the 1px `canvas-border` against the warm canvas, not from shadow. This is the Claude-aligned resting state; the composer no longer carries a resting shadow.
+- **Lifted hover** (`box-shadow: 0 8px 24px rgba(15, 8, 30, 0.04)`): Reserved for the few large surfaces that earn it on hover. Diffuse, never crisp. Most cards hover by tinting their border to `brand-200`, not by lifting.
+- **Focus ring** (`box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24)`): Applied globally to every interactive element on `:focus-visible` (buttons, inputs, selects, `[role="button"]`). The single most consistent visual signature in the product. The composer input opts out via `.no-focus-ring` because its `ai-border` already signals focus by darkening its border tone.
 
 ### Named Rules
 
@@ -254,7 +266,7 @@ The Editorial GRC doctrine is **borders before shadows, shadows sparingly, tinte
 
 **The No-Glow Rule.** Decorative glow chrome around AI surfaces is explicitly prohibited and has been actively removed from the codebase (`ai-glow`, `ai-shimmer`, `ai-pulse-ring`, `ai-float` are all neutralized to no-ops). If you're tempted to make something glow because it's "AI," the answer is no.
 
-**The Focus Ring Is Sacred Rule.** The 4px `brand-600 @ 24% alpha` focus ring appears on every focusable element. It is the single accessibility signature of the product. Do not remove it, do not restyle it per-component. The `.no-focus-ring` opt-out exists only for chat composer inputs where the ring competes with the surrounding ai-border focus glow.
+**The Focus Ring Is Sacred Rule.** The 4px `brand-600 @ 24% alpha` focus ring appears on every focusable element. It is the single accessibility signature of the product. Do not remove it, do not restyle it per-component. The `.no-focus-ring` opt-out exists only for chat composer inputs, where the composer signals focus via its `ai-border` border tone instead (no glow), so the global ring would be redundant.
 
 ## 5. Components
 
@@ -278,7 +290,7 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 - **Behavior:** Clickable. Opens evidence drawer. No hover background change; the underline-on-hover is sufficient.
 
 ### Cards / Containers
-- **Corner Style:** `rounded-lg` (12px) for the default card; `rounded-xl` (16px) for the AI response surface and the AI input border (`rounded: 1.5rem`).
+- **Corner Style:** `rounded-lg` (12px) for the default card; `rounded-xl` (16px) for the AI response surface; `1.25rem` (20px) for the AI input composer — Claude's actual composer radius.
 - **Background:** `canvas-elevated` (`#FFFFFF`).
 - **Border:** 1px `canvas-border` (`#E5E7EB`). Hover tints to `brand-200`. **No shadow at rest.**
 - **KPI Card Active State:** Bottom border becomes `brand-600` at 2px to signal selection. The rest of the border stays neutral.
@@ -311,8 +323,9 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 - **Streaming caret:** 2px `brand-600` bar, blinks once per 1.2s with `steps(1)` — square, not sine.
 
 ### AI Input (composer / `ai-border`)
-- **Style:** `canvas-elevated` background, 1px `canvas-border`, `rounded: 1.5rem` (24px), subtle resting shadow (`0 1px 2px rgba(15,8,30,0.04), 0 8px 24px rgba(15,8,30,0.04)`).
-- **Focus-within:** Border shifts to `brand-300`, shadow deepens with the `brand-600 @ 10%` lift, plus the global 4px focus ring at `@ 10%`. This is the only element in the product that combines all four signals; it earns it.
+- **Style:** `canvas-elevated` background, 1px `canvas-border`, `rounded: 1.25rem` (20px — Claude's actual composer radius). **Flat at rest:** `box-shadow: none`. The hairline border does all the work; no resting glow or lift.
+- **Focus-within:** Border tone only — it darkens one step to `brand-300`. No ring, no glow, no shadow change. That single border shift is the entire focus signal: calm, editorial, in-flow. The composer input carries `.no-focus-ring` so the global 4px ring doesn't double up on the border.
+- **Removed:** The old decorative AI effects (`ai-glow`, `ai-shimmer`, `ai-float`, `ai-pulse-ring`) are neutralized to no-ops in `src/index.css` and must not be reintroduced.
 
 ### Skeleton (loading)
 - **Style:** Linear gradient from `paper-50` → `canvas-border` → `paper-50`, animated via the `shimmer` keyframe (1.5s `ease-in-out` infinite). 200% background-size for the slide.
@@ -359,3 +372,246 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 - **Don't** use mascots, illustrative blobs, pastel gradients, or rounded-everything friendliness. Auditors are paid to be skeptical.
 - **Don't** use pure red, amber, or green (`#FF0000`, `#FFA500`, `#00FF00`-family). The semantic palette is deliberately tinted away from RAG.
 - **Don't** use Material-style elevation tiers (elevation-1, elevation-2…). This system is flat with a few specific lifted states; not a tiered Z-axis.
+
+## 7. Surfaces — Where the System Is Used
+
+The tokens and components above are abstract. This section maps them onto the actual product surfaces, following the sidebar's nav groups. Each surface lists **every component it renders** (with its source file), the role each plays, and the tokens/patterns it leans on, so "where does this get used" and "what is on this screen" both have one answer per screen. Shared primitives reused across many surfaces are catalogued once in §7.10.
+
+### 7.1 Ask IRA — Chat (`chat/ChatView.tsx`)
+
+The flagship surface. One continuous editorial reading column; the thread, composer, and empty-state hero all share the same width. Scrolling thread + sticky bottom composer; an optional right-side workspace panel slides in when a query produces a plan/result. Specs below are pulled verbatim from `ChatView.tsx`.
+
+#### 7.1.1 Reading column
+
+Thread wrapper: `max-w-[52.5rem] mx-auto w-full px-4 sm:px-6 pb-10 space-y-10` (`pt-8`, or `pt-4` with a pending dashboard). Composer wrapper: `max-w-[52.5rem] mx-auto w-full px-4 sm:px-0`. The **52.5rem (840px)** column is fixed — do not change it. Message row: `group flex justify-end` (user) / `justify-start` (assistant); user content is `w-fit max-w-[80%] ml-auto`, assistant is `w-full`.
+
+#### 7.1.2 Empty-state hero
+
+- Centered block: `w-[52.5rem] max-w-full text-center`.
+- `AuditifyHelloEffect` (`shared/HelloEffect`): the animated `hello`, `className="text-primary h-14 mx-auto"`.
+- Headline `<h1>`: `text-[2.125rem] font-medium tracking-[-0.02em] mb-2 text-ink-900/85`, with a `TextShimmer` (`shared/TextShimmer`, `font-bold`, `duration={3} spread={2}`) on the emphasized span.
+- Subhead: `text-[0.9375rem] text-ink-500 mb-10`.
+- `FloatingLines` (`shared/FloatingLines`): the one ambient decoration behind the hero.
+
+#### 7.1.3 Composer (`.ai-border`)
+
+- Shell: `<div className="ai-border relative">`. `.ai-border` (in `index.css`) = `canvas-elevated`, 1px `canvas-border`, **`border-radius: 1.25rem` (20px), flat (`box-shadow: none`)**; `:focus-within` darkens the border to `brand-300` only — no ring/glow.
+- Inner: `rounded-2xl` wrapper.
+- Textarea: `no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]`; placeholder `Reply to Ira…`. The `.no-focus-ring` is why the global 4px ring is suppressed here (the border tone is the focus signal).
+- Drag-drop overlay: `absolute inset-0 z-20 … rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300`, fades in over 120ms; label `text-[0.8125rem] font-medium text-brand-700` with a `Paperclip` 14.
+
+#### 7.1.4 Attachment chips (`.composer-chips-row`)
+
+Single horizontally-scrolling row inside the composer: `composer-chips-row flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1` (right-edge fade mask + hidden scrollbar from `index.css`). Opened via `DataPickerModal` (`chat/DataPickerModal`, returns `AttachmentSelection`).
+- Source chip: `bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 hover:border-brand-200`, with a `text-[0.625rem] uppercase tracking-[0.06em] text-ink-500` type tag (`DB`/`API`/`CLOUD`/`SESS`/`FILE`) and a truncated name `max-w-[10rem]`.
+- File chip: `bg-canvas-elevated text-ink-800 text-[0.8125rem] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border hover:border-brand-200`, icon in a `size-6 rounded bg-brand-50 text-brand-700` square.
+
+#### 7.1.5 Composer toolbar (attach / stop / send)
+
+Row: `flex items-center justify-between gap-2 px-3 pb-4`.
+- Attach button: `size-8 rounded-lg text-ink-500 hover:bg-brand-50 hover:text-ink-800`.
+- Stop (in-flight): `size-8 rounded-lg bg-ink-900 text-canvas-elevated hover:bg-ink-800`, glyph `Square size={11} fill="currentColor"`. Dark, not red.
+- Send: `size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800`, glyph `ArrowUp size={16} strokeWidth={2.25}`. Hidden entirely when the composer is empty.
+
+#### 7.1.6 User message pill
+
+`bg-canvas-elevated`, 1px `canvas-border`, `rounded-2xl`, whisper shadow `shadow-[0_1px_2px_rgba(15,8,30,0.04)]`, hover `hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.16)]`, `transition-[border-color,box-shadow] duration-300`. The white-sheet-on-paper signature. `InlineEditBubble` edits it in place (`text-[1rem] text-ink-900` field with `border-brand-200`).
+
+#### 7.1.7 AI response prose
+
+Claude-style: **no bubble, no avatar, no brand dot** — identity carried by left-flush alignment. Rendered by `renderAssistantText` (`shared/AssistantMarkdown`) inside `text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]`. (Note: this is the in-thread reality — **15px flush prose**, capped at 66ch. The 17px gradient-bordered `.ai-response` card in §5 is the standalone primitive; the live chat renders flatter.) Citations are mono `brand-50` pills; the streaming caret is the 2px `brand-600` `.ai-caret`.
+
+#### 7.1.8 Thinking / loaders
+
+Before the first token: `ThinkingTrail` (live reasoning steps) **or** three pulsing `.ai-dot` (`brand-400`, 200ms stagger) — never both. For a running audit: `InlineAuditLoader` (`chat/ProgressiveLoader`) with `LOADING_STEPS`, plan → SQL → sources → results, `~40px` breathing room below.
+
+#### 7.1.9 Evidence ledger
+
+Inline 4-cell row (not a KPI glass grid): `divide-x` hairlines, Source Serif 4 numerals at 28px tabular, Inter sentence-case labels.
+
+#### 7.1.10 Follow-ups — "What next?"
+
+Heading `<h3>`: `mb-2 text-[0.75rem] font-medium tracking-normal text-ink-900`, fades in (`delay 0.35`). Chips wrap (`flex flex-wrap gap-2`), each: `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.8125rem] leading-tight`; rest `bg-canvas-elevated text-ink-700 border border-canvas-border`, hover/selected `bg-brand-50 text-brand-700 border-brand-200`. **Cascade reveal** (the sanctioned pattern): per-chip `delay: 0.4 + i*0.13`, `duration 0.48`, expo-out `[0.22,1,0.36,1]`; hover spring `stiffness 700, damping 32, mass 0.12`.
+
+#### 7.1.11 Clarification
+
+`ClarificationBlock` (audit-query) and legacy `ClarificationCard` (`chat/ClarificationCard`, workflow flow) — inline choice cards above the composer, never modals, so the user can answer inline or bypass and type. `AssumptionsPanel` (`chat/AssumptionsPanel`) is the collapsible "assumptions made" list.
+
+#### 7.1.12 Plan-approve gate (`qna-plan`)
+
+Approve: `h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold` + `CheckCircle` 13. Revise: `h-9 px-3 rounded-md bg-canvas-elevated border border-canvas-border text-[0.75rem] font-semibold text-ink-700 hover:border-brand-200` + `Pencil` 12.
+
+#### 7.1.13 Workspace panel (`ChatWorkflowWorkspace`)
+
+Right-side panel that slides in on a result. Tab strip is a segmented control with a Framer `layoutId` sliding pill. Sources tab uses the rich `SourceCard` (brand-tinted icon chip, live status ping, type pill, mono table chips). Embeds `ConfigurableChart` (same engine as Dashboard) for result graphs and `KpiTile` for headline metrics; `FullscreenChartModal` / `FullscreenTableModal` expand either to a focused overlay (`w-[800px] max-w-[92vw] max-h-[88vh] rounded-2xl`).
+
+#### 7.1.14 Result actions
+
+`ExportReportButton`, `AddToDashboardModal`, `AddToReportModal` (`chat/*`) push a result into a dashboard widget or report, with the launch-button micro-interaction (`launch-ripple` / `launch-shimmer` in `index.css`). Inline link affordance to the workspace: `text-xs text-ink-500 hover:text-ink-800` + `ArrowUpRight` 12. `useToast` (`shared/Toast`) handles confirmations.
+
+### 7.2 Dashboard (`dashboard/DashboardView.tsx`) — incl. the graph
+
+A `react-grid-layout` canvas of draggable, resizable widgets. Specs below come from `DashboardView.tsx`, `shared/KpiTile.tsx`, and `dashboard/add-widget/ConfigurableChart.tsx`.
+
+#### 7.2.1 Grid canvas
+
+`react-grid-layout`, styled in `index.css`: drag placeholder `bg-brand-200`, `opacity 0.4`, `border-radius 16px`; resize handle is an 18×18 corner whose chevron is `border-#94A3B8` at rest → `brand-600` on `.react-grid-item:hover`; dragging item gets `z-50` + `cursor: grabbing`.
+
+#### 7.2.2 KPI tile (`shared/KpiTile.tsx`)
+
+- Card: `glass-card rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)] transition-[border-color,box-shadow] duration-300`.
+- Label: `text-[0.6875rem]` (11px) `font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate`.
+- Value: `text-[1.625rem]` (26px) `font-bold text-ink-900 leading-none tabular-nums`, animated by `KpiCountUp` (`delay 120 + index*80`).
+- Mount: spring `stiffness 320, damping 18, mass 0.7, delay 0.08 + index*0.08`. Hover: `y:-3, scale 1.015` spring `420/22`. The `.card-kpi` active state (in `index.css`) adds a 2px `brand-600` bottom border.
+
+#### 7.2.3 The graph (`ConfigurableChart`, Recharts)
+
+Six widget types, selected by `type`: **Line**, **Area**, **Bar**, **Pie**, **Table**, **KPI**.
+
+- **Series palette (categorical, not RAG):** `PURPLE #7C3AED`, `BLUE #3d68ee`, `GREEN #10b981`, `AMBER #f59e0b`, `GRAY #9ca3af`; pie set `[#3d68ee, #10b981, #f59e0b, #ef4444, #8b5cf6]`; editable 10-color palette `#6a12cd, #0ea5e9, #10b981, #f59e0b, #ef4444, #ec4899, #8b5cf6, #14b8a6, #f97316, #06b6d4`. Base color default `#7C3AED`.
+- **Line / Area (AreaChart):** actual series `type="monotone" strokeWidth={2}`, `dot r:4 strokeWidth:0`, `activeDot r:6 stroke #fff strokeWidth:2`; **target series** `strokeWidth={2} strokeDasharray="5 5"` (the dashed goal line). Grid `CartesianGrid strokeDasharray="3 3" stroke #f0f0f0` (Area variant uses `#e5e7eb`), `vertical={false}`. Axis labels `fontSize 12 fill #9ca3af`.
+- **Bar:** `<Bar radius={[4,4,0,0]}>` (rounded top), often combined with a `<Line strokeWidth={2.5}>` overlay. Grid `stroke #e5e7eb`.
+- **Pie:** `outerRadius={pieOuterRadius}`, slice colors from the pie set.
+- **Table widget:** header `text-[0.625rem] font-bold text-[#6a12cd] uppercase tracking-[0.5px]` on `bg-[#faf5ff]/40`; rows `hover:bg-[#faf5ff]/30`, first column `text-[#6a12cd] font-medium`; aggregation footer row `bg-[#faf5ff] border-t-2 border-[#6a12cd]/20`.
+- **Tooltips:** value emphasis in `text-[#26064a]` (brand-900). Numbers tabular; the chart container's focus outline is suppressed (`.recharts-wrapper` rule in `index.css`).
+- **Empty state:** `size-20 rounded-2xl bg-[#f4f0ff]` icon chip + `stroke #6a12cd` glyph at `opacity 0.3`, "Add Columns" in `text-[#26064a]`.
+
+#### 7.2.4 Widget builder (`AddCardModal` + formatting sections)
+
+`AddCardModal` (`dashboard/add-widget/AddCardModal`) hosts the configuration panels:
+- `LegendSection` — legend placement/visibility.
+- `TypographySection` (`…/imports/TypographySection-1760-98`) — per-widget type.
+- `ConditionalFormattingSection` — threshold-based cell/series coloring.
+- `DataSeriesFormattingSection` — per-series color from the editable palette.
+
+#### 7.2.5 Supporting components
+
+- `WhiteDropdown` (`dashboard/add-widget/WhiteDropdown`) — white option menu (`z-popover`).
+- `FileTreeView` (`dashboard/add-widget/FileTreeView`) — dataset/source tree when binding data.
+- `AddDataModal` (`dashboard/AddDataModal`) — attach a dataset.
+- `Orb` (`shared/Orb`) — ambient "ask about this dashboard" affordance. `useToast` for toasts.
+
+### 7.3 Home (`home/HomeView.tsx`)
+
+The one sanctioned decorative surface — the hero ships two ambient radial gradients (`brand-500` top-right + `brand-400` bottom-left) inline. Everywhere else stays neutral.
+
+#### 7.3.1 Hero
+Source-serif greeting over the two-gradient ambient field. The only place outside the chat empty state that carries decorative gradients.
+
+#### 7.3.2 `NotificationRow` (`notifications/NotificationRow`)
+Activity-feed rows built on the `.feed-item` primitive (`index.css`): transparent at rest, `hover:bg-brand-50` with a `canvas-border` outline, **no shadow**, `transition-background-color 200ms`.
+
+#### 7.3.3 `SeverityBadge` (`shared/StatusBadge`)
+See §7.10.4 — border-less, icon-less, spelled-out severity pills.
+
+### 7.4 Knowledge Hub (`knowledge/KnowledgeHubView.tsx`) → Data Sources
+
+`KnowledgeHubView` is a tab shell: `UnderlinedTabs` host `DataSourcesView` (the gallery) + a `SmartLearnComingSoon` placeholder, with `FloatingLines` ambient motion. **The contact-sheet gallery itself lives in `data-sources/DataSourcesView.tsx`** (replaced the old rail+preview reading pane 2026-06-01 — don't restore the rail or rebuild a rejected layout).
+
+#### 7.4.1 View toggle (Gallery / List)
+Segmented control, `viewMode` persisted in `localStorage('kh:viewMode')`. Icons `LayoutGrid` / `Rows3` (size 15); active icon `text-brand-700`, inactive `text-ink-500`; a sliding pill sits behind (`relative z-10` icons).
+
+#### 7.4.2 Gallery grid
+`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`.
+
+#### 7.4.3 Source card (`DataSourceCard`)
+`group w-full flex items-center gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border transition-colors duration-200`. Rest `border-canvas-border hover:border-brand-300`; selected `border-brand-500 bg-brand-50/50`. Hover (Framer): `y:-3, boxShadow 0 8px 24px -10px rgb(15 8 30 / 0.16)`, spring `400/30`; tap `scale 0.99`. Icon tile `w-10 h-10 rounded-lg` (tone-colored) with an absolute hover checkbox (`bg-paper-0 border-ink-300`, `opacity-0 group-hover:opacity-100 hover:border-brand-500`) so layout never shifts. **Footer carries the hierarchy:** files show `size · date` (neutral `ink-500`); integrations show a live status dot + label — `compliant` dot + `text-compliant-700` "Connected", or `mitigated` dot + `text-mitigated-700` "Needs reconnection" — so the two kinds read apart at a glance.
+
+#### 7.4.4 Pagination
+Below the grid, centered: `Showing N of M sources`, then a quiet reveal button `Load {n} more` + `ChevronDown` (`h-10`, `border-canvas-border` → hover `brand-200`/`brand-50`, chevron nudges down 0.5 on hover). Not a primary CTA — a calm "reveal the next page" affordance, never the loudest thing on screen.
+
+#### 7.4.5 Detail (`DataSourceDetailView`)
+Click a card → `DataSourceDetailView`; overlay `fixed inset-0 z-30`, ESC/keyboard to close. **Header is a flat hairline card** (`rounded-xl border border-canvas-border bg-canvas-elevated`) — **no gradient hero, no ambient lines, no floating shadow**; it opens on the same calm surface as the gallery. `bg-brand-50` icon square + `brand-700` glyph, ink title, a `brand-50`/`brand-700` format chip, `StatusPillFlat` for status, and a neutral download tile that tints to brand on hover. Inline rename via the bespoke 18px header editor (recolored for the light surface; ✓ `brand-700`, ✕ `ink-500`). Body branches: a **folder** → reading pane (finder list + live preview, bounded height); a **single file** → its always-open preview card fills the page; a **multi-file** source → a contained file-list card (`rounded-xl border` + `divide-y` rows), each row reusing `InlineRename` (`sm`) to rename and `StatusPillFlat` for status — never bare rows floating on canvas. Supporting: `Button`, `ConfirmationModal`, `DataPickerModal`, `useToast`.
+
+### 7.5 Report (`reports/ReportsView.tsx`) + Report reader
+
+The only surfaces that wear **warm paper** (`paper-50` / `paper-100`) instead of canvas — "deliverable, not control." Evidence excerpts may be Source Serif 4 italic; reader column ~960px.
+
+#### 7.5.1 `ReportBuilder` (`reports/ReportBuilder`)
+Compose a report from query results.
+
+#### 7.5.2 `WidgetPickerParts` (`chat/WidgetPickerParts`)
+`SectionHeader`, `Checkbox`, `KpiPreviewRow`, `TablePreviewRow` — pick which KPIs/tables/charts to embed (driven by `setAll` / `toggleIn` from `widgetPickerHelpers`).
+
+#### 7.5.3 Embedded result components
+`ConfigurableChart` (charts, §7.2.3), `SmartTable` (tables, §7.10.3), `KpiCountUp` (`shared/KpiTile`, animated numerals), `renderAssistantText` (`shared/AssistantMarkdown`, narrative prose).
+
+#### 7.5.4 `StatusBadge` + `BulkAuditVariantView`
+Status/severity pills (§7.10.4); `BulkAuditVariantView` (`reports/BulkAuditVariants`) for bulk/variant runs. `FloatingLines` / `useToast` round it out.
+
+### 7.6 Governance — Control Library, RACM, Risk Register
+
+Dense data surfaces (`governance/RACMView`, `ControlLibraryView`; Risk Register).
+
+#### 7.6.1 `SmartTable` (`shared/SmartTable`)
+The DataGrid for all three — full spec in §7.10.3. Row-select = `brand-600` left border + `brand-50` tint.
+
+#### 7.6.2 `CreateControlDrawer` (`governance/CreateControlDrawer`)
+Right drawer to add a control (`NewControlData` payload).
+
+#### 7.6.3 `ControlDetailView` (`governance/ControlDetailView`)
+Per-control detail page.
+
+#### 7.6.4 `Orb` + `useToast`
+Ambient "ask IRA about this register" affordance; toasts. Severity always via the border-less spelled-out pills (§7.10.4) — never a RAG ramp.
+
+### 7.7 Execution — Control Testing, Evidence, Findings
+
+Workpaper surfaces (`execution/ControlTestingView`, `EvidenceView`, `FindingsView`).
+
+#### 7.7.1 Alert cards (the single sanctioned side-stripe)
+Findings use the `.card-alert-critical` / `-high` / `-medium` primitives (`index.css`): a **3px left-edge** `risk` / `high` / `mitigated` border, `box-shadow: none`. This is the only side-stripe in the system; do not generalize.
+
+#### 7.7.2 `SmartTable` + `Orb`
+Evidence/testing tables reuse `SmartTable` (§7.10.3); each view embeds `Orb` for inline AI. Evidence references use Evidence Blue (`#0369A1`) + mono citation chips.
+
+### 7.8 Sidebar (`sidebar/`, chrome on every surface)
+
+The only persistently dark surface.
+
+#### 7.8.1 Shell
+`brand-900` (`#26064A`) with the 1.8%-opacity `.noise-texture` overlay (`index.css`). Dividers `rgba(255,255,255,0.08)`.
+
+#### 7.8.2 `NavItem` groups
+Order: **Ask IRA / Home · Recents / Audit Planning · Engagements · Engagement Config · Engagement Final / Dashboard · Report · Risk Register / Control Library · Workflow Library / Knowledge Hub / Admin.**
+
+#### 7.8.3 `NavItem` states
+Rest transparent → hover `rgba(255,255,255,0.08)` → active `rgba(255,255,255,0.12)`; text `rgba(255,255,255,0.85)` lifting to full white when active. (Tokens: `--color-sidebar-*` in `index.css`.)
+
+### 7.9 Modals & overlays (`modals/`, `shared/`)
+
+Layering scale (`index.css`): `--z-popover 100` < `--z-modal 200` < `--z-toast 300`.
+
+#### 7.9.1 `ConfirmationModal` (`shared/ConfirmationModal`)
+Destructive/confirm dialogs.
+
+#### 7.9.2 `ModalPrimitives` (`chat/ModalPrimitives`)
+Shared dialog shell: overlay + surface (`bg-canvas-elevated rounded-2xl border border-canvas-border`, common widths `w-[28rem]` / `w-[32rem]` / `w-[800px]`, all `max-w-[92vw]`) + close.
+
+#### 7.9.3 `Toast` (`shared/Toast`)
+`useToast` provider; success / error / info (`z-toast`).
+
+#### 7.9.4 `useModalA11y` / `useDialogA11y` (`chat/useModalA11y`)
+Focus trap + ESC + restore focus.
+
+### 7.10 Shared primitives (exact specs)
+
+Defined once in `shared/`, reused across surfaces.
+
+#### 7.10.1 `Button` (`shared/Button.tsx`)
+Single source of truth. 6 variants × 2 sizes (`sm` h-7/text-xs, `md` h-9/text-sm) × 4 shapes (`md`/`lg`(default)/`xl`/`full`). Base: `inline-flex items-center justify-center font-medium transition-[…] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1`. Primary `bg-primary text-white shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md`; stop `bg-ink-900 text-white`; destructive `bg-risk text-white`; outline `bg-canvas-elevated border border-canvas-border hover:bg-brand-50 hover:border-brand-200`; ghost `bg-transparent text-text-muted hover:bg-brand-50`; secondary `bg-brand-50 text-brand-700`. Pressed: ghost → `bg-primary/10 text-primary`, outline → `bg-primary/5 border-primary/30 text-primary`.
+
+#### 7.10.2 `KpiTile` / `KpiCountUp` (`shared/KpiTile.tsx`)
+Full spec in §7.2.2 (`glass-card rounded-xl px-5 py-4`, 11px label, 26px tabular value).
+
+#### 7.10.3 `SmartTable` (`shared/SmartTable.tsx`)
+Table `w-full text-[0.8125rem]` (modern) / `text-[0.75rem]`. Header row `border-b border-border-light` (modern) or `bg-surface-2 border-b border-border-light`. Cells `py-3`. Search input `pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-[8px]`, focus `border-primary/40 ring-2 ring-primary/10`. Expand-row detail `px-10 py-4 bg-surface-2/50 border-b border-border-light`. Footer/pagination `px-4 py-3 border-t border-border-light bg-surface-2/30`, page buttons `p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30`. Empty state `w-10 h-10 rounded-xl bg-surface-2` icon + `text-[0.8125rem] font-medium text-text-secondary`.
+
+#### 7.10.4 `StatusBadge` / `SeverityBadge` (`shared/StatusBadge.tsx`)
+Flat pill, **no border, no icon**: `inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] font-medium whitespace-nowrap tabular-nums`. Tones: `risk` `bg-risk-50 text-risk-700`, `high` `bg-high-50 text-high-700`, `mitigated` `bg-mitigated-50 text-mitigated-700`, `compliant` `bg-compliant-50 text-compliant-700`, `evidence` `bg-evidence-50 text-evidence-700`, `info` `bg-brand-50 text-brand-700`, `draft` `bg-draft-50 text-draft-700`. Labels spelled out (`Critical`, not `C`).
+
+#### 7.10.5 `InlineRename` (`shared/InlineRename.tsx`)
+The "click to rename in place" editor — single source of truth across the Knowledge Hub data-source surfaces (grid tile, list row, file row). Auto-selects on mount; **Enter or blur commits, Escape cancels**; the ✓/✕ buttons use `onMouseDown`-preventDefault so a click doesn't blur-commit first. Input: `flex-1 min-w-0 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 focus:outline-none`, sized by the `size` prop — `md` (default) `h-8 px-2.5 rounded-lg` for cards, `sm` `h-7 px-2 rounded-md` for the denser file rows. Save `<Check 15>` `text-brand-700 hover:bg-brand-50`, cancel `<X 15>` `text-ink-500 hover:bg-brand-50`, both `p-1.5 rounded-md`. The detail-view **hero header** rename stays bespoke (white ✓/✕ over the brand header) — it is intentionally not this primitive.
+
+#### 7.10.6 Other shared primitives
+`Orb` (ambient "ask IRA here"; Dashboard/Governance/Execution), `FloatingLines` (empty-state line motion; Chat/Knowledge Hub/Reports), `GlassCard` (`.glass-card` flat-at-rest card), `AssistantMarkdown` (markdown → prose + mono citation pills), `Toast` / `ConfirmationModal` (everywhere), `Breadcrumbs`, `DateFilterPicker`, `TextShimmer`, `HelloEffect`, `Persona` / `AIPersona`.

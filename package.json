@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "setup-hooks": "git config core.hooksPath .githooks && echo 'git hooks enabled (.githooks/pre-commit, .githooks/pre-push)'",
     "review:local": "bash tools/preflight-review.sh",
+    "sync:design": "node scripts/sync-design.mjs",
+    "check:design": "node scripts/sync-design.mjs --check",
     "test": "playwright test",
     "test:home": "playwright test tests/home.spec.ts"
   },
