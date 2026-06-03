@@ -238,6 +238,15 @@ export const RACM_LIBRARY: RACMRow[] = [
   },
 ];
 
+/**
+ * Display label for an attribute: `{controlId}-A{n}`.
+ * Internal ids are `{controlId}.{n}` (e.g. P2P-C-01.1 → P2P-C-01-A1); ids already
+ * in the `-A{n}` form (custom controls) pass through unchanged.
+ */
+export function attrCode(attributeId: string): string {
+  return attributeId.replace(/\.(\d+)$/, '-A$1');
+}
+
 /** All RACM rows that belong to a given process. */
 export function racmRowsForProcess(process: ProcessCode): RACMRow[] {
   return RACM_LIBRARY.filter(r => r.process === process);
