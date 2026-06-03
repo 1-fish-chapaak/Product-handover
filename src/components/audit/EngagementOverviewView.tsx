@@ -229,6 +229,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const tabs = useMemo(() => engagement ? tabsForType(engagement.type) : [], [engagement]);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
+  // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
+  const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
 
   // Tab order + hidden set — drag to reorder, toggle visibility from Configuration; persisted per type.
   const [tabPrefs, setTabPrefs] = useState<TabPrefs>(() => engagement ? loadTabPrefs(engagement.type) : { order: [], hidden: [] });
@@ -496,7 +498,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ CONTROLS (Compliance / IA) ═══ */}
             {activeTab === 'controls' && (
-              <ControlsTab engagement={eng} onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)} />
+              <ControlsTab
+                engagement={eng}
+                onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
+                onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
+              />
             )}
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
@@ -513,7 +519,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ EVIDENCE (Compliance / IA) ═══ */}
             {activeTab === 'evidence' && (
-              <EvidenceTab engagement={eng} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />
+              <EvidenceTab engagement={eng} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} openControlId={evidenceTarget} onOpened={() => setEvidenceTarget(null)} />
             )}
 
             {/* ═══ EXCEPTION MANAGEMENT (Automation) — slim summary; full workspace lives at /case-management ═══ */}
@@ -598,7 +604,8 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
   const ownerOptions = OWNER_LIST.includes(form.owner) ? OWNER_LIST : [form.owner, ...OWNER_LIST];
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 items-start">
       <div className="rounded-xl border border-border-light bg-white p-5">
         <h3 className="text-[13px] font-semibold text-text">Engagement details</h3>
         <p className="text-[12px] text-text-muted mt-0.5 mb-4">Owner, planned schedule, and framework for this engagement.</p>
@@ -642,7 +649,7 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
         <p className="text-[12px] text-text-muted mt-0.5 mb-4">
           Choose which tabs appear for this engagement. Drag the tab headers left/right to change their order.
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const locked = tab.id === 'config';
@@ -674,6 +681,7 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
             );
           })}
         </div>
+      </div>
       </div>
 
       <div className="flex items-center justify-end gap-3">

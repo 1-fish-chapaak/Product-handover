@@ -10,7 +10,7 @@ import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
   FileText, Image as ImageIcon, FileSpreadsheet, Check, AlertCircle,
   Link2, Workflow as WorkflowIcon, ClipboardList,
-  CheckCircle2, Circle,
+  CheckCircle2, Circle, FlaskConical,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import type { Engagement } from '../../data/engagements';
@@ -24,6 +24,8 @@ interface Props {
   engagement: Engagement;
   /** Launch the Ask IRA workflow builder scoped to this engagement (Create-new path in the link modal). */
   onCreateWorkflow?: () => void;
+  /** Jump to the Evidence tab with this control opened at Attribute Testing. */
+  onTestEvidence?: (controlId: string) => void;
 }
 
 type ControlStatus = 'Effective' | 'In Test' | 'Failed' | 'Pending';
@@ -117,10 +119,6 @@ function lastTestedFor(controlId: string): string {
   return `Last tested ${days}d ago`;
 }
 
-function ownerForControl(controlId: string): string {
-  return OWNER_NAMES[hash(controlId) % OWNER_NAMES.length] ?? OWNER_NAMES[0];
-}
-
 function confidenceTone(c: number): { bar: string; text: string } {
   if (c >= 85) return { bar: 'bg-compliant', text: 'text-compliant-700' };
   if (c >= 65) return { bar: 'bg-mitigated-500', text: 'text-mitigated-700' };
@@ -142,7 +140,7 @@ function kindForFile(name: string): EvidenceKind {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ControlsTab({ engagement, onCreateWorkflow }: Props): JSX.Element {
+export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence }: Props): JSX.Element {
   const { addToast } = useToast();
   const ws = useEngagementWorkspace();
   const controls = ws.controls;
@@ -478,7 +476,6 @@ export default function ControlsTab({ engagement, onCreateWorkflow }: Props): JS
                 <span className={`px-2 h-6 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
                 </span>
-                <span className="text-[11px] text-ink-500 shrink-0 tabular-nums">{c.attributes.length} attr</span>
                 <span className="text-[11px] text-ink-400 shrink-0 hidden md:inline">{lastTestedFor(c.controlId)}</span>
               </button>
 
@@ -492,9 +489,17 @@ export default function ControlsTab({ engagement, onCreateWorkflow }: Props): JS
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
-                      <div className="flex items-center justify-between text-[11px] text-ink-500">
-                        <span><span className="font-semibold text-ink-600">{c.subProcess}</span> · {c.frequency} · Owner {ownerForControl(c.controlId)}</span>
-                        <span className="font-mono">{c.attributes.length} attribute{c.attributes.length === 1 ? '' : 's'}</span>
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-[12px] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
+                        {onTestEvidence && (
+                          <button
+                            onClick={() => onTestEvidence(c.controlId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50/50 hover:bg-brand-50 text-brand-700 text-[11.5px] font-semibold cursor-pointer transition-colors shrink-0"
+                            title="Open this control in the Evidence tab to upload evidence and test samples"
+                          >
+                            <FlaskConical size={13} /> Test evidence
+                          </button>
+                        )}
                       </div>
                       {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
                       <div className="space-y-1.5">

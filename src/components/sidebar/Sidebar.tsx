@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, GitCompare, FlaskConical, TrendingUp,
+  Inbox, FlaskConical, TrendingUp,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 
@@ -327,8 +327,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />
           <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management'} expanded={isExpanded} onClick={() => setView('engagements')} />
           <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />
-          <NavItem icon={GitCompare} label="Engagement Config" active={view === 'engagement-config'} expanded={isExpanded} onClick={() => setView('engagement-config')} />
-          <NavItem icon={ClipboardCheck} label="Engagement Final" active={view === 'engagement-final'} expanded={isExpanded} onClick={() => setView('engagement-final')} />
 
           {/* ── GLOBAL ── */}
           <Divider label="Global" expanded={isExpanded} />
