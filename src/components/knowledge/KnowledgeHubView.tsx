@@ -75,50 +75,39 @@ function SmartLearnComingSoon() {
       transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
       className="max-w-2xl mx-auto"
     >
-      <div className="relative overflow-hidden rounded-2xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_4px_24px_rgb(106_18_205_/_0.05)] px-10 py-14 text-center">
-        <div
-          aria-hidden
-          className="absolute pointer-events-none"
-          style={{
-            top: -120, left: '50%', transform: 'translateX(-50%)',
-            width: 480, height: 320,
-            background: 'radial-gradient(ellipse, rgba(136,56,222,0.12) 0%, transparent 65%)',
-            filter: 'blur(28px)',
-          }}
-        />
-        <div className="relative">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-semibold tracking-wider uppercase mb-6">
-            <Sparkles size={11} />
-            Coming soon
-          </span>
-          <div className="relative w-16 h-16 mx-auto mb-5">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-purple-500/25" />
-            <motion.div
-              animate={prefersReducedMotion ? undefined : { rotate: [0, 6, -6, 0] }}
-              transition={prefersReducedMotion ? undefined : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative w-full h-full flex items-center justify-center"
-            >
-              <Brain size={28} className="text-white" />
-            </motion.div>
-          </div>
-          <h2 className="font-display text-[1.75rem] text-ink-900 leading-tight mb-3">
-            Smart Learn is on the way
-          </h2>
-          <p className="text-[0.9375rem] text-ink-500 leading-relaxed max-w-md mx-auto">
-            IRA will remember your output preferences, your team's vocabulary, and the
-            corrections you make in chat — so answers sound like
-            <em className="not-italic font-semibold text-ink-800"> you</em>, not a generic assistant.
-          </p>
-          <div className="mt-7 flex items-center justify-center gap-1.5" aria-hidden="true">
-            {[0, 1, 2].map(i => (
-              <motion.span
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-brand-400"
-                animate={prefersReducedMotion ? { opacity: 0.6 } : { opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
-                transition={prefersReducedMotion ? undefined : { duration: 1.2, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
-              />
-            ))}
-          </div>
+      {/* Flat, hairline card — Linear/Notion aesthetic: no floating shadow,
+          no gradient blob, no elevated icon tile. Brand is reserved for the
+          flat icon square + the Coming-soon pill accent. */}
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-10 py-14 text-center">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-semibold tracking-wider uppercase mb-6">
+          <Sparkles size={11} />
+          Coming soon
+        </span>
+        <div className="w-12 h-12 mx-auto mb-5 rounded-lg bg-brand-50 flex items-center justify-center">
+          <motion.div
+            animate={prefersReducedMotion ? undefined : { rotate: [0, 6, -6, 0] }}
+            transition={prefersReducedMotion ? undefined : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Brain size={24} className="text-brand-700" />
+          </motion.div>
+        </div>
+        <h2 className="font-display text-[1.75rem] text-ink-900 leading-tight mb-3">
+          Smart Learn is on the way
+        </h2>
+        <p className="text-[0.9375rem] text-ink-500 leading-relaxed max-w-md mx-auto">
+          IRA will remember your output preferences, your team's vocabulary, and the
+          corrections you make in chat — so answers sound like
+          <em className="not-italic font-semibold text-ink-800"> you</em>, not a generic assistant.
+        </p>
+        <div className="mt-7 flex items-center justify-center gap-1.5" aria-hidden="true">
+          {[0, 1, 2].map(i => (
+            <motion.span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-brand-400"
+              animate={prefersReducedMotion ? { opacity: 0.6 } : { opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+              transition={prefersReducedMotion ? undefined : { duration: 1.2, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
+            />
+          ))}
         </div>
       </div>
     </motion.div>
@@ -164,17 +153,20 @@ export default function KnowledgeHubView() {
 
   // Reports' exact recipe: bg-canvas outer, bg-canvas-elevated header strip
   // extends full-bleed via negative margins, border-b separator, content
-  // sits on the canvas below. Side padding (px-[124px]) matches Reports.
+  // sits on the canvas below. Side padding is responsive (px-6 → lg:px-12 →
+  // xl:px-[124px]) so narrow windows keep room for wide tables; the 124px
+  // gutter (matching Reports) only kicks in on xl. The strip's negative
+  // margins mirror the same scale so the full-bleed stays aligned.
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-canvas">
+    <div className="kh-no-focus-ring h-full flex flex-col overflow-hidden bg-canvas">
       {!detailOpen && (
-      <div className="px-[124px] pt-8 shrink-0">
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
         {/* Header + tabs share a single full-bleed white strip — bg-canvas-
             elevated extends past the outer px-[124px] / pt-8 insets via
             negative margins. Border-b separates strip from content.
             FloatingLines canvas paints across the strip behind the type so
             the header reads as a brand surface, not a flat panel. */}
-        <div className="bg-canvas-elevated -mx-[124px] px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
           {/* Ambient FloatingLines — confined to top and bottom waves only.
               No middle wave (where the H1 sits). Low opacity keeps the lines
               as texture, never a competing visual element. Content sits in
@@ -226,7 +218,7 @@ export default function KnowledgeHubView() {
           inner view scrolls within (list) or fills (folder detail split).
           When a detail is open the header is hidden, so it starts from the top
           with the page's standard top inset. */}
-      <div className={`px-[124px] ${detailOpen ? 'pt-8' : 'pt-4'} pb-8 flex-1 min-h-0 flex flex-col overflow-hidden`}>
+      <div className={`px-6 lg:px-12 xl:px-[124px] ${detailOpen ? 'pt-8' : 'pt-4'} pb-8 flex-1 min-h-0 flex flex-col overflow-hidden`}>
         <AnimatePresence mode="wait">
           {tab === 'data' ? (
             <motion.div
@@ -235,7 +227,9 @@ export default function KnowledgeHubView() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              className="flex-1 min-h-0 overflow-y-auto"
+              // Reserve the scrollbar gutter always, so the content doesn't nudge
+              // when the scrollbar appears (e.g. list → a taller detail/loading).
+              className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable]"
             >
               <DataSourcesView ref={dataSourcesRef} onDetailChange={setDetailOpen} />
             </motion.div>

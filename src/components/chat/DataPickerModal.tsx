@@ -194,7 +194,7 @@ export default function DataPickerModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="dpicker-title">
+        <div className="kh-no-focus-ring fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="dpicker-title">
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -225,14 +225,14 @@ export default function DataPickerModal({
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     disabled={tab === 'upload'}
-                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:bg-paper-50 disabled:text-text-muted transition-colors"
+                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary disabled:bg-canvas disabled:text-text-muted transition-colors"
                   />
                 </div>
               )}
               <div className="ml-auto flex items-center gap-1">
                 <button
                   onClick={requestClose}
-                  className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-paper-50 transition-colors cursor-pointer"
+                  className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-brand-50 transition-colors cursor-pointer"
                   aria-label="Close picker"
                 >
                   <X size={16} />
@@ -310,7 +310,7 @@ export default function DataPickerModal({
                     value={combinedName}
                     onChange={(e) => setCombinedName(e.target.value)}
                     placeholder="Leave empty to add as separate files"
-                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[0.75rem] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
+                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[0.75rem] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary transition-colors"
                   />
                 </label>
               ) : (
@@ -752,7 +752,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           </button>
           <button
             onClick={() => folderInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-paper-300 hover:bg-paper-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Folder size={13} />
             Choose folder
@@ -894,7 +894,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
                   className={`flex items-center gap-2.5 px-3 h-10 rounded-lg border text-left transition-colors cursor-pointer ${
                     selected
                       ? 'border-brand-600 bg-brand-50'
-                      : 'border-paper-200 bg-paper-0 hover:border-paper-300 hover:bg-paper-50'
+                      : 'border-paper-200 bg-paper-0 hover:border-brand-300 hover:bg-brand-50'
                   }`}
                 >
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
@@ -939,7 +939,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
               type="button"
               onClick={runTest}
               disabled={!requiredFilled || testStatus === 'testing'}
-              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:bg-paper-100 disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-brand-300 hover:bg-brand-50 disabled:bg-canvas disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               {testStatus === 'testing' && <Loader2 size={12} className="animate-spin" />}
               {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
@@ -962,14 +962,14 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
         </div>
       </div>
 
-      {/* Footer — paper-50 strip, helper on left, action group on right. */}
-      <div className="border-t border-paper-200 px-6 py-3 flex items-center justify-between bg-paper-50">
+      {/* Footer — cool canvas strip, helper on left, action group on right. */}
+      <div className="border-t border-paper-200 px-6 py-3 flex items-center justify-between bg-canvas">
         <span className="text-[0.75rem] text-ink-500">Credentials are stored encrypted.</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-brand-300 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -989,7 +989,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
 }
 
 const inputCls =
-  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 disabled:bg-paper-100 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
+  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 disabled:bg-canvas disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
 
 function Field({
   label, required, full, children,

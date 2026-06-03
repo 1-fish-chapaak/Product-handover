@@ -5,11 +5,12 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   ChevronLeft, ChevronRight, Search, ChevronDown, ArrowUpDown,
   FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
-  CheckCircle, Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
+  Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
   Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
+import InlineRename from '../shared/InlineRename';
 import {
   filesForSource, getFileBlob, loadFileBlob, registerFileBlob, setSourceFiles, metaForFormat, countPdfPages, countSheetRows, getPdfjs,
   validateUploadFile, isAllowedKnowledgeFile,
@@ -43,10 +44,12 @@ const TYPE_ICON: Record<SourceType, React.ElementType> = {
   file: FileText, database: Database, api: Globe, cloud: Cloud, session: MessageSquare,
 };
 
-const STATUS_META: Record<FileStatus, { label: string; tone: string; icon: React.ElementType }> = {
-  processed:  { label: 'Processed',  tone: 'text-compliant bg-compliant-50',     icon: CheckCircle },
-  processing: { label: 'Processing', tone: 'text-evidence-700 bg-evidence-50',   icon: Loader2 },
-  failed:     { label: 'Failed',     tone: 'text-risk-700 bg-risk-50',           icon: AlertCircle },
+// Status → label. Tone is owned by StatusPillFlat (the sole consumer); the
+// pill is flat by design, so no per-status icon is carried here.
+const STATUS_META: Record<FileStatus, { label: string }> = {
+  processed:  { label: 'Processed' },
+  processing: { label: 'Processing' },
+  failed:     { label: 'Failed' },
 };
 
 // Health pill uses an outline + colored dot so it doesn't read as the same green
@@ -120,7 +123,11 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   // Per-source content
   const isFileSource = source.type === 'file';
   const baseFiles = isFileSource ? filesForSource(source) : [];
-  const allFiles = [...recentlyAdded, ...baseFiles];
+  // A just-uploaded file is persisted into baseFiles (so it survives reload) AND
+  // kept in recentlyAdded (so it stays pinned on top this session) — dedupe by
+  // id so it isn't listed twice.
+  const recentlyAddedIds = new Set(recentlyAdded.map(f => f.id));
+  const allFiles = [...recentlyAdded, ...baseFiles.filter(f => !recentlyAddedIds.has(f.id))];
   const integrationConfig = !isFileSource ? INTEGRATION_CONFIGS[source.id] : undefined;
   // For a single-file source, the header carries that file's status + date and
   // a direct download (folders download the whole pack instead).
@@ -162,10 +169,6 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   // Folders get the FolderOpen + evidence-tile treatment so the detail header
   // matches the card on DataSourcesView. File-source files stay brand-tiled.
   const SourceIcon = source.isFolder ? FolderOpen : TYPE_ICON[source.type];
-  // One calm brand tone for every source tile — matches the cards on the list
-  // page (the icon glyph carries type identity, not the tile colour).
-  const iconTileClass = 'bg-brand-50';
-  const iconColorClass = 'text-brand-700';
 
   // ─── Rename handlers ─────────────────────────────────────────────────────
   const startRename = () => { setDraftName(source.name); setEditingName(true); };
@@ -185,18 +188,17 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   // after an in-place file rename.
   const [, bumpFiles] = useReducer((n: number) => n + 1, 0);
 
-  // Rename a single file inside this source. Session uploads live in
-  // recentlyAdded; everything else is persisted via setSourceFiles (which also
-  // materialises a synthesised listing into DATASET_FILES on first edit).
+  // Rename a single file inside this source. Uploads are kept in recentlyAdded
+  // for pinning AND persisted into DATASET_FILES, so update both: the state map
+  // (no-op if absent) keeps the pinned copy in sync, and setSourceFiles persists
+  // the change so it survives a reload (it also materialises a synthesised
+  // listing into DATASET_FILES on first edit).
   const renameFile = (fileId: string, newName: string) => {
     const name = newName.trim();
     if (!name) return;
-    if (recentlyAdded.some(f => f.id === fileId)) {
-      setRecentlyAdded(curr => curr.map(f => (f.id === fileId ? { ...f, name } : f)));
-    } else {
-      setSourceFiles(source.id, filesForSource(source).map(f => (f.id === fileId ? { ...f, name } : f)));
-      bumpFiles();
-    }
+    setRecentlyAdded(curr => curr.map(f => (f.id === fileId ? { ...f, name } : f)));
+    setSourceFiles(source.id, filesForSource(source).map(f => (f.id === fileId ? { ...f, name } : f)));
+    bumpFiles();
     addToast({ type: 'success', message: `Renamed to "${name}".` });
   };
 
@@ -228,6 +230,11 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       ...meta,
     };
     setRecentlyAdded(curr => [promoted, ...curr]);
+    // Persist the file into the source's list so it survives a page reload. The
+    // bytes were already saved to IndexedDB via registerFileBlob above; without
+    // this the row lived only in component state and vanished on refresh.
+    setSourceFiles(source.id, [promoted, ...filesForSource(source)]);
+    bumpFiles();
     addToast({ type: 'success', message: `${uf.name} uploaded.` });
   };
 
@@ -321,7 +328,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -12 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="flex flex-col gap-5"
+      className="flex flex-col gap-5 h-full min-h-0"
     >
       {/* Back */}
       <div className="flex items-center shrink-0">
@@ -334,17 +341,20 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
         </button>
       </div>
 
-      {/* Source header — presented as a card (outlined, elevated surface) that
-          eases in on mount, matching the platform's entrance motion. */}
+      {/* Source header — flat hairline card (Linear/Notion aesthetic). No
+          gradient hero, no ambient lines, no floating shadow: the detail opens
+          on the same calm surface as the gallery. Brand is reserved for the
+          icon square and the rename/selection accents. */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.2, 0, 0, 1], delay: 0.04 }}
-        className="flex items-center justify-between gap-4 flex-wrap shrink-0 rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-4 shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]"
+        className="shrink-0 rounded-xl border border-canvas-border bg-canvas-elevated"
       >
+        <div className="flex items-center justify-between gap-4 flex-wrap px-5 py-4">
         <div className="group/hd flex items-center gap-3.5 min-w-0 flex-1">
-          <div className={`w-12 h-12 rounded-xl ${iconTileClass} flex items-center justify-center shrink-0`}>
-            <SourceIcon size={22} className={iconColorClass} />
+          <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+            <SourceIcon size={22} className="text-brand-700" />
           </div>
           <div className="min-w-0">
             {/* Name row — inline editable */}
@@ -366,11 +376,11 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                       }
                       commitRename();
                     }}
-                    className="h-10 px-2.5 text-[1.125rem] font-semibold tracking-tight text-ink-900 bg-canvas-elevated border border-brand-600 rounded-lg focus:outline-none focus:ring-4 focus:ring-brand-600/15 transition-all min-w-0 flex-1"
+                    className="h-10 px-2.5 text-[1.125rem] font-semibold tracking-tight text-ink-900 bg-canvas-elevated border border-brand-600 rounded-lg focus:outline-none transition-all min-w-0 flex-1"
                   />
                   <button
                     onClick={commitRename}
-                    className="p-1.5 text-compliant hover:bg-compliant-50 rounded-md transition-colors cursor-pointer"
+                    className="p-1.5 text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer"
                     aria-label="Save name"
                   >
                     <Check size={16} />
@@ -393,10 +403,9 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                   >
                     {source.name}
                   </h1>
-                  {headerFile && <StatusPillFlat status={headerFile.status} />}
                   <button
                     onClick={startRename}
-                    className="p-1 text-ink-300 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 opacity-0 group-hover/hd:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                    className="p-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 opacity-0 group-hover/hd:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                     aria-label="Rename source"
                   >
                     <Pencil size={13} />
@@ -404,35 +413,51 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
                 </>
               )}
             </div>
-            <p className="text-[0.8125rem] text-ink-500 mt-1 tabular-nums">
-              {source.isFolder
-                // Folders: count + total size (type is shown as the badge above).
-                ? `${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'} · ${formatBytes(totalSize)}`
-                : isFileSource
-                  // Single file: format · size · upload date (status is the pill above).
-                  ? <>{source.subtype}{headerFile && <> · uploaded {new Date(headerFile.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>}</>
-                  : <>{source.subtype}{integrationConfig && <> · {integrationConfig.provider}</>}</>}
-            </p>
+            {/* Meta row — format chip, then facts, then the status pill at the
+                end behind a faint divider (report-cover layout). The chip carries
+                the type, so the facts drop the redundant format token. */}
+            <div className="flex items-center gap-2 mt-1 text-[0.8125rem] text-ink-500 tabular-nums">
+              <span className="inline-flex items-center shrink-0 px-1.5 h-[1.125rem] rounded-md bg-brand-50 text-[0.625rem] font-bold uppercase tracking-wide text-brand-700">
+                {source.isFolder ? 'Folder' : isFileSource ? (headerFile?.format ?? source.subtype.split('·')[0].trim()) : source.type}
+              </span>
+              <span className="truncate">
+                {source.isFolder
+                  // Folders: count + total size.
+                  ? `${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'} · ${formatBytes(totalSize)}`
+                  : isFileSource && headerFile
+                    // Single file: size · upload date (format is the chip).
+                    ? <>{formatBytes(headerFile.sizeBytes)} · uploaded {new Date(headerFile.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                    : <>{source.subtype}{integrationConfig && <> · {integrationConfig.provider}</>}</>}
+              </span>
+              {headerFile && (
+                <>
+                  <span className="text-ink-300">|</span>
+                  <StatusPillFlat status={headerFile.status} />
+                </>
+              )}
+            </div>
           </div>
         </div>
         {isFileSource && allFiles.length > 0 && headerFile?.status !== 'failed' && (
-          /* Download — whole folder, or the single file. Soft icon tile that
-             pairs with the header's icon (not a lonely outline box). */
+          /* Download — whole folder, or the single file. Flat neutral tile that
+             tints to brand on hover, matching the gallery's hover language. */
           <button
             onClick={downloadHeader}
             title={source.isFolder ? 'Download all files' : 'Download file'}
             aria-label={source.isFolder ? 'Download all files' : 'Download file'}
-            className="group shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-paper-100 text-ink-600 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+            className="group shrink-0 flex items-center justify-center w-10 h-10 rounded-lg border border-canvas-border text-ink-500 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             <Download size={18} className="transition-transform duration-200 group-hover:translate-y-0.5 motion-reduce:transition-none" />
           </button>
         )}
+        </div>
       </motion.div>
 
-      {/* ── Body branches by source type ── (viewport-tall so the back button +
-          header card scroll away above it, while the reading pane keeps its own
-          internal scroll) */}
-      <div className="shrink-0 flex flex-col h-[calc(100vh-13rem)]">
+      {/* ── Body branches by source type ── A folder shows the reading pane
+          (its own rail/preview scroll internally); everything else fills the
+          remaining height and scrolls *inside* this region, so the back link
+          and header stay pinned and the page itself never scrolls. */}
+      <div className={`flex flex-col min-h-0 ${source.isFolder ? 'shrink-0 h-[calc(100vh-13rem)]' : 'flex-1 overflow-y-auto'}`}>
         {isFileSource ? (
           <FileSourceBody
             files={allFiles}
@@ -498,8 +523,10 @@ function FileSourceBody({
 
   const fill = isFolder && (files.length > 0 || uploadingFiles.length > 0);
   // Single-file preview: the spreadsheet/PDF preview is already its own card, so
-  // the wrapper drops its border/bg to avoid a card-inside-a-card.
-  const singlePreview = !isFolder && files.length > 0;
+  // the wrapper drops its border/bg to avoid a card-inside-a-card. Only a *lone*
+  // file is its own card; a multi-file (non-folder) list still wants the card
+  // container so its rows read as a contained list, not floating on bare canvas.
+  const singlePreview = !isFolder && files.length === 1;
 
   // ↑/↓ steps the selection (and thus the live preview) when focus isn't in a
   // text field. This is the "see without clicking each" path.
@@ -620,7 +647,7 @@ function FileSourceBody({
           setIsDragging(false);
           onUpload(e.dataTransfer.files);
         }}
-        className={`relative transition-colors ${isDragging ? 'rounded-xl overflow-hidden border border-brand-300 bg-brand-50/40' : singlePreview ? '' : 'rounded-xl overflow-hidden border border-canvas-border bg-canvas-elevated'} ${fill ? 'flex-1 min-h-0 flex flex-col' : ''}`}
+        className={`relative transition-colors ${isDragging ? 'rounded-xl overflow-hidden border border-brand-300 bg-brand-50/40' : singlePreview ? '' : 'rounded-xl overflow-hidden border border-canvas-border bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'} ${fill ? 'flex-1 min-h-0 flex flex-col' : ''}`}
       >
         {isDragging && (
           <div
@@ -654,14 +681,23 @@ function FileSourceBody({
           /* Folder → reading pane: finder list (left) + live preview (right).
              Selecting a row (click or ↑/↓) updates the preview instantly. */
           <div className="flex flex-1 min-h-0">
-            <div className="w-[24rem] shrink-0 border-r border-canvas-border flex flex-col min-h-0">
-              {/* List header — aligns with the preview header (h-14) so the
+            <div className="w-80 shrink-0 border-r border-canvas-border flex flex-col min-h-0 bg-canvas-elevated">
+              {/* List header — aligns with the preview header (h-12) so the
                   divider runs straight across; shows count + keyboard hint. */}
-              <div className="shrink-0 flex items-center justify-between gap-2 px-4 h-14 border-b border-canvas-border bg-canvas">
-                <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 tabular-nums">
-                  {search ? `${visible.length} ${visible.length === 1 ? 'result' : 'results'}` : 'Files'}
+              <div className="shrink-0 flex items-center justify-between gap-2 px-3 h-16 border-b border-canvas-border bg-canvas-elevated">
+                <span className="inline-flex items-baseline gap-1.5 min-w-0">
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
+                    {search ? 'Results' : 'Files'}
+                  </span>
+                  <span className="text-[0.6875rem] font-semibold tabular-nums text-ink-400">
+                    {search ? `${visible.length} of ${files.length}` : files.length}
+                  </span>
                 </span>
-                <span className="text-[0.6875rem] text-ink-400">↑↓ to move</span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[0.625rem] text-ink-400">
+                  <kbd className="inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded border border-canvas-border bg-canvas font-mono text-[0.625rem] text-ink-400">↑</kbd>
+                  <kbd className="inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded border border-canvas-border bg-canvas font-mono text-[0.625rem] text-ink-400">↓</kbd>
+                  <span className="ml-0.5">to move</span>
+                </span>
               </div>
               <div ref={listRef} className="flex-1 overflow-y-auto">
                 <FileList
@@ -834,7 +870,7 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
       </div>
 
       <div className={`overflow-auto ${maxHeightClass}`}>
-        <table className={`border-collapse text-[0.75rem] ${hasFlex ? 'w-full' : 'w-auto'}`}>
+        <table className="border-collapse text-[0.75rem] w-full">
           <thead className="sticky top-0 z-10">
             <tr>
               <th className="sticky left-0 z-20 w-10 px-2.5 py-2.5 bg-canvas-elevated border-b border-canvas-border" aria-hidden />
@@ -847,6 +883,10 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
                   {h}
                 </th>
               ))}
+              {/* No prose column to absorb the slack → a blank filler column
+                  stretches the row to the card's full width (so short-column
+                  sheets don't leave a dead zone on the right). */}
+              {!hasFlex && <th aria-hidden className="w-full bg-canvas-elevated border-b border-canvas-border" />}
             </tr>
           </thead>
           <tbody>
@@ -867,6 +907,9 @@ function SpreadsheetTable({ header, body, totalRows, totalCols, live, sheetNames
                     </td>
                   );
                 })}
+                {/* Filler cell — pairs with the header filler to carry the row's
+                    hover + bottom border across the full width. */}
+                {!hasFlex && <td aria-hidden />}
               </tr>
             ))}
           </tbody>
@@ -941,21 +984,41 @@ function SpreadsheetPreview({ url, totalRows, maxHeightClass, bare = false }: { 
     );
   }
   if (!data) {
-    // Skeleton — sheet bar + shimmer rows, so the load reads as the table
-    // forming rather than an empty bordered box.
+    // Table skeleton — cool shimmer sweep, six aligned columns mirroring the
+    // loaded table so the load reads as the table forming (and holds the same
+    // ~400px height, so there's no size jump when data arrives).
     return (
       <div className={shellClass}>
-        <div className="flex items-center gap-2.5 px-3 h-12 border-b border-canvas-border bg-canvas">
-          <span className="w-7 h-7 rounded-md bg-paper-100 animate-pulse" />
-          <span className="h-3 w-28 rounded bg-paper-100 animate-pulse" />
+        {/* Sheet-tab bar — tabs left, count right. */}
+        <div className="flex items-center justify-between gap-2.5 px-3 h-12 border-b border-canvas-border bg-canvas">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-md skeleton-cool shrink-0" />
+            <span className="h-3 w-16 rounded skeleton-cool" />
+            <span className="h-3 w-14 rounded skeleton-cool" />
+          </div>
+          <span className="h-2.5 w-24 rounded skeleton-cool shrink-0" />
         </div>
-        <div className="px-4 py-3.5 space-y-3.5">
+        {/* Column-header row. */}
+        <div className="flex items-center gap-4 px-4 h-9 border-b border-canvas-border/60">
+          <span className="h-2.5 w-6 rounded skeleton-cool shrink-0" />
+          <span className="h-2.5 w-16 rounded skeleton-cool shrink-0" />
+          <span className="h-2.5 flex-1 rounded skeleton-cool" />
+          <span className="h-2.5 w-16 rounded skeleton-cool shrink-0" />
+          <span className="h-2.5 w-20 rounded skeleton-cool shrink-0" />
+          <span className="h-2.5 w-24 rounded skeleton-cool shrink-0" />
+          <span className="h-2.5 w-12 rounded skeleton-cool shrink-0" />
+        </div>
+        {/* Data rows. */}
+        <div className="px-4 py-3 space-y-3.5">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4">
-              <span className="h-3 w-6 rounded bg-paper-100/80 animate-pulse shrink-0" />
-              <span className="h-3 flex-1 rounded bg-paper-100 animate-pulse" />
-              <span className="h-3 w-20 rounded bg-paper-100/80 animate-pulse shrink-0" />
-              <span className="h-3 w-16 rounded bg-paper-100/80 animate-pulse shrink-0" />
+              <span className="h-3 w-6 rounded skeleton-cool shrink-0" />
+              <span className="h-3 w-16 rounded skeleton-cool shrink-0" />
+              <span className="h-3 flex-1 rounded skeleton-cool" />
+              <span className="h-3 w-16 rounded skeleton-cool shrink-0" />
+              <span className="h-3 w-20 rounded skeleton-cool shrink-0" />
+              <span className="h-3 w-24 rounded skeleton-cool shrink-0" />
+              <span className="h-3 w-12 rounded skeleton-cool shrink-0" />
             </div>
           ))}
         </div>
@@ -1056,10 +1119,18 @@ function PdfCanvasViewer({ source, fileName, bare = false }: { source: string | 
     );
   }
   if (!doc) {
+    // Compact centred loader — matches the spreadsheet preview's loading state.
     return (
-      <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 h-[120px] flex items-center justify-center gap-2 text-[0.75rem] text-ink-500">
-        <Loader2 size={13} className="animate-spin motion-reduce:animate-none" />
-        Rendering pages…
+      <div className={bare ? '' : 'rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)]'}>
+        <div className="flex flex-col items-center justify-center gap-3 min-h-[400px] px-6 text-center">
+          <span className="flex items-center justify-center w-11 h-11 rounded-full bg-brand-50">
+            <Loader2 size={20} className="text-brand-600 animate-spin motion-reduce:animate-none" />
+          </span>
+          <div>
+            <p className="text-[0.8125rem] font-semibold text-ink-800">Loading preview</p>
+            <p className="text-[0.75rem] text-ink-400 mt-0.5">Rendering pages…</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1223,7 +1294,7 @@ function FileList({ visible, uploadingFiles, search, selectedId, onSelect }: {
   onSelect: (id: string) => void;
 }) {
   return (
-    <ul className="px-2 py-2 space-y-0.5">
+    <ul className="py-1.5">
       <AnimatePresence initial={false}>
         {uploadingFiles.map(uf => (<UploadingListRow key={uf.id} file={uf} />))}
       </AnimatePresence>
@@ -1242,15 +1313,18 @@ function FileList({ visible, uploadingFiles, search, selectedId, onSelect }: {
   );
 }
 
+// Dense, flat, tool-like row (Linear/Notion): a small inline file-type icon, the
+// name, and one right-aligned tabular signal (row/page count). No tile, no
+// gutter. Cool-gray hover/selection; brand-600 is reserved for the selected
+// state — a thin left accent + the icon. Size/date drop here (identical across
+// opaque dumps, shown in full in the preview header) to keep the scan clean.
 function FileListRow({ file, selected, onSelect }: { file: DatasetFile; selected: boolean; onSelect: () => void }) {
   const { Icon } = fileTile(file);
-  const dateStr = new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const count = file.rows != null
+  const signal = file.rows != null
     ? `${file.rows.toLocaleString()} ${file.rows === 1 ? 'row' : 'rows'}`
     : file.pages != null
       ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}`
-      : null;
-  const meta = count ? `${count} · ${formatBytes(file.sizeBytes)}` : formatBytes(file.sizeBytes);
+      : formatBytes(file.sizeBytes);
 
   return (
     <li>
@@ -1262,14 +1336,13 @@ function FileListRow({ file, selected, onSelect }: { file: DatasetFile; selected
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
         aria-pressed={selected}
         title={file.name}
-        className={`no-focus-ring group flex items-center gap-2.5 px-2.5 h-[3.25rem] rounded-lg transition-colors cursor-pointer outline-none ${selected ? 'bg-brand-50 ring-1 ring-inset ring-brand-100' : 'hover:bg-brand-50/70 focus-visible:bg-brand-50/60'}`}
+        className={`no-focus-ring group flex items-center gap-2 pl-2.5 pr-2.5 h-8 border-l-2 transition-colors cursor-pointer outline-none ${selected ? 'border-brand-600' : 'border-transparent hover:bg-canvas-border/30 focus-visible:bg-canvas-border/30'}`}
       >
-        <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><Icon size={16} /></span>
-        <span className="flex-1 min-w-0">
-          <span className={`block truncate text-[0.875rem] font-semibold ${selected ? 'text-brand-700' : 'text-ink-900'}`}>{file.name}</span>
-          <span className="block truncate text-[0.75rem] text-ink-400 tabular-nums mt-0.5">{meta} · {dateStr}</span>
-        </span>
-        {file.status !== 'processed' && <StatusPillFlat status={file.status} />}
+        <Icon size={15} className={`shrink-0 transition-colors ${selected ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'}`} />
+        <span className={`flex-1 min-w-0 truncate text-[0.8125rem] ${selected ? 'text-ink-900 font-semibold' : 'text-ink-700 font-medium'}`}>{file.name}</span>
+        {file.status === 'processed'
+          ? <span className={`shrink-0 text-[0.6875rem] tabular-nums ${selected ? 'text-ink-500' : 'text-ink-400'}`}>{signal}</span>
+          : <StatusPillFlat status={file.status} />}
       </div>
     </li>
   );
@@ -1301,23 +1374,34 @@ function UploadingListRow({ file }: { file: UploadingFile }) {
   );
 }
 
+// A Notion-style properties block under the preview. Fills the space below a
+// small file with useful, scannable metadata instead of an empty pane — values
+// come straight off the file record (no re-parsing). One key/value per row,
+// muted label left, tabular value right, hairline-divided card (crisp/flat).
+// The shared file-preview body: just the preview card. Used by BOTH a
+// standalone single-file source and the folder reading-pane's right side, so
+// the two render identically (one component, not two).
+function FilePreviewBlock({ file }: { file: DatasetFile }) {
+  return <FilePreviewBody key={file.id} file={file} tall />;
+}
+
 // ─── Reading pane: live preview (right side) ─────────────────────────────────
 // Shows whichever file is selected in the list. Updates instantly as selection
-// changes — no opening, no back. Header carries identity + download; body is
-// the full preview.
+// changes — no opening, no back. The header mirrors the single-file page header
+// (brand tile + name + status + download); the body is the shared preview block.
 function PreviewPane({ file }: { file: DatasetFile }) {
   const { addToast } = useToast();
-  const { Icon, tone } = fileTile(file);
+  const { Icon } = fileTile(file);
   const isFailed = file.status === 'failed';
   const dateStr = new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <>
-      <header className="flex items-center gap-3 px-4 h-14 border-b border-canvas-border bg-canvas shrink-0">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${tone}`}><Icon size={17} /></div>
+      <header className="flex items-center gap-3 px-4 h-16 border-b border-canvas-border bg-canvas-elevated shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center shrink-0"><Icon size={20} className="text-brand-700" /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[0.875rem] font-semibold text-ink-900 truncate" title={file.name}>{file.name}</span>
+            <span className="text-[1rem] font-semibold tracking-tight text-ink-900 truncate" title={file.name}>{file.name}</span>
             <StatusPillFlat status={file.status} />
           </div>
           <div className="text-[0.75rem] text-ink-500 tabular-nums mt-0.5">{file.format} · uploaded {dateStr}</div>
@@ -1325,11 +1409,11 @@ function PreviewPane({ file }: { file: DatasetFile }) {
         {!isFailed && (
           <button
             onClick={() => { triggerDownload(file); addToast({ type: 'success', message: `Downloading ${file.name}…` }); }}
-            className="flex items-center justify-center w-8 h-8 rounded-md text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer"
+            className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer shrink-0"
             aria-label="Download"
             title="Download"
           >
-            <Download size={15} />
+            <Download size={17} />
           </button>
         )}
       </header>
@@ -1340,8 +1424,8 @@ function PreviewPane({ file }: { file: DatasetFile }) {
           <p className="text-[0.75rem] text-ink-500">This file couldn’t be processed — the format may not be supported.</p>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-auto">
-          <FilePreviewBody key={file.id} file={file} tall bare />
+        <div className="flex-1 min-h-0 overflow-auto p-4">
+          <FilePreviewBlock file={file} />
         </div>
       )}
     </>
@@ -1361,25 +1445,14 @@ interface FileRowProps {
 function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps) {
   const { addToast } = useToast();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(file.name);
-  const renameRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (editing) renameRef.current?.select(); }, [editing]);
 
-  const startRename = () => { setDraft(file.name); setEditing(true); };
-  const commitRename = () => {
-    const n = draft.trim();
-    if (n && n !== file.name) onRename?.(file.id, n);
-    setEditing(false);
-  };
-  const cancelRename = () => { setDraft(file.name); setEditing(false); };
+  const startRename = () => setEditing(true);
 
   const handleDownload = () => {
     triggerDownload(file);
     addToast({ type: 'success', message: `Downloading ${file.name}…` });
   };
 
-  const status = STATUS_META[file.status];
-  const StatusIcon = status.icon;
   const isFailed = file.status === 'failed';
   const countLabel = file.pages != null
     ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}`
@@ -1407,15 +1480,20 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
   // header lacks — status, row/page count, upload date, download — then the
   // always-open preview.
   if (isSingle) {
-    // The header card already shows status · size · upload date + download, and
-    // the table caption shows the row count — so the row is just the preview,
-    // full-width (its own card), with no extra wrapper around it.
+    // The page header already shows status · size · upload date + download, so
+    // the body is the preview card + the same Details block the folder preview
+    // pane uses — kept identical so a single file and a file inside a folder
+    // read the same on the right.
     return (
       <li>
-        {isFailed && (
-          <div className="pb-3 text-[0.75rem] text-risk-700">Processing failed. Format may not be supported.</div>
+        {isFailed ? (
+          <>
+            <div className="pb-3 text-[0.75rem] text-risk-700">Processing failed. Format may not be supported.</div>
+            <FilePreviewBody file={file} tall />
+          </>
+        ) : (
+          <FilePreviewBlock file={file} />
         )}
-        <FilePreviewBody file={file} tall />
       </li>
     );
   }
@@ -1429,17 +1507,11 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {editing ? (
-              <input
-                ref={renameRef}
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onClick={e => e.stopPropagation()}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') commitRename();
-                  else if (e.key === 'Escape') cancelRename();
-                }}
-                onBlur={commitRename}
-                className="flex-1 min-w-0 h-7 px-2 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-md focus:outline-none focus:ring-4 focus:ring-brand-600/15"
+              <InlineRename
+                initial={file.name}
+                size="sm"
+                onCommit={n => { onRename?.(file.id, n); setEditing(false); }}
+                onCancel={() => setEditing(false)}
               />
             ) : (
               <span
@@ -1453,12 +1525,7 @@ function FileRow({ file, expanded, isSingle, onToggle, onRename }: FileRowProps)
                 {file.name}
               </span>
             )}
-            {!editing && (
-              <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${status.tone}`}>
-                <StatusIcon size={10} className={file.status === 'processing' ? 'animate-spin motion-reduce:animate-none' : ''} />
-                {status.label}
-              </span>
-            )}
+            {!editing && <StatusPillFlat status={file.status} />}
           </div>
           {metaLine}
           {isFailed && (

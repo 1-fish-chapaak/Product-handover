@@ -6,8 +6,8 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, GitCompare, FlaskConical, TrendingUp,
+  ClipboardCheck, Layers, Bell,
+  GitCompare, TrendingUp,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 
@@ -159,14 +159,23 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-settings', 'admin-integrations', 'admin-logs'];
 
   return (
+    // Outer layout slot — ALWAYS the collapsed 64px width. Neither hovering nor
+    // pinning the rail open reflows the page; the visual rail overlays instead,
+    // so the content never moves/resizes.
+    <div
+      className="relative h-full shrink-0 z-50 w-16"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+    {/* Visual rail — absolutely positioned so any expanded state (hover OR
+        pinned) floats OVER the content with a drop shadow, instead of pushing
+        it. */}
     <motion.div
       animate={{ width: isExpanded ? 256 : 64 }}
       transition={{
         duration: prefersReducedMotion ? 0 : 0.28,
       }}
-      className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      className={`absolute inset-y-0 left-0 h-full bg-sidebar-bg noise-texture flex flex-col overflow-hidden z-50 ${isExpanded ? 'shadow-[8px_0_32px_-10px_rgba(15,8,30,0.55)]' : ''}`}
     >
       {/* ── Sidebar header: collapsed shows ONLY the bell (centered in 64px);
           expanded shows logo + IRAME.AI + Audit Intelligence on the left,
@@ -480,5 +489,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
         )}
       </div>
     </motion.div>
+    </div>
   );
 }

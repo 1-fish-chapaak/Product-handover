@@ -5,7 +5,7 @@ import {
   Search, Upload, MoreHorizontal, Plus, X,
   Pencil, Trash2, Unplug, Check,
   MessageSquare, AlertTriangle,
-  LayoutGrid, Rows3,
+  LayoutGrid, Rows3, ChevronDown,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
@@ -16,6 +16,7 @@ import {
 import DataSourceDetailView from './DataSourceDetailView';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import InlineRename from '../shared/InlineRename';
 import {
   TODAY, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource, type SourceType,
@@ -244,43 +245,6 @@ function SourceCard(props: SourceCardProps) {
     : <SourceTile {...props} />;
 }
 
-// Inline rename editor — input + save/cancel. Shared by the grid tile and list
-// row. Auto-selects on mount; Enter/blur commits, Escape cancels. The save and
-// cancel buttons use onMouseDown-preventDefault so clicking them doesn't blur
-// the input first (which would fire a commit before the click registers).
-function InlineRename({ initial, onCommit, onCancel }: {
-  initial: string;
-  onCommit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState(initial);
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { ref.current?.select(); }, []);
-  const commit = () => {
-    const n = draft.trim();
-    if (n && n !== initial) onCommit(n);
-    else onCancel();
-  };
-  return (
-    <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={e => e.stopPropagation()}>
-      <input
-        ref={ref}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') onCancel(); }}
-        onBlur={commit}
-        className="flex-1 min-w-0 h-8 px-2.5 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 rounded-lg focus:outline-none focus:ring-4 focus:ring-brand-600/15"
-      />
-      <button onMouseDown={e => e.preventDefault()} onClick={commit} className="p-1.5 text-brand-700 hover:bg-brand-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Save name">
-        <Check size={15} />
-      </button>
-      <button onMouseDown={e => e.preventDefault()} onClick={onCancel} className="p-1.5 text-ink-500 hover:bg-brand-50 rounded-md cursor-pointer shrink-0 transition-colors" aria-label="Cancel rename">
-        <X size={15} />
-      </button>
-    </div>
-  );
-}
-
 // Grid tile — primary card, slightly richer than the previous version. Folders
 // get a count chip; integrations get a health dot + last sync.
 function SourceTile({
@@ -387,7 +351,10 @@ function SourceTile({
               Inline display so wrap kicks in only on genuine overflow. */}
           <div className="mt-1 text-[0.75rem] text-ink-500 tabular-nums leading-snug">
             {isIntegrated ? (
-              <span className={`font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-brand-700'}`}>
+              // Live connection — a status dot makes integration cards scannable
+              // against files at a glance (files carry size · date instead).
+              <span className={`inline-flex items-center gap-1.5 font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-compliant-700'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${health === 'degraded' ? 'bg-mitigated' : 'bg-compliant'}`} aria-hidden />
                 {health === 'degraded' ? 'Needs reconnection' : 'Connected'}
               </span>
             ) : (
@@ -735,7 +702,7 @@ function EmptyShell({ icon: Icon, children }: { icon: React.ElementType; childre
 
 function CatalogLoadingSkeleton() {
   // Vary the card widths slightly so the grid doesn't read as a single flat
-  // block of beige. Same number of skeletons per row as the real grid.
+  // block. Same number of skeletons per row as the real grid.
   const bucketSizes = [6, 3];
   return (
     <div className="space-y-5 animate-pulse">
@@ -744,9 +711,9 @@ function CatalogLoadingSkeleton() {
         <div className="flex items-center gap-1 px-1">
           {[0, 1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="flex items-center gap-2 px-3.5 h-10">
-              <div className="w-3 h-3 rounded bg-paper-100" />
-              <div className="h-3 rounded bg-paper-100" style={{ width: 56 + (i % 3) * 14 }} />
-              <div className="w-6 h-4 rounded-full bg-paper-100" />
+              <div className="w-3 h-3 rounded bg-canvas-border" />
+              <div className="h-3 rounded bg-canvas-border" style={{ width: 56 + (i % 3) * 14 }} />
+              <div className="w-6 h-4 rounded-full bg-canvas-border" />
             </div>
           ))}
         </div>
@@ -754,28 +721,28 @@ function CatalogLoadingSkeleton() {
 
       {/* Skeleton toolbar */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 max-w-xl h-9 rounded-lg bg-paper-100" />
-        <div className="w-24 h-9 rounded-lg bg-paper-100" />
-        <div className="w-[4.25rem] h-9 rounded-lg bg-paper-100" />
-        <div className="w-20 h-9 rounded-lg bg-paper-100" />
+        <div className="flex-1 max-w-xl h-9 rounded-lg bg-canvas-border" />
+        <div className="w-24 h-9 rounded-lg bg-canvas-border" />
+        <div className="w-[4.25rem] h-9 rounded-lg bg-canvas-border" />
+        <div className="w-20 h-9 rounded-lg bg-canvas-border" />
         <div className="w-28 h-9 rounded-lg bg-brand-100" />
       </div>
 
       {/* Skeleton buckets */}
       {bucketSizes.map((n, bi) => (
         <div key={bi}>
-          <div className="h-3 w-32 rounded bg-paper-100 mb-3" />
+          <div className="h-3 w-32 rounded bg-canvas-border mb-3" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: n }).map((_, i) => (
               <div
                 key={i}
                 className="flex items-start gap-3 px-4 py-3.5 rounded-lg bg-canvas-elevated border border-canvas-border"
               >
-                <div className="w-10 h-10 rounded-lg bg-paper-100 shrink-0" />
+                <div className="w-10 h-10 rounded-lg bg-canvas-border shrink-0" />
                 <div className="flex-1 min-w-0 space-y-2">
-                  <div className="h-3 rounded bg-paper-100" style={{ width: `${55 + ((i * 7) % 30)}%` }} />
-                  <div className="h-2.5 rounded bg-paper-100" style={{ width: `${30 + ((i * 11) % 20)}%` }} />
-                  <div className="h-2 rounded bg-paper-100 mt-3" style={{ width: `${45 + ((i * 5) % 25)}%` }} />
+                  <div className="h-3 rounded bg-canvas-border" style={{ width: `${55 + ((i * 7) % 30)}%` }} />
+                  <div className="h-2.5 rounded bg-canvas-border" style={{ width: `${30 + ((i * 11) % 20)}%` }} />
+                  <div className="h-2 rounded bg-canvas-border mt-3" style={{ width: `${45 + ((i * 5) % 25)}%` }} />
                 </div>
               </div>
             ))}
@@ -1643,9 +1610,10 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <button
               type="button"
               onClick={() => setVisibleLimit(l => l + PAGE_SIZE)}
-              className="inline-flex items-center px-6 h-11 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.875rem] font-semibold text-ink-800 hover:bg-brand-50 hover:border-ink-300 transition-colors cursor-pointer"
+              className="group inline-flex items-center gap-2 pl-5 pr-4 h-10 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.8125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-200 hover:bg-brand-50 transition-colors cursor-pointer"
             >
-              Load more data
+              Load {Math.min(PAGE_SIZE, visible.length - paginatedVisible.length)} more
+              <ChevronDown size={15} className="text-ink-400 group-hover:text-brand-600 transition-[color,transform] group-hover:translate-y-0.5 motion-reduce:transition-none" />
             </button>
           )}
         </div>
