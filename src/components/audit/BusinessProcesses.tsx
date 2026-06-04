@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search, Plus, Upload, Sparkles,
-  ChevronRight, ChevronDown,
+  ChevronRight, ChevronLeft, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
   FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
@@ -4103,8 +4103,8 @@ function SectionCard({
     >
       {/* identity icon chip — coloured by the section's GRC semantic, in the Engagements
           event-icon style (bg-{sem}-50 / text-{sem}-700) */}
-      <span className={`w-8 h-8 rounded-lg grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
-        {Icon ? <Icon size={15} /> : null}
+      <span className={`w-8 h-8 rounded-md grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
+        {Icon ? <Icon size={20} /> : null}
       </span>
 
       {/* name + the count fraction */}
@@ -4168,6 +4168,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
+  // 2-column side-by-side experiment is P2P-only for now.
+  const isP2P = bp.id === 'p2p';
 
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
@@ -4282,6 +4284,17 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
   };
   const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+
+  // Single source of truth for "is this section set up?" — shared by both the
+  // "Set up this business process" checklist and the "Coverage by section"
+  // panel so they never disagree. A showcase override pins O2C to a mid-setup
+  // state; every other process derives done-state from real section content.
+  const SETUP_DEMO_OVERRIDE: Partial<Record<string, Record<SectionKey, boolean>>> = {
+    o2c: { sop: false, racm: true, risks: false, controls: false, workflows: false },
+  };
+  const sectionDemoOverride = SETUP_DEMO_OVERRIDE[bp.id];
+  const isSectionComplete = (k: SectionKey) =>
+    sectionDemoOverride ? sectionDemoOverride[k] : sectionMeta[k].count > 0;
 
   // ── Rich insights per section — drive the BP detail index cards. ────────────
   // Each section reads its underlying seed data and reports:
@@ -4614,12 +4627,61 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   // Dropdown menu — used in the BP detail INDEX header. Picks a section,
   // navigates to it, then fires triggerSectionCreate.
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  // Horizontal expand/collapse for the P2P 2-column experiment: the setup
+  // checklist and the coverage panel sit side-by-side and each folds to a slim
+  // rail on its own (both can be open, or either one closed).
+  const [setupOpen, setSetupOpen] = useState(true);
+  const [coverageOpen, setCoverageOpen] = useState(true);
+  // When a create/upload flow is requested for a section we aren't viewing yet,
+  // we navigate there first and remember the intent. The effect below fires the
+  // trigger once that section is mounted — child effects (which register the
+  // section's create listener) run before this parent effect, so the flow opens
+  // reliably instead of racing a fixed timeout.
+  const [pendingCreate, setPendingCreate] = useState<SectionKey | null>(null);
   const handleDropdownPick = (section: SectionKey) => {
     setCreateMenuOpen(false);
-    if (section !== drilledSection) switchDrilledSection(section);
-    // Defer trigger to next tick so the section component has mounted.
-    setTimeout(() => triggerSectionCreate(section), 50);
+    if (section === drilledSection) {
+      // Already viewing the section — open its flow immediately.
+      triggerSectionCreate(section);
+    } else {
+      setPendingCreate(section);
+      switchDrilledSection(section);
+    }
   };
+  useEffect(() => {
+    if (pendingCreate && drilledSection === pendingCreate) {
+      triggerSectionCreate(pendingCreate);
+      setPendingCreate(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drilledSection, pendingCreate]);
+
+  // Slim folded rail shown when a side-by-side panel is collapsed (P2P layout).
+  // Clicking anywhere on the rail re-opens the panel.
+  const renderCollapsedStrip = ({ title, icon: Icon, gradient, expandDir, onExpand }: {
+    title: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    gradient?: boolean;
+    expandDir: 'right' | 'left';
+    onExpand: () => void;
+  }) => (
+    <motion.section
+      {...revealProps(0)}
+      role="button"
+      tabIndex={0}
+      onClick={onExpand}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(); } }}
+      aria-label={`Expand ${title}`}
+      className="self-start shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-center gap-2 cursor-pointer hover:border-brand-200 transition-colors"
+    >
+      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
+        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </span>
+      <span className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${gradient ? 'bg-gradient-to-r from-brand-400 to-brand-600 text-paper-0' : 'bg-brand-50 text-brand-700'}`}>
+        <Icon size={16} />
+      </span>
+    </motion.section>
+  );
 
   // RACM editor takeover — full-screen replaces all views while editing
   if (reviewingRacm) {
@@ -4966,10 +5028,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           );
         })()}
 
-        {/* Setup checklist — guided steps to populate this process, one per section.
-            Each step is "done" once that section has content; the buttons reuse the
-            same create flows as the Quick add menu. */}
-        {!isFreshBP && (() => {
+        {/* Setup checklist + Coverage by section. On the P2P process these sit
+            side-by-side in a 2-column layout where each panel folds to a slim rail
+            independently; every other process keeps the stacked layout. */}
+        <div className={isP2P ? 'flex items-stretch gap-5 mb-5' : 'contents'}>
+
+        {!isFreshBP && (
+          isP2P && !setupOpen ? renderCollapsedStrip({
+            title: 'Set up this business process',
+            icon: Zap,
+            gradient: true,
+            expandDir: 'right',
+            onExpand: () => setSetupOpen(true),
+          }) : (() => {
           const SETUP_STEPS = [
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
             { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: Grid3x3 },
@@ -4977,18 +5048,13 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
             { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
           ];
-          // Showcase states: O2C is pinned to a mid-setup checklist (only RACM
-          // done, the rest still to do — matches the reference design); every
-          // other process derives done-state from real section content (P2P = 5/5).
-          const SETUP_DEMO_OVERRIDE: Partial<Record<string, Record<SectionKey, boolean>>> = {
-            o2c: { sop: false, racm: true, risks: false, controls: false, workflows: false },
-          };
-          const demoOverride = SETUP_DEMO_OVERRIDE[bp.id];
-          const isStepDone = (k: SectionKey) => demoOverride ? demoOverride[k] : sectionMeta[k].count > 0;
+          // Done-state comes from the shared isSectionComplete helper, so the
+          // checklist and the Coverage panel always tell the same story.
+          const isStepDone = isSectionComplete;
           const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
           const pct = Math.round((completed / SETUP_STEPS.length) * 100);
           return (
-            <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
+            <motion.section className={`rounded-xl border border-canvas-border bg-white p-5 ${isP2P ? 'flex-1 min-w-0' : 'mb-5'}`} {...revealProps(0)}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 grid place-items-center shrink-0">
@@ -5001,8 +5067,20 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                     </p>
                   </div>
                 </div>
-                <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden shrink-0">
-                  <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  {isP2P && (
+                    <button
+                      type="button"
+                      onClick={() => setSetupOpen(false)}
+                      aria-label="Collapse setup checklist"
+                      className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -5010,7 +5088,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   const done = isStepDone(step.key);
                   const Icon = step.icon;
                   return (
-                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant-50 bg-compliant-50/40' : 'border-canvas-border bg-white'}`}>
+                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant/25 bg-compliant-50/40' : 'border-canvas-border/40 bg-white'}`}>
                       {done ? (
                         <span className="w-6 h-6 rounded-full bg-compliant grid place-items-center shrink-0">
                           <CheckCircle2 size={16} className="text-paper-0" strokeWidth={2.5} />
@@ -5037,19 +5115,41 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               </div>
             </motion.section>
           );
-        })()}
+        })())}
 
         {/* Coverage by section — a bordered panel with one clickable row per area, matching
             the Engagements overview's SectionCard + Row pattern. Locked rows show on a fresh
             process so the path ahead stays visible. */}
-        <motion.section className="rounded-xl border border-canvas-border bg-white p-4" {...revealProps(0)}>
-          <div className="mb-2">
+        {isP2P && !coverageOpen ? renderCollapsedStrip({
+          title: 'Coverage by section',
+          icon: LayoutGrid,
+          gradient: false,
+          expandDir: 'left',
+          onExpand: () => setCoverageOpen(true),
+        }) : (
+        <motion.section className={`rounded-xl border border-canvas-border bg-white p-4 ${isP2P ? 'flex-1 min-w-0' : ''}`} {...revealProps(0)}>
+          <div className="flex items-center justify-between mb-2">
             <h3 className="text-[13px] font-semibold text-ink-800">Coverage by section</h3>
+            {isP2P && (
+              <button
+                type="button"
+                onClick={() => setCoverageOpen(false)}
+                aria-label="Collapse coverage by section"
+                className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+              >
+                <ChevronRight size={18} />
+              </button>
+            )}
           </div>
           <div className="space-y-0.5">
             {sortedIndexSections.map((key) => {
-              const m = sectionMeta[key];
-              const ins = sectionInsights[key];
+              // Stay in sync with the setup checklist: a section that reads
+              // "not done" there must show its 0/empty state here too.
+              const incomplete = !isSectionComplete(key);
+              const m = incomplete ? { ...sectionMeta[key], count: 0 } : sectionMeta[key];
+              const ins = incomplete
+                ? { ...sectionInsights[key], ratio: null, healthRatioText: '', openCount: 0 }
+                : sectionInsights[key];
               // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
               const locked = lockedFor(key);
               const lockedReason = key === 'sop'
@@ -5084,6 +5184,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             })}
           </div>
         </motion.section>
+        )}
+
+        </div>
       </div>
     </div>
   );
