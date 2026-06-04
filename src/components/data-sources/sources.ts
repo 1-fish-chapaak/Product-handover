@@ -31,7 +31,10 @@ export interface DataSource {
   health?: 'healthy' | 'degraded';
 }
 
-export const TODAY = new Date('2026-05-28');
+// The app's reference "now". Anchored to the real current date (UTC midnight,
+// matching the date-only semantics the seed offsets + date filter rely on) so
+// "Today" actually means today and all relative upload dates stay current.
+export const TODAY = new Date(new Date().toISOString().slice(0, 10));
 
 const dayOffset = (n: number): string => {
   const d = new Date(TODAY);
@@ -59,7 +62,7 @@ export const SEED: DataSource[] = [
   // ── Multi-file uploads (folder aggregates — one folder per card) ──
   { id: 'f-01', name: 'AI_Fare Audit',           type: 'file', isFolder: true, subtype: 'Folder · 2 files · 12.4 MB', createdAt: dayOffset(0),
     columns: ['Date', 'Region', 'Route', 'Airline', 'Fare Type', 'Amount', 'Variance'] },
-  { id: 'f-02', name: 'PWC Status',              type: 'file', isFolder: true, subtype: 'Folder · 2 files · 2.1 MB',  createdAt: dayOffset(0) },
+  { id: 'f-02', name: 'PwC Status',              type: 'file', isFolder: true, subtype: 'Folder · 2 files · 2.1 MB',  createdAt: dayOffset(0) },
   { id: 'f-04', name: 'Emaar Payment Extraction', type: 'file', isFolder: true, subtype: 'Folder · 2 files · 6.2 MB', createdAt: dayOffset(3) },
   { id: 'f-05', name: 'Loan Details Extraction', type: 'file', isFolder: true, subtype: 'Folder · 3 files · 8.7 MB',  createdAt: dayOffset(3),
     columns: ['Loan ID', 'Borrower', 'Principal', 'Interest Rate', 'Term Months', 'Status'] },
@@ -69,7 +72,7 @@ export const SEED: DataSource[] = [
   { id: 'f-13', name: 'NSE AP Analytics',        type: 'file', isFolder: true, subtype: 'Folder · 2 files · 7.6 MB',  createdAt: dayOffset(9) },
   // Long-column fixture — used to exercise the column-picker's scroll,
   // sticky section headings, and search at scale (60+ columns).
-  { id: 'f-17', name: 'AMEX Settlement Statement', type: 'file', subtype: 'CSV · 24.6 MB', createdAt: dayOffset(1),
+  { id: 'f-17', name: 'Amex Settlement Statement', type: 'file', subtype: 'CSV · 24.6 MB', createdAt: dayOffset(1),
     columns: [
       'Current Date', 'Payment Date', 'Settlement number', 'Submission / Transaction Reference Number',
       'Record Type', 'Submitting Merchant ID', 'Submission SE Name', 'Terminal ID', 'Batch Number',

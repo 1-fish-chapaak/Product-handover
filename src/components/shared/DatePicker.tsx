@@ -36,6 +36,10 @@ interface DatePickerProps {
   /** ISO bounds — days outside are not selectable. */
   min?: string;
   max?: string;
+  /** Reference "today" — lets callers on a mock clock (demo seed runs on a
+   *  fixed TODAY) align the calendar's default month + today marker with the
+   *  app's clock instead of the real system date. Defaults to real now. */
+  today?: Date;
   'aria-label'?: string;
   id?: string;
 }
@@ -70,6 +74,7 @@ export default function DatePicker({
   placeholder = 'Select date',
   min,
   max,
+  today: todayProp,
   'aria-label': ariaLabel,
   id,
 }: DatePickerProps) {
@@ -77,7 +82,7 @@ export default function DatePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const today = useMemo(() => startOfDay(new Date()), []);
+  const today = useMemo(() => startOfDay(todayProp ?? new Date()), [todayProp]);
   const selected = useMemo(() => parseISO(value), [value]);
   const minDate = useMemo(() => parseISO(min), [min]);
   const maxDate = useMemo(() => parseISO(max), [max]);

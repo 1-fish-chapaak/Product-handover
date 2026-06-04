@@ -5,7 +5,7 @@ function defaultGroupName(): string {
   const d = new Date();
   return `Upload · ${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()}`;
 }
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   X, Search, Layers, FileText, Database, Upload, Check, Mail, Plus, Loader2, Folder,
   AlertTriangle, Lock,
@@ -302,27 +302,29 @@ export default function DataPickerModal({
             {/* Footer — selection count + Attach CTA. In kh-add upload tab,
                 if 2+ loose files are queued, replace the status text with a
                 slim "Group as" input on the left side. */}
-            <div className="border-t border-border-light px-5 py-3 flex items-center justify-between gap-3 bg-surface-2/60">
+            <div className="border-t border-paper-200 px-5 py-3 flex items-center justify-between gap-3 bg-canvas">
               {mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
                 <label className="flex items-center gap-2 flex-1 min-w-0 max-w-md">
-                  <span className="text-[0.75rem] font-medium text-text-secondary shrink-0">Group as</span>
+                  <span className="text-[0.75rem] font-medium text-ink-700 shrink-0">Group as</span>
                   <input
                     value={combinedName}
                     onChange={(e) => setCombinedName(e.target.value)}
                     placeholder="Leave empty to add as separate files"
-                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[0.75rem] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary transition-colors"
+                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-paper-200 bg-white text-[0.75rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
                   />
                 </label>
               ) : (
-                <div className="text-[0.75rem] text-text-muted tabular-nums flex items-center gap-2">
+                <div className="text-[0.75rem] text-ink-500 tabular-nums flex items-center gap-2">
                   {totalSelected === 0 && inFlightCount === 0 && (
-                    <>Pick sources or files to attach to your message.</>
+                    mode === 'kh-add'
+                      ? <>Drop files or connect a database to add to your Knowledge Hub.</>
+                      : <>Pick sources or files to attach to your message.</>
                   )}
                   {totalSelected > 0 && (
-                    <span><span className="font-semibold text-text-secondary">{totalSelected}</span> {totalSelected === 1 ? 'item' : 'items'} selected</span>
+                    <span><span className="font-semibold text-ink-700">{totalSelected}</span> {totalSelected === 1 ? 'item' : 'items'} selected</span>
                   )}
                   {inFlightCount > 0 && (
-                    <span className="inline-flex items-center gap-1 text-primary">
+                    <span className="inline-flex items-center gap-1 text-brand-600">
                       <Loader2 size={11} className="animate-spin" />
                       {inFlightCount} uploading…
                     </span>
@@ -332,16 +334,16 @@ export default function DataPickerModal({
               <div className="flex items-center gap-2">
                 <button
                   onClick={requestClose}
-                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
+                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-paper-0 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={requestConfirm}
                   disabled={totalSelected === 0}
-                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-brand-600/40 disabled:text-white disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
-                  <Check size={13} />
+                  {mode === 'kh-add' ? <Plus size={13} /> : <Check size={13} />}
                   {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}
                 </button>
               </div>
@@ -588,6 +590,7 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
 
 function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelProps) {
   const { addToast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -719,13 +722,13 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        className={`rounded-xl border-2 border-dashed text-center px-6 py-12 transition-colors ${
-          isDragging ? 'border-primary bg-primary-xlight' : 'border-border-light bg-surface-2/60'
+        className={`rounded-xl border-2 border-dashed text-center px-6 py-7 transition-colors ${
+          isDragging ? 'border-brand-600 bg-brand-50' : 'border-paper-200 bg-canvas'
         }`}
       >
-        <Upload size={28} className={`mx-auto mb-3 ${isDragging ? 'text-primary' : 'text-text-muted/60'}`} />
-        <p className="text-[0.875rem] text-text-secondary font-medium">Drop files or a folder here</p>
-        <p className="text-[0.75rem] text-text-muted mt-1">or pick from your computer</p>
+        <Upload size={24} className={`mx-auto mb-2 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
+        <p className="text-[0.875rem] text-ink-700 font-medium">Drop files or a folder here</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -742,10 +745,10 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           className="hidden"
           onChange={(e) => { handleFolderInput(e.target.files); e.target.value = ''; }}
         />
-        <div className="inline-flex items-center gap-2 mt-4">
+        <div className="inline-flex items-center gap-2 mt-3">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Upload size={13} />
             Choose files
@@ -767,16 +770,16 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           path tag inline. The Combine input above only renders in kh-add when
           2+ loose files are queued. */}
       {pendingUploads.length > 0 && (
-        <div className="rounded-xl border border-border-light bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-border-light bg-surface-2/60 flex items-center justify-between">
-            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">
+        <div className="rounded-lg border border-paper-200 bg-white overflow-hidden">
+          <div className="px-4 py-2 border-b border-paper-200 bg-canvas flex items-center justify-between">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
               Uploads · {pendingUploads.length}
             </span>
             {(() => {
               const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
               const failed = pendingUploads.filter(u => u.status === 'error').length;
               if (inFlight > 0) return (
-                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-primary">
+                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-600">
                   <Loader2 size={10} className="animate-spin" />
                   Uploading {inFlight}…
                 </span>
@@ -791,10 +794,19 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
             })()}
           </div>
 
-          <ul className="divide-y divide-border-light">
-            {pendingUploads.map(u => (
-              <PendingFileRow key={u.localId} upload={u} onRemove={removeUpload} indent={false} />
-            ))}
+          <ul className="divide-y divide-paper-200">
+            <AnimatePresence initial={false}>
+              {pendingUploads.map((u, idx) => (
+                <PendingFileRow
+                  key={u.localId}
+                  upload={u}
+                  onRemove={removeUpload}
+                  indent={false}
+                  idx={idx}
+                  reduced={!!prefersReducedMotion}
+                />
+              ))}
+            </AnimatePresence>
           </ul>
         </div>
       )}
@@ -878,7 +890,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex-1 px-6 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
         {/* Engine grid — selected uses brand-50 bg + brand-600 border per DESIGN.md selected state. */}
         <section>
           <div className="text-[0.6875rem] font-medium uppercase tracking-[0.06em] text-ink-500 mb-2">Engine</div>
@@ -1010,8 +1022,8 @@ function Field({
 // the file came from a folder upload (e.g. "sales.pdf · Reports/Q1"). Used
 // in both chat and kh-add modes.
 function PendingFileRow({
-  upload, onRemove, indent,
-}: { upload: PendingUpload; onRemove: (id: string) => void; indent: boolean }) {
+  upload, onRemove, indent, idx = 0, reduced = false,
+}: { upload: PendingUpload; onRemove: (id: string) => void; indent: boolean; idx?: number; reduced?: boolean }) {
   const isReady = upload.status === 'ready';
   const isError = upload.status === 'error';
   const isValidating = upload.status === 'validating';
@@ -1023,67 +1035,75 @@ function PendingFileRow({
     ? upload.path.replace(`/${upload.name}`, '') || upload.path
     : '';
   const LeadIcon = isError ? (isPasswordErr ? Lock : AlertTriangle) : (pathTag ? Folder : FileText);
-  const leadTone = isError ? 'text-risk' : isReady ? 'text-primary' : 'text-text-muted/60';
+  const leadTone = isError ? 'text-risk' : isReady ? 'text-brand-600' : 'text-ink-400';
   return (
-    <li className={`flex items-center gap-3 py-3 ${indent ? 'pl-10 pr-4' : 'px-4'}`}>
+    <motion.li
+      layout
+      initial={reduced ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0, height: 'auto' }}
+      exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      transition={{ duration: 0.26, delay: Math.min(idx, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+      className={`overflow-hidden flex items-center gap-3 py-3 ${indent ? 'pl-10 pr-4' : 'px-4'}`}
+    >
       <LeadIcon size={14} className={`shrink-0 ${leadTone}`} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className={`text-[0.8125rem] truncate flex-1 min-w-0 ${isError ? 'text-text-secondary' : 'text-text'}`}>
-            {upload.name}
-            {pathTag && (
-              <span className="ml-1.5 text-[0.6875rem] text-ink-400 font-normal" title={upload.path}>
-                · {pathTag}
-              </span>
-            )}
-          </div>
-          {isReady && (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-compliant bg-compliant-50">
-              <Check size={10} />
-              Ready
-            </span>
-          )}
-          {isError && (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-risk bg-risk-50">
-              <AlertTriangle size={10} />
-              Failed
-            </span>
-          )}
-          {isValidating && (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
-              <Loader2 size={10} className="animate-spin" />
-              Checking…
-            </span>
-          )}
-          {isUploading && (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-primary bg-primary-xlight">
-              <Loader2 size={10} className="animate-spin" />
-              {upload.progress}%
+        <div className={`text-[0.8125rem] truncate ${isError ? 'text-ink-600' : 'text-ink-800'}`}>
+          {upload.name}
+          {pathTag && (
+            <span className="ml-1.5 text-[0.6875rem] text-ink-400 font-normal" title={upload.path}>
+              · {pathTag}
             </span>
           )}
         </div>
         {isUploading && (
-          <div className="mt-1.5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+          <div className="mt-1.5 h-1.5 rounded-full bg-paper-200 overflow-hidden">
             <motion.div
-              className="h-full bg-primary"
+              className="h-full bg-brand-600"
               initial={{ width: 0 }}
               animate={{ width: `${upload.progress}%` }}
               transition={{ duration: 0.18, ease: 'linear' }}
             />
           </div>
         )}
-        <div className={`text-[0.6875rem] tabular-nums mt-1 ${isError ? 'text-risk font-medium' : 'text-text-muted'}`}>
+        <div className={`text-[0.6875rem] tabular-nums mt-1 ${isError ? 'text-risk font-medium' : 'text-ink-500'}`}>
           {isError ? upload.error : formatBytesShort(upload.sizeBytes)}
         </div>
       </div>
+      {/* Status pill — a centered trailing element (sibling of the remove
+          button), so it lines up with the lead icon and the X instead of
+          riding the filename's line. */}
+      {isReady && (
+        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-compliant bg-compliant-50">
+          <Check size={10} />
+          Ready
+        </span>
+      )}
+      {isError && (
+        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-risk bg-risk-50">
+          <AlertTriangle size={10} />
+          Failed
+        </span>
+      )}
+      {isValidating && (
+        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-ink-500 bg-canvas">
+          <Loader2 size={10} className="animate-spin" />
+          Checking…
+        </span>
+      )}
+      {isUploading && (
+        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-brand-700 bg-brand-50">
+          <Loader2 size={10} className="animate-spin" />
+          {upload.progress}%
+        </span>
+      )}
       <button
         onClick={() => onRemove(upload.localId)}
-        className="p-1.5 text-text-muted hover:text-risk hover:bg-surface-2 rounded-md transition-colors cursor-pointer shrink-0"
+        className="p-1.5 text-ink-400 hover:text-risk hover:bg-canvas rounded-md transition-colors cursor-pointer shrink-0"
         aria-label={`${isReady || isError ? 'Remove' : 'Cancel'} ${upload.name}`}
       >
         <X size={13} />
       </button>
-    </li>
+    </motion.li>
   );
 }
 
