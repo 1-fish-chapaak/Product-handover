@@ -280,7 +280,7 @@ export default function DataPickerModal({
               />
             ) : (
             <>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               {tab === 'upload' ? (
                 <UploadPanel
                   pendingUploads={pendingUploads}
@@ -302,7 +302,7 @@ export default function DataPickerModal({
             {/* Footer — selection count + Attach CTA. In kh-add upload tab,
                 if 2+ loose files are queued, replace the status text with a
                 slim "Group as" input on the left side. */}
-            <div className="border-t border-paper-200 px-5 py-3 flex items-center justify-between gap-3 bg-canvas">
+            <div className="shrink-0 border-t border-paper-200 px-5 py-3 flex items-center justify-between gap-3 bg-canvas">
               {mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
                 <label className="flex items-center gap-2 flex-1 min-w-0 max-w-md">
                   <span className="text-[0.75rem] font-medium text-ink-700 shrink-0">Group as</span>
