@@ -241,9 +241,9 @@ export default function AutomationActivityTrailTab({ engagement, automationState
       <div className="flex items-center gap-4 pb-4 border-b border-border-light">
         {/* Workflow dropdown */}
         <div className="relative">
-          <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Workflow</div>
+          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Workflow</div>
           <button onClick={() => setWfDropdownOpen(!wfDropdownOpen)}
-            className="flex items-center gap-1.5 h-8 px-3 min-w-[160px] text-[12px] font-medium text-text bg-white border border-border rounded-lg cursor-pointer hover:border-primary/30 transition-colors">
+            className="flex items-center gap-1.5 h-8 px-3 min-w-[160px] text-[0.75rem] font-medium text-text bg-white border border-border rounded-lg cursor-pointer hover:border-primary/30 transition-colors">
             <Workflow size={12} className="text-primary shrink-0" />
             <span className="flex-1 text-left truncate">{workflowFilter || 'All workflows'}</span>
             <ChevronDown size={12} className="text-gray-400 shrink-0" />
@@ -253,12 +253,12 @@ export default function AutomationActivityTrailTab({ engagement, automationState
               <div className="fixed inset-0 z-10" onClick={() => setWfDropdownOpen(false)} />
               <div className="absolute top-full left-0 mt-1 z-20 w-64 bg-white border border-border-light rounded-lg shadow-lg overflow-hidden">
                 <button onClick={() => { setWorkflowFilter(''); setWfDropdownOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-[12px] hover:bg-surface-2/30 cursor-pointer transition-colors ${!workflowFilter ? 'font-semibold text-primary bg-primary/5' : 'text-text'}`}>
+                  className={`w-full text-left px-3 py-2 text-[0.75rem] hover:bg-surface-2/30 cursor-pointer transition-colors ${!workflowFilter ? 'font-semibold text-primary bg-primary/5' : 'text-text'}`}>
                   All workflows
                 </button>
                 {workflowNames.map(name => (
                   <button key={name} onClick={() => { setWorkflowFilter(name); setWfDropdownOpen(false); }}
-                    className={`w-full text-left px-3 py-2 text-[12px] hover:bg-surface-2/30 cursor-pointer transition-colors ${workflowFilter === name ? 'font-semibold text-primary bg-primary/5' : 'text-text'}`}>
+                    className={`w-full text-left px-3 py-2 text-[0.75rem] hover:bg-surface-2/30 cursor-pointer transition-colors ${workflowFilter === name ? 'font-semibold text-primary bg-primary/5' : 'text-text'}`}>
                     {name}
                   </button>
                 ))}
@@ -269,11 +269,11 @@ export default function AutomationActivityTrailTab({ engagement, automationState
 
         {/* Type pills */}
         <div>
-          <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
+          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
           <div className="flex items-center gap-1.5">
             {TYPE_FILTERS.map(f => (
               <button key={f.label} onClick={() => setTypeFilter(f.label)}
-                className={`h-8 px-3 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${
+                className={`h-8 px-3 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${
                   typeFilter === f.label
                     ? 'bg-primary text-white'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -285,7 +285,7 @@ export default function AutomationActivityTrailTab({ engagement, automationState
         </div>
 
         {/* Event count */}
-        <div className="ml-auto text-[11px] text-gray-400 self-end pb-1">
+        <div className="ml-auto text-[0.6875rem] text-gray-400 self-end pb-1">
           {filtered.length} event{filtered.length !== 1 ? 's' : ''}
         </div>
       </div>
@@ -294,8 +294,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
       {groups.length === 0 ? (
         <div className="py-16 text-center">
           <Clock size={32} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-[14px] font-semibold text-text mb-1">No Activity Yet</p>
-          <p className="text-[12px] text-text-muted">Events will appear here as you run workflows and manage exceptions.</p>
+          <p className="text-[0.875rem] font-semibold text-text mb-1">No Activity Yet</p>
+          <p className="text-[0.75rem] text-text-muted">Events will appear here as you run workflows and manage exceptions.</p>
         </div>
       ) : (
         <div className="pt-2">
@@ -303,8 +303,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
             <div key={group.label}>
               {/* Date header */}
               <div className="flex items-center gap-3 py-3 sticky top-0 bg-surface z-10">
-                <span className="text-[11px] font-bold text-gray-400 tracking-wider">{group.label}</span>
-                <span className="text-[10px] text-gray-300">({group.entries.length})</span>
+                <span className="text-[0.6875rem] font-bold text-gray-400 tracking-wider">{group.label}</span>
+                <span className="text-[0.625rem] text-gray-300">({group.entries.length})</span>
                 <div className="flex-1 border-b border-border-light/50" />
               </div>
 
@@ -323,8 +323,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-text leading-snug">{entry.title}</div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
+                        <div className="text-[0.75rem] font-semibold text-text leading-snug">{entry.title}</div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[0.625rem] text-gray-400">
                           {entry.workflowName && (
                             <>
                               <span className="flex items-center gap-0.5 text-primary/70 font-medium">
@@ -339,8 +339,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
 
                       {/* Time + actor */}
                       <div className="text-right shrink-0">
-                        <div className="text-[10px] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{entry.actor}</div>
+                        <div className="text-[0.625rem] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
+                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.actor}</div>
                       </div>
                     </div>
                   );

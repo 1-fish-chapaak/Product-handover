@@ -23,18 +23,18 @@ function StatusPill({ status }: { status: ControlStatus }) {
     'ineffective':        { label: 'Ineffective',         cls: 'bg-risk-50 text-risk-700' },
   };
   const s = map[status] || map['not-started'];
-  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[11px] font-semibold whitespace-nowrap ${s.cls}`}>{s.label}</span>;
+  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${s.cls}`}>{s.label}</span>;
 }
 
 function ResultPill({ result }: { result: string }) {
-  if (!result) return <span className="text-ink-400 text-[11px]">—</span>;
+  if (!result) return <span className="text-ink-400 text-[0.6875rem]">—</span>;
   const map: Record<string, string> = {
     'Effective': 'bg-compliant-50 text-compliant-700',
     'Partially Effective': 'bg-high-50 text-high-700',
     'Ineffective': 'bg-risk-50 text-risk-700',
     'Pending': 'bg-draft-50 text-draft-700',
   };
-  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[11px] font-semibold whitespace-nowrap ${map[result] || map['Pending']}`}>{result}</span>;
+  return <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${map[result] || map['Pending']}`}>{result}</span>;
 }
 
 function isConcluded(s: ControlStatus): boolean {
@@ -85,7 +85,7 @@ function WorkflowCoverageCell({ control, onOpenDrawer }: { control: ControlDetai
     return (
       <div className="flex items-center gap-1">
         <AlertTriangle size={10} className="text-risk-700 shrink-0" />
-        <span className="text-[10px] font-semibold text-risk-700">Missing workflow</span>
+        <span className="text-[0.625rem] font-semibold text-risk-700">Missing workflow</span>
       </div>
     );
   }
@@ -95,13 +95,13 @@ function WorkflowCoverageCell({ control, onOpenDrawer }: { control: ControlDetai
       <button onClick={() => onOpenDrawer(control.id)} className="text-left cursor-pointer group/wf">
         <div className="flex items-center gap-1.5">
           <Workflow size={10} className="text-brand-500 shrink-0" />
-          <span className="text-[10px] font-medium text-brand-700">{summary.displayText}</span>
+          <span className="text-[0.625rem] font-medium text-brand-700">{summary.displayText}</span>
         </div>
         <div className="flex items-center gap-1 mt-0.5">
           {allMapped ? (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-compliant-700"><CheckCircle2 size={8} />All mapped</span>
+            <span className="inline-flex items-center gap-0.5 text-[0.5625rem] font-medium text-compliant-700"><CheckCircle2 size={8} />All mapped</span>
           ) : (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-risk-700"><AlertTriangle size={8} />{summary.unmappedAttributeCount} unmapped</span>
+            <span className="inline-flex items-center gap-0.5 text-[0.5625rem] font-medium text-risk-700"><AlertTriangle size={8} />{summary.unmappedAttributeCount} unmapped</span>
           )}
           <ChevronRight size={8} className="text-ink-300 group-hover/wf:text-brand-500" />
         </div>
@@ -153,26 +153,26 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
             <div>
               <div className="flex items-center gap-2">
                 <Link2 size={18} className="text-brand-600" />
-                <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Workflow Mapping</h2>
+                <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Workflow Mapping</h2>
               </div>
-              <p className="text-[12px] text-ink-500 mt-1">{control.controlName}</p>
+              <p className="text-[0.75rem] text-ink-500 mt-1">{control.controlName}</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
           {/* Summary chips */}
           <div className="flex items-center gap-2 mt-3">
-            <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700">
+            <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-brand-50 text-brand-700">
               <Workflow size={10} />{summary.linkedWorkflowCount} workflow{summary.linkedWorkflowCount !== 1 ? 's' : ''}
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-evidence-50 text-evidence-700">
+            <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-evidence-50 text-evidence-700">
               <Target size={10} />{summary.attributeCount} attribute{summary.attributeCount !== 1 ? 's' : ''}
             </span>
             {summary.unmappedAttributeCount > 0 ? (
-              <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-risk-50 text-risk-700">
+              <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-risk-50 text-risk-700">
                 <AlertTriangle size={10} />{summary.unmappedAttributeCount} unmapped
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[10px] font-semibold bg-compliant-50 text-compliant-700">
+              <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[0.625rem] font-semibold bg-compliant-50 text-compliant-700">
                 <CheckCircle2 size={10} />All mapped
               </span>
             )}
@@ -189,23 +189,23 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
               <div key={wf.id}>
                 <div className="flex items-center gap-2 mb-2">
                   <Workflow size={13} className="text-brand-600 shrink-0" />
-                  <span className="text-[13px] font-semibold text-ink-800">{wf.name}</span>
-                  <span className="text-[10px] font-mono text-ink-400">{wf.version}</span>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">{wf.name}</span>
+                  <span className="text-[0.625rem] font-mono text-ink-400">{wf.version}</span>
                 </div>
                 <div className="space-y-1.5 ml-5">
                   {wfAttrs.map(attr => (
                     <div key={attr.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-white">
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-medium text-ink-800">{attr.name}</div>
+                        <div className="text-[0.75rem] font-medium text-ink-800">{attr.name}</div>
                         {attr.assertions && attr.assertions.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {attr.assertions.map(a => (
-                              <span key={a} className="px-1.5 h-[16px] rounded text-[9px] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
+                              <span key={a} className="px-1.5 h-[16px] rounded text-[0.5625rem] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
                             ))}
                           </div>
                         )}
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2 h-5 rounded text-[9px] font-bold bg-compliant-50 text-compliant-700 shrink-0">
+                      <span className="inline-flex items-center gap-1 px-2 h-5 rounded text-[0.5625rem] font-bold bg-compliant-50 text-compliant-700 shrink-0">
                         <CheckCircle2 size={8} />Mapped
                       </span>
                     </div>
@@ -220,18 +220,18 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={13} className="text-risk-700 shrink-0" />
-                <span className="text-[13px] font-semibold text-risk-700">Unmapped Attributes</span>
-                <span className="text-[10px] text-risk-700/70">({unmapped.length})</span>
+                <span className="text-[0.8125rem] font-semibold text-risk-700">Unmapped Attributes</span>
+                <span className="text-[0.625rem] text-risk-700/70">({unmapped.length})</span>
               </div>
               <div className="space-y-1.5 ml-5">
                 {unmapped.map(attr => (
                   <div key={attr.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-risk/20 bg-risk-50/20">
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-medium text-ink-800">{attr.name}</div>
+                      <div className="text-[0.75rem] font-medium text-ink-800">{attr.name}</div>
                       {attr.assertions && attr.assertions.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {attr.assertions.map(a => (
-                            <span key={a} className="px-1.5 h-[16px] rounded text-[9px] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
+                            <span key={a} className="px-1.5 h-[16px] rounded text-[0.5625rem] font-medium bg-brand-50 text-brand-700 inline-flex items-center">{a}</span>
                           ))}
                         </div>
                       )}
@@ -244,7 +244,7 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
                         const wf = workflows.find(w => w.id === e.target.value);
                         if (wf) showToast(`Attribute mapped to ${wf.name}`);
                       }}
-                      className="w-[120px] px-2 py-1 rounded border border-risk/30 bg-white text-[10px] text-ink-700 outline-none cursor-pointer focus:border-brand-500/60 shrink-0"
+                      className="w-[120px] px-2 py-1 rounded border border-risk/30 bg-white text-[0.625rem] text-ink-700 outline-none cursor-pointer focus:border-brand-500/60 shrink-0"
                     >
                       <option value="">Assign…</option>
                       {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -259,7 +259,7 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
           <AnimatePresence>
             {toastMsg && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink-800 text-white text-[11px] font-medium shadow-lg flex items-center gap-2">
+                className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink-800 text-white text-[0.6875rem] font-medium shadow-lg flex items-center gap-2">
                 <CheckCircle2 size={12} className="text-compliant shrink-0" />{toastMsg}
               </motion.div>
             )}
@@ -270,11 +270,11 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas">
           <div className="rounded-lg border border-canvas-border bg-surface-2/50 px-3 py-2 flex items-start gap-2 mb-3">
             <Shield size={11} className="text-ink-400 mt-0.5 shrink-0" />
-            <span className="text-[9.5px] text-ink-400 leading-relaxed">
+            <span className="text-[0.75rem] text-ink-400 leading-relaxed">
               Workflow mapping defines how each attribute will be tested. Execution starts after population and sample setup.
             </span>
           </div>
-          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer">
+          <button onClick={onClose} className="w-full px-4 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
             Done
           </button>
         </footer>
@@ -372,7 +372,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
 
       <div className="p-8 relative">
         {/* Back */}
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back
         </button>
 
@@ -381,13 +381,13 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-xl font-bold text-text">{eng.name}</h1>
-              <span className="px-2.5 h-6 rounded-full text-[11px] font-semibold bg-compliant-50 text-compliant-700 inline-flex items-center">{eng.status}</span>
+              <span className="px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold bg-compliant-50 text-compliant-700 inline-flex items-center">{eng.status}</span>
             </div>
-            <p className="text-[13px] text-text-secondary mt-1 max-w-2xl">{eng.description}</p>
+            <p className="text-[0.8125rem] text-text-secondary mt-1 max-w-2xl">{eng.description}</p>
           </div>
           {canClose && (
             <button onClick={() => setShowCloseModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[12px] font-bold transition-all cursor-pointer shrink-0">
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.75rem] font-bold transition-all cursor-pointer shrink-0">
               <Lock size={14} />Close Engagement
             </button>
           )}
@@ -406,8 +406,8 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             { label: 'Activated', value: eng.activatedAt, icon: Zap },
           ].map(m => (
             <div key={m.label} className="glass-card rounded-xl p-2.5">
-              <div className="flex items-center gap-1 mb-0.5"><m.icon size={10} className="text-text-muted" /><span className="text-[9px] font-semibold text-text-muted uppercase">{m.label}</span></div>
-              <div className="text-[11px] font-medium text-text truncate" title={m.value}>{m.value}</div>
+              <div className="flex items-center gap-1 mb-0.5"><m.icon size={10} className="text-text-muted" /><span className="text-[0.5625rem] font-semibold text-text-muted uppercase">{m.label}</span></div>
+              <div className="text-[0.6875rem] font-medium text-text truncate" title={m.value}>{m.value}</div>
             </div>
           ))}
         </div>
@@ -420,8 +420,8 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-primary-medium"><Play size={16} className="text-white" /></div>
                   <div>
-                    <h3 className="text-[14px] font-bold text-text">Welcome to Your Audit Workspace</h3>
-                    <p className="text-[12px] text-text-muted mt-0.5">This engagement has been created from the selected RACM snapshot. Testing has not started yet. Begin by uploading population data for controls.</p>
+                    <h3 className="text-[0.875rem] font-bold text-text">Welcome to Your Audit Workspace</h3>
+                    <p className="text-[0.75rem] text-text-muted mt-0.5">This engagement has been created from the selected RACM snapshot. Testing has not started yet. Begin by uploading population data for controls.</p>
                   </div>
                 </div>
                 <button onClick={() => setShowOnboarding(false)} className="p-1.5 rounded-lg hover:bg-surface-2 cursor-pointer"><X size={14} className="text-text-muted" /></button>
@@ -434,11 +434,11 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                 ].map(s => (
                   <div key={s.step} className="glass-card rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white bg-gradient-to-br from-primary to-primary-medium">{s.step}</div>
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[0.6875rem] font-bold text-white bg-gradient-to-br from-primary to-primary-medium">{s.step}</div>
                       <div className={`p-1 rounded-lg ${s.color}`}><s.icon size={12} /></div>
                     </div>
-                    <p className="text-[12px] font-semibold text-text mb-1">{s.label}</p>
-                    <p className="text-[10px] text-text-muted leading-relaxed">{s.desc}</p>
+                    <p className="text-[0.75rem] font-semibold text-text mb-1">{s.label}</p>
+                    <p className="text-[0.625rem] text-text-muted leading-relaxed">{s.desc}</p>
                   </div>
                 ))}
               </div>
@@ -452,8 +452,8 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             <div className="flex items-center gap-3">
               <Settings size={18} className="text-high-700" />
               <div>
-                <p className="text-[13px] font-semibold text-high-700">Engagement activated, but controls need configuration</p>
-                <p className="text-[11px] text-high-700/80 mt-0.5">All {sourceControls.length} controls are awaiting population data and workflow configuration before execution can begin. Click any control below to start.</p>
+                <p className="text-[0.8125rem] font-semibold text-high-700">Engagement activated, but controls need configuration</p>
+                <p className="text-[0.6875rem] text-high-700/80 mt-0.5">All {sourceControls.length} controls are awaiting population data and workflow configuration before execution can begin. Click any control below to start.</p>
               </div>
             </div>
           </div>
@@ -464,8 +464,8 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
           <div className="mb-4 rounded-xl border border-risk/20 bg-risk-50/30 px-4 py-3 flex items-center gap-3">
             <div className="p-1.5 rounded-lg bg-risk-50 shrink-0"><Link2 size={14} className="text-risk-700" /></div>
             <div>
-              <p className="text-[12px] font-semibold text-risk-700">Workflow mapping incomplete</p>
-              <p className="text-[11px] text-risk-700/70 mt-0.5">
+              <p className="text-[0.75rem] font-semibold text-risk-700">Workflow mapping incomplete</p>
+              <p className="text-[0.6875rem] text-risk-700/70 mt-0.5">
                 {sourceControls.filter(c => hasUnmappedAttributes(c)).length} control{sourceControls.filter(c => hasUnmappedAttributes(c)).length !== 1 ? 's have' : ' has'} attributes not linked to workflows. Complete workflow mapping before execution.
               </p>
             </div>
@@ -475,19 +475,19 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
         {/* ── TABS ── */}
         <div className="flex items-center border-b border-border-light mb-4">
           <button onClick={() => setActiveTab('controls')}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'controls' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'controls' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
             <ShieldCheck size={14} />Controls
-            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'controls' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{sourceControls.length}</span>
+            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'controls' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{sourceControls.length}</span>
           </button>
           <button onClick={() => setActiveTab('review-queue')}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'review-queue' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'review-queue' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
             <Eye size={14} />Review Queue
-            {pendingReview > 0 && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700">{pendingReview}</span>}
+            {pendingReview > 0 && <span className="text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700">{pendingReview}</span>}
           </button>
           <button onClick={() => setActiveTab('findings')}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'findings' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'findings' ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
             <AlertTriangle size={14} />Findings
-            {FINDINGS.length > 0 && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-risk-50 text-risk-700">{FINDINGS.length}</span>}
+            {FINDINGS.length > 0 && <span className="text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full bg-risk-50 text-risk-700">{FINDINGS.length}</span>}
           </button>
         </div>
 
@@ -497,20 +497,20 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             {/* Filters */}
             <div className="flex items-center gap-4 mb-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-bold text-text-muted">Status:</span>
+                <span className="text-[0.75rem] font-bold text-text-muted">Status:</span>
                 <div className="flex gap-1 flex-wrap">
                   {([['all', 'All'], ['not-started', 'Ready'], ['in-progress', 'In Progress'], ['pending-review', 'Review'], ['concluded', 'Concluded'], ['failed', 'Failed']] as [StatusFilter, string][]).map(([key, label]) => (
                     <button key={key} onClick={() => setStatusFilter(key)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${statusFilter === key ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>{label}</button>
+                      className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${statusFilter === key ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>{label}</button>
                   ))}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-bold text-text-muted">Domain:</span>
+                <span className="text-[0.75rem] font-bold text-text-muted">Domain:</span>
                 <div className="flex gap-1 flex-wrap">
                   {domains.map(d => (
                     <button key={d} onClick={() => setDomainFilter(d)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${domainFilter === d ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>{d}</button>
+                      className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${domainFilter === d ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'}`}>{d}</button>
                   ))}
                 </div>
               </div>
@@ -518,18 +518,18 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
               <div className="relative w-52">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-[12px] bg-white border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted" />
+                  className="w-full pl-8 pr-3 py-2 text-[0.75rem] bg-white border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted" />
               </div>
             </div>
 
             {/* Controls Execution Table */}
             <div className="glass-card rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table className="w-full text-[0.75rem]">
                   <thead>
                     <tr className="border-b border-border bg-surface-2/50">
                       {['Control', 'Process', 'Key', 'Workflow Coverage', 'Execution Status', 'Population', 'Samples', 'Evidence', 'Reviewer', 'Action'].map(h => (
-                        <th key={h} className="px-3 py-3 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide">{h}</th>
+                        <th key={h} className="px-3 py-3 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -546,37 +546,37 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                           onClick={() => onOpenControl(row.id, row)}
                           className="border-b border-border/50 hover:bg-brand-50/30 transition-colors cursor-pointer group">
                           <td className="px-3 py-3">
-                            <span className="text-[10px] font-mono text-text-muted">{row.controlId}</span>
-                            <div className="text-[12px] font-medium text-text max-w-[160px] truncate">{row.controlName}</div>
+                            <span className="text-[0.625rem] font-mono text-text-muted">{row.controlId}</span>
+                            <div className="text-[0.75rem] font-medium text-text max-w-[160px] truncate">{row.controlName}</div>
                           </td>
-                          <td className="px-3 py-3"><span className="text-[11px] text-text-secondary">{row.domain}</span></td>
+                          <td className="px-3 py-3"><span className="text-[0.6875rem] text-text-secondary">{row.domain}</span></td>
                           <td className="px-3 py-3 text-center">
-                            {row.isKey ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-bold">K</span> : <span className="text-ink-300">—</span>}
+                            {row.isKey ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.625rem] font-bold">K</span> : <span className="text-ink-300">—</span>}
                           </td>
                           <td className="px-3 py-3">
                             <WorkflowCoverageCell control={row} onOpenDrawer={setMappingDrawerControlId} />
                           </td>
                           <td className="px-3 py-3"><StatusPill status={row.status} /></td>
-                          <td className="px-3 py-3"><span className={`text-[11px] font-semibold ${popCls}`}>{popLabel}</span></td>
+                          <td className="px-3 py-3"><span className={`text-[0.6875rem] font-semibold ${popCls}`}>{popLabel}</span></td>
                           <td className="px-3 py-3">
-                            {row.sampleCount > 0 ? <span className="text-[11px] tabular-nums text-text-secondary">{row.samplesTested}/{row.sampleCount}</span> : <span className="text-ink-300 text-[10px]">—</span>}
+                            {row.sampleCount > 0 ? <span className="text-[0.6875rem] tabular-nums text-text-secondary">{row.samplesTested}/{row.sampleCount}</span> : <span className="text-ink-300 text-[0.625rem]">—</span>}
                           </td>
                           <td className="px-3 py-3">
                             {row.samples.length > 0 ? (
-                              <span className={`text-[10px] font-bold ${evidencePct === 100 ? 'text-compliant-700' : evidencePct > 0 ? 'text-high-700' : 'text-ink-400'}`}>{evidencePct}%</span>
-                            ) : <span className="text-ink-300 text-[10px]">—</span>}
+                              <span className={`text-[0.625rem] font-bold ${evidencePct === 100 ? 'text-compliant-700' : evidencePct > 0 ? 'text-high-700' : 'text-ink-400'}`}>{evidencePct}%</span>
+                            ) : <span className="text-ink-300 text-[0.625rem]">—</span>}
                           </td>
                           <td className="px-3 py-3">
                             {row.workingPaper.rounds.some(r => r.reviewerStatus === 'approved')
-                              ? <span className="text-[10px] font-bold text-compliant-700">Approved</span>
+                              ? <span className="text-[0.625rem] font-bold text-compliant-700">Approved</span>
                               : row.status === 'pending-review'
-                                ? <span className="text-[10px] font-bold text-mitigated-700">Pending</span>
-                                : <span className="text-ink-300 text-[10px]">—</span>}
+                                ? <span className="text-[0.625rem] font-bold text-mitigated-700">Pending</span>
+                                : <span className="text-ink-300 text-[0.625rem]">—</span>}
                           </td>
                           <td className="px-3 py-3">
                             <span
                               onClick={action.label === 'Fix Mapping' ? (e: React.MouseEvent) => { e.stopPropagation(); setMappingDrawerControlId(row.id); } : undefined}
-                              className={`text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
+                              className={`text-[0.625rem] font-bold px-2 py-1 rounded-lg cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
                               <action.icon size={10} />{action.label}
                             </span>
                           </td>
@@ -587,7 +587,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                 </table>
               </div>
               <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-2/30">
-                <span className="text-[11px] text-text-muted">Showing {filteredControls.length} of {sourceControls.length} controls</span>
+                <span className="text-[0.6875rem] text-text-muted">Showing {filteredControls.length} of {sourceControls.length} controls</span>
               </div>
             </div>
           </>
@@ -599,17 +599,17 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             {reviewQueue.length === 0 ? (
               <div className="text-center py-16">
                 <CheckCircle2 size={32} className="text-compliant mx-auto mb-3" />
-                <p className="text-[14px] font-semibold text-text">No pending reviews</p>
-                <p className="text-[12px] text-text-muted mt-1">All submitted controls have been reviewed.</p>
+                <p className="text-[0.875rem] font-semibold text-text">No pending reviews</p>
+                <p className="text-[0.75rem] text-text-muted mt-1">All submitted controls have been reviewed.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="glass-card rounded-xl p-4 mb-4">
                   <div className="flex items-center justify-between">
-                    <div><span className="text-[11px] font-bold text-text-muted uppercase">Reviewer</span><p className="text-[13px] font-semibold text-text">{eng.reviewer}</p></div>
+                    <div><span className="text-[0.6875rem] font-bold text-text-muted uppercase">Reviewer</span><p className="text-[0.8125rem] font-semibold text-text">{eng.reviewer}</p></div>
                     <div className="flex items-center gap-4">
-                      <div className="text-center"><div className="text-lg font-bold text-mitigated-700 tabular-nums">{reviewQueue.length}</div><div className="text-[10px] text-text-muted">Pending</div></div>
-                      <div className="text-center"><div className="text-lg font-bold text-risk-700 tabular-nums">{reviewQueue.filter(c => c.exceptions > 0).length}</div><div className="text-[10px] text-text-muted">Exceptions</div></div>
+                      <div className="text-center"><div className="text-lg font-bold text-mitigated-700 tabular-nums">{reviewQueue.length}</div><div className="text-[0.625rem] text-text-muted">Pending</div></div>
+                      <div className="text-center"><div className="text-lg font-bold text-risk-700 tabular-nums">{reviewQueue.filter(c => c.exceptions > 0).length}</div><div className="text-[0.625rem] text-text-muted">Exceptions</div></div>
                     </div>
                   </div>
                 </div>
@@ -621,25 +621,25 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-mono text-text-muted">{ctrl.controlId}</span>
-                            {ctrl.isKey && <span className="px-1.5 h-4 rounded text-[9px] font-bold bg-mitigated-50 text-mitigated-700 inline-flex items-center">KEY</span>}
-                            {ctrl.exceptions > 0 && <span className="px-1.5 h-4 rounded text-[9px] font-bold bg-risk-50 text-risk-700 inline-flex items-center">{ctrl.exceptions} EXCEPTIONS</span>}
+                            <span className="text-[0.625rem] font-mono text-text-muted">{ctrl.controlId}</span>
+                            {ctrl.isKey && <span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700 inline-flex items-center">KEY</span>}
+                            {ctrl.exceptions > 0 && <span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-risk-50 text-risk-700 inline-flex items-center">{ctrl.exceptions} EXCEPTIONS</span>}
                           </div>
-                          <h3 className="text-[13px] font-semibold text-text">{ctrl.controlName}</h3>
-                          <span className="text-[11px] text-text-muted">Submitted by {ctrl.assignee}</span>
+                          <h3 className="text-[0.8125rem] font-semibold text-text">{ctrl.controlName}</h3>
+                          <span className="text-[0.6875rem] text-text-muted">Submitted by {ctrl.assignee}</span>
                         </div>
                       </div>
                       <div className="grid grid-cols-4 gap-2 mb-3">
-                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[14px] font-bold text-text tabular-nums">{ctrl.samplesTested}/{ctrl.sampleCount}</div><div className="text-[9px] text-text-muted">Samples</div></div>
-                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[14px] font-bold text-compliant-700 tabular-nums">{passed}</div><div className="text-[9px] text-text-muted">Passed</div></div>
-                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className={`text-[14px] font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div><div className="text-[9px] text-text-muted">Failed</div></div>
-                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[14px] font-bold text-text tabular-nums">{ctrl.evidenceCount}</div><div className="text-[9px] text-text-muted">Evidence</div></div>
+                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[0.875rem] font-bold text-text tabular-nums">{ctrl.samplesTested}/{ctrl.sampleCount}</div><div className="text-[0.5625rem] text-text-muted">Samples</div></div>
+                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[0.875rem] font-bold text-compliant-700 tabular-nums">{passed}</div><div className="text-[0.5625rem] text-text-muted">Passed</div></div>
+                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className={`text-[0.875rem] font-bold tabular-nums ${failed > 0 ? 'text-risk-700' : 'text-text-muted'}`}>{failed}</div><div className="text-[0.5625rem] text-text-muted">Failed</div></div>
+                        <div className="text-center p-2 rounded-lg bg-surface-2/50"><div className="text-[0.875rem] font-bold text-text tabular-nums">{ctrl.evidenceCount}</div><div className="text-[0.5625rem] text-text-muted">Evidence</div></div>
                       </div>
-                      {ctrl.conclusion && <div className="p-3 bg-surface-2/40 rounded-lg mb-3"><span className="text-[10px] font-bold text-text-muted uppercase">Tester Conclusion</span><p className="text-[12px] text-text-secondary mt-0.5">{ctrl.conclusion}</p></div>}
+                      {ctrl.conclusion && <div className="p-3 bg-surface-2/40 rounded-lg mb-3"><span className="text-[0.625rem] font-bold text-text-muted uppercase">Tester Conclusion</span><p className="text-[0.75rem] text-text-secondary mt-0.5">{ctrl.conclusion}</p></div>}
                       <div className="flex items-center gap-3">
-                        <button onClick={() => onOpenControl(ctrl.id, ctrl)} className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 text-primary rounded-lg text-[11px] font-semibold hover:bg-primary/20 transition-colors cursor-pointer"><Eye size={12} />Review Detail</button>
-                        <button className="flex items-center gap-1.5 px-3 py-2 bg-compliant hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-all cursor-pointer"><CheckCircle2 size={12} />Approve</button>
-                        <button className="flex items-center gap-1.5 px-3 py-2 border border-risk text-risk-700 hover:bg-risk-50 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"><XCircle size={12} />Reject</button>
+                        <button onClick={() => onOpenControl(ctrl.id, ctrl)} className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 text-primary rounded-lg text-[0.6875rem] font-semibold hover:bg-primary/20 transition-colors cursor-pointer"><Eye size={12} />Review Detail</button>
+                        <button className="flex items-center gap-1.5 px-3 py-2 bg-compliant hover:brightness-110 text-white rounded-lg text-[0.6875rem] font-semibold transition-all cursor-pointer"><CheckCircle2 size={12} />Approve</button>
+                        <button className="flex items-center gap-1.5 px-3 py-2 border border-risk text-risk-700 hover:bg-risk-50 rounded-lg text-[0.6875rem] font-semibold transition-all cursor-pointer"><XCircle size={12} />Reject</button>
                       </div>
                     </div>
                   );
@@ -655,8 +655,8 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
             {FINDINGS.length === 0 ? (
               <div className="text-center py-16">
                 <CheckCircle2 size={32} className="text-compliant mx-auto mb-3" />
-                <p className="text-[14px] font-semibold text-text">No findings raised</p>
-                <p className="text-[12px] text-text-muted mt-1">Findings are created when a control is concluded as ineffective.</p>
+                <p className="text-[0.875rem] font-semibold text-text">No findings raised</p>
+                <p className="text-[0.75rem] text-text-muted mt-1">Findings are created when a control is concluded as ineffective.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -665,14 +665,14 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                     onClick={() => { const ctrl = sourceControls.find(c => c.controlId === f.controlId); if (ctrl) onOpenControl(ctrl.id, ctrl); }}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-mono font-bold text-risk-700">{f.id}</span>
-                        <span className={`px-2.5 h-6 rounded-full text-[11px] font-semibold inline-flex items-center ${f.severity === 'Material Weakness' ? 'bg-risk-50 text-risk-700' : f.severity === 'Significant Deficiency' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{f.severity}</span>
-                        <span className={`px-2.5 h-6 rounded-full text-[11px] font-semibold inline-flex items-center ${f.status === 'Open' ? 'bg-risk-50 text-risk-700' : 'bg-compliant-50 text-compliant-700'}`}>{f.status}</span>
+                        <span className="text-[0.8125rem] font-mono font-bold text-risk-700">{f.id}</span>
+                        <span className={`px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold inline-flex items-center ${f.severity === 'Material Weakness' ? 'bg-risk-50 text-risk-700' : f.severity === 'Significant Deficiency' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{f.severity}</span>
+                        <span className={`px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold inline-flex items-center ${f.status === 'Open' ? 'bg-risk-50 text-risk-700' : 'bg-compliant-50 text-compliant-700'}`}>{f.status}</span>
                       </div>
-                      <span className="text-[11px] text-text-muted">Due: {f.remediationDueDate}</span>
+                      <span className="text-[0.6875rem] text-text-muted">Due: {f.remediationDueDate}</span>
                     </div>
-                    <h3 className="text-[13px] font-semibold text-text mb-2">{f.title}</h3>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <h3 className="text-[0.8125rem] font-semibold text-text mb-2">{f.title}</h3>
+                    <div className="grid grid-cols-2 gap-2 text-[0.6875rem]">
                       <div><span className="text-text-muted">Control: </span><span className="text-text font-medium">{f.controlName}</span></div>
                       <div><span className="text-text-muted">Owner: </span><span className="text-text font-medium">{f.owner}</span></div>
                     </div>
@@ -701,7 +701,7 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
               <div className="bg-white rounded-2xl shadow-2xl border border-border-light max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-primary-medium"><Lock size={16} className="text-white" /></div>
-                  <h3 className="text-[15px] font-bold text-text">Close Engagement</h3>
+                  <h3 className="text-[0.9375rem] font-bold text-text">Close Engagement</h3>
                 </div>
                 <div className="space-y-2 mb-5">
                   {[
@@ -712,19 +712,19 @@ export default function EngagementDetailView({ engagementId, freshActivation, on
                     <motion.div key={step.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
                       className="flex items-center gap-3 p-3 rounded-xl bg-surface-2/50">
                       <div className="p-1.5 rounded-lg bg-brand-50 text-brand-700 shrink-0"><step.icon size={13} /></div>
-                      <div><p className="text-[12px] font-semibold text-text">{step.label}</p><p className="text-[10px] text-text-muted">{step.desc}</p></div>
+                      <div><p className="text-[0.75rem] font-semibold text-text">{step.label}</p><p className="text-[0.625rem] text-text-muted">{step.desc}</p></div>
                     </motion.div>
                   ))}
                 </div>
-                <div className="p-3 bg-surface-2 rounded-xl mb-5 text-[12px] space-y-1">
+                <div className="p-3 bg-surface-2 rounded-xl mb-5 text-[0.75rem] space-y-1">
                   <div className="flex justify-between"><span className="text-text-muted">Concluded</span><span className="font-semibold text-compliant-700">{concluded}/{totalControls}</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Effective</span><span className="font-semibold text-compliant-700">{sourceControls.filter(c => c.status === 'effective').length}</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Ineffective</span><span className="font-semibold text-risk-700">{deficient}</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Findings</span><span className="font-semibold text-text">{FINDINGS.length}</span></div>
                 </div>
                 <div className="flex items-center gap-3 justify-end">
-                  <button onClick={() => setShowCloseModal(false)} className="px-4 py-2 border border-border rounded-lg text-[12px] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">Cancel</button>
-                  <button onClick={() => setShowCloseModal(false)} className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[12px] font-bold transition-all cursor-pointer flex items-center gap-2"><Lock size={13} />Close Engagement</button>
+                  <button onClick={() => setShowCloseModal(false)} className="px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">Cancel</button>
+                  <button onClick={() => setShowCloseModal(false)} className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.75rem] font-bold transition-all cursor-pointer flex items-center gap-2"><Lock size={13} />Close Engagement</button>
                 </div>
               </div>
             </motion.div>

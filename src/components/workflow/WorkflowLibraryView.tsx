@@ -274,13 +274,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     >
       {/* Header */}
       <div className="pt-8 pb-5">
-        <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
+        <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
           Workflow Library
         </div>
-        <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
           Workflow Library
         </h1>
-        <p className="text-[14px] text-ink-500 mt-1">
+        <p className="text-[0.875rem] text-ink-500 mt-1">
           Browse the workflow catalog and add the ones relevant to your audit.
         </p>
       </div>
@@ -288,7 +288,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       {/* Search + Create */}
       <div className=" pb-5 flex items-center gap-3">
           {bulkMode && (
-            <span className="text-[13px] text-text-secondary">
+            <span className="text-[0.8125rem] text-text-secondary">
               <span className="font-semibold text-text">{selectedIds.size}</span> selected
             </span>
           )}
@@ -298,13 +298,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search workflow.."
-              className="w-full pl-10 pr-4 h-10 rounded-md border border-border bg-white text-[13px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+              className="w-full pl-10 pr-4 h-10 rounded-md border border-border bg-white text-[0.8125rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
             />
           </div>
           <div className="ml-auto flex items-center gap-3">
             <button
               onClick={() => onCreateWorkflow?.()}
-              className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[13px] font-semibold hover:bg-primary/10 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[0.8125rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer"
             >
               <Sparkles size={14} />
               Create Workflow
@@ -312,14 +312,14 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
             {bulkMode ? (
               <button
                 onClick={exitBulkMode}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[13px] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
             ) : (
               <button
                 onClick={enterBulkMode}
-                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[13px] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]"
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd]"
               >
                 <Play size={14} />
                 Bulk Run
@@ -355,10 +355,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                     />
                   </th>
                 )}
-                {/* ORIG th classes below: "px-4 py-3.5 text-left text-[13px] font-semibold text-text ..." */}
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[320px]">Workflow Name</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">Workflow Description</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[170px]">
+                {/* ORIG th classes below: "px-4 py-3.5 text-left text-[0.8125rem] font-semibold text-text ..." */}
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[320px]">Workflow Name</th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted">Workflow Description</th>
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[170px]">
                   <div className="relative inline-flex items-center gap-1.5">
                     Business Process
                     <FilterIconButton
@@ -377,7 +377,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[200px]">
+                <th className="px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[200px]">
                   <div className="relative inline-flex items-center gap-1.5">
                     Tags
                     <FilterIconButton
@@ -396,13 +396,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-text-muted w-[140px]" aria-label="Actions"></th>
+                <th className="px-4 py-3 text-right text-[0.6875rem] font-semibold uppercase tracking-wider text-text-muted w-[140px]" aria-label="Actions"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={bulkMode ? 6 : 5} className="px-6 py-16 text-center text-[13px] text-text-muted">
+                  <td colSpan={bulkMode ? 6 : 5} className="px-6 py-16 text-center text-[0.8125rem] text-text-muted">
                     No workflows match "{search}"
                   </td>
                 </tr>
@@ -434,7 +434,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                         <div className="flex flex-col gap-1.5 w-full min-w-0">
                           <div className="flex items-start gap-2 min-w-0">
                             <span
-                              className="group inline cursor-pointer text-[13px] text-text font-medium hover:text-[#6a12cd] hover:underline line-clamp-2 min-w-0"
+                              className="group inline cursor-pointer text-[0.8125rem] text-text font-medium hover:text-[#6a12cd] hover:underline line-clamp-2 min-w-0"
                               onClick={e => {
                                 e.stopPropagation();
                                 if (bulkMode) toggleSelect(wf.id);
@@ -449,7 +449,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                             </span>
                             {wf.live && (
                               <span
-                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 mt-0.5"
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[0.6875rem] font-medium shrink-0 mt-0.5"
                                 style={{ backgroundColor: '#ECFEF3', color: '#047A48' }}
                               >
                                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#047A48' }} />
@@ -457,25 +457,25 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                               </span>
                             )}
                           </div>
-                          {/* ORIG: <span className="inline-flex items-center self-start px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[11px] font-mono font-semibold tracking-tight"> */}
-                          <span className="self-start text-[11px] font-mono text-ink-500 tracking-tight">
+                          {/* ORIG: <span className="inline-flex items-center self-start px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[0.6875rem] font-mono font-semibold tracking-tight"> */}
+                          <span className="self-start text-[0.6875rem] font-mono text-ink-500 tracking-tight">
                             {wf.controlId}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 align-top text-[13px] text-text-secondary max-w-[520px]">
+                      <td className="px-4 py-4 align-top text-[0.8125rem] text-text-secondary max-w-[520px]">
                         <span className="line-clamp-2">{wf.description}</span>
                       </td>
-                      <td className="px-4 py-4 align-top text-[13px] text-text-secondary">
+                      <td className="px-4 py-4 align-top text-[0.8125rem] text-text-secondary">
                         {wf.businessProcess}
                       </td>
                       <td className="px-4 py-4 align-top">
                         <div className="flex flex-wrap gap-1.5">
                           {wf.tags.map(t => (
-                            // ORIG chip: "inline-flex items-center px-2 py-0.5 rounded-md bg-primary-xlight text-primary text-[12px] font-semibold"
+                            // ORIG chip: "inline-flex items-center px-2 py-0.5 rounded-md bg-primary-xlight text-primary text-[0.75rem] font-semibold"
                             <span
                               key={t}
-                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[12px] font-medium"
+                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-2 border border-border-light text-ink-700 text-[0.75rem] font-medium"
                             >
                               {t}
                             </span>
@@ -532,7 +532,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
           <button
             onClick={handleContinue}
             disabled={selectedIds.size === 0}
-            className="flex items-center gap-2 px-4 h-9 rounded-md bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 h-9 rounded-md bg-primary text-white text-[0.8125rem] font-semibold hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             Continue
             <ArrowRight size={14} />
@@ -543,11 +543,11 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       {/* Pagination */}
       <div className="flex items-center justify-between  py-4 border-t border-border-light bg-white">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-text-secondary">Rows per page:</span>
+            <span className="text-[0.8125rem] text-text-secondary">Rows per page:</span>
             <div className="relative">
               <button
                 onClick={() => setRowsDropdownOpen(p => !p)}
-                className="flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-md border border-border text-[13px] text-text bg-white hover:border-primary/40 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 pl-3 pr-2 h-8 rounded-md border border-border text-[0.8125rem] text-text bg-white hover:border-primary/40 transition-colors cursor-pointer"
               >
                 {rowsPerPage}
                 <ChevronDown size={12} className={`text-text-muted transition-transform ${rowsDropdownOpen ? 'rotate-180' : ''}`} />
@@ -560,7 +560,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                       <button
                         key={n}
                         onClick={() => { setRowsPerPage(n); setRowsDropdownOpen(false); setPage(1); }}
-                        className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-primary-xlight transition-colors cursor-pointer ${
+                        className={`w-full text-left px-3 py-1.5 text-[0.8125rem] hover:bg-primary-xlight transition-colors cursor-pointer ${
                           n === rowsPerPage ? 'text-primary font-semibold' : 'text-text'
                         }`}
                       >
@@ -574,7 +574,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-[13px] text-text-secondary">Page {page} of {TOTAL_PAGES}</span>
+            <span className="text-[0.8125rem] text-text-secondary">Page {page} of {TOTAL_PAGES}</span>
             <div className="flex items-center gap-1">
               <PaginationButton onClick={() => setPage(1)} disabled={page === 1}>
                 <ChevronsLeft size={14} />
@@ -631,7 +631,7 @@ function ActionIconButton({
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30 shadow-md"
+        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-ink-900 text-white text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30 shadow-md"
       >
         {label}
       </span>
@@ -710,7 +710,7 @@ function FilterDropdown({
         <div className="max-h-[320px] overflow-auto">
           <label className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-surface-2 border-b border-border-light">
             <Checkbox checked={allSelected} onChange={toggleAll} ariaLabel="Select all" />
-            <span className="text-[13px] font-semibold text-text">Select All</span>
+            <span className="text-[0.8125rem] font-semibold text-text">Select All</span>
           </label>
           {options.map(opt => (
             <label
@@ -722,7 +722,7 @@ function FilterDropdown({
                 onChange={() => togglePending(opt)}
                 ariaLabel={opt}
               />
-              <span className="text-[13px] text-text">{opt}</span>
+              <span className="text-[0.8125rem] text-text">{opt}</span>
             </label>
           ))}
         </div>
@@ -731,14 +731,14 @@ function FilterDropdown({
             type="button"
             onClick={() => setPending(new Set())}
             disabled={pending.size === 0}
-            className="px-3 h-8 rounded-md text-[13px] font-semibold text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            className="px-3 h-8 rounded-md text-[0.8125rem] font-semibold text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             Clear
           </button>
           <button
             type="button"
             onClick={() => onApply(pending)}
-            className="px-4 h-8 rounded-md bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+            className="px-4 h-8 rounded-md bg-primary text-white text-[0.8125rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
           >
             Apply
           </button>

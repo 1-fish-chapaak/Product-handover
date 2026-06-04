@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DESIGN.md — Editorial GRC · Preview (Light)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300..900&family=Inter:wght@300..700&family=JetBrains+Mono:wght@400..700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ──────────────────────────────────────────────────────────
+       TOKENS
+       ────────────────────────────────────────────────────────── */
+    :root {
+      /* Brand */
+      --brand-50:  #F7F0FF;
+      --brand-100: #EDDEFE;
+      --brand-200: #DCBBFD;
+      --brand-300: #C393FA;
+      --brand-400: #A366F0;
+      --brand-500: #8838DE;
+      --brand-600: #6A12CD;
+      --brand-700: #550FA5;
+      --brand-800: #3B0B72;
+      --brand-900: #26064A;
+      --brand-950: #170330;
+
+      /* Paper & Ink */
+      --paper-0:   #FFFFFF;
+      --paper-50:  #FAF7F2;
+      --paper-100: #F3EEE5;
+      --paper-200: #E8E1D2;
+      --paper-300: #D6CCB7;
+      --ink-300: #C2B9CB;
+      --ink-400: #9A8FAE;
+      --ink-500: #6B5D82;
+      --ink-600: #4A3D62;
+      --ink-700: #332848;
+      --ink-800: #1F1433;
+      --ink-900: #0F0720;
+
+      /* Semantic */
+      --risk:       #B42318;
+      --risk-50:    #FEF3F2;
+      --risk-100:   #FCD5D2;
+      --high:       #C2410C;
+      --high-50:    #FFF7ED;
+      --high-100:   #FADBC7;
+      --mitigated:  #B45309;
+      --mitigated-50: #FFFBEB;
+      --mitigated-100:#FAE5B0;
+      --compliant:  #15803D;
+      --compliant-50: #F0FDF4;
+      --compliant-100:#BEE6CB;
+      --evidence:   #0369A1;
+      --evidence-50:#F0F9FF;
+      --evidence-100:#E0F2FE;
+      --info:       #6A12CD;
+      --info-50:    #F7F0FF;
+      --info-100:   #EDDEFE;
+      --draft:      #6B5D82;
+      --draft-50:   #F4F2F7;
+      --draft-100:  #E5DFEB;
+
+      /* Shadow */
+      --shadow-xs: 0 1px 0 rgba(15, 7, 32, 0.04);
+      --shadow-sm: 0 1px 2px rgba(15, 7, 32, 0.05), 0 0 0 1px rgba(15, 7, 32, 0.03);
+      --shadow-md: 0 4px 12px rgba(15, 7, 32, 0.06), 0 1px 2px rgba(15, 7, 32, 0.05);
+      --shadow-lg: 0 12px 32px rgba(15, 7, 32, 0.08), 0 4px 12px rgba(15, 7, 32, 0.05);
+      --shadow-xl: 0 24px 48px rgba(15, 7, 32, 0.12), 0 12px 24px rgba(15, 7, 32, 0.06);
+      --glow-brand: 0 0 0 4px rgba(106, 18, 205, 0.24);
+
+      /* Radius */
+      --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px;
+
+      /* Motion */
+      --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+      --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+      /* Faces */
+      --font-display: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       BASE
+       ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--paper-50);
+      color: var(--ink-800);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.6;
+      font-feature-settings: "cv08", "cv11", "ss01";
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+    ::selection { background: var(--brand-100); color: var(--ink-900); }
+
+    /* Layout */
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 64px 32px 128px; }
+    .hero { padding: 96px 0 48px; border-bottom: 1px solid var(--paper-200); margin-bottom: 64px; }
+    .hero .kicker {
+      font-size: 12px; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-700);
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 380;
+      font-size: 72px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin: 16px 0 24px;
+    }
+    .hero p {
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--ink-600);
+      max-width: 66ch;
+    }
+    .hero .link-row {
+      margin-top: 32px;
+      display: flex; gap: 16px; align-items: center;
+      font-size: 13px; color: var(--ink-500);
+    }
+    .hero .link-row a { color: var(--brand-700); text-decoration: none; border-bottom: 1px solid var(--brand-200); }
+    .hero .link-row a:hover { color: var(--brand-800); border-bottom-color: var(--brand-600); }
+
+    /* Section heads */
+    .section { margin: 96px 0 0; }
+    .section:first-of-type { margin-top: 0; }
+    .section > .label {
+      font-size: 12px; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-700); margin-bottom: 8px;
+    }
+    .section > h2 {
+      font-family: var(--font-display);
+      font-weight: 420;
+      font-size: 44px;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 0 0 24px;
+    }
+    .section > .intro {
+      font-size: 17px;
+      line-height: 1.6;
+      color: var(--ink-600);
+      max-width: 66ch;
+      margin-bottom: 48px;
+    }
+    /* "Used in:" — maps each component to the product surfaces that use it. */
+    .used-in {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ink-500);
+      margin: -12px 0 24px;
+    }
+    .used-in b { color: var(--brand-700); font-weight: 500; }
+
+    /* Grid helpers */
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-6 { grid-template-columns: repeat(6, 1fr); }
+    .grid-12 { grid-template-columns: repeat(12, 1fr); gap: 24px; }
+    @media (max-width: 880px) {
+      .grid-4, .grid-6, .grid-12 { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size: 56px; }
+      .section > h2 { font-size: 36px; }
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       COLOR SWATCHES
+       ────────────────────────────────────────────────────────── */
+    .swatch {
+      border-radius: var(--r-md);
+      border: 1px solid var(--paper-200);
+      overflow: hidden;
+      background: var(--paper-0);
+    }
+    .swatch .chip { height: 72px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+    .swatch .meta { padding: 10px 12px; }
+    .swatch .name { font-size: 13px; font-weight: 560; color: var(--ink-800); font-family: var(--font-mono); }
+    .swatch .hex { font-size: 12px; color: var(--ink-500); font-family: var(--font-mono); margin-top: 2px; }
+
+    /* ──────────────────────────────────────────────────────────
+       TYPE SCALE
+       ────────────────────────────────────────────────────────── */
+    .type-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 32px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--paper-200);
+      align-items: baseline;
+    }
+    .type-row .tag {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-500);
+      padding-top: 8px;
+    }
+    .type-row .sample { color: var(--ink-900); }
+    .t-display-2xl { font-family: var(--font-display); font-weight: 320; font-size: 72px; line-height: 1.05; letter-spacing: -0.03em; }
+    .t-display-xl  { font-family: var(--font-display); font-weight: 380; font-size: 56px; line-height: 1.07; letter-spacing: -0.025em; }
+    .t-display-lg  { font-family: var(--font-display); font-weight: 420; font-size: 44px; line-height: 1.1;  letter-spacing: -0.02em; }
+    .t-display-md  { font-family: var(--font-display); font-weight: 480; font-size: 36px; line-height: 1.15; letter-spacing: -0.015em; }
+    .t-display-sm  { font-family: var(--font-display); font-weight: 520; font-size: 28px; line-height: 1.2;  letter-spacing: -0.01em; }
+    .t-heading-xl  { font-weight: 600; font-size: 24px; line-height: 1.25; letter-spacing: -0.005em; }
+    .t-heading-lg  { font-weight: 600; font-size: 20px; line-height: 1.3; }
+    .t-heading-md  { font-weight: 600; font-size: 17px; line-height: 1.4; }
+    .t-heading-sm  { font-weight: 620; font-size: 15px; line-height: 1.45; letter-spacing: 0.005em; }
+    .t-body-lg     { font-weight: 400; font-size: 17px; line-height: 1.65; }
+    .t-body        { font-weight: 400; font-size: 15px; line-height: 1.6; }
+    .t-body-sm     { font-weight: 440; font-size: 13px; line-height: 1.55; }
+    .t-label       { font-weight: 560; font-size: 12px; line-height: 1.3; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-500); }
+    .t-code        { font-family: var(--font-mono); font-weight: 420; font-size: 13px; }
+    .t-numeric     { font-weight: 520; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+    /* ──────────────────────────────────────────────────────────
+       COMPONENTS
+       ────────────────────────────────────────────────────────── */
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+    /* Button */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 40px; padding: 0 16px; border-radius: var(--r-md);
+      font: 600 15px/1 var(--font-sans); letter-spacing: 0.005em;
+      border: 1px solid transparent; cursor: pointer;
+      transition: background 150ms var(--ease-standard), transform 75ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .btn-primary { background: var(--brand-600); color: var(--paper-0); }
+    .btn-primary:hover { background: var(--brand-500); }
+    .btn-primary:active { background: var(--brand-800); transform: translateY(0.5px); }
+    .btn-secondary { background: var(--paper-0); color: var(--ink-800); border-color: var(--paper-200); }
+    .btn-secondary:hover { border-color: var(--paper-300); background: var(--paper-50); }
+    .btn-ghost { background: transparent; color: var(--ink-700); }
+    .btn-ghost:hover { background: var(--brand-50); color: var(--brand-700); }
+    .btn-destructive { background: var(--risk); color: var(--paper-0); }
+    .btn-link { background: transparent; color: var(--brand-700); height: auto; padding: 0; }
+    .btn-link:hover { color: var(--brand-800); text-decoration: underline; }
+    .btn:focus-visible { outline: none; box-shadow: var(--glow-brand); }
+
+    /* Input */
+    .input {
+      height: 40px; padding: 0 12px; border-radius: var(--r-md);
+      border: 1px solid var(--paper-200); background: var(--paper-0);
+      font: 400 15px/1 var(--font-sans); color: var(--ink-900);
+      width: 280px; transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .input::placeholder { color: var(--ink-300); }
+    .input:hover { border-color: var(--paper-300); }
+    .input:focus { outline: none; border-color: var(--brand-600); box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); }
+
+    /* Card */
+    .card {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .card.interactive:hover { border-color: var(--paper-300); box-shadow: var(--shadow-sm); cursor: pointer; }
+    .card.elevated { border: none; box-shadow: var(--shadow-md); }
+    .card.muted { background: var(--paper-100); border: none; }
+    .card.feature { background: var(--brand-50); border-color: var(--brand-200); }
+
+    /* Pill */
+    /* Shipped StatusBadge: flat tinted bg + -700 text, NO border, NO icon. */
+    .pill {
+      display: inline-flex; align-items: center;
+      height: 24px; padding: 0 10px; border-radius: 999px;
+      font: 560 12px/1 var(--font-sans); letter-spacing: 0.02em; text-transform: uppercase;
+    }
+    .pill .glyph { display: none; }
+    .pill-risk { background: var(--risk-50); color: #912018; }
+    .pill-high { background: var(--high-50); color: #9A3412; }
+    .pill-mit  { background: var(--mitigated-50); color: #92400E; }
+    .pill-comp { background: var(--compliant-50); color: #166534; }
+    .pill-info { background: var(--info-50); color: var(--brand-700); }
+    .pill-ev   { background: var(--evidence-50); color: #075985; }
+    .pill-draft{ background: var(--draft-50); color: var(--draft); }
+
+    /* Shadow demo */
+    .shadow-demo { padding: 24px; background: var(--paper-0); border-radius: var(--r-lg); text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--ink-500); }
+    .s-xs { box-shadow: var(--shadow-xs); }
+    .s-sm { box-shadow: var(--shadow-sm); }
+    .s-md { box-shadow: var(--shadow-md); }
+    .s-lg { box-shadow: var(--shadow-lg); }
+    .s-xl { box-shadow: var(--shadow-xl); }
+
+    /* Radius demo */
+    .radius-demo {
+      height: 80px; background: var(--brand-100);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 12px; color: var(--brand-800);
+    }
+
+    /* Spacing demo */
+    .space-row { display: flex; align-items: flex-end; gap: 16px; height: 160px; padding: 24px; background: var(--paper-100); border-radius: var(--r-md); }
+    .space-unit { background: var(--brand-600); width: 32px; position: relative; }
+    .space-unit::after {
+      content: attr(data-label);
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-family: var(--font-mono); font-size: 11px; color: var(--ink-500); white-space: nowrap;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: AI RESPONSE
+       ────────────────────────────────────────────────────────── */
+    .ai-response {
+      position: relative;
+      border-radius: var(--r-xl);
+      padding: 24px 28px;
+      /* Shipped: flat #FFFFFF, single 2-stop gradient border at 0.24, no tint, no shadow. */
+      background: linear-gradient(var(--paper-0), var(--paper-0)) padding-box,
+                  linear-gradient(135deg, rgba(106, 18, 205, 0.24), rgba(168, 85, 247, 0.24)) border-box;
+      border: 1px solid transparent;
+      box-shadow: none;
+    }
+    .ai-meta {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; color: var(--ink-500); margin-bottom: 16px;
+    }
+    .ai-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-400); animation: pulse 1.4s var(--ease-spring) infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.4); opacity: 1; } }
+    .ai-body { font-size: 17px; line-height: 1.65; color: var(--ink-800); max-width: 66ch; }
+    .ai-body p { margin: 0 0 14px; }
+    .ai-citation {
+      display: inline-block;
+      padding: 1px 7px;
+      font: 460 12px/1.5 var(--font-mono);
+      color: var(--brand-700);
+      background: var(--brand-50);
+      border-radius: 4px;
+      margin: 0 2px;
+    }
+    .ai-tools {
+      margin-top: 20px;
+      background: var(--paper-100);
+      border-radius: var(--r-md);
+      padding: 12px 16px;
+      font: 460 12px/1.7 var(--font-mono);
+      color: var(--ink-600);
+    }
+    .ai-tools .tool-head { color: var(--ink-500); margin-bottom: 4px; }
+    .ai-cursor {
+      display: inline-block;
+      width: 2px; height: 18px; vertical-align: -3px;
+      background: var(--brand-600);
+      margin-left: 2px;
+      animation: blink 1.2s steps(2, end) infinite;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: DASHBOARD HERO
+       ────────────────────────────────────────────────────────── */
+    .dash-card {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 28px 32px;
+    }
+    .dash-card .kicker { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-700); font-weight: 560; }
+    .dash-card .metric {
+      font-family: var(--font-display);
+      font-weight: 320;
+      font-size: 64px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin-top: 12px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .dash-card .metric .denom { font-size: 18px; color: var(--ink-400); font-weight: 400; letter-spacing: 0; }
+    .dash-card .trend {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; font-size: 13px; font-weight: 520; color: var(--compliant);
+      font-variant-numeric: tabular-nums;
+    }
+    .dash-card .bar {
+      height: 6px; border-radius: 999px; background: var(--paper-200); overflow: hidden; margin-top: 24px;
+    }
+    .dash-card .bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand-600), var(--brand-400));
+      width: 78%;
+    }
+    .dash-card .breakdown { margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .dash-card .breakdown .cell { display: flex; flex-direction: column; gap: 4px; }
+    .dash-card .breakdown .num {
+      font-variant-numeric: tabular-nums; font-weight: 600; font-size: 20px; color: var(--ink-900);
+    }
+    .dash-card .breakdown .lbl {
+      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500); font-weight: 560;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: REPORT EXCERPT
+       ────────────────────────────────────────────────────────── */
+    .report {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 56px 64px 48px;
+    }
+    .report .report-kicker {
+      font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-700); font-weight: 560;
+    }
+    .report h2 {
+      font-family: var(--font-display);
+      font-weight: 380;
+      font-size: 44px;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 14px 0 28px;
+      max-width: 18ch;
+    }
+    .report p {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--ink-700);
+      max-width: 66ch;
+      margin: 0 0 16px;
+    }
+    .report .dropcap::first-letter {
+      font-family: var(--font-display);
+      font-weight: 320;
+      font-size: 76px;
+      line-height: 0.9;
+      float: left;
+      margin: 6px 10px 0 -2px;
+      color: var(--brand-700);
+    }
+    .report .eyebrow {
+      margin-top: 36px;
+      font-size: 13px; color: var(--ink-500);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .report .eyebrow .divider { flex: 1; height: 1px; background: var(--paper-200); }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: DATA TABLE
+       ────────────────────────────────────────────────────────── */
+    .table-wrap { border: 1px solid var(--paper-200); border-radius: var(--r-lg); overflow: hidden; background: var(--paper-0); }
+    table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.data thead th {
+      background: var(--paper-100);
+      color: var(--ink-600);
+      font-weight: 560; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      text-align: left; padding: 12px 16px;
+      border-bottom: 1px solid var(--paper-200);
+    }
+    table.data tbody td { padding: 12px 16px; border-bottom: 1px solid var(--paper-100); color: var(--ink-800); vertical-align: middle; }
+    table.data tbody tr:last-child td { border-bottom: none; }
+    table.data tbody tr:hover { background: var(--paper-50); }
+    table.data tbody tr.selected { background: var(--brand-50); box-shadow: inset 2px 0 0 var(--brand-600); }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 520; }
+    table.data .mono { font-family: var(--font-mono); font-size: 12px; color: var(--ink-500); }
+
+    /* ──────────────────────────────────────────────────────────
+       FOOTER
+       ────────────────────────────────────────────────────────── */
+    .foot {
+      margin-top: 128px; padding-top: 32px;
+      border-top: 1px solid var(--paper-200);
+      font-size: 13px; color: var(--ink-500);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+    .foot a { color: var(--brand-700); text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- HERO ─────────────────────────────────────────────── -->
+    <header class="hero">
+      <div class="kicker">DESIGN.md · Editorial GRC · Light</div>
+      <h1>A design system for<br/>governance, risk,<br/>and compliance.</h1>
+      <p>
+        Editorial premium in a domain that's been corporate for too long.
+        Warm paper canvas, serif display as a real character beat, calm
+        density, and purple — always purple — as the signature you can see
+        from across the room.
+      </p>
+      <div class="link-row">
+        <span>Open <a href="./DESIGN.md">DESIGN.md</a></span>
+        <span>·</span>
+        <span>Switch to <a href="./preview-dark.html">dark mode</a></span>
+      </div>
+    </header>
+
+    <!-- BRAND SCALE ──────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">01 · Color</div>
+      <h2>Brand scale</h2>
+      <p class="intro">
+        Eleven stops derived from <code class="t-code">#6A12CD</code>.
+        <code class="t-code">brand-600</code> is the anchor for buttons,
+        links, and primary CTAs. <code class="t-code">brand-700</code> is
+        the accessible on-surface body variant (~7.2:1 on paper).
+      </p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--brand-50)"></div><div class="meta"><div class="name">brand-50</div><div class="hex">#F7F0FF</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-100)"></div><div class="meta"><div class="name">brand-100</div><div class="hex">#EDDEFE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-200)"></div><div class="meta"><div class="name">brand-200</div><div class="hex">#DCBBFD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-300)"></div><div class="meta"><div class="name">brand-300</div><div class="hex">#C393FA</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-400)"></div><div class="meta"><div class="name">brand-400</div><div class="hex">#A366F0</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-500)"></div><div class="meta"><div class="name">brand-500</div><div class="hex">#8838DE</div></div></div>
+        <div class="swatch" style="outline: 2px solid var(--brand-200); outline-offset: 2px;"><div class="chip" style="background: var(--brand-600)"></div><div class="meta"><div class="name">brand-600 ★</div><div class="hex">#6A12CD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-700)"></div><div class="meta"><div class="name">brand-700</div><div class="hex">#550FA5</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-800)"></div><div class="meta"><div class="name">brand-800</div><div class="hex">#3B0B72</div></div></div>
+        <div class="swatch" style="outline: 2px solid var(--brand-200); outline-offset: 2px;"><div class="chip" style="background: var(--brand-900)"></div><div class="meta"><div class="name">brand-900 ★</div><div class="hex">#26064A</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-950)"></div><div class="meta"><div class="name">brand-950</div><div class="hex">#170330</div></div></div>
+      </div>
+    </section>
+
+    <!-- PAPER & INK ──────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">02 · Neutrals</div>
+      <h2>Paper &amp; ink</h2>
+      <p class="intro">
+        Warm off-whites and plum-tinted darks. Pair with purple; avoid cold
+        slate. Body canvas is <code class="t-code">paper-50</code>; pure
+        white is reserved for cards sitting on tinted surfaces.
+      </p>
+      <div class="grid grid-4">
+        <div class="swatch"><div class="chip" style="background: var(--paper-0); border: 1px solid var(--paper-200)"></div><div class="meta"><div class="name">paper-0</div><div class="hex">#FFFFFF</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-50)"></div><div class="meta"><div class="name">paper-50 ★</div><div class="hex">#FAF7F2</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-100)"></div><div class="meta"><div class="name">paper-100</div><div class="hex">#F3EEE5</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-200)"></div><div class="meta"><div class="name">paper-200</div><div class="hex">#E8E1D2</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-300)"></div><div class="meta"><div class="name">paper-300</div><div class="hex">#D6CCB7</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-300)"></div><div class="meta"><div class="name">ink-300</div><div class="hex">#C2B9CB</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-400)"></div><div class="meta"><div class="name">ink-400</div><div class="hex">#9A8FAE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-500)"></div><div class="meta"><div class="name">ink-500</div><div class="hex">#6B5D82</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-600)"></div><div class="meta"><div class="name">ink-600</div><div class="hex">#4A3D62</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-700)"></div><div class="meta"><div class="name">ink-700</div><div class="hex">#332848</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-800)"></div><div class="meta"><div class="name">ink-800</div><div class="hex">#1F1433</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-900)"></div><div class="meta"><div class="name">ink-900 ★</div><div class="hex">#0F0720</div></div></div>
+      </div>
+    </section>
+
+    <!-- SEMANTIC ─────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">03 · Semantic</div>
+      <h2>GRC severity scale</h2>
+      <p class="intro">
+        Crimson, burnt orange, old gold, moss, sky, violet — chosen for
+        colorblind separation and against the cliché of pure red-amber-green.
+      </p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--risk)"></div><div class="meta"><div class="name">risk</div><div class="hex">#B42318 · Critical</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--high)"></div><div class="meta"><div class="name">high</div><div class="hex">#C2410C · High</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--mitigated)"></div><div class="meta"><div class="name">mitigated</div><div class="hex">#B45309 · Medium</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--compliant)"></div><div class="meta"><div class="name">compliant</div><div class="hex">#15803D · Low</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--evidence)"></div><div class="meta"><div class="name">evidence</div><div class="hex">#0369A1 · Sources</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--info)"></div><div class="meta"><div class="name">info</div><div class="hex">#6A12CD · Info</div></div></div>
+      </div>
+    </section>
+
+    <!-- TYPOGRAPHY ───────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">04 · Typography</div>
+      <h2>Scale &amp; faces</h2>
+      <p class="intro">
+        Source Serif 4 for display. Inter for body and UI. JetBrains Mono
+        for anything that should feel like a receipt — evidence IDs, code,
+        citations, tool-call traces.
+      </p>
+
+      <!-- 4-base type scale (rem) -->
+      <table style="border-collapse:collapse; width:100%; max-width:560px; margin:0 0 40px; font-size:13px; font-variant-numeric:tabular-nums;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--paper-200);">
+            <th style="padding:8px 12px 8px 0; font-weight:560;">Token</th>
+            <th style="padding:8px 12px; font-weight:560;">rem</th>
+            <th style="padding:8px 12px; font-weight:560;">Step</th>
+            <th style="padding:8px 12px; font-weight:560;">Role</th>
+            <th style="padding:8px 0 8px 12px; font-weight:560;">Font · wt</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xs</td><td style="padding:8px 12px;">0.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×3</td><td style="padding:8px 12px;">Caption / meta / mono</td><td style="padding:8px 0 8px 12px;">Inter / JetBrains · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-base</td><td style="padding:8px 12px;">1rem</td><td style="padding:8px 12px; color:var(--ink-500);">×4</td><td style="padding:8px 12px;">Body</td><td style="padding:8px 0 8px 12px;">Inter · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-lg</td><td style="padding:8px 12px;">1.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×5</td><td style="padding:8px 12px;">Large body / subhead</td><td style="padding:8px 0 8px 12px;">Inter · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xl</td><td style="padding:8px 12px;">1.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×6</td><td style="padding:8px 12px;">Heading</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-2xl</td><td style="padding:8px 12px;">1.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×7</td><td style="padding:8px 12px;">KPI / large heading</td><td style="padding:8px 0 8px 12px;">Inter · 700</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-3xl</td><td style="padding:8px 12px;">2rem</td><td style="padding:8px 12px; color:var(--ink-500);">×8</td><td style="padding:8px 12px;">Display — small</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 480</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-4xl</td><td style="padding:8px 12px;">2.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×9</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 460</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-5xl</td><td style="padding:8px 12px;">2.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×10</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 440</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-6xl</td><td style="padding:8px 12px;">2.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×11</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-7xl</td><td style="padding:8px 12px;">3rem</td><td style="padding:8px 12px; color:var(--ink-500);">×12</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 400</td></tr>
+          <tr><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">display</td><td style="padding:8px 12px;">3.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×14</td><td style="padding:8px 12px;">Hero — once / page</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+        </tbody>
+      </table>
+
+      <div class="type-row"><div class="tag">display-2xl</div><div class="sample t-display-2xl">Assessment</div></div>
+      <div class="type-row"><div class="tag">display-xl</div><div class="sample t-display-xl">Operational Risk</div></div>
+      <div class="type-row"><div class="tag">display-lg</div><div class="sample t-display-lg">Control Coverage</div></div>
+      <div class="type-row"><div class="tag">display-md</div><div class="sample t-display-md">Findings &amp; Remediations</div></div>
+      <div class="type-row"><div class="tag">display-sm</div><div class="sample t-display-sm">Delete this audit?</div></div>
+      <div class="type-row"><div class="tag">heading-xl</div><div class="sample t-heading-xl">Quarterly review dashboard</div></div>
+      <div class="type-row"><div class="tag">heading-lg</div><div class="sample t-heading-lg">Open findings by severity</div></div>
+      <div class="type-row"><div class="tag">heading-md</div><div class="sample t-heading-md">Enterprise risk register</div></div>
+      <div class="type-row"><div class="tag">heading-sm</div><div class="sample t-heading-sm">Your pending approvals</div></div>
+      <div class="type-row"><div class="tag">body-lg</div><div class="sample t-body-lg">A comprehensive review of control effectiveness across business units, with findings prioritized by impact and remediation velocity.</div></div>
+      <div class="type-row"><div class="tag">body</div><div class="sample t-body">Default UI copy. Interface descriptions, form helper text, list items, tooltip prose, and everything else that needs to read well at 15 pixels without calling attention.</div></div>
+      <div class="type-row"><div class="tag">body-sm</div><div class="sample t-body-sm">Compact dense-data copy for tables running at row-height 32, secondary meta rows, and micro captions.</div></div>
+      <div class="type-row"><div class="tag">label</div><div class="sample"><span class="t-label">Enterprise Risk Score</span></div></div>
+      <div class="type-row"><div class="tag">code</div><div class="sample t-code">audit_trail_q1_2026.json · evt_8c3f2b · confidence 0.94</div></div>
+      <div class="type-row"><div class="tag">numeric</div><div class="sample t-numeric" style="font-size:36px;">  12,481,306.44  </div></div>
+    </section>
+
+    <!-- SPACING ──────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">05 · Layout</div>
+      <h2>Spacing grid</h2>
+      <p class="intro">8pt base. 4pt sub-grid where icons demand it. Nothing between.</p>
+      <div class="space-row">
+        <div class="space-unit" style="height: 4px"  data-label="4"></div>
+        <div class="space-unit" style="height: 8px"  data-label="8"></div>
+        <div class="space-unit" style="height: 12px" data-label="12"></div>
+        <div class="space-unit" style="height: 16px" data-label="16"></div>
+        <div class="space-unit" style="height: 24px" data-label="24"></div>
+        <div class="space-unit" style="height: 32px" data-label="32"></div>
+        <div class="space-unit" style="height: 48px" data-label="48"></div>
+        <div class="space-unit" style="height: 64px" data-label="64"></div>
+        <div class="space-unit" style="height: 96px" data-label="96"></div>
+        <div class="space-unit" style="height: 128px" data-label="128"></div>
+      </div>
+    </section>
+
+    <!-- RADIUS ───────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">06 · Radius</div>
+      <h2>Radii</h2>
+      <div class="grid grid-6">
+        <div class="radius-demo" style="border-radius: var(--r-xs)">xs · 4</div>
+        <div class="radius-demo" style="border-radius: var(--r-sm)">sm · 6</div>
+        <div class="radius-demo" style="border-radius: var(--r-md)">md · 8</div>
+        <div class="radius-demo" style="border-radius: var(--r-lg)">lg · 12</div>
+        <div class="radius-demo" style="border-radius: var(--r-xl)">xl · 16</div>
+        <div class="radius-demo" style="border-radius: 999px">full</div>
+      </div>
+    </section>
+
+    <!-- ELEVATION ────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">07 · Depth</div>
+      <h2>Elevation</h2>
+      <p class="intro">Borders first. Shadow sparingly. Tint never.</p>
+      <div class="grid grid-4" style="gap: 32px;">
+        <div class="shadow-demo s-xs">shadow-xs</div>
+        <div class="shadow-demo s-sm">shadow-sm</div>
+        <div class="shadow-demo s-md">shadow-md</div>
+        <div class="shadow-demo s-lg">shadow-lg</div>
+        <div class="shadow-demo s-xl">shadow-xl</div>
+        <div class="shadow-demo" style="box-shadow: var(--glow-brand)">glow-brand</div>
+      </div>
+    </section>
+
+    <!-- BUTTONS ──────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">08 · Primitives</div>
+      <h2>Buttons</h2>
+      <p class="used-in"><b>Used in:</b> every surface — Ask IRA composer send, Dashboard widget actions, RACM toolbars, Report export, modal footers.</p>
+      <div class="row">
+        <button class="btn btn-primary">Save assessment</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-ghost">Details</button>
+        <button class="btn btn-destructive">Delete audit</button>
+        <button class="btn btn-link">View all risks →</button>
+      </div>
+    </section>
+
+    <!-- INPUT ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size: 28px;">Input</h2>
+      <p class="used-in"><b>Used in:</b> Knowledge Hub search, RACM / Control Library filters, form fields across Engagements & Admin. (The Ask IRA composer is the one input that uses border-tone focus, not the ring.)</p>
+      <div class="row">
+        <input class="input" placeholder="Search risks…" />
+        <input class="input" value="IT-GEN-04" style="width: 180px;" />
+      </div>
+    </section>
+
+    <!-- PILLS ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size: 28px;">Severity pills</h2>
+      <p class="used-in"><b>Used in:</b> Risk Register rows, Findings (Execution), Control Library status, chat Sources type pills. Spelled-out labels, no RAG ramp.</p>
+      <div class="row">
+        <span class="pill pill-risk"><span class="glyph">●</span> Critical</span>
+        <span class="pill pill-high"><span class="glyph">▲</span> High</span>
+        <span class="pill pill-mit"><span class="glyph">◆</span> Medium</span>
+        <span class="pill pill-comp"><span class="glyph">■</span> Low</span>
+        <span class="pill pill-ev"><span class="glyph">◧</span> Evidence</span>
+        <span class="pill pill-info"><span class="glyph">○</span> Informational</span>
+        <span class="pill pill-draft"><span class="glyph">▢</span> Draft</span>
+      </div>
+    </section>
+
+    <!-- CARDS ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size: 28px;">Cards</h2>
+      <p class="used-in"><b>Used in:</b> Dashboard KPI tiles, Knowledge Hub gallery preview cards, chat SourceCards, Home tiles. Feature variant = highlighted AI suggestion / KPI.</p>
+      <div class="grid grid-4">
+        <div class="card">
+          <div class="t-label">Outlined</div>
+          <div class="t-heading-md" style="margin-top: 8px">Default</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">1px border, no shadow, 12px radius, 24px padding.</p>
+        </div>
+        <div class="card elevated">
+          <div class="t-label">Elevated</div>
+          <div class="t-heading-md" style="margin-top: 8px">Shadow md</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">Rare — use for floating content, never static cards.</p>
+        </div>
+        <div class="card muted">
+          <div class="t-label">Muted</div>
+          <div class="t-heading-md" style="margin-top: 8px">paper-100</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">Backgrounded group on a paper canvas.</p>
+        </div>
+        <div class="card feature">
+          <div class="t-label" style="color: var(--brand-700)">Feature</div>
+          <div class="t-heading-md" style="margin-top: 8px; color: var(--ink-900)">brand-50</div>
+          <p class="t-body-sm" style="color: var(--ink-600); margin: 8px 0 0;">AI suggestions, KPI highlight, signature moments.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: DASHBOARD CARD ───── -->
+    <section class="section">
+      <div class="label">09 · Signature</div>
+      <h2>Enterprise risk score</h2>
+      <p class="intro">How a dashboard hero card feels when paper, serif, and purple are composed carefully.</p>
+      <p class="used-in"><b>Used in:</b> Dashboard (<code>DashboardView</code>) — KPI tiles + the <code>ConfigurableChart</code> graph (Line / Area / Bar / Pie / Table / KPI) on a react-grid-layout canvas.</p>
+      <div class="grid grid-12">
+        <div class="dash-card" style="grid-column: span 7;">
+          <div class="kicker">Enterprise Risk · Q1 2026</div>
+          <div class="metric">78 <span class="denom">/ 100</span></div>
+          <div class="trend">↑ 12% this quarter</div>
+          <div class="bar"><div class="fill"></div></div>
+          <div class="breakdown">
+            <div class="cell"><span class="num">4</span><span class="lbl">Critical</span></div>
+            <div class="cell"><span class="num">12</span><span class="lbl">High</span></div>
+            <div class="cell"><span class="num">23</span><span class="lbl">Medium</span></div>
+            <div class="cell"><span class="num">47</span><span class="lbl">Low</span></div>
+          </div>
+        </div>
+        <div class="dash-card" style="grid-column: span 5; display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <div class="kicker">Audit timeline</div>
+            <div class="t-heading-lg" style="margin-top: 8px">Q1 closes in 14 days</div>
+            <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">
+              Fieldwork complete for SOX IT General Controls. Three
+              remediations pending sign-off from Cristina.
+            </p>
+          </div>
+          <div class="row">
+            <span class="pill pill-comp"><span class="glyph">■</span> On track</span>
+            <span class="pill pill-ev"><span class="glyph">◧</span> 4 sources</span>
+          </div>
+          <button class="btn btn-link" style="align-self: flex-start;">Open audit plan →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: AI RESPONSE ───── -->
+    <section class="section">
+      <h2>AI response</h2>
+      <p class="intro">Not a chat bubble. Considered prose with citations, streaming cursor, and pulse-thinking — the signature surface for GRC Copilot.</p>
+      <p class="used-in"><b>Used in:</b> Ask IRA chat (<code>ChatView</code>) — the answer surface inside the 52.5rem thread; prose capped at 66ch. Produced by the flat 20px <code>ai-border</code> composer.</p>
+      <div class="ai-response">
+        <div class="ai-meta">
+          <span class="dot"></span>
+          Answered in 1.2s · 4 sources · model: risk-analyst-4
+        </div>
+        <div class="ai-body">
+          <p>
+            Three SOX IT General Controls failed in Q1 2026:
+            <span class="ai-citation">IT-GEN-04</span>
+            (privileged access review — evidence stale by 47 days),
+            <span class="ai-citation">IT-GEN-07</span>
+            (change management — two emergency changes lack retrospective
+            approval), and
+            <span class="ai-citation">IT-GEN-11</span>
+            (backup restoration — last test was 94 days ago against a
+            90-day SLA).
+          </p>
+          <p>
+            Remediation is straightforward for IT-GEN-04 and IT-GEN-11
+            (run the review, run the test). IT-GEN-07 requires a policy
+            decision — should emergency changes be permitted without
+            retrospective approval in narrow incident windows?<span class="ai-cursor"></span>
+          </p>
+        </div>
+        <div class="ai-tools">
+          <div class="tool-head">// tool calls</div>
+          <div>retrieve(control_ids=["IT-GEN-*"], quarter="Q1-2026")  →  47 controls</div>
+          <div>filter(status="failed")                               →  3 matches</div>
+          <div>rank(by="remediation_effort", order="asc")            →  ok</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: DATA TABLE ───── -->
+    <section class="section">
+      <h2>Data table</h2>
+      <p class="intro">Comfortable density. Tabular numerics. Zebra off by default, on by density. Row selection signaled by a single violet left border — no heavy background swap.</p>
+      <p class="used-in"><b>Used in:</b> RACM &amp; Control Library (Governance), Risk Register, Findings / Control Testing (Execution), and the Dashboard Table widget.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width: 64px;">#</th>
+              <th>Risk</th>
+              <th>Owner</th>
+              <th>Severity</th>
+              <th class="num">Exposure</th>
+              <th>Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td class="mono">R-142</td>
+              <td>Access review overdue — privileged accounts</td>
+              <td>J. Mendoza</td>
+              <td><span class="pill pill-risk"><span class="glyph">●</span> Critical</span></td>
+              <td class="num">$ 2,400,000</td>
+              <td>Apr 28</td>
+            </tr>
+            <tr>
+              <td class="mono">R-141</td>
+              <td>Vendor SOC 2 Type II unreceived</td>
+              <td>M. Lee</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 870,000</td>
+              <td>May 10</td>
+            </tr>
+            <tr>
+              <td class="mono">R-140</td>
+              <td>DR runbook untested this quarter</td>
+              <td>K. Ray</td>
+              <td><span class="pill pill-mit"><span class="glyph">◆</span> Medium</span></td>
+              <td class="num">$ 410,000</td>
+              <td>Jun 02</td>
+            </tr>
+            <tr>
+              <td class="mono">R-139</td>
+              <td>Annual penetration test scoping pending</td>
+              <td>A. Park</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 1,120,000</td>
+              <td>Apr 22</td>
+            </tr>
+            <tr>
+              <td class="mono">R-138</td>
+              <td>Policy training attestation — Q1</td>
+              <td>Cristina R.</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Low</span></td>
+              <td class="num">$ 84,000</td>
+              <td>Apr 30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: REPORT EXCERPT ───── -->
+    <section class="section">
+      <h2>Report reader</h2>
+      <p class="intro">Editorial long-form. 66-character column, drop-cap on section one, serif body option for audit deliverables that will be read — really read — by someone across the boardroom.</p>
+      <p class="used-in"><b>Used in:</b> Report (<code>ReportsView</code>) + report reader — the only surfaces on warm paper (<code>paper-50/100</code>), ~960px column.</p>
+      <div class="report">
+        <div class="report-kicker">Q1 2026 · Operational Risk Assessment</div>
+        <h2>Three controls failed the quarter — none of them fatal.</h2>
+        <p class="dropcap">
+          Across fourteen business units and 312 tested controls, operational
+          risk closed Q1 2026 at a score of 78, up from 66 in Q4 2025. The
+          improvement is meaningful but uneven: IT General Controls and
+          Third-Party Risk both advanced materially, while Change
+          Management regressed slightly on the back of two emergency
+          deployments in late March.
+        </p>
+        <p>
+          The three failed controls are routine remediations, not structural
+          breakdowns. Privileged access reviews (IT-GEN-04) slipped by
+          forty-seven days while the access governance team absorbed an
+          unplanned head-count change. Backup restoration testing
+          (IT-GEN-11) fell four days past SLA, a symptom of the annual
+          calendar rather than of a testing failure. Change management
+          (IT-GEN-07) is the only finding that warrants policy attention.
+        </p>
+        <div class="eyebrow">
+          <span>Published Apr 2, 2026 · 12 min read</span>
+          <span class="divider"></span>
+          <span>By the Risk &amp; Compliance desk</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOT ─────────────────────────────────────────────── -->
+    <footer class="foot">
+      <div>DESIGN.md — Editorial GRC · Light preview · refined 2026-04-21</div>
+      <div>
+        <a href="./DESIGN.md">DESIGN.md</a> ·
+        <a href="./preview-dark.html">Dark preview</a> ·
+        <a href="./README.md">README</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

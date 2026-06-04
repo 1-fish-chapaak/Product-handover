@@ -278,20 +278,20 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
         {/* Back */}
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors"
+          className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors"
         >
           <ArrowLeft size={14} /> Back
         </button>
 
         {/* Page header */}
         <div className="mb-6">
-          <div className="text-[10.5px] font-bold tracking-[0.18em] text-primary uppercase mb-1.5">
+          <div className="text-[0.75rem] font-bold tracking-[0.18em] text-primary uppercase mb-1.5">
             Audit Quality
           </div>
-          <h1 className="font-display text-[28px] font-bold text-ink-900 tracking-tight leading-tight">
+          <h1 className="font-display text-[1.75rem] font-bold text-ink-900 tracking-tight leading-tight">
             Closed-Case Sampling
           </h1>
-          <p className="text-[13.5px] text-text-secondary mt-2 max-w-2xl leading-relaxed">
+          <p className="text-[0.75rem] text-text-secondary mt-2 max-w-2xl leading-relaxed">
             Sample resolved exceptions to validate risk-owner classifications. Builds the audit-trail for your own review.
           </p>
         </div>
@@ -301,18 +301,18 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
           <div className="flex items-end gap-4 flex-wrap">
             {/* Engagement scope */}
             <div className="relative min-w-[220px]">
-              <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
+              <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
                 Engagement scope
               </label>
               <button
                 onClick={() => setScopeOpen(o => !o)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-white text-[12.5px] text-text hover:border-primary/40 transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-white text-[0.75rem] text-text hover:border-primary/40 transition-colors cursor-pointer"
               >
                 <Filter size={12} className="text-text-muted" />
                 <span className="flex-1 text-left truncate">
                   {engagementScope.size === 0 ? 'All engagements' : `${engagementScope.size} selected`}
                 </span>
-                <span className="text-[11px] text-text-muted tabular-nums">{availablePool.length} cases</span>
+                <span className="text-[0.6875rem] text-text-muted tabular-nums">{availablePool.length} cases</span>
                 <ChevronDown size={12} className={`text-text-muted transition-transform ${scopeOpen ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
@@ -341,15 +341,15 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
                             className="w-1.5 h-1.5 rounded-full shrink-0"
                             style={{ background: PROCESS_COLORS[e.process] }}
                           />
-                          <span className="text-[12px] text-text flex-1 truncate">{e.name}</span>
-                          <span className="font-mono text-[10.5px] text-text-muted">{e.code}</span>
+                          <span className="text-[0.75rem] text-text flex-1 truncate">{e.name}</span>
+                          <span className="font-mono text-[0.75rem] text-text-muted">{e.code}</span>
                         </button>
                       );
                     })}
                     {engagementScope.size > 0 && (
                       <button
                         onClick={() => setEngagementScope(new Set())}
-                        className="w-full text-[11px] font-semibold text-primary hover:bg-primary/5 px-2.5 py-1.5 rounded-lg cursor-pointer mt-1 border-t border-border-light"
+                        className="w-full text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 px-2.5 py-1.5 rounded-lg cursor-pointer mt-1 border-t border-border-light"
                       >
                         Clear selection
                       </button>
@@ -361,7 +361,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
 
             {/* Period */}
             <div className="min-w-[160px]">
-              <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
+              <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
                 Period
               </label>
               <div className="relative">
@@ -369,7 +369,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
                 <select
                   value={period}
                   onChange={(e) => setPeriod(e.target.value as Period)}
-                  className="w-full pl-8 pr-3 py-2 rounded-lg border border-border bg-white text-[12.5px] text-text outline-none hover:border-primary/40 focus:border-primary/40 cursor-pointer appearance-none"
+                  className="w-full pl-8 pr-3 py-2 rounded-lg border border-border bg-white text-[0.75rem] text-text outline-none hover:border-primary/40 focus:border-primary/40 cursor-pointer appearance-none"
                 >
                   {(['7d', '30d', '90d', 'custom'] as Period[]).map(p => (
                     <option key={p} value={p}>{PERIOD_LABEL[p]}</option>
@@ -380,7 +380,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
 
             {/* Sample size + presets */}
             <div className="min-w-[200px]">
-              <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
+              <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
                 Sample size
               </label>
               <div className="flex items-center gap-1.5">
@@ -390,14 +390,14 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
                   max={availablePool.length || 100}
                   value={sampleSize}
                   onChange={(e) => setSampleSize(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  className="w-16 px-2.5 py-2 rounded-lg border border-border bg-white text-[12.5px] text-text outline-none focus:border-primary/40 tabular-nums"
+                  className="w-16 px-2.5 py-2 rounded-lg border border-border bg-white text-[0.75rem] text-text outline-none focus:border-primary/40 tabular-nums"
                 />
                 <div className="flex items-center gap-0.5">
                   {PRESETS.map(n => (
                     <button
                       key={n}
                       onClick={() => setSampleSize(n)}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer tabular-nums ${
+                      className={`px-2 py-1 rounded-md text-[0.6875rem] font-semibold transition-colors cursor-pointer tabular-nums ${
                         sampleSize === n ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                       }`}
                     >
@@ -412,7 +412,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
             <div className="ml-auto">
               <button
                 onClick={drawSample}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer shadow-sm"
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer shadow-sm"
               >
                 <Shuffle size={14} />
                 Draw sample
@@ -422,13 +422,13 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
 
           {/* Classification pill toggle */}
           <div className="mt-4 pt-4 border-t border-border-light flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Classification</span>
+            <span className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide">Classification</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               {CLASSIFICATION_FILTERS.map(c => (
                 <button
                   key={c}
                   onClick={() => setClassFilter(c)}
-                  className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-full text-[0.75rem] font-semibold transition-colors cursor-pointer ${
                     classFilter === c
                       ? 'bg-primary text-white'
                       : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
@@ -453,40 +453,40 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
             >
               <div className="flex items-center gap-2">
                 <ClipboardCheck size={16} className="text-primary" />
-                <span className="text-[13px] font-semibold text-text">
+                <span className="text-[0.8125rem] font-semibold text-text">
                   {sample.length} sample{sample.length === 1 ? '' : 's'}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[12.5px]">
+              <div className="flex items-center gap-1.5 text-[0.75rem]">
                 <span className="w-2 h-2 rounded-full bg-compliant" />
                 <span className="text-text tabular-nums font-medium">{agreed}</span>
                 <span className="text-text-muted">agreed</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[12.5px]">
+              <div className="flex items-center gap-1.5 text-[0.75rem]">
                 <span className="w-2 h-2 rounded-full bg-risk" />
                 <span className="text-text tabular-nums font-medium">{disagreed}</span>
                 <span className="text-text-muted">disagreed</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[12.5px]">
+              <div className="flex items-center gap-1.5 text-[0.75rem]">
                 <span className="w-2 h-2 rounded-full bg-mitigated" />
                 <span className="text-text tabular-nums font-medium">{needInfo}</span>
                 <span className="text-text-muted">need info</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[12.5px]">
+              <div className="flex items-center gap-1.5 text-[0.75rem]">
                 <span className="w-2 h-2 rounded-full bg-text-muted/40" />
                 <span className="text-text tabular-nums font-medium">{pending}</span>
                 <span className="text-text-muted">pending</span>
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">Concurrence</div>
-                  <div className="text-[18px] font-bold tabular-nums text-text leading-none mt-0.5">
+                  <div className="text-[0.625rem] uppercase tracking-wider text-text-muted font-semibold">Concurrence</div>
+                  <div className="text-[1.125rem] font-bold tabular-nums text-text leading-none mt-0.5">
                     {decided === 0 ? '—' : `${accuracy}%`}
                   </div>
                 </div>
                 <button
                   onClick={() => { setSample([]); setDecisions({}); setDisagreeOpen({}); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary hover:border-primary/40 hover:text-primary transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] font-semibold text-text-secondary hover:border-primary/40 hover:text-primary transition-colors cursor-pointer"
                 >
                   <RefreshCw size={11} /> Reset
                 </button>
@@ -519,7 +519,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
               <button
                 onClick={() => setConfirmOpen(true)}
                 disabled={decided === 0}
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 <FileCheck size={14} /> Finalize review
               </button>
@@ -552,8 +552,8 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
                   <FileCheck size={18} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-bold text-text mb-1">Finalize closed-case review</h3>
-                  <p className="text-[12.5px] text-text-secondary leading-relaxed">
+                  <h3 className="text-[0.9375rem] font-bold text-text mb-1">Finalize closed-case review</h3>
+                  <p className="text-[0.75rem] text-text-secondary leading-relaxed">
                     You're recording your review of <span className="font-semibold text-text">{sample.length} sample{sample.length === 1 ? '' : 's'}</span>
                     {' '}(<span className="text-compliant-700 font-semibold">{agreed} agreed</span>,{' '}
                     <span className="text-risk-700 font-semibold">{disagreed} disagreed</span>). The auditor record will reflect{' '}
@@ -564,13 +564,13 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
               <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => setConfirmOpen(false)}
-                  className="px-3.5 py-2 rounded-lg border border-border bg-white text-[12.5px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 rounded-lg border border-border bg-white text-[0.75rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={finalize}
-                  className="px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+                  className="px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
                   Record review
                 </button>
@@ -591,8 +591,8 @@ function EmptyState({ available }: { available: number }): JSX.Element {
       <div className="w-14 h-14 rounded-2xl bg-primary/[0.08] text-primary inline-flex items-center justify-center mb-3">
         <Shuffle size={22} />
       </div>
-      <h3 className="text-[15px] font-semibold text-text mb-1.5">Draw a sample to begin</h3>
-      <p className="text-[12.5px] text-text-muted max-w-md mx-auto leading-relaxed">
+      <h3 className="text-[0.9375rem] font-semibold text-text mb-1.5">Draw a sample to begin</h3>
+      <p className="text-[0.75rem] text-text-muted max-w-md mx-auto leading-relaxed">
         Configure your scope, period, and sample size above, then draw a random sample
         from the <span className="font-semibold text-text tabular-nums">{available}</span> resolved
         case{available === 1 ? '' : 's'} matching your filters.
@@ -640,9 +640,9 @@ function SampleCard({
     >
       {/* Header row */}
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <span className="font-mono text-[11.5px] tracking-tight text-ink-500">{c.ref}</span>
+        <span className="font-mono text-[0.75rem] tracking-tight text-ink-500">{c.ref}</span>
         <span
-          className="inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[10.5px] font-semibold border"
+          className="inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[0.75rem] font-semibold border"
           style={{
             background: `${processColor}14`,
             borderColor: `${processColor}33`,
@@ -652,24 +652,24 @@ function SampleCard({
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: processColor }} />
           {engagementName}
         </span>
-        <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10.5px] font-semibold border ${CLASS_PILL[cls]}`}>
+        <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.75rem] font-semibold border ${CLASS_PILL[cls]}`}>
           {cls}
         </span>
-        <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10.5px] font-bold uppercase border ${SEV_BADGE[c.severity]}`}>
+        <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.75rem] font-bold uppercase border ${SEV_BADGE[c.severity]}`}>
           {c.severity}
         </span>
-        <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-text-muted">
+        <span className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] text-text-muted">
           <Clock size={11} /> Closed {c.closedOn}
         </span>
       </div>
 
       {/* Title */}
-      <h3 className="text-[14.5px] font-bold text-text leading-snug mb-3">{c.title}</h3>
+      <h3 className="text-[0.75rem] font-bold text-text leading-snug mb-3">{c.title}</h3>
 
       {/* Rationale */}
       <div className="rounded-xl border border-border-light bg-canvas px-4 py-3 mb-4">
-        <div className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted mb-1">Resolution rationale</div>
-        <p className="text-[13px] text-text leading-relaxed">
+        <div className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted mb-1">Resolution rationale</div>
+        <p className="text-[0.8125rem] text-text leading-relaxed">
           {c.rationale}
           {c.detail && <span className="text-text-muted"> {c.detail}</span>}
         </p>
@@ -685,8 +685,8 @@ function SampleCard({
                   <ev.icon size={12} />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-semibold text-text leading-tight">{ev.label}</div>
-                  <div className="text-[10.5px] text-text-muted truncate">{ev.sub}</div>
+                  <div className="text-[0.6875rem] font-semibold text-text leading-tight">{ev.label}</div>
+                  <div className="text-[0.75rem] text-text-muted truncate">{ev.sub}</div>
                 </div>
               </div>
               {idx < trail.length - 1 && (
@@ -721,7 +721,7 @@ function SampleCard({
           onClick={() => onRecord('info')}
         />
         {decision !== 'pending' && (
-          <span className="ml-auto text-[11px] text-text-muted">
+          <span className="ml-auto text-[0.6875rem] text-text-muted">
             {owner ? `Owner: ${owner.name}` : c.assignee}
           </span>
         )}
@@ -739,13 +739,13 @@ function SampleCard({
           >
             <div className="mt-4 pt-4 border-t border-border-light grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
+                <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
                   Reclassify as
                 </label>
                 <select
                   value={newClass}
                   onChange={(e) => setNewClass(e.target.value as Classification)}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-white text-[12.5px] text-text outline-none focus:border-primary/40 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-white text-[0.75rem] text-text outline-none focus:border-primary/40 cursor-pointer"
                 >
                   {(['Control Deficiency', 'Process Gap', 'False Positive', 'Other'] as Classification[]).map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -753,7 +753,7 @@ function SampleCard({
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
+                <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wide block mb-1.5">
                   Reason
                 </label>
                 <textarea
@@ -761,19 +761,19 @@ function SampleCard({
                   onChange={(e) => setReason(e.target.value)}
                   rows={2}
                   placeholder="Why does this case need a different classification?"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-white text-[12.5px] text-text outline-none focus:border-primary/40 resize-none placeholder:text-text-muted/70"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-white text-[0.75rem] text-text outline-none focus:border-primary/40 resize-none placeholder:text-text-muted/70"
                 />
               </div>
               <div className="md:col-span-2 flex items-center justify-end gap-2">
                 <button
                   onClick={() => onToggleDisagree(false)}
-                  className="px-3 py-1.5 rounded-lg text-[11.5px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
                 >
                   Collapse
                 </button>
                 <button
                   onClick={() => { onRecord('disagree', { newClassification: newClass, reason }); onToggleDisagree(false); }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-risk text-white text-[11.5px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-risk text-white text-[0.75rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"
                 >
                   <AlertTriangle size={11} /> Submit disagreement
                 </button>
@@ -800,7 +800,7 @@ function DecisionButton({ active, activeCls, icon: Icon, label, onClick }: Decis
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${
         active ? activeCls : 'border-border bg-white text-text-secondary hover:border-primary/30 hover:bg-surface-2'
       }`}
     >

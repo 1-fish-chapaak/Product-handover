@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -303,12 +304,12 @@ function Dropdown<T extends string>({
 
   return (
     <div ref={ref} className="mb-3">
-      <label className="text-[12px] font-semibold text-text-muted block mb-1.5">{label}</label>
+      <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">{label}</label>
       <div className="relative">
         <button
           type="button"
           onClick={() => !disabled && setOpen(p => !p)}
-          className={`w-full flex items-center justify-between px-3 py-2.5 border border-border rounded-lg text-[13px] transition-colors bg-white ${
+          className={`w-full flex items-center justify-between px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] transition-colors bg-white ${
             disabled ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'text-text hover:border-primary/30 cursor-pointer'
           }`}
         >
@@ -329,7 +330,7 @@ function Dropdown<T extends string>({
                   key={opt}
                   type="button"
                   onClick={() => { onChange(opt); setOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-[12px] transition-colors cursor-pointer ${
+                  className={`w-full text-left px-3 py-2 text-[0.75rem] transition-colors cursor-pointer ${
                     value === opt ? 'bg-primary/10 text-primary font-semibold' : 'text-text-secondary hover:bg-surface-2'
                   }`}
                 >
@@ -362,7 +363,7 @@ function KpiCard({ label, value, icon: Icon, color, index }: {
         </div>
       </div>
       <div className="text-2xl font-bold text-text">{value}</div>
-      <div className="text-[12px] text-text-muted mt-1">{label}</div>
+      <div className="text-[0.75rem] text-text-muted mt-1">{label}</div>
     </motion.div>
   );
 }
@@ -472,8 +473,8 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
         <header className="shrink-0 px-6 pt-5 pb-0 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <div className="flex items-center gap-2"><Upload size={18} className="text-brand-600" /><h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Import RACM</h2></div>
-              <p className="text-[12px] text-ink-500 mt-0.5">Upload an Excel or CSV file containing risk and control data.</p>
+              <div className="flex items-center gap-2"><Upload size={18} className="text-brand-600" /><h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Import RACM</h2></div>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Upload an Excel or CSV file containing risk and control data.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
@@ -481,10 +482,10 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
           <div className="flex items-center gap-1 -mb-px">
             {steps.map((s, i) => (
               <button key={s} onClick={() => { if (i < step) setStep(i); }}
-                className={`pb-3 px-2 text-[11px] font-medium transition-colors cursor-pointer border-b-2 whitespace-nowrap ${
+                className={`pb-3 px-2 text-[0.6875rem] font-medium transition-colors cursor-pointer border-b-2 whitespace-nowrap ${
                   i === step ? 'border-brand-600 text-brand-700' : i < step ? 'border-transparent text-brand-500 hover:text-brand-700' : 'border-transparent text-ink-400'
                 }`}>
-                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold mr-1 ${
+                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[0.5625rem] font-bold mr-1 ${
                   i < step ? 'bg-brand-600 text-white' : i === step ? 'bg-brand-100 text-brand-700' : 'bg-canvas text-ink-400'
                 }`}>{i < step ? '✓' : i + 1}</span>{s}
               </button>
@@ -503,12 +504,12 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                   <div onClick={handleFileDrop}
                     className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-primary/40 hover:bg-primary-xlight/20 transition-all cursor-pointer">
                     <Upload size={32} className="mx-auto text-ink-300 mb-3" />
-                    <p className="text-[14px] font-semibold text-text mb-1">Drop your RACM file here</p>
-                    <p className="text-[12px] text-text-muted">or click to browse. Supports .xlsx, .xls, .csv</p>
-                    <p className="text-[10px] text-text-muted mt-3">Maximum file size: 10MB</p>
+                    <p className="text-[0.875rem] font-semibold text-text mb-1">Drop your RACM file here</p>
+                    <p className="text-[0.75rem] text-text-muted">or click to browse. Supports .xlsx, .xls, .csv</p>
+                    <p className="text-[0.625rem] text-text-muted mt-3">Maximum file size: 10MB</p>
                   </div>
                   <div className="rounded-lg border border-canvas-border bg-canvas px-3 py-2">
-                    <p className="text-[10px] text-ink-400">Expected columns: Risk Name, Risk Description, Process, Control Description, Control Owner, Control Type, Frequency</p>
+                    <p className="text-[0.625rem] text-ink-400">Expected columns: Risk Name, Risk Description, Process, Control Description, Control Owner, Control Type, Frequency</p>
                   </div>
                 </div>
               )}
@@ -519,32 +520,32 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-compliant-50/50 border border-compliant/20">
                     <CheckCircle2 size={16} className="text-compliant-700 shrink-0" />
                     <div>
-                      <span className="text-[12px] font-semibold text-compliant-700">File parsed successfully</span>
-                      <span className="text-[12px] text-compliant-700/70 ml-2">{fileName} — {MOCK_PARSED_ROWS.length} rows, {previewHeaders.length} columns detected</span>
+                      <span className="text-[0.75rem] font-semibold text-compliant-700">File parsed successfully</span>
+                      <span className="text-[0.75rem] text-compliant-700/70 ml-2">{fileName} — {MOCK_PARSED_ROWS.length} rows, {previewHeaders.length} columns detected</span>
                     </div>
                   </div>
                   <div className="glass-card rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-[11px]">
+                      <table className="w-full text-[0.6875rem]">
                         <thead><tr className="border-b border-border bg-surface-2/50">
-                          <th className="px-2 py-2 text-left text-[9px] font-semibold text-text-muted uppercase w-8">Row</th>
-                          {previewHeaders.map(h => <th key={h} className="px-2 py-2 text-left text-[9px] font-semibold text-text-muted uppercase">{h}</th>)}
+                          <th className="px-2 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase w-8">Row</th>
+                          {previewHeaders.map(h => <th key={h} className="px-2 py-2 text-left text-[0.5625rem] font-semibold text-text-muted uppercase">{h}</th>)}
                         </tr></thead>
                         <tbody>{previewRows.map((r, i) => (
                           <tr key={i} className="border-b border-border/40">
-                            <td className="px-2 py-1.5 text-[10px] font-mono text-ink-400">{r.sourceRow}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text truncate max-w-[100px]">{r.riskName}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text-muted truncate max-w-[120px]">{r.riskDescription}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text">{r.process}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text truncate max-w-[140px]">{r.controlText}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text-muted">{r.controlOwner}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text-muted">{r.controlType}</td>
-                            <td className="px-2 py-1.5 text-[10px] text-text-muted">{r.frequency}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] font-mono text-ink-400">{r.sourceRow}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text truncate max-w-[100px]">{r.riskName}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text-muted truncate max-w-[120px]">{r.riskDescription}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text">{r.process}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text truncate max-w-[140px]">{r.controlText}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text-muted">{r.controlOwner}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text-muted">{r.controlType}</td>
+                            <td className="px-2 py-1.5 text-[0.625rem] text-text-muted">{r.frequency}</td>
                           </tr>
                         ))}</tbody>
                       </table>
                     </div>
-                    <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[10px] text-text-muted">Showing {previewRows.length} of {MOCK_PARSED_ROWS.length} rows</div>
+                    <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[0.625rem] text-text-muted">Showing {previewRows.length} of {MOCK_PARSED_ROWS.length} rows</div>
                   </div>
                 </div>
               )}
@@ -552,17 +553,17 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
               {/* Step 2: Column Mapping */}
               {step === 2 && (
                 <div className="space-y-4">
-                  <p className="text-[12px] text-text-muted">Map each detected column to the correct RACM field.</p>
+                  <p className="text-[0.75rem] text-text-muted">Map each detected column to the correct RACM field.</p>
                   <div className="space-y-2">
                     {previewHeaders.map((h, i) => (
                       <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-white">
                         <div className="w-[140px] shrink-0">
-                          <span className="text-[11px] font-mono text-ink-500">Column {i + 1}</span>
-                          <div className="text-[12px] font-medium text-text">{h}</div>
+                          <span className="text-[0.6875rem] font-mono text-ink-500">Column {i + 1}</span>
+                          <div className="text-[0.75rem] font-medium text-text">{h}</div>
                         </div>
                         <ArrowRight size={14} className="text-ink-300 shrink-0" />
                         <select value={columnMapping[i] || '— Skip —'} onChange={e => setColumnMapping(prev => ({ ...prev, [i]: e.target.value }))}
-                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-border bg-white text-[12px] text-text outline-none focus:border-primary/40 cursor-pointer">
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] text-text outline-none focus:border-primary/40 cursor-pointer">
                           {COLUMN_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         {columnMapping[i] && columnMapping[i] !== '— Skip —' && <CheckCircle2 size={14} className="text-compliant-700 shrink-0" />}
@@ -576,33 +577,33 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
               {step === 3 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-[12px] text-text-muted">{MOCK_PARSED_ROWS.length} rows ready for import</p>
-                    <span className="px-2.5 h-5 rounded-full text-[10px] font-semibold bg-evidence-50 text-evidence-700 inline-flex items-center">All unmapped — mapping happens after import</span>
+                    <p className="text-[0.75rem] text-text-muted">{MOCK_PARSED_ROWS.length} rows ready for import</p>
+                    <span className="px-2.5 h-5 rounded-full text-[0.625rem] font-semibold bg-evidence-50 text-evidence-700 inline-flex items-center">All unmapped — mapping happens after import</span>
                   </div>
                   <div className="glass-card rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-[11px]">
+                      <table className="w-full text-[0.6875rem]">
                         <thead><tr className="border-b border-border bg-surface-2/50">
                           {['Row', 'Risk Name', 'Process', 'Control Text', 'Owner', 'Type', 'Status'].map(h =>
-                            <th key={h} className="px-3 py-2.5 text-left text-[9px] font-semibold text-text-muted uppercase whitespace-nowrap">{h}</th>
+                            <th key={h} className="px-3 py-2.5 text-left text-[0.5625rem] font-semibold text-text-muted uppercase whitespace-nowrap">{h}</th>
                           )}
                         </tr></thead>
                         <tbody>{MOCK_PARSED_ROWS.map((r, i) => (
                           <tr key={i} className="border-b border-border/40 hover:bg-surface-2/30 transition-colors">
-                            <td className="px-3 py-2 text-[10px] font-mono text-ink-400">{r.sourceRow}</td>
-                            <td className="px-3 py-2"><div className="text-[11px] font-medium text-text">{r.riskName}</div><div className="text-[9.5px] text-text-muted truncate max-w-[160px]">{r.riskDescription}</div></td>
-                            <td className="px-3 py-2 text-[11px] text-text">{r.process}</td>
-                            <td className="px-3 py-2 text-[10px] text-text-secondary truncate max-w-[180px]">{r.controlText}</td>
-                            <td className="px-3 py-2 text-[10px] text-text-muted">{r.controlOwner}</td>
-                            <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
-                            <td className="px-3 py-2"><span className="px-1.5 h-4 rounded text-[9px] font-bold bg-draft-50 text-draft-700 inline-flex items-center">Not Mapped</span></td>
+                            <td className="px-3 py-2 text-[0.625rem] font-mono text-ink-400">{r.sourceRow}</td>
+                            <td className="px-3 py-2"><div className="text-[0.6875rem] font-medium text-text">{r.riskName}</div><div className="text-[0.75rem] text-text-muted truncate max-w-[160px]">{r.riskDescription}</div></td>
+                            <td className="px-3 py-2 text-[0.6875rem] text-text">{r.process}</td>
+                            <td className="px-3 py-2 text-[0.625rem] text-text-secondary truncate max-w-[180px]">{r.controlText}</td>
+                            <td className="px-3 py-2 text-[0.625rem] text-text-muted">{r.controlOwner}</td>
+                            <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
+                            <td className="px-3 py-2"><span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-draft-50 text-draft-700 inline-flex items-center">Not Mapped</span></td>
                           </tr>
                         ))}</tbody>
                       </table>
                     </div>
                   </div>
                   <div className="rounded-lg border border-canvas-border bg-canvas px-3 py-2">
-                    <p className="text-[10px] text-ink-400">Imported control descriptions are preserved as source references. Map them to Control Library objects after import.</p>
+                    <p className="text-[0.625rem] text-ink-400">Imported control descriptions are preserved as source references. Map them to Control Library objects after import.</p>
                   </div>
                 </div>
               )}
@@ -612,23 +613,23 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
                 <div className="space-y-5">
                   <div className="glass-card rounded-2xl p-6 text-center">
                     <CheckCircle2 size={36} className="mx-auto text-compliant-700 mb-3" />
-                    <h3 className="text-[16px] font-bold text-text mb-1">Ready to Import</h3>
-                    <p className="text-[13px] text-text-muted mb-4">This will create {MOCK_PARSED_ROWS.length} risk-control rows from {fileName}</p>
+                    <h3 className="text-[1rem] font-bold text-text mb-1">Ready to Import</h3>
+                    <p className="text-[0.8125rem] text-text-muted mb-4">This will create {MOCK_PARSED_ROWS.length} risk-control rows from {fileName}</p>
                     <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto text-center">
-                      <div><div className="text-xl font-bold text-text">{MOCK_PARSED_ROWS.length}</div><div className="text-[10px] text-text-muted">Rows</div></div>
-                      <div><div className="text-xl font-bold text-text">{new Set(MOCK_PARSED_ROWS.map(r => r.riskName)).size}</div><div className="text-[10px] text-text-muted">Unique Risks</div></div>
-                      <div><div className="text-xl font-bold text-text">{new Set(MOCK_PARSED_ROWS.map(r => r.process)).size}</div><div className="text-[10px] text-text-muted">Processes</div></div>
+                      <div><div className="text-xl font-bold text-text">{MOCK_PARSED_ROWS.length}</div><div className="text-[0.625rem] text-text-muted">Rows</div></div>
+                      <div><div className="text-xl font-bold text-text">{new Set(MOCK_PARSED_ROWS.map(r => r.riskName)).size}</div><div className="text-[0.625rem] text-text-muted">Unique Risks</div></div>
+                      <div><div className="text-xl font-bold text-text">{new Set(MOCK_PARSED_ROWS.map(r => r.process)).size}</div><div className="text-[0.625rem] text-text-muted">Processes</div></div>
                     </div>
                   </div>
                   <div className="rounded-xl border border-mitigated/30 bg-mitigated-50 px-4 py-3 flex items-start gap-2.5">
                     <Info size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
-                    <div className="text-[11px] text-mitigated-700 leading-relaxed">
+                    <div className="text-[0.6875rem] text-mitigated-700 leading-relaxed">
                       Imported controls are <strong>not</strong> automatically created as system controls. They are preserved as source references. You will need to map each control text to a Control Library object or create new controls.
                     </div>
                   </div>
                   <div className="rounded-lg border border-canvas-border bg-canvas px-3 py-2 flex items-start gap-2 opacity-50">
                     <Activity size={11} className="text-ink-400 mt-0.5 shrink-0" />
-                    <span className="text-[10px] text-ink-400">AI auto-mapping — coming soon. Suggested matches will appear here in a future release.</span>
+                    <span className="text-[0.625rem] text-ink-400">AI auto-mapping — coming soon. Suggested matches will appear here in a future release.</span>
                   </div>
                 </div>
               )}
@@ -639,17 +640,17 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between">
-          <div className="text-[11px] text-ink-400">Step {step + 1} of {steps.length}</div>
+          <div className="text-[0.6875rem] text-ink-400">Step {step + 1} of {steps.length}</div>
           <div className="flex items-center gap-3">
-            {step > 0 && <button onClick={() => setStep(s => s - 1)} className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Back</button>}
+            {step > 0 && <button onClick={() => setStep(s => s - 1)} className="px-4 py-2 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Back</button>}
             {step < 4 ? (
               <button onClick={() => setStep(s => s + 1)} disabled={step === 0}
-                className="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                className="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 {step === 3 ? 'Review Complete' : 'Continue'}
               </button>
             ) : (
               <button onClick={() => onImport(MOCK_PARSED_ROWS)}
-                className="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer">
+                className="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                 Confirm Import
               </button>
             )}
@@ -732,14 +733,14 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
     <div className="space-y-5">
       {/* Action bar */}
       <div className="flex items-center justify-between">
-        <div className="text-[12px] text-text-muted">{totalRacms} RACM{totalRacms !== 1 ? 's' : ''} across {new Set(racmList.map(r => r.process)).size} processes</div>
+        <div className="text-[0.75rem] text-text-muted">{totalRacms} RACM{totalRacms !== 1 ? 's' : ''} across {new Set(racmList.map(r => r.process)).size} processes</div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowImportDrawer(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-[12px] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
+            className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
             <Upload size={13} />Import RACM
           </button>
           <button onClick={() => setShowCreateRacmModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[12px] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+            className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer">
             <Plus size={13} />Create RACM
           </button>
         </div>
@@ -758,7 +759,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
             className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${kpi.color.split(' ')[0]}`}>{kpi.value}</div>
-            <div className="text-[10px] text-text-muted mt-0.5">{kpi.label}</div>
+            <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
           </motion.div>
         ))}
       </div>
@@ -766,11 +767,11 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
       {/* RACM table */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="border-b border-border bg-surface-2/50">
                 {['RACM', 'Process', 'Framework', 'Risks', 'Controls', 'Key Controls', 'Mapping Status', 'Readiness', ''].map(h => (
-                  <th key={h || 'action'} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  <th key={h || 'action'} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -784,25 +785,25 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
                         {racm.linkedToEngagement && <Lock size={10} className="text-gray-400 shrink-0" />}
-                        <span className="text-[12px] font-medium text-text">{racm.name}</span>
+                        <span className="text-[0.75rem] font-medium text-text">{racm.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{racm.process}</span>
+                      <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gray-100 text-gray-600 border border-gray-200/60">{racm.process}</span>
                     </td>
-                    <td className="px-3 py-3"><span className="text-[11px] text-gray-500">{racm.framework}</span></td>
-                    <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{racm.risks}</span></td>
-                    <td className="px-3 py-3"><span className="text-[12px] text-text tabular-nums">{racm.controls}</span></td>
-                    <td className="px-3 py-3"><span className="text-[12px] text-gray-500 tabular-nums">{racm.keyControls}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.6875rem] text-gray-500">{racm.framework}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.risks}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-text tabular-nums">{racm.controls}</span></td>
+                    <td className="px-3 py-3"><span className="text-[0.75rem] text-gray-500 tabular-nums">{racm.keyControls}</span></td>
                     <td className="px-3 py-3">
-                      <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${MAPPING_STYLES[mapping]}`}>{mapping}</span>
+                      <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${MAPPING_STYLES[mapping]}`}>{mapping}</span>
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${READINESS_STYLES[readiness]}`}>{readiness}</span>
+                      <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${READINESS_STYLES[readiness]}`}>{readiness}</span>
                     </td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => { setMappingRacm(racm); setShowMappingWorkspace(true); }}
-                        className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
+                        className="px-2 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 bg-gray-100 text-gray-600 hover:bg-gray-200/70">
                         View<ChevronRight size={8} />
                       </button>
                     </td>
@@ -813,7 +814,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
           </table>
         </div>
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-          <span className="text-[11px] text-text-muted">{racmList.length} RACM{racmList.length !== 1 ? 's' : ''}</span>
+          <span className="text-[0.6875rem] text-text-muted">{racmList.length} RACM{racmList.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
@@ -821,51 +822,51 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
       {importedRows.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[13px] font-semibold text-text flex items-center gap-2">
+            <h3 className="text-[0.8125rem] font-semibold text-text flex items-center gap-2">
               <Upload size={14} className="text-brand-600" />Imported RACM — Review & Map
             </h3>
-            <div className="flex items-center gap-3 text-[11px]">
+            <div className="flex items-center gap-3 text-[0.6875rem]">
               <span className="text-compliant-700 font-medium">{mappedImportCount} mapped</span>
               <span className="text-draft-700 font-medium">{unmappedImportCount} unmapped</span>
             </div>
           </div>
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-[11px]">
+              <table className="w-full text-[0.6875rem]">
                 <thead><tr className="border-b border-border bg-surface-2/50">
                   {['Row', 'Risk', 'Process', 'Imported Control Text', 'Owner', 'Type', 'Mapping', 'Action'].map(h =>
-                    <th key={h} className="px-3 py-2.5 text-left text-[9px] font-semibold text-text-muted uppercase whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-2.5 text-left text-[0.5625rem] font-semibold text-text-muted uppercase whitespace-nowrap">{h}</th>
                   )}
                 </tr></thead>
                 <tbody>{importedRows.map((r, i) => (
                   <tr key={i} className={`border-b border-border/40 transition-colors ${r.mappingStatus === 'Not Mapped' ? 'bg-risk-50/10 hover:bg-risk-50/20' : 'hover:bg-surface-2/30'}`}>
-                    <td className="px-3 py-2 text-[10px] font-mono text-ink-400">{r.sourceRow}</td>
+                    <td className="px-3 py-2 text-[0.625rem] font-mono text-ink-400">{r.sourceRow}</td>
                     <td className="px-3 py-2">
-                      <div className="text-[11px] font-medium text-text">{r.riskName}</div>
-                      <div className="text-[9.5px] text-text-muted truncate max-w-[140px]">{r.riskDescription}</div>
+                      <div className="text-[0.6875rem] font-medium text-text">{r.riskName}</div>
+                      <div className="text-[0.75rem] text-text-muted truncate max-w-[140px]">{r.riskDescription}</div>
                     </td>
-                    <td className="px-3 py-2 text-[11px] text-text">{r.process}</td>
-                    <td className="px-3 py-2 text-[10px] text-text-secondary max-w-[180px]"><span className="line-clamp-2">{r.controlText}</span></td>
-                    <td className="px-3 py-2 text-[10px] text-text-muted">{r.controlOwner}</td>
-                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
-                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[9px] font-bold inline-flex items-center ${MAP_STATUS_CLS[r.mappingStatus]}`}>{r.mappingStatus}</span></td>
+                    <td className="px-3 py-2 text-[0.6875rem] text-text">{r.process}</td>
+                    <td className="px-3 py-2 text-[0.625rem] text-text-secondary max-w-[180px]"><span className="line-clamp-2">{r.controlText}</span></td>
+                    <td className="px-3 py-2 text-[0.625rem] text-text-muted">{r.controlOwner}</td>
+                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${r.controlType === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-gray-100 text-gray-500'}`}>{r.controlType}</span></td>
+                    <td className="px-3 py-2"><span className={`px-1.5 h-4 rounded text-[0.5625rem] font-bold inline-flex items-center ${MAP_STATUS_CLS[r.mappingStatus]}`}>{r.mappingStatus}</span></td>
                     <td className="px-3 py-2">
                       {r.mappingStatus === 'Not Mapped' ? (
                         <div className="flex items-center gap-1">
                           <button onClick={() => handleMapRow(i)}
-                            className="px-2 py-0.5 rounded text-[9px] font-bold text-primary bg-primary/10 hover:bg-primary/15 cursor-pointer transition-colors">Map Control</button>
+                            className="px-2 py-0.5 rounded text-[0.5625rem] font-bold text-primary bg-primary/10 hover:bg-primary/15 cursor-pointer transition-colors">Map Control</button>
                           <button onClick={() => { handleMapRow(i); addToast({ message: 'New control created in Control Library', type: 'success' }); }}
-                            className="px-2 py-0.5 rounded text-[9px] font-bold text-brand-700 bg-brand-50 hover:bg-brand-50/80 cursor-pointer transition-colors">Create New</button>
+                            className="px-2 py-0.5 rounded text-[0.5625rem] font-bold text-brand-700 bg-brand-50 hover:bg-brand-50/80 cursor-pointer transition-colors">Create New</button>
                         </div>
                       ) : (
-                        <span className="text-[10px] text-compliant-700 font-medium flex items-center gap-1"><CheckCircle2 size={10} />Done</span>
+                        <span className="text-[0.625rem] text-compliant-700 font-medium flex items-center gap-1"><CheckCircle2 size={10} />Done</span>
                       )}
                     </td>
                   </tr>
                 ))}</tbody>
               </table>
             </div>
-            <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[10px] text-text-muted">
+            <div className="px-3 py-2 border-t border-border bg-surface-2/30 text-[0.625rem] text-text-muted">
               Source: imported file · {importedRows.length} rows · Source row numbers preserved for traceability
             </div>
           </div>
@@ -875,7 +876,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
       {/* Governance notice */}
       <div className="rounded-lg border border-canvas-border bg-canvas px-4 py-3 flex items-start gap-2.5">
         <ShieldCheck size={13} className="text-ink-400 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-ink-400 leading-relaxed">
+        <p className="text-[0.6875rem] text-ink-400 leading-relaxed">
           RACM is the governance mapping layer — it defines which risks are mitigated by which controls and how they will be tested.
           It does not contain samples, evidence, or testing conclusions. Those belong to the Execution tab.
         </p>
@@ -968,18 +969,18 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-3">
           <ArrowLeft size={14} />Back to RACM List
         </button>
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-primary-medium"><LayoutGrid size={18} className="text-white" /></div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-[16px] font-bold text-text">{racm.name}</h2>
-              <span className="text-[11px] font-mono text-ink-400">{racm.version}</span>
-              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>{computed.status}</span>
+              <h2 className="text-[1rem] font-bold text-text">{racm.name}</h2>
+              <span className="text-[0.6875rem] font-mono text-ink-400">{racm.version}</span>
+              <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${statusCls}`}>{computed.status}</span>
             </div>
-            <div className="flex items-center gap-3 text-[12px] text-text-muted mt-0.5">
+            <div className="flex items-center gap-3 text-[0.75rem] text-text-muted mt-0.5">
               <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: BP_DOT_COLORS[racm.process] || '#6B5D82' }} />{racm.process}</span>
               <span>{racm.framework}</span>
             </div>
@@ -993,7 +994,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
             className="glass-card rounded-xl p-3 text-center">
             <div className={`text-lg font-bold tabular-nums ${kpi.color}`}>{kpi.value}</div>
-            <div className="text-[10px] text-text-muted mt-0.5">{kpi.label}</div>
+            <div className="text-[0.625rem] text-text-muted mt-0.5">{kpi.label}</div>
           </motion.div>
         ))}
       </div>
@@ -1001,16 +1002,16 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
       {/* Action bar */}
       <div className="flex items-center gap-2">
         <button onClick={() => setShowAddRisk(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+          className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
           <Plus size={13} />Add Risk
         </button>
         <button onClick={handleImportRisks}
-          className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-lg text-[12px] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
+          className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
           <Upload size={13} />Import Risks from File
         </button>
         {totalRisks > 0 && (
           <button onClick={handleProceedToMapping}
-            className="flex items-center gap-1.5 px-4 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[12px] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer ml-auto">
+            className="flex items-center gap-1.5 px-4 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer ml-auto">
             <Target size={13} />Proceed to Mapping
           </button>
         )}
@@ -1019,7 +1020,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
       {/* Helper text */}
       <div className="rounded-lg border border-canvas-border bg-canvas px-4 py-3 flex items-start gap-2.5">
         <Info size={13} className="text-primary/60 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-ink-500 leading-relaxed">Define risks first, then map controls to establish risk coverage. Mapping happens in the next step — just create risks here.</p>
+        <p className="text-[0.6875rem] text-ink-500 leading-relaxed">Define risks first, then map controls to establish risk coverage. Mapping happens in the next step — just create risks here.</p>
       </div>
 
       {/* Add Risk inline form */}
@@ -1027,27 +1028,27 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
         {showAddRisk && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
             <div className="glass-card rounded-xl p-4 space-y-3">
-              <div className="text-[12px] font-bold text-brand-700">Add Risk</div>
+              <div className="text-[0.75rem] font-bold text-brand-700">Add Risk</div>
               <div>
-                <label className="text-[12px] font-semibold text-text-muted block mb-1">Risk Name *</label>
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1">Risk Name *</label>
                 <input value={riskName} onChange={e => setRiskName(e.target.value)} placeholder="e.g. Unauthorized vendor payments"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" autoFocus />
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" autoFocus />
               </div>
               <div>
-                <label className="text-[12px] font-semibold text-text-muted block mb-1">Risk Description</label>
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1">Risk Description</label>
                 <textarea value={riskDesc} onChange={e => setRiskDesc(e.target.value)} rows={2} placeholder="Describe the risk..."
-                  className="w-full px-3 py-2 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" />
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none" />
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-ink-400">
+              <div className="flex items-center gap-2 text-[0.6875rem] text-ink-400">
                 <span>Process: <strong className="text-text">{racm.process}</strong></span>
                 <span>·</span>
                 <span>ID: auto-generated</span>
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <button onClick={handleAddRisk} disabled={!riskName.trim()}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Add Risk</button>
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Add Risk</button>
                 <button onClick={() => { setShowAddRisk(false); setRiskName(''); setRiskDesc(''); }}
-                  className="px-4 py-2 border border-border rounded-lg text-[12px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+                  className="px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
               </div>
             </div>
           </motion.div>
@@ -1058,51 +1059,51 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
       {isEmpty && !showAddRisk ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-10 text-center">
           <AlertTriangle size={36} className="mx-auto text-ink-300 mb-3" />
-          <p className="text-[15px] font-semibold text-ink-600 mb-1">No risks added yet</p>
-          <p className="text-[13px] text-ink-400 mb-5 max-w-md mx-auto">Start by adding risks manually or importing a RACM file with existing risk and control data.</p>
+          <p className="text-[0.9375rem] font-semibold text-ink-600 mb-1">No risks added yet</p>
+          <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">Start by adding risks manually or importing a RACM file with existing risk and control data.</p>
           <div className="flex items-center justify-center gap-3">
-            <button onClick={() => setShowAddRisk(true)} className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"><Plus size={14} />Add Risk</button>
-            <button onClick={handleImportRisks} className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-lg text-[13px] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer"><Upload size={14} />Import Risks</button>
+            <button onClick={() => setShowAddRisk(true)} className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Plus size={14} />Add Risk</button>
+            <button onClick={handleImportRisks} className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-lg text-[0.8125rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer"><Upload size={14} />Import Risks</button>
           </div>
         </motion.div>
       ) : localRisks.length > 0 ? (
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead><tr className="border-b border-border bg-surface-2/50">
                 {['ID', 'Risk Name', 'Process', 'Source', 'Status'].map(h =>
-                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase">{h}</th>
+                  <th key={h} className="px-3 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase">{h}</th>
                 )}
               </tr></thead>
               <tbody>{localRisks.map((r, i) => (
                 <motion.tr key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
                   className="border-b border-border/40 hover:bg-surface-2/30 transition-colors">
-                  <td className="px-3 py-2.5 font-mono text-[11px] text-ink-500">{r.id}</td>
+                  <td className="px-3 py-2.5 font-mono text-[0.6875rem] text-ink-500">{r.id}</td>
                   <td className="px-3 py-2.5">
-                    <div className="text-[12px] font-medium text-text">{r.name}</div>
-                    {r.description && <div className="text-[10px] text-text-muted truncate max-w-[250px]">{r.description}</div>}
+                    <div className="text-[0.75rem] font-medium text-text">{r.name}</div>
+                    {r.description && <div className="text-[0.625rem] text-text-muted truncate max-w-[250px]">{r.description}</div>}
                   </td>
-                  <td className="px-3 py-2.5"><span className="inline-flex items-center gap-1 text-[11px]"><span className="w-1.5 h-1.5 rounded-full" style={{ background: BP_DOT_COLORS[r.process] || '#6B5D82' }} />{r.process}</span></td>
-                  <td className="px-3 py-2.5 text-[11px] text-ink-400">{r.sourceRow}</td>
-                  <td className="px-3 py-2.5"><span className="px-1.5 h-4 rounded text-[9px] font-bold bg-draft-50 text-draft-700 inline-flex items-center">Unmapped</span></td>
+                  <td className="px-3 py-2.5"><span className="inline-flex items-center gap-1 text-[0.6875rem]"><span className="w-1.5 h-1.5 rounded-full" style={{ background: BP_DOT_COLORS[r.process] || '#6B5D82' }} />{r.process}</span></td>
+                  <td className="px-3 py-2.5 text-[0.6875rem] text-ink-400">{r.sourceRow}</td>
+                  <td className="px-3 py-2.5"><span className="px-1.5 h-4 rounded text-[0.5625rem] font-bold bg-draft-50 text-draft-700 inline-flex items-center">Unmapped</span></td>
                 </motion.tr>
               ))}</tbody>
             </table>
           </div>
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-2/30">
-            <span className="text-[11px] text-text-muted">{localRisks.length} risk{localRisks.length !== 1 ? 's' : ''} added</span>
+            <span className="text-[0.6875rem] text-text-muted">{localRisks.length} risk{localRisks.length !== 1 ? 's' : ''} added</span>
             <button onClick={handleProceedToMapping}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[11px] font-semibold transition-colors cursor-pointer">
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.6875rem] font-semibold transition-colors cursor-pointer">
               <Target size={11} />Proceed to Mapping <ChevronRight size={10} />
             </button>
           </div>
         </div>
       ) : racm.risks > 0 ? (
         <div className="glass-card rounded-xl p-5">
-          <h3 className="text-[12px] font-bold text-ink-500 uppercase tracking-wider mb-3">Existing Risks ({racm.risks})</h3>
-          <p className="text-[12px] text-ink-400">This RACM has {racm.risks} risks from seed data.</p>
+          <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Existing Risks ({racm.risks})</h3>
+          <p className="text-[0.75rem] text-ink-400">This RACM has {racm.risks} risks from seed data.</p>
           <button onClick={handleProceedToMapping}
-            className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+            className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
             <Target size={13} />Open Mapping Workspace
           </button>
         </div>
@@ -1149,8 +1150,8 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
     });
   };
 
-  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
-  const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+  const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+  const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   return (
     <>
@@ -1161,8 +1162,8 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
           <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
             <div>
-              <h2 className="font-display text-[18px] font-semibold text-ink-900">Create RACM</h2>
-              <p className="text-[12px] text-ink-500 mt-0.5">Define a new Risk & Control Matrix for audit governance.</p>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Create RACM</h2>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new Risk & Control Matrix for audit governance.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
           </div>
@@ -1170,7 +1171,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: 480 }}>
             {/* Section 1: Basic Info */}
             <div className="space-y-3">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
+              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Basic Info</h3>
               <div>
                 <label className={labelCls}>RACM Name <span className="text-red-400">*</span></label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P — Vendor Payment" className={fieldCls} autoFocus />
@@ -1183,7 +1184,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
             {/* Section 2: Audit Context */}
             <div className="space-y-3">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Audit Context</h3>
+              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Audit Context</h3>
               <div>
                 <label className={labelCls}>Business Process <span className="text-red-400">*</span></label>
                 <select value={process} onChange={e => setProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
@@ -1216,7 +1217,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
             {/* Section 3: Ownership */}
             <div className="space-y-3">
-              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ownership</h3>
+              <h3 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Ownership</h3>
               <div>
                 <label className={labelCls}>RACM Owner <span className="text-red-400">*</span></label>
                 <input value={owner} onChange={e => setOwner(e.target.value)} className={fieldCls} />
@@ -1225,9 +1226,9 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
           </div>
 
           <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
             <button onClick={handleCreate} disabled={!isValid}
-              className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+              className="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
               Create RACM
             </button>
           </div>
@@ -1253,33 +1254,33 @@ function GanttTooltip({ item, position }: { item: AuditEngagement; position: { x
       style={{ left: position.x + 12, top: position.y - 8 }}
     >
       <div className="glass-card-strong rounded-xl p-3 shadow-xl min-w-[240px]">
-        <div className="text-[12px] font-bold text-text mb-1.5">{item.name}</div>
+        <div className="text-[0.75rem] font-bold text-text mb-1.5">{item.name}</div>
         <div className="space-y-1">
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Type / Framework</span>
             <span className="text-text font-medium">{item.auditType} / {item.framework}</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Owner</span>
             <span className="text-text font-medium">{item.owner}</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Duration</span>
             <span className="text-text font-medium">{item.duration} months ({startMonth} — {endMonth})</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Controls</span>
             <span className="text-text font-medium">{item.controls}</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">RACM Version</span>
             <span className="text-text font-medium">{item.sourceRacmVersionId}</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Status</span>
             <span className={`font-bold px-1.5 py-0.5 rounded-full ${lifecycleTone(item.status)}`}>{lifecycleLabel(item.status)}</span>
           </div>
-          <div className="flex justify-between text-[12px]">
+          <div className="flex justify-between text-[0.75rem]">
             <span className="text-text-muted">Priority</span>
             <span className={`font-bold ${
               item.priority === 'Critical' ? 'text-risk-700' :
@@ -1327,7 +1328,7 @@ function GanttChart({
           {MONTHS.map((m, i) => (
             <div
               key={m}
-              className={`flex-1 text-center text-[12px] font-semibold ${
+              className={`flex-1 text-center text-[0.75rem] font-semibold ${
                 i === currentMonth ? 'text-primary' : 'text-text-muted'
               }`}
             >
@@ -1367,7 +1368,7 @@ function GanttChart({
                 onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                <span className="text-white text-[12px] font-semibold truncate drop-shadow-sm">
+                <span className="text-white text-[0.75rem] font-semibold truncate drop-shadow-sm">
                   {item.name}
                 </span>
                 {item.engagementSnapshotId && (
@@ -1402,7 +1403,7 @@ function MilestonesStrip() {
               <div key={ms.label} className="flex items-center" style={{ marginLeft: i === 0 ? `${(ms.month / 12) * 100}%` : `${((ms.month - MILESTONES[i - 1].month) / 12) * 100 - 3}%` }}>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/5 border border-primary/10">
                   <Icon size={11} className="text-primary" />
-                  <span className="text-[12px] font-medium text-primary whitespace-nowrap">{ms.label}</span>
+                  <span className="text-[0.75rem] font-medium text-primary whitespace-nowrap">{ms.label}</span>
                 </div>
               </div>
             );
@@ -1422,7 +1423,7 @@ function LifecycleStepper({ status }: { status: EngagementLifecycle }) {
 
   return (
     <div className="mb-4">
-      <div className="text-[10px] font-bold text-text-muted uppercase mb-2">Lifecycle</div>
+      <div className="text-[0.625rem] font-bold text-text-muted uppercase mb-2">Lifecycle</div>
       <div className="flex gap-1">
         {[...planningSteps, ...executionSteps].map((step, i) => {
           const isActive = step === status;
@@ -1431,7 +1432,7 @@ function LifecycleStepper({ status }: { status: EngagementLifecycle }) {
           return (
             <div key={step} className="flex items-center gap-1">
               {i === 4 && <div className="w-px h-5 bg-border-light mx-1" />}
-              <div className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+              <div className={`px-2 py-1 rounded-md text-[0.625rem] font-semibold transition-all ${
                 isActive ? lifecycleTone(step) + ' ring-1 ring-current/20' :
                 isPast ? 'bg-compliant-50/60 text-compliant-700/60' :
                 'bg-paper-50 text-ink-400'
@@ -1490,7 +1491,7 @@ function EngagementDrawer({
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[15px] font-bold text-text">
+            <h3 className="text-[0.9375rem] font-bold text-text">
               {isCreate ? 'Create Engagement' : isInExecution ? 'Engagement Detail' : 'Edit Engagement'}
             </h3>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer">
@@ -1505,7 +1506,7 @@ function EngagementDrawer({
           {readOnly && !isInExecution && (
             <div className="flex items-center gap-2.5 p-3 bg-evidence-50 rounded-xl mb-4 border border-evidence">
               <Lock size={14} className="text-evidence-700 shrink-0" />
-              <span className="text-[12px] text-evidence-700 font-medium">Plan is frozen — fields are read-only.</span>
+              <span className="text-[0.75rem] text-evidence-700 font-medium">Plan is frozen — fields are read-only.</span>
             </div>
           )}
 
@@ -1516,12 +1517,12 @@ function EngagementDrawer({
                 <div className="flex items-center gap-2.5">
                   <Play size={14} className="text-compliant-700 shrink-0" />
                   <div>
-                    <span className="text-[12px] text-compliant-700 font-semibold block">In Execution</span>
-                    <span className="text-[11px] text-compliant-700/80">Snapshot: {form.engagementSnapshotId || '—'}</span>
+                    <span className="text-[0.75rem] text-compliant-700 font-semibold block">In Execution</span>
+                    <span className="text-[0.6875rem] text-compliant-700/80">Snapshot: {form.engagementSnapshotId || '—'}</span>
                   </div>
                 </div>
               {onViewExecution && (
-                <button onClick={() => onViewExecution(form.id)} className="px-3 py-1.5 bg-compliant hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5">
+                <button onClick={() => onViewExecution(form.id)} className="px-3 py-1.5 bg-compliant hover:brightness-110 text-white rounded-lg text-[0.6875rem] font-semibold transition-all cursor-pointer flex items-center gap-1.5">
                   <ArrowRight size={11} />
                   Open Hub
                 </button>
@@ -1531,14 +1532,14 @@ function EngagementDrawer({
               <div className="flex items-center gap-2.5 p-3 bg-brand-50/50 rounded-xl border border-brand-100">
                 <Lock size={13} className="text-brand-700 shrink-0" />
                 <div className="flex-1">
-                  <span className="text-[11px] font-semibold text-brand-700">Snapshot locked from {form.sourceRacmVersionId}</span>
-                  <p className="text-[10px] text-brand-600 mt-0.5">RACM, audit period, and control scope are immutable during execution.</p>
+                  <span className="text-[0.6875rem] font-semibold text-brand-700">Snapshot locked from {form.sourceRacmVersionId}</span>
+                  <p className="text-[0.625rem] text-brand-600 mt-0.5">RACM, audit period, and control scope are immutable during execution.</p>
                 </div>
               </div>
               {/* Scope change warning */}
               <div className="flex items-start gap-2 p-2.5 bg-surface-2/50 rounded-lg">
                 <AlertTriangle size={11} className="text-text-muted mt-0.5 shrink-0" />
-                <p className="text-[10px] text-text-muted">Scope changes require creating a new RACM version and new engagement snapshot.</p>
+                <p className="text-[0.625rem] text-text-muted">Scope changes require creating a new RACM version and new engagement snapshot.</p>
               </div>
             </div>
           )}
@@ -1547,7 +1548,7 @@ function EngagementDrawer({
           {canActivate && (
             <button
               onClick={() => onActivate(form.id)}
-              className="w-full flex items-center justify-center gap-2 py-3 mb-4 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[13px] font-bold transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 mb-4 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.8125rem] font-bold transition-all cursor-pointer"
             >
               <Zap size={14} />
               Activate Engagement
@@ -1558,14 +1559,14 @@ function EngagementDrawer({
           <div className="space-y-0">
             {/* Name */}
             <div className="mb-3">
-              <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Engagement Name *</label>
+              <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Engagement Name *</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => update('name', e.target.value)}
                 disabled={readOnly || isInExecution}
                 placeholder="e.g., P2P — SOX Audit FY26"
-                className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${
+                className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${
                   (readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'
                 }`}
               />
@@ -1580,7 +1581,7 @@ function EngagementDrawer({
                 onChange={(v) => update('auditType', v)}
                 disabled={readOnly || isInExecution}
               />
-              <p className="text-[10px] text-text-muted mt-0.5 px-1">Audit type defines the nature of the audit.</p>
+              <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Audit type defines the nature of the audit.</p>
             </div>
 
             {/* Framework / Compliance Scope */}
@@ -1592,25 +1593,25 @@ function EngagementDrawer({
                 onChange={(v) => update('framework', v)}
                 disabled={readOnly || isInExecution}
               />
-              <p className="text-[10px] text-text-muted mt-0.5 px-1">Framework defines the compliance or assurance standard.</p>
+              <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Framework defines the compliance or assurance standard.</p>
             </div>
 
             {/* SOX Enforcement Panel */}
             <div className={`mb-3 rounded-xl border px-4 py-3 ${form.framework === 'SOX ICFR' ? 'border-brand-200 bg-brand-50/40' : 'border-border bg-surface-2/50'}`}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] font-bold text-text-muted uppercase">SOX Enforcement</span>
+                <span className="text-[0.6875rem] font-bold text-text-muted uppercase">SOX Enforcement</span>
                 {form.framework === 'SOX ICFR' ? (
-                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-bold bg-brand-100 text-brand-700">Enabled</span>
+                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-bold bg-brand-100 text-brand-700">Enabled</span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">Disabled</span>
+                  <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-medium bg-gray-100 text-gray-500">Disabled</span>
                 )}
               </div>
               {form.framework === 'SOX ICFR' ? (
-                <p className="text-[10px] text-brand-700 leading-relaxed">Reviewer approval, evidence requirements, key-control validation, and period locking will be enforced.</p>
+                <p className="text-[0.625rem] text-brand-700 leading-relaxed">Reviewer approval, evidence requirements, key-control validation, and period locking will be enforced.</p>
               ) : (
-                <p className="text-[10px] text-text-muted leading-relaxed">Standard engagement rules will apply.</p>
+                <p className="text-[0.625rem] text-text-muted leading-relaxed">Standard engagement rules will apply.</p>
               )}
-              <p className="text-[9px] text-text-muted mt-1 italic">SOX enforcement is driven by framework, not audit type.</p>
+              <p className="text-[0.5625rem] text-text-muted mt-1 italic">SOX enforcement is driven by framework, not audit type.</p>
             </div>
 
             {/* Primary Business Process / Domain */}
@@ -1622,23 +1623,23 @@ function EngagementDrawer({
                 onChange={(v) => update('businessProcess', v)}
                 disabled={readOnly || isInExecution}
               />
-              <p className="text-[10px] text-text-muted mt-0.5 px-1">Used for planning and filtering. Execution scope comes from linked RACM.</p>
+              <p className="text-[0.625rem] text-text-muted mt-0.5 px-1">Used for planning and filtering. Execution scope comes from linked RACM.</p>
             </div>
 
             {/* Audit Period */}
             <div className="grid grid-cols-2 gap-3">
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Audit Period Start *</label>
-                <input type="date" value={form.auditPeriodStart} onChange={e => update('auditPeriodStart', e.target.value)}
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Audit Period Start *</label>
+                <DatePicker value={form.auditPeriodStart} onChange={e => update('auditPeriodStart', e.target.value)}
                   disabled={readOnly || isInExecution}
-                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
+                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Audit Period End *</label>
-                <input type="date" value={form.auditPeriodEnd} onChange={e => update('auditPeriodEnd', e.target.value)}
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Audit Period End *</label>
+                <DatePicker value={form.auditPeriodEnd} onChange={e => update('auditPeriodEnd', e.target.value)}
                   disabled={readOnly || isInExecution}
-                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
+                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
             </div>
@@ -1646,17 +1647,17 @@ function EngagementDrawer({
             {/* Planned Start/End */}
             <div className="grid grid-cols-2 gap-3">
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Planned Start *</label>
-                <input type="date" value={form.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)}
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Planned Start *</label>
+                <DatePicker value={form.plannedStartDate} onChange={e => update('plannedStartDate', e.target.value)}
                   disabled={readOnly || isInExecution}
-                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
+                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Planned End *</label>
-                <input type="date" value={form.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)}
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Planned End *</label>
+                <DatePicker value={form.plannedEndDate} onChange={e => update('plannedEndDate', e.target.value)}
                   disabled={readOnly || isInExecution}
-                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
+                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
             </div>
@@ -1665,14 +1666,14 @@ function EngagementDrawer({
             {isInExecution && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="mb-3">
-                  <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Actual Start</label>
-                  <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] bg-surface-2 text-text-secondary">
+                  <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Actual Start</label>
+                  <div className="px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] bg-surface-2 text-text-secondary">
                     {formatDate(form.actualStartDate)}
                   </div>
                 </div>
                 <div className="mb-3">
-                  <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Actual End</label>
-                  <div className="px-3 py-2.5 border border-border rounded-lg text-[13px] bg-surface-2 text-text-secondary">
+                  <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Actual End</label>
+                  <div className="px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] bg-surface-2 text-text-secondary">
                     {formatDate(form.actualEndDate)}
                   </div>
                 </div>
@@ -1699,7 +1700,7 @@ function EngagementDrawer({
 
             {/* RACM Version */}
             <div className="mb-3">
-              <label className="text-[12px] font-semibold text-text-muted block mb-1.5">RACM Version *</label>
+              <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">RACM Version *</label>
               <div className="relative">
                 <Dropdown<string>
                   label=""
@@ -1719,10 +1720,10 @@ function EngagementDrawer({
               <div className="mb-3 p-3 bg-brand-50/50 rounded-xl border border-brand-100">
                 <div className="flex items-center gap-2 mb-1">
                   <Copy size={12} className="text-brand-600" />
-                  <span className="text-[11px] font-bold text-brand-700 uppercase">Engagement Snapshot</span>
+                  <span className="text-[0.6875rem] font-bold text-brand-700 uppercase">Engagement Snapshot</span>
                 </div>
-                <div className="text-[12px] text-brand-700 font-mono">{form.engagementSnapshotId}</div>
-                <div className="text-[11px] text-brand-600 mt-0.5">Immutable copy of RACM {form.sourceRacmVersionId} created at activation</div>
+                <div className="text-[0.75rem] text-brand-700 font-mono">{form.engagementSnapshotId}</div>
+                <div className="text-[0.6875rem] text-brand-600 mt-0.5">Immutable copy of RACM {form.sourceRacmVersionId} created at activation</div>
               </div>
             )}
 
@@ -1736,11 +1737,11 @@ function EngagementDrawer({
                 disabled={readOnly || isInExecution}
               />
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Duration (months)</label>
+                <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Duration (months)</label>
                 <input type="number" min={1} max={12} value={form.duration}
                   onChange={(e) => update('duration', Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))}
                   disabled={readOnly || isInExecution}
-                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
+                  className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all ${(readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
             </div>
@@ -1749,13 +1750,13 @@ function EngagementDrawer({
 
             {/* Description */}
             <div className="mb-3">
-              <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Description</label>
+              <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Description</label>
               <textarea
                 value={form.description}
                 onChange={(e) => update('description', e.target.value)}
                 disabled={readOnly || isInExecution}
                 placeholder="Describe the scope and objectives of this engagement..."
-                className={`w-full px-3 py-2.5 border border-border rounded-lg text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none h-24 ${
+                className={`w-full px-3 py-2.5 border border-border rounded-lg text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all resize-none h-24 ${
                   (readOnly || isInExecution) ? 'bg-surface-2 text-text-muted cursor-not-allowed' : 'bg-white placeholder:text-text-muted/50'
                 }`}
               />
@@ -1767,14 +1768,14 @@ function EngagementDrawer({
             <div className="mt-5 pt-4 border-t border-border-light">
               <button
                 onClick={() => onSave(form)}
-                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[13px] font-semibold transition-colors cursor-pointer mb-3"
+                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer mb-3"
               >
                 {isCreate ? 'Create Engagement' : 'Save Changes'}
               </button>
               {!isCreate && (
                 <button
                   onClick={() => onDelete(form.id)}
-                  className="w-full py-2 text-risk-700 hover:bg-risk-50 rounded-xl text-[12px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="w-full py-2 text-risk-700 hover:bg-risk-50 rounded-xl text-[0.75rem] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   Remove from Plan
                 </button>
@@ -1838,7 +1839,7 @@ function ActivationModal({ engagement, activating, activationError, activationLo
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-primary-medium"><Lock size={16} className="text-white" /></div>
-                <h3 className="text-[15px] font-bold text-text">Activate Engagement?</h3>
+                <h3 className="text-[0.9375rem] font-bold text-text">Activate Engagement?</h3>
               </div>
               <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-2 transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
             </div>
@@ -1846,32 +1847,32 @@ function ActivationModal({ engagement, activating, activationError, activationLo
             {activationError && (
               <div className="flex items-start gap-2.5 p-3 bg-risk-50 rounded-xl mb-4 border border-risk/30">
                 <XCircle size={14} className="text-risk-700 mt-0.5 shrink-0" />
-                <p className="text-[12px] text-risk-700 font-medium">{activationError}</p>
+                <p className="text-[0.75rem] text-risk-700 font-medium">{activationError}</p>
               </div>
             )}
 
             {hasBlockers ? (
               <div className="p-3 bg-risk-50/50 rounded-xl mb-4 border border-risk/20">
-                <p className="text-[11px] font-bold text-risk-700 uppercase mb-2">Activation Blocked</p>
+                <p className="text-[0.6875rem] font-bold text-risk-700 uppercase mb-2">Activation Blocked</p>
                 <div className="space-y-1">
                   {blockers.blocking.map(b => (
-                    <div key={b} className="flex items-center gap-2 text-[11px] text-risk-700"><XCircle size={11} className="shrink-0" /><span>{b}</span></div>
+                    <div key={b} className="flex items-center gap-2 text-[0.6875rem] text-risk-700"><XCircle size={11} className="shrink-0" /><span>{b}</span></div>
                   ))}
                 </div>
               </div>
             ) : (
               <div className="p-3 bg-compliant-50/30 rounded-xl mb-4 border border-compliant/20">
-                <p className="text-[10px] font-bold text-compliant-700 uppercase mb-1.5">All pre-flight checks passed</p>
+                <p className="text-[0.625rem] font-bold text-compliant-700 uppercase mb-1.5">All pre-flight checks passed</p>
                 <div className="grid grid-cols-2 gap-1">
                   {['RACM linked', 'Owner assigned', 'Reviewer assigned', 'Period defined', 'Dates set', 'Controls mapped', 'Workflows available'].map(item => (
-                    <div key={item} className="flex items-center gap-1.5 text-[10px] text-compliant-700"><CheckCircle2 size={10} />{item}</div>
+                    <div key={item} className="flex items-center gap-1.5 text-[0.625rem] text-compliant-700"><CheckCircle2 size={10} />{item}</div>
                   ))}
                 </div>
               </div>
             )}
 
             <div className="mb-4">
-              <p className="text-[11px] font-bold text-text-muted uppercase mb-2">Activating this engagement will:</p>
+              <p className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Activating this engagement will:</p>
               <div className="space-y-1.5">
                 {[
                   `Create an immutable Engagement Snapshot from ${engagement.sourceRacmVersionId}`,
@@ -1880,7 +1881,7 @@ function ActivationModal({ engagement, activating, activationError, activationLo
                   'Initialize test instances (Ready if workflow linked, Not Configured otherwise)',
                   'Enable population upload, sampling, evidence, testing, working paper, and review',
                 ].map((text, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <div key={i} className="flex items-start gap-2 text-[0.6875rem]">
                     <ChevronRight size={10} className="text-primary mt-0.5 shrink-0" />
                     <span className="text-text-secondary">{text}</span>
                   </div>
@@ -1888,7 +1889,7 @@ function ActivationModal({ engagement, activating, activationError, activationLo
               </div>
             </div>
 
-            <div className="p-3 bg-surface-2 rounded-xl mb-4 text-[12px] space-y-1">
+            <div className="p-3 bg-surface-2 rounded-xl mb-4 text-[0.75rem] space-y-1">
               <div className="flex justify-between"><span className="text-text-muted">Engagement</span><span className="font-medium text-text">{engagement.name}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">RACM Version</span><span className="font-medium text-text">{engagement.sourceRacmVersionId}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">Controls</span><span className="font-medium text-text">{engagement.controls}</span></div>
@@ -1897,13 +1898,13 @@ function ActivationModal({ engagement, activating, activationError, activationLo
 
             <div className="flex items-start gap-2.5 p-3 bg-high-50/50 rounded-xl mb-5 border border-high/20">
               <AlertTriangle size={14} className="text-high-700 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-high-700">This action cannot be undone. The snapshot is immutable and scope changes require a new engagement.</p>
+              <p className="text-[0.6875rem] text-high-700">This action cannot be undone. The snapshot is immutable and scope changes require a new engagement.</p>
             </div>
 
             <div className="flex items-center gap-3 justify-end">
-              <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-[12px] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">Cancel</button>
+              <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">Cancel</button>
               <button onClick={onConfirm} disabled={hasBlockers}
-                className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[13px] font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.8125rem] font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
                 <Zap size={14} />Confirm Activation
               </button>
             </div>
@@ -1914,13 +1915,13 @@ function ActivationModal({ engagement, activating, activationError, activationLo
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="mx-auto mb-3 w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary-medium flex items-center justify-center">
                 <Zap size={20} className="text-white" />
               </motion.div>
-              <h3 className="text-[15px] font-bold text-text">Activating Engagement</h3>
-              <p className="text-[11px] text-text-muted mt-1">{engagement.name}</p>
+              <h3 className="text-[0.9375rem] font-bold text-text">Activating Engagement</h3>
+              <p className="text-[0.6875rem] text-text-muted mt-1">{engagement.name}</p>
             </div>
             <div className="space-y-2 max-w-sm mx-auto mb-4">
               {activationSteps.map((step, i) => (
                 <motion.div key={step} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.4 }}
-                  className="flex items-center gap-3 text-[12px]">
+                  className="flex items-center gap-3 text-[0.75rem]">
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.4 + 0.3 }}>
                     <CheckCircle2 size={14} className="text-compliant-700" />
                   </motion.div>
@@ -1931,14 +1932,14 @@ function ActivationModal({ engagement, activating, activationError, activationLo
             {activationLog.length > 0 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                 className="max-w-sm mx-auto p-3 bg-surface-2/50 rounded-lg max-h-32 overflow-y-auto">
-                <p className="text-[9px] font-bold text-text-muted uppercase mb-1">Audit Log</p>
+                <p className="text-[0.5625rem] font-bold text-text-muted uppercase mb-1">Audit Log</p>
                 {activationLog.map((entry, i) => (
-                  <p key={i} className="text-[9px] font-mono text-text-muted leading-relaxed">{entry}</p>
+                  <p key={i} className="text-[0.5625rem] font-mono text-text-muted leading-relaxed">{entry}</p>
                 ))}
               </motion.div>
             )}
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: activationSteps.length * 0.4 + 0.5 }}
-              className="text-[10px] text-text-muted text-center mt-3">Redirecting to execution workspace...</motion.p>
+              className="text-[0.625rem] text-text-muted text-center mt-3">Redirecting to execution workspace...</motion.p>
           </div>
         )}
       </div>
@@ -2265,7 +2266,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
             <div className="flex items-center gap-3">
               <button
                 onClick={openCreateDrawer}
-                className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[12px] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
               >
                 <Plus size={13} />
                 Add Engagement
@@ -2290,9 +2291,9 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
         {/* Embedded toolbar — New Engagement button when inside Programs */}
         {embedded && (
           <div className="flex items-center justify-between mb-4">
-            <div className="text-[12px] text-text-muted">{plan.length} engagement{plan.length !== 1 ? 's' : ''}</div>
+            <div className="text-[0.75rem] text-text-muted">{plan.length} engagement{plan.length !== 1 ? 's' : ''}</div>
             <button onClick={openCreateDrawer}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Plus size={14} />Plan Engagement
             </button>
           </div>
@@ -2303,10 +2304,10 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
             <div className="flex items-center gap-3 p-3 rounded-xl bg-risk-50/50 border border-risk/20">
               <AlertTriangle size={16} className="text-risk-700 shrink-0" />
-              <span className="text-[12px] font-bold text-risk-700">Attention Required:</span>
+              <span className="text-[0.75rem] font-bold text-risk-700">Attention Required:</span>
               <div className="flex items-center gap-4">
                 {attentionItems.map(item => (
-                  <span key={item.type} className={`text-[12px] font-medium ${
+                  <span key={item.type} className={`text-[0.75rem] font-medium ${
                     item.type === 'overdue' ? 'text-risk-700' : item.type === 'failed' ? 'text-high-700' : 'text-mitigated-700'
                   }`}>
                     {item.count} {item.label}
@@ -2323,7 +2324,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors cursor-pointer ${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
                   : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -2339,11 +2340,11 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
         {activeTab === 'timeline' && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold text-text-muted">Filter by Primary Process:</span>
+              <span className="text-[0.75rem] font-bold text-text-muted">Filter by Primary Process:</span>
               <div className="flex gap-1">
                 {processFilterOptions.map(opt => (
                   <button key={opt} onClick={() => setProcessFilter(opt)}
-                    className={`px-2.5 py-1 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-full text-[0.75rem] font-semibold transition-all cursor-pointer ${
                       processFilter === opt ? 'bg-primary text-white shadow-sm' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                     }`}>{opt}</button>
                 ))}
@@ -2351,11 +2352,11 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
             </div>
             <div className="w-px h-5 bg-border-light" />
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold text-text-muted">Status:</span>
+              <span className="text-[0.75rem] font-bold text-text-muted">Status:</span>
               <div className="flex gap-1">
                 {statusFilterOptions.map(opt => (
                   <button key={opt} onClick={() => setStatusFilter(opt)}
-                    className={`px-2.5 py-1 rounded-full text-[12px] font-semibold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-full text-[0.75rem] font-semibold transition-all cursor-pointer ${
                       statusFilter === opt ? 'bg-primary text-white shadow-sm' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                     }`}>{opt}</button>
                 ))}
@@ -2451,7 +2452,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                     <motion.div key={card.label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                       className="glass-card rounded-lg px-3 py-2.5 flex items-center gap-2.5">
                       <div className={`text-lg font-bold tabular-nums ${card.cls.split(' ')[0]}`}>{card.value}</div>
-                      <div className="text-[10px] text-text-muted leading-tight">{card.label}</div>
+                      <div className="text-[0.625rem] text-text-muted leading-tight">{card.label}</div>
                     </motion.div>
                   ))}
                 </div>
@@ -2462,11 +2463,11 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {filterOptions.map(f => (
                         <button key={f.key} onClick={() => setEngFilter(f.key)}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                          className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                             engFilter === f.key ? 'bg-primary text-white' : 'bg-surface-2 text-text-muted hover:bg-primary/10 hover:text-primary'
                           }`}>
                           {f.label}
-                          {f.count > 0 && <span className={`ml-1 text-[10px] tabular-nums ${engFilter === f.key ? 'text-white/80' : 'text-text-muted/60'}`}>{f.count}</span>}
+                          {f.count > 0 && <span className={`ml-1 text-[0.625rem] tabular-nums ${engFilter === f.key ? 'text-white/80' : 'text-text-muted/60'}`}>{f.count}</span>}
                         </button>
                       ))}
                     </div>
@@ -2474,7 +2475,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                     <div className="flex items-center gap-1.5">
                       {processFilterOptions.map(opt => (
                         <button key={opt} onClick={() => setProcessFilter(opt)}
-                          className={`px-2 py-1 rounded-full text-[10px] font-semibold transition-all cursor-pointer ${
+                          className={`px-2 py-1 rounded-full text-[0.625rem] font-semibold transition-all cursor-pointer ${
                             processFilter === opt ? 'bg-evidence-700 text-white' : 'bg-surface-2 text-text-muted hover:bg-evidence-50 hover:text-evidence-700'
                           }`}>{opt}</button>
                       ))}
@@ -2483,7 +2484,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                   <div className="relative">
                     <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
                     <input type="text" placeholder="Search engagements, RACM, owner..." value={engSearch} onChange={e => setEngSearch(e.target.value)}
-                      className="pl-8 pr-3 py-1.5 text-[11px] border border-border rounded-lg bg-white text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 transition-colors w-56" />
+                      className="pl-8 pr-3 py-1.5 text-[0.6875rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted/60 outline-none focus:border-primary/40 transition-colors w-56" />
                   </div>
                 </div>
 
@@ -2491,16 +2492,16 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                 {filteredPlan.length === 0 ? (
                   <div className="glass-card rounded-xl p-12 text-center">
                     <ClipboardList size={32} className="text-text-muted mx-auto mb-3" />
-                    <p className="text-[14px] font-semibold text-text mb-1">
+                    <p className="text-[0.875rem] font-semibold text-text mb-1">
                       {plan.length === 0 ? 'No engagements planned yet' : 'No engagements match this filter'}
                     </p>
-                    <p className="text-[12px] text-text-muted max-w-sm mx-auto mb-4">
+                    <p className="text-[0.75rem] text-text-muted max-w-sm mx-auto mb-4">
                       {plan.length === 0
                         ? 'Create your first engagement by selecting a business process and RACM.'
                         : 'Try adjusting your filters or search query above.'}
                     </p>
                     {plan.length === 0 && (
-                      <button onClick={openCreateDrawer} className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+                      <button onClick={openCreateDrawer} className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
                         <Plus size={13} />Plan Engagement
                       </button>
                     )}
@@ -2510,18 +2511,18 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                 {/* Helper text */}
                 <div className="flex items-start gap-2 mb-3 px-1">
                   <Info size={12} className="text-primary/50 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-text-muted leading-relaxed">
+                  <p className="text-[0.625rem] text-text-muted leading-relaxed">
                     Engagements are organized by primary business process. Execution details are available inside each engagement.
                   </p>
                 </div>
 
                 <div className="glass-card rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[12px]">
+                    <table className="w-full text-[0.75rem]">
                       <thead>
                         <tr className="border-b border-border bg-surface-2/40">
                           {['Engagement', 'Type / Framework', 'Owner', 'Status', 'Attention', 'Next Action'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                            <th key={h} className="px-4 py-2.5 text-left text-[0.625rem] font-semibold text-text-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -2543,40 +2544,40 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                                 {/* Engagement — enriched with process chip, period, alert */}
                                 <td className="px-4 py-3.5">
                                   <div className="min-w-0 max-w-[320px]">
-                                    <span className="text-[12.5px] font-semibold text-text leading-snug">{eng.name}</span>
-                                    <div className="text-[10px] text-text-muted/80 mt-0.5 truncate">RACM: {getRacmDisplayName(eng)}</div>
+                                    <span className="text-[0.75rem] font-semibold text-text leading-snug">{eng.name}</span>
+                                    <div className="text-[0.625rem] text-text-muted/80 mt-0.5 truncate">RACM: {getRacmDisplayName(eng)}</div>
                                     <div className="flex items-center gap-1.5 mt-1.5">
-                                      <span className={`px-1.5 h-[18px] rounded text-[9px] font-bold border inline-flex items-center ${PROCESS_BADGE_COLORS[eng.businessProcess]}`}>
+                                      <span className={`px-1.5 h-[18px] rounded text-[0.5625rem] font-bold border inline-flex items-center ${PROCESS_BADGE_COLORS[eng.businessProcess]}`}>
                                         {eng.businessProcess === 'Cross' ? 'Cross' : eng.businessProcess}
                                       </span>
-                                      {auditPeriod && <span className="text-[9px] text-text-muted/60">{auditPeriod}</span>}
-                                      {eng.isOverdue && <span className="px-1.5 h-[18px] rounded text-[8px] font-bold bg-red-50 text-red-600 inline-flex items-center">OVERDUE</span>}
-                                      {eng.riskStatus === 'at-risk' && !eng.isOverdue && <span className="px-1.5 h-[18px] rounded text-[8px] font-bold bg-amber-50 text-amber-600 inline-flex items-center">AT RISK</span>}
+                                      {auditPeriod && <span className="text-[0.5625rem] text-text-muted/60">{auditPeriod}</span>}
+                                      {eng.isOverdue && <span className="px-1.5 h-[18px] rounded text-[0.5rem] font-bold bg-red-50 text-red-600 inline-flex items-center">OVERDUE</span>}
+                                      {eng.riskStatus === 'at-risk' && !eng.isOverdue && <span className="px-1.5 h-[18px] rounded text-[0.5rem] font-bold bg-amber-50 text-amber-600 inline-flex items-center">AT RISK</span>}
                                     </div>
                                   </div>
                                 </td>
                                 {/* Type / Framework */}
                                 <td className="px-4 py-3.5">
-                                  <div className="text-[11px] text-text-secondary leading-snug">{eng.auditType}</div>
-                                  <div className="text-[10px] text-text-muted/70 mt-0.5">{eng.framework}</div>
+                                  <div className="text-[0.6875rem] text-text-secondary leading-snug">{eng.auditType}</div>
+                                  <div className="text-[0.625rem] text-text-muted/70 mt-0.5">{eng.framework}</div>
                                 </td>
                                 {/* Owner */}
                                 <td className="px-4 py-3.5">
-                                  <div className="text-[11px] font-medium text-text">{eng.owner.split(' ')[0]}</div>
-                                  <div className="text-[9.5px] text-text-muted/70 mt-0.5">{eng.reviewer.split(' ')[0]}</div>
+                                  <div className="text-[0.6875rem] font-medium text-text">{eng.owner.split(' ')[0]}</div>
+                                  <div className="text-[0.75rem] text-text-muted/70 mt-0.5">{eng.reviewer.split(' ')[0]}</div>
                                 </td>
                                 {/* Status */}
                                 <td className="px-4 py-3.5">
-                                  <span className={`px-2 h-[20px] rounded-full text-[9px] font-semibold inline-flex items-center ${lifecycleTone(eng.status)}`}>{lifecycleLabel(eng.status)}</span>
+                                  <span className={`px-2 h-[20px] rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${lifecycleTone(eng.status)}`}>{lifecycleLabel(eng.status)}</span>
                                 </td>
                                 {/* Attention */}
                                 <td className="px-4 py-3.5">
-                                  <span className={`px-2 h-[20px] rounded-full text-[9px] font-semibold inline-flex items-center ${attention.cls}`}>{attention.label}</span>
+                                  <span className={`px-2 h-[20px] rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${attention.cls}`}>{attention.label}</span>
                                 </td>
                                 {/* Next Action */}
                                 <td className="px-4 py-3.5">
                                   <div className="flex items-center gap-1">
-                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
+                                    <span className={`px-2.5 py-1 rounded-lg text-[0.625rem] font-bold cursor-pointer transition-colors inline-flex items-center gap-1 ${action.cls}`}>
                                       {action.label}<ChevronRight size={9} />
                                     </span>
                                     <button
@@ -2594,13 +2595,13 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                                 <tr className="bg-surface-2/20 border-b border-border/30">
                                   <td colSpan={6} className="px-5 py-3">
                                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} transition={{ duration: 0.15 }}
-                                      className="grid grid-cols-6 gap-5 text-[11px]">
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Controls</span><span className="font-bold text-text tabular-nums">{eng.controls}</span></div>
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Tested</span><span className="font-bold text-text tabular-nums">{eng.controlsTested}</span></div>
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Effective</span><span className="font-bold text-emerald-700 tabular-nums">{eng.controlsEffective}</span></div>
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Failed</span><span className={`font-bold tabular-nums ${eng.controlsFailed > 0 ? 'text-red-600' : 'text-text-muted/50'}`}>{eng.controlsFailed}</span></div>
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Pending Review</span><span className="font-bold text-text tabular-nums">{eng.pendingReview}</span></div>
-                                      <div><span className="text-text-muted/70 block text-[9px] uppercase font-semibold mb-0.5 tracking-wide">Last Activity</span><span className="text-text-secondary">{eng.lastActivity}</span></div>
+                                      className="grid grid-cols-6 gap-5 text-[0.6875rem]">
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Controls</span><span className="font-bold text-text tabular-nums">{eng.controls}</span></div>
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Tested</span><span className="font-bold text-text tabular-nums">{eng.controlsTested}</span></div>
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Effective</span><span className="font-bold text-emerald-700 tabular-nums">{eng.controlsEffective}</span></div>
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Failed</span><span className={`font-bold tabular-nums ${eng.controlsFailed > 0 ? 'text-red-600' : 'text-text-muted/50'}`}>{eng.controlsFailed}</span></div>
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Pending Review</span><span className="font-bold text-text tabular-nums">{eng.pendingReview}</span></div>
+                                      <div><span className="text-text-muted/70 block text-[0.5625rem] uppercase font-semibold mb-0.5 tracking-wide">Last Activity</span><span className="text-text-secondary">{eng.lastActivity}</span></div>
                                     </motion.div>
                                   </td>
                                 </tr>
@@ -2612,7 +2613,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                     </table>
                   </div>
                   <div className="px-4 py-2 border-t border-border/40 bg-surface-2/20">
-                    <span className="text-[10px] text-text-muted">{filteredPlan.length} of {plan.length} engagements</span>
+                    <span className="text-[0.625rem] text-text-muted">{filteredPlan.length} of {plan.length} engagements</span>
                   </div>
                 </div>
                 </>
@@ -2630,7 +2631,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
               {/* Current Execution Progress */}
               {plan.some(p => isExecutionPhase(p.status)) && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="mt-6">
-                  <h2 className="text-[15px] font-semibold text-text mb-3">Execution Progress</h2>
+                  <h2 className="text-[0.9375rem] font-semibold text-text mb-3">Execution Progress</h2>
                   <div className="glass-card rounded-2xl p-5">
                     <div className="space-y-4">
                       {plan.filter(p => isExecutionPhase(p.status)).map((eng, i) => {
@@ -2643,14 +2644,14 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
                             <div className="flex items-center justify-between mb-1.5">
                               <div className="flex items-center gap-2">
                                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: eng.color }} />
-                                <span className="text-[12px] font-medium text-text">{eng.name}</span>
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${lifecycleTone(eng.status)}`}>
+                                <span className="text-[0.75rem] font-medium text-text">{eng.name}</span>
+                                <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${lifecycleTone(eng.status)}`}>
                                   {lifecycleLabel(eng.status)}
                                 </span>
                               </div>
                               <div className="flex items-center gap-3">
-                                <span className="text-[12px] text-text-muted">{tested}/{eng.controls} controls</span>
-                                <span className="text-[12px] font-bold font-mono text-text">{progress}%</span>
+                                <span className="text-[0.75rem] text-text-muted">{tested}/{eng.controls} controls</span>
+                                <span className="text-[0.75rem] font-bold font-mono text-text">{progress}%</span>
                               </div>
                             </div>
                             <div className="h-2 bg-surface-3 rounded-full overflow-hidden">

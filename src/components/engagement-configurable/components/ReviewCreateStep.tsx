@@ -21,7 +21,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
   const warnings = validation.errors.filter(e => e.severity === 'warning');
 
   const SummaryRow = ({ label: l, value }: { label: string; value: string }) => (
-    <div className="flex items-baseline gap-2 text-[11px]">
+    <div className="flex items-baseline gap-2 text-[0.6875rem]">
       <span className="text-gray-400 w-32 shrink-0">{l}</span>
       <span className="text-text font-medium">{value || '—'}</span>
     </div>
@@ -63,40 +63,40 @@ export default function ReviewCreateStep({ patternType, details, config, validat
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-[15px] font-bold text-text mb-1">Review & Create</h3>
-        <p className="text-[12px] text-text-muted">Review your {label.toLowerCase()} configuration before creating.</p>
+        <h3 className="text-[0.9375rem] font-bold text-text mb-1">Review & Create</h3>
+        <p className="text-[0.75rem] text-text-muted">Review your {label.toLowerCase()} configuration before creating.</p>
       </div>
 
       {/* Validation */}
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50/30 p-3 space-y-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700"><AlertTriangle size={12} />Errors ({errors.length})</div>
+          <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-red-700"><AlertTriangle size={12} />Errors ({errors.length})</div>
           {errors.map((e, i) => (
-            <div key={i} className="text-[10px] text-red-600 pl-5">- {e.message}</div>
+            <div key={i} className="text-[0.625rem] text-red-600 pl-5">- {e.message}</div>
           ))}
         </div>
       )}
       {warnings.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50/30 p-3 space-y-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700"><AlertTriangle size={12} />Warnings ({warnings.length})</div>
+          <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-amber-700"><AlertTriangle size={12} />Warnings ({warnings.length})</div>
           {warnings.map((w, i) => (
-            <div key={i} className="text-[10px] text-amber-600 pl-5">- {w.message}</div>
+            <div key={i} className="text-[0.625rem] text-amber-600 pl-5">- {w.message}</div>
           ))}
         </div>
       )}
 
       {/* Work Type */}
       <div className="rounded-lg border border-border-light p-3 space-y-1.5">
-        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Work Type</h5>
+        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Work Type</h5>
         <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-text">{pattern.label}</span>
-          <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-bold">{label}</span>
+          <span className="text-[0.75rem] font-semibold text-text">{pattern.label}</span>
+          <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-bold">{label}</span>
         </div>
       </div>
 
       {/* Common Details */}
       <div className="rounded-lg border border-border-light p-3 space-y-1">
-        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{label} Details</h5>
+        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">{label} Details</h5>
         <SummaryRow label="Name" value={details.name} />
         <SummaryRow label="Objective" value={details.description} />
         <SummaryRow label="Owner" value={details.owner} />
@@ -109,7 +109,7 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Pattern Config */}
       <div className="rounded-lg border border-border-light p-3 space-y-1">
-        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Pattern Setup</h5>
+        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Pattern Setup</h5>
         {configEntries.map((e, i) => (
           <SummaryRow key={i} label={e.label} value={e.value} />
         ))}
@@ -117,20 +117,20 @@ export default function ReviewCreateStep({ patternType, details, config, validat
 
       {/* Workspace Preview */}
       <div className="rounded-lg border border-border-light p-3">
-        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Tabs</h5>
+        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Tabs</h5>
         <div className="flex flex-wrap gap-1.5">
           {pattern.workspaceTabs.map(tab => (
-            <span key={tab.id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-semibold">{tab.label}</span>
+            <span key={tab.id} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-semibold">{tab.label}</span>
           ))}
         </div>
       </div>
 
       {/* Required Outputs */}
       <div className="rounded-lg border border-border-light p-3">
-        <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
+        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
         <div className="space-y-1">
           {pattern.requiredOutputs.map(o => (
-            <div key={o} className="flex items-center gap-1.5 text-[10px] text-text">
+            <div key={o} className="flex items-center gap-1.5 text-[0.625rem] text-text">
               <CheckCircle2 size={10} className="text-gray-300" />
               {o}
             </div>
@@ -142,12 +142,12 @@ export default function ReviewCreateStep({ patternType, details, config, validat
       {isCreated ? (
         <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50/30 p-4 text-center">
           <CheckCircle2 size={20} className="text-emerald-600 mx-auto mb-2" />
-          <p className="text-[13px] font-semibold text-emerald-800">Draft created locally</p>
-          <p className="text-[11px] text-emerald-600 mt-1">Routing and persistence will be wired in a later step.</p>
+          <p className="text-[0.8125rem] font-semibold text-emerald-800">Draft created locally</p>
+          <p className="text-[0.6875rem] text-emerald-600 mt-1">Routing and persistence will be wired in a later step.</p>
         </div>
       ) : (
         <button onClick={onCreate} disabled={!validation.isValid}
-          className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.8125rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           Create {label}
         </button>
       )}

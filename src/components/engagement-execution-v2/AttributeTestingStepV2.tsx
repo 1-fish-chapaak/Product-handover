@@ -57,8 +57,8 @@ export default function AttributeTestingStepV2({ ctrl, onUpdateControl, onNaviga
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <AlertTriangle size={20} className="text-amber-500 mb-3" />
-        <h4 className="text-[14px] font-semibold text-text mb-1">No attributes defined</h4>
-        <p className="text-[12px] text-text-muted">Add attributes on the Overview step before testing.</p>
+        <h4 className="text-[0.875rem] font-semibold text-text mb-1">No attributes defined</h4>
+        <p className="text-[0.75rem] text-text-muted">Add attributes on the Overview step before testing.</p>
       </div>
     );
   }
@@ -70,7 +70,7 @@ export default function AttributeTestingStepV2({ ctrl, onUpdateControl, onNaviga
       {/* Top bar — title + version switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[11px] text-text-muted">
+          <p className="text-[0.6875rem] text-text-muted">
             Configure sampling + evidence validation at the control level, then walk each attribute.
           </p>
         </div>
@@ -98,19 +98,19 @@ function LayoutSwitcher({ value, onChange }: { value: LayoutVariant; onChange: (
   ];
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">Layout</span>
+      <span className="text-[0.625rem] text-text-muted font-semibold uppercase tracking-wider">Layout</span>
       <div className="inline-flex bg-surface-2/60 rounded-lg p-0.5 border border-border-light">
         {opts.map(o => (
           <button key={o.id} onClick={() => onChange(o.id)}
             title={o.sub}
-            className={`px-2.5 h-7 rounded text-[11px] font-bold cursor-pointer transition-colors ${
+            className={`px-2.5 h-7 rounded text-[0.6875rem] font-bold cursor-pointer transition-colors ${
               value === o.id ? 'bg-white text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary'
             }`}>
             {o.label}
           </button>
         ))}
       </div>
-      <span className="text-[9.5px] text-text-muted">{opts.find(o => o.id === value)?.sub}</span>
+      <span className="text-[0.75rem] text-text-muted">{opts.find(o => o.id === value)?.sub}</span>
     </div>
   );
 }
@@ -139,8 +139,8 @@ function PopulationCard({ ctrl, onUpdateControl }: { ctrl: ExecutionControl; onU
       <div className="px-5 py-3 flex items-center gap-3 border-b border-border-light">
         <StepBadge done={!!pop} number={1} />
         <div className="flex-1 min-w-0">
-          <h5 className="text-[13px] font-bold text-text">Define population</h5>
-          <p className="text-[10.5px] text-text-muted">Upload the dataset this control will be tested against.</p>
+          <h5 className="text-[0.8125rem] font-bold text-text">Define population</h5>
+          <p className="text-[0.75rem] text-text-muted">Upload the dataset this control will be tested against.</p>
         </div>
       </div>
       <div className="px-5 py-4">
@@ -148,12 +148,12 @@ function PopulationCard({ ctrl, onUpdateControl }: { ctrl: ExecutionControl; onU
           <div className="rounded-lg border border-emerald-200/40 bg-emerald-50/20 px-4 py-3 flex items-center gap-3">
             <Database size={14} className="text-emerald-600 shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] text-text font-medium truncate">{pop.source}</div>
-              <div className="text-[10px] text-text-muted">{pop.rowCount.toLocaleString()} rows · test unit: {pop.testUnit}</div>
+              <div className="text-[0.75rem] text-text font-medium truncate">{pop.source}</div>
+              <div className="text-[0.625rem] text-text-muted">{pop.rowCount.toLocaleString()} rows · test unit: {pop.testUnit}</div>
             </div>
-            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-700">Locked</span>
+            <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-emerald-100 text-emerald-700">Locked</span>
             <button onClick={() => onUpdateControl(p => ({ ...p, execution: { ...p.execution, population: null, sampling: null, testItems: [] } }))}
-              className="text-[10px] text-text-muted hover:text-primary cursor-pointer">Replace</button>
+              className="text-[0.625rem] text-text-muted hover:text-primary cursor-pointer">Replace</button>
           </div>
         ) : (
           <button onClick={() => {
@@ -169,8 +169,8 @@ function PopulationCard({ ctrl, onUpdateControl }: { ctrl: ExecutionControl; onU
           }}
             className="w-full rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 py-6 px-4 cursor-pointer transition-colors flex flex-col items-center gap-2">
             <Upload size={16} className="text-primary" />
-            <span className="text-[12px] font-semibold text-primary">Upload population (.xlsx / .csv)</span>
-            <span className="text-[10px] text-text-muted">Click to add — drag-drop wired in production.</span>
+            <span className="text-[0.75rem] font-semibold text-primary">Upload population (.xlsx / .csv)</span>
+            <span className="text-[0.625rem] text-text-muted">Click to add — drag-drop wired in production.</span>
           </button>
         )}
       </div>
@@ -225,23 +225,23 @@ function SamplingCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilder }: { ctrl
       <div className="px-5 py-3 flex items-center gap-3 border-b border-border-light">
         <StepBadge done={done} number={2} disabled={locked} />
         <div className="flex-1 min-w-0">
-          <h5 className="text-[13px] font-bold text-text">Configure sampling</h5>
-          <p className="text-[10.5px] text-text-muted">One sample set is shared by every sample-based attribute on this control.</p>
+          <h5 className="text-[0.8125rem] font-bold text-text">Configure sampling</h5>
+          <p className="text-[0.75rem] text-text-muted">One sample set is shared by every sample-based attribute on this control.</p>
         </div>
         {done && (
-          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-700 flex items-center gap-1">
+          <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-emerald-100 text-emerald-700 flex items-center gap-1">
             <CheckCircle2 size={9} />{sampling!.sampleItemIds.length} samples
           </span>
         )}
       </div>
       <div className="px-5 py-4 space-y-3">
         {locked ? (
-          <p className="text-[11px] text-text-muted flex items-center gap-1.5"><Lock size={11} />Upload population first.</p>
+          <p className="text-[0.6875rem] text-text-muted flex items-center gap-1.5"><Lock size={11} />Upload population first.</p>
         ) : (
           <>
             {/* Method picker */}
             <div>
-              <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Method</label>
+              <label className="text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Method</label>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { m: SamplingMethod.RANDOM,        label: 'Random',        icon: Shuffle,      desc: 'Uniform draw' },
@@ -255,9 +255,9 @@ function SamplingCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilder }: { ctrl
                     }`}>
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <o.icon size={11} className={method === o.m ? 'text-primary' : 'text-text-muted'} />
-                      <span className={`text-[11px] font-bold ${method === o.m ? 'text-primary' : 'text-text'}`}>{o.label}</span>
+                      <span className={`text-[0.6875rem] font-bold ${method === o.m ? 'text-primary' : 'text-text'}`}>{o.label}</span>
                     </div>
-                    <p className="text-[9px] text-text-muted leading-tight">{o.desc}</p>
+                    <p className="text-[0.5625rem] text-text-muted leading-tight">{o.desc}</p>
                   </button>
                 ))}
               </div>
@@ -265,24 +265,24 @@ function SamplingCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilder }: { ctrl
             {/* Method-specific config */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Sample size</label>
+                <label className="text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Sample size</label>
                 <input type="number" min={1} max={pop?.rowCount || 1000} value={size} onChange={e => setSize(Number(e.target.value))}
                   disabled={method === SamplingMethod.WORKFLOW}
-                  className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40 transition-all disabled:bg-surface-2 disabled:text-text-muted" />
-                <p className="text-[9px] text-text-muted mt-1">Capped at population size ({pop?.rowCount.toLocaleString() || 0}).</p>
+                  className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all disabled:bg-surface-2 disabled:text-text-muted" />
+                <p className="text-[0.5625rem] text-text-muted mt-1">Capped at population size ({pop?.rowCount.toLocaleString() || 0}).</p>
               </div>
               {method === SamplingMethod.COLUMN_FILTER && (
                 <div>
-                  <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Filter</label>
+                  <label className="text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider block mb-1.5">Filter</label>
                   <input value={filterDesc} onChange={e => setFilterDesc(e.target.value)}
                     placeholder="e.g. amount > 100000 AND status = 'OPEN'"
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[11px] text-text bg-white outline-none focus:border-primary/40 transition-all" />
+                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all" />
                 </div>
               )}
               {method === SamplingMethod.WORKFLOW && (
                 <div className="flex items-end">
                   <button onClick={() => onLaunchWorkflowBuilder?.(`Build a sampling workflow for control "${ctrl.name}" against its population (${pop?.rowCount} rows, test unit: ${pop?.testUnit}). The workflow should output a deterministic sample list.`)}
-                    className="w-full px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-[11px] font-semibold cursor-pointer hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5">
+                    className="w-full px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-[0.6875rem] font-semibold cursor-pointer hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5">
                     <Wand2 size={11} />Build sampling workflow
                   </button>
                 </div>
@@ -291,11 +291,11 @@ function SamplingCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilder }: { ctrl
             <div className="flex items-center gap-2 pt-1">
               <button onClick={generateSamples}
                 disabled={method === SamplingMethod.WORKFLOW}
-                className="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-semibold cursor-pointer hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
+                className="px-3 py-1.5 rounded-lg bg-primary text-white text-[0.6875rem] font-semibold cursor-pointer hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
                 <Shuffle size={11} />{done ? 'Regenerate samples' : 'Generate samples'}
               </button>
               {done && (
-                <span className="text-[10px] text-text-muted">Generated {new Date(sampling!.generatedAt!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-[0.625rem] text-text-muted">Generated {new Date(sampling!.generatedAt!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
               )}
             </div>
           </>
@@ -318,11 +318,11 @@ function ValidationWorkflowsCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilde
       <div className="px-5 py-3 flex items-center gap-3 border-b border-border-light">
         <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center"><WorkflowIcon size={11} /></div>
         <div className="flex-1 min-w-0">
-          <h5 className="text-[13px] font-bold text-text">Evidence validation workflows</h5>
-          <p className="text-[10.5px] text-text-muted">Workflows that auto-validate uploaded evidence (e.g. OCR + signature check + amount tolerance).</p>
+          <h5 className="text-[0.8125rem] font-bold text-text">Evidence validation workflows</h5>
+          <p className="text-[0.75rem] text-text-muted">Workflows that auto-validate uploaded evidence (e.g. OCR + signature check + amount tolerance).</p>
         </div>
         {!empty && (
-          <button onClick={onCreate} className="text-[10px] text-primary hover:underline cursor-pointer flex items-center gap-0.5"><Plus size={9} />Add workflow</button>
+          <button onClick={onCreate} className="text-[0.625rem] text-primary hover:underline cursor-pointer flex items-center gap-0.5"><Plus size={9} />Add workflow</button>
         )}
       </div>
       <div className="px-5 py-4">
@@ -330,11 +330,11 @@ function ValidationWorkflowsCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilde
           <div className="rounded-xl border-2 border-dashed border-blue-200/60 bg-blue-50/20 px-4 py-5 flex items-center gap-4">
             <div className="shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center"><WorkflowIcon size={16} className="text-blue-600" /></div>
             <div className="flex-1 min-w-0">
-              <h6 className="text-[12px] font-bold text-blue-800">No workflows configured</h6>
-              <p className="text-[10.5px] text-blue-700 mt-0.5">Auto-validation reduces manual P/F. Build a workflow with IRA — describe the check in plain English and the agent scaffolds it.</p>
+              <h6 className="text-[0.75rem] font-bold text-blue-800">No workflows configured</h6>
+              <p className="text-[0.75rem] text-blue-700 mt-0.5">Auto-validation reduces manual P/F. Build a workflow with IRA — describe the check in plain English and the agent scaffolds it.</p>
             </div>
             <button onClick={onCreate}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
               <Sparkles size={11} />Build with IRA
             </button>
           </div>
@@ -344,12 +344,12 @@ function ValidationWorkflowsCard({ ctrl, onUpdateControl, onLaunchWorkflowBuilde
               <div key={wf.id} className="rounded-lg border border-border-light px-3 py-2 flex items-center gap-3">
                 <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center"><WorkflowIcon size={12} className="text-blue-600" /></div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-semibold text-text truncate">{wf.name}</div>
-                  <div className="text-[10px] text-text-muted truncate">{wf.description}</div>
+                  <div className="text-[0.75rem] font-semibold text-text truncate">{wf.name}</div>
+                  <div className="text-[0.625rem] text-text-muted truncate">{wf.description}</div>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${wf.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : wf.status === 'ERROR' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>{wf.status}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${wf.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : wf.status === 'ERROR' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>{wf.status}</span>
                 <button onClick={() => onUpdateControl(prev => ({ ...prev, execution: { ...prev.execution, validationWorkflows: (prev.execution.validationWorkflows || []).filter(w => w.id !== wf.id) } }))}
-                  className="text-[10px] text-text-muted hover:text-red-600 cursor-pointer"><X size={11} /></button>
+                  className="text-[0.625rem] text-text-muted hover:text-red-600 cursor-pointer"><X size={11} /></button>
               </div>
             ))}
           </div>
@@ -381,19 +381,19 @@ function SampleBasedAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }
           {samplingDone ? <ChevronDown size={12} className={`text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} /> : <Lock size={11} className="text-gray-400" />}
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-gray-400">{attr.id}</span>
-              <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-primary/10 text-primary">SAMPLE-BASED</span>
-              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{attr.type === 'AUTOMATED' ? 'AUTO' : 'MANUAL'}</span>
-              {attr.required && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-red-50 text-red-600">REQ</span>}
+              <span className="text-[0.625rem] font-mono text-gray-400">{attr.id}</span>
+              <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-primary/10 text-primary">SAMPLE-BASED</span>
+              <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${attr.type === 'AUTOMATED' ? 'bg-evidence-50 text-evidence-700' : 'bg-gray-100 text-gray-600'}`}>{attr.type === 'AUTOMATED' ? 'AUTO' : 'MANUAL'}</span>
+              {attr.required && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-red-50 text-red-600">REQ</span>}
             </div>
-            <div className="text-[12px] font-semibold text-text truncate">{attr.name}</div>
-            <div className="text-[10px] text-text-muted truncate">{attr.assertionName}</div>
+            <div className="text-[0.75rem] font-semibold text-text truncate">{attr.name}</div>
+            <div className="text-[0.625rem] text-text-muted truncate">{attr.assertionName}</div>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {summary.fail > 0 && <span className="text-[10px] font-bold text-red-600 tabular-nums">{summary.fail} fail</span>}
-          {summary.pass > 0 && <span className="text-[10px] font-bold text-emerald-600 tabular-nums">{summary.pass} pass</span>}
-          {summary.pending > 0 && <span className="text-[10px] text-text-muted tabular-nums">{summary.pending} pending</span>}
+          {summary.fail > 0 && <span className="text-[0.625rem] font-bold text-red-600 tabular-nums">{summary.fail} fail</span>}
+          {summary.pass > 0 && <span className="text-[0.625rem] font-bold text-emerald-600 tabular-nums">{summary.pass} pass</span>}
+          {summary.pending > 0 && <span className="text-[0.625rem] text-text-muted tabular-nums">{summary.pending} pending</span>}
         </div>
       </button>
 
@@ -460,18 +460,18 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
           <ChevronDown size={12} className={`text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-mono text-gray-400">{attr.id}</span>
-              <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-700">GENERIC</span>
-              {attr.required && <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-red-50 text-red-600">REQ</span>}
+              <span className="text-[0.625rem] font-mono text-gray-400">{attr.id}</span>
+              <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-amber-100 text-amber-700">GENERIC</span>
+              {attr.required && <span className="px-1.5 py-0.5 rounded text-[0.5rem] font-bold bg-red-50 text-red-600">REQ</span>}
             </div>
-            <div className="text-[12px] font-semibold text-text truncate">{attr.name}</div>
-            <div className="text-[10px] text-text-muted truncate">{attr.assertionName} · control-level (no sample loop)</div>
+            <div className="text-[0.75rem] font-semibold text-text truncate">{attr.name}</div>
+            <div className="text-[0.625rem] text-text-muted truncate">{attr.assertionName} · control-level (no sample loop)</div>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {r === AttrResult.PASS && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">Pass</span>}
-          {r === AttrResult.FAIL && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700">Fail</span>}
-          {r === AttrResult.NOT_TESTED && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-500">Pending</span>}
+          {r === AttrResult.PASS && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-emerald-100 text-emerald-700">Pass</span>}
+          {r === AttrResult.FAIL && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-red-100 text-red-700">Fail</span>}
+          {r === AttrResult.NOT_TESTED && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-gray-100 text-gray-500">Pending</span>}
         </div>
       </button>
 
@@ -480,33 +480,33 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
           <AttributeDescriptionBlock attr={attr} />
           <div className="rounded-lg border border-border-light">
             <div className="px-3 py-2 border-b border-border-light bg-surface-2/30 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Evidence</span>
-              <span className="text-[9px] text-text-muted tabular-nums">{evCount} file{evCount !== 1 ? 's' : ''}</span>
+              <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">Evidence</span>
+              <span className="text-[0.5625rem] text-text-muted tabular-nums">{evCount} file{evCount !== 1 ? 's' : ''}</span>
             </div>
             <div className="px-3 py-3">
               {evCount === 0 ? (
                 <button onClick={addEvidence}
                   className="w-full rounded-lg border-2 border-dashed border-amber-300/60 bg-amber-50/20 hover:bg-amber-50/40 py-4 px-4 cursor-pointer transition-colors flex flex-col items-center gap-1">
                   <Upload size={13} className="text-amber-600" />
-                  <span className="text-[11px] font-semibold text-amber-700">Upload evidence</span>
+                  <span className="text-[0.6875rem] font-semibold text-amber-700">Upload evidence</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
                   <Paperclip size={11} className="text-emerald-600" />
-                  <span className="text-[11px] text-text">{evCount} file{evCount !== 1 ? 's' : ''} attached</span>
-                  <button onClick={clearEvidence} className="ml-auto text-[10px] text-text-muted hover:text-red-600 cursor-pointer">Replace</button>
+                  <span className="text-[0.6875rem] text-text">{evCount} file{evCount !== 1 ? 's' : ''} attached</span>
+                  <button onClick={clearEvidence} className="ml-auto text-[0.625rem] text-text-muted hover:text-red-600 cursor-pointer">Replace</button>
                 </div>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-text-muted">Result:</span>
+            <span className="text-[0.625rem] text-text-muted">Result:</span>
             <button onClick={() => setResult(AttrResult.PASS)} disabled={evCount === 0}
-              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
+              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
             <button onClick={() => setResult(AttrResult.FAIL)} disabled={evCount === 0}
-              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
+              className={`px-2 py-1 rounded text-[0.625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
             {r === AttrResult.FAIL && (
-              <button onClick={clearEvidence} className="ml-auto px-2 py-1 rounded border border-amber-300 text-amber-700 text-[10px] font-semibold cursor-pointer hover:bg-amber-50 flex items-center gap-1">
+              <button onClick={clearEvidence} className="ml-auto px-2 py-1 rounded border border-amber-300 text-amber-700 text-[0.625rem] font-semibold cursor-pointer hover:bg-amber-50 flex items-center gap-1">
                 <RotateCcw size={9} />Replace evidence and retry
               </button>
             )}
@@ -521,16 +521,16 @@ function GenericAttrCard({ ctrl, attr, expanded, onToggle, onUpdateControl }: {
 function AttributeDescriptionBlock({ attr }: { attr: Attribute }) {
   return (
     <div className="rounded-lg bg-surface-2/30 border border-border-light px-3 py-3">
-      <p className="text-[11px] text-text-secondary leading-relaxed">{attr.description}</p>
+      <p className="text-[0.6875rem] text-text-secondary leading-relaxed">{attr.description}</p>
       {attr.requiredEvidenceTypes.length > 0 && (
         <div className="mt-3 space-y-1.5">
-          <span className="text-[9px] text-text-muted font-bold uppercase tracking-wider">Required evidence</span>
+          <span className="text-[0.5625rem] text-text-muted font-bold uppercase tracking-wider">Required evidence</span>
           {attr.requiredEvidenceTypes.map((t, i) => (
             <div key={t} className="flex items-start gap-2">
               <Paperclip size={9} className="text-text-muted mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <span className="text-[11px] font-semibold text-text">{t}</span>
-                {attr.evidenceDescriptions?.[i] && <p className="text-[10px] text-text-muted leading-snug">{attr.evidenceDescriptions[i]}</p>}
+                <span className="text-[0.6875rem] font-semibold text-text">{t}</span>
+                {attr.evidenceDescriptions?.[i] && <p className="text-[0.625rem] text-text-muted leading-snug">{attr.evidenceDescriptions[i]}</p>}
               </div>
             </div>
           ))}
@@ -603,20 +603,20 @@ function SampleEvidenceTable({ ctrl, attr, rounds, onUpdateControl }: {
   return (
     <div className="space-y-3">
       {rounds.length > 1 && (
-        <div className="text-[10px] text-text-muted">
+        <div className="text-[0.625rem] text-text-muted">
           Round <strong className="text-text">{active.roundNumber}</strong> · scope is {active.sampleIds.length} failed sample{active.sampleIds.length !== 1 ? 's' : ''} from prior round.
         </div>
       )}
 
       <div className="rounded-lg border border-border-light overflow-hidden">
-        <table className="w-full text-[10px]">
+        <table className="w-full text-[0.625rem]">
           <thead>
             <tr className="bg-surface-2/40 border-b border-border-light">
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider">#</th>
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider">Sample</th>
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider">Description</th>
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider">Evidence</th>
-              <th className="px-3 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider">Result</th>
+              <th className="px-3 py-1.5 text-left text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider">#</th>
+              <th className="px-3 py-1.5 text-left text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider">Sample</th>
+              <th className="px-3 py-1.5 text-left text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider">Description</th>
+              <th className="px-3 py-1.5 text-left text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider">Evidence</th>
+              <th className="px-3 py-1.5 text-left text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider">Result</th>
             </tr>
           </thead>
           <tbody>
@@ -639,9 +639,9 @@ function SampleEvidenceTable({ ctrl, attr, rounds, onUpdateControl }: {
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setResult(ti.id, AttrResult.PASS)} disabled={ev === 0}
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
+                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.PASS ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' : 'bg-gray-100 text-gray-500 hover:bg-emerald-50'}`}>Pass</button>
                       <button onClick={() => setResult(ti.id, AttrResult.FAIL)} disabled={ev === 0}
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
+                        className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${r === AttrResult.FAIL ? 'bg-red-100 text-red-700 ring-1 ring-red-300' : 'bg-gray-100 text-gray-500 hover:bg-red-50'}`}>Fail</button>
                     </div>
                   </td>
                 </tr>
@@ -655,7 +655,7 @@ function SampleEvidenceTable({ ctrl, attr, rounds, onUpdateControl }: {
         <button onClick={startRoundN}
           className="w-full rounded-lg border-2 border-dashed border-amber-300/60 bg-amber-50/20 hover:bg-amber-50/40 py-2.5 px-3 cursor-pointer transition-colors flex items-center justify-center gap-2">
           <RotateCcw size={11} className="text-amber-600" />
-          <span className="text-[11px] font-semibold text-amber-700">Start Round {(active?.roundNumber || 1) + 1} for {failedIds.length} failed sample{failedIds.length !== 1 ? 's' : ''}</span>
+          <span className="text-[0.6875rem] font-semibold text-amber-700">Start Round {(active?.roundNumber || 1) + 1} for {failedIds.length} failed sample{failedIds.length !== 1 ? 's' : ''}</span>
         </button>
       )}
     </div>
@@ -687,7 +687,7 @@ function summariseSampleAttr(attr: Attribute, items: TestItem[]): { pass: number
 // ── Step badge ──────────────────────────────────────────────────────────
 function StepBadge({ number, done, disabled }: { number: number; done?: boolean; disabled?: boolean }) {
   return (
-    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[0.625rem] font-bold ${
       disabled ? 'bg-gray-100 text-gray-400' :
       done ? 'bg-emerald-500 text-white' :
       'bg-primary text-white'
@@ -715,8 +715,8 @@ function LayoutA({ ctrl, onUpdateControl, onLaunchWorkflowBuilder, onNavigate }:
       {/* Attribute list */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h5 className="text-[12px] font-bold text-text uppercase tracking-wider">Attributes ({ctrl.attributes.length})</h5>
-          <span className="text-[10px] text-text-muted">{sampling?.generatedAt ? `Sample set: ${sampling.sampleItemIds.length} items` : 'Locked until sampling complete'}</span>
+          <h5 className="text-[0.75rem] font-bold text-text uppercase tracking-wider">Attributes ({ctrl.attributes.length})</h5>
+          <span className="text-[0.625rem] text-text-muted">{sampling?.generatedAt ? `Sample set: ${sampling.sampleItemIds.length} items` : 'Locked until sampling complete'}</span>
         </div>
         <div className="space-y-2">
           {ctrl.attributes.map(attr => attr.scope === AttrScope.GENERIC
@@ -745,7 +745,7 @@ function LayoutB({ ctrl, onUpdateControl, onLaunchWorkflowBuilder, onNavigate }:
       {/* Left rail */}
       <div className="rounded-xl border border-border-light bg-white overflow-hidden h-fit sticky top-0">
         <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
-          <h5 className="text-[10px] font-bold text-text uppercase tracking-wider">Control</h5>
+          <h5 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Control</h5>
         </div>
         <div className="px-1.5 py-1.5 space-y-0.5">
           <RailItem active={sel.kind === 'pop'} onClick={() => setSel({ kind: 'pop' })}
@@ -756,7 +756,7 @@ function LayoutB({ ctrl, onUpdateControl, onLaunchWorkflowBuilder, onNavigate }:
             icon={WorkflowIcon} title="Validation workflows" sub={(ctrl.execution.validationWorkflows?.length || 0) > 0 ? `${ctrl.execution.validationWorkflows!.length} configured` : 'None configured'} />
         </div>
         <div className="px-3 py-2 border-y border-border-light bg-surface-2/40">
-          <h5 className="text-[10px] font-bold text-text uppercase tracking-wider">Attributes ({ctrl.attributes.length})</h5>
+          <h5 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Attributes ({ctrl.attributes.length})</h5>
         </div>
         <div className="px-1.5 py-1.5 space-y-0.5 max-h-[420px] overflow-y-auto">
           {ctrl.attributes.map(attr => {
@@ -768,10 +768,10 @@ function LayoutB({ ctrl, onUpdateControl, onLaunchWorkflowBuilder, onNavigate }:
                 disabled={attr.scope === AttrScope.SAMPLE_BASED && !sampling?.generatedAt}
                 className={`w-full text-left px-2 py-1.5 rounded transition-colors cursor-pointer ${active ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2'} disabled:opacity-40 disabled:cursor-not-allowed`}>
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span className={`text-[7px] font-bold px-1 py-0.5 rounded ${attr.scope === AttrScope.GENERIC ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'}`}>{attr.scope === AttrScope.GENERIC ? 'GEN' : 'SMP'}</span>
-                  <span className="text-[11px] font-semibold truncate">{attr.name}</span>
+                  <span className={`text-[0.4375rem] font-bold px-1 py-0.5 rounded ${attr.scope === AttrScope.GENERIC ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'}`}>{attr.scope === AttrScope.GENERIC ? 'GEN' : 'SMP'}</span>
+                  <span className="text-[0.6875rem] font-semibold truncate">{attr.name}</span>
                 </div>
-                <div className="text-[9px] text-text-muted">
+                <div className="text-[0.5625rem] text-text-muted">
                   {summary ? (summary.fail > 0 ? `${summary.fail} fail` : summary.pass > 0 ? `${summary.pass} pass` : `${summary.pending} pending`) :
                     (gen?.result === AttrResult.PASS ? 'Pass' : gen?.result === AttrResult.FAIL ? 'Fail' : 'Pending')}
                 </div>
@@ -805,8 +805,8 @@ function RailItem({ active, onClick, icon: Icon, title, sub, done, disabled }: {
       className={`w-full text-left px-2 py-1.5 rounded transition-colors cursor-pointer flex items-center gap-2 ${active ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2'} disabled:opacity-40 disabled:cursor-not-allowed`}>
       <Icon size={12} className={active ? 'text-primary' : 'text-text-muted'} />
       <div className="flex-1 min-w-0">
-        <div className={`text-[11px] font-semibold truncate ${active ? 'text-primary' : 'text-text'}`}>{title}</div>
-        <div className="text-[9px] text-text-muted truncate">{sub}</div>
+        <div className={`text-[0.6875rem] font-semibold truncate ${active ? 'text-primary' : 'text-text'}`}>{title}</div>
+        <div className="text-[0.5625rem] text-text-muted truncate">{sub}</div>
       </div>
       {done && <Check size={10} className="text-emerald-600" />}
     </button>
@@ -848,7 +848,7 @@ function TimelineNode({ num, title, done, locked, optional, children }: { num: n
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center shrink-0">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[0.6875rem] font-bold ${
           locked ? 'bg-gray-100 text-gray-400' :
           done ? 'bg-emerald-500 text-white' :
           'bg-primary text-white'
@@ -857,9 +857,9 @@ function TimelineNode({ num, title, done, locked, optional, children }: { num: n
       </div>
       <div className="flex-1 min-w-0 pb-2">
         <div className="flex items-center gap-2 mb-2">
-          <h5 className="text-[12px] font-bold text-text">{title}</h5>
-          {optional && <span className="text-[9px] text-text-muted font-medium">(optional)</span>}
-          {locked && <span className="text-[9px] text-text-muted flex items-center gap-1"><Lock size={9} />Locked</span>}
+          <h5 className="text-[0.75rem] font-bold text-text">{title}</h5>
+          {optional && <span className="text-[0.5625rem] text-text-muted font-medium">(optional)</span>}
+          {locked && <span className="text-[0.5625rem] text-text-muted flex items-center gap-1"><Lock size={9} />Locked</span>}
         </div>
         {children}
       </div>
@@ -885,7 +885,7 @@ function NextCta({ ctrl, onNavigate }: { ctrl: ExecutionControl; onNavigate: Sha
   const allDone = ctrl.attributes.every(a => attrDone(ctrl, a));
   return (
     <button onClick={() => onNavigate('working-paper')} disabled={!allDone}
-      className="ml-auto px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300">
+      className="ml-auto px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300">
       Working paper<ChevronRight size={11} />
     </button>
   );

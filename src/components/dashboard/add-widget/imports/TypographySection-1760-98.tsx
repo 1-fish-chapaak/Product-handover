@@ -15,7 +15,7 @@ export default function TypographySection({ showLabels, onShowLabelsChange }: { 
           <div className="size-[18px] rounded-[4px] flex items-center justify-center">
             <Type className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Data Labels</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Data Labels</span>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onShowLabelsChange?.(!enabled); }}

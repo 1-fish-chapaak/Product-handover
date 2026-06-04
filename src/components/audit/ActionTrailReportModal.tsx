@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -144,8 +145,8 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
               <Sparkles size={16} className="text-white" />
             </div>
             <div>
-              <h2 className="text-[16px] font-bold text-text">Action Trail Report</h2>
-              <p className="text-[12px] text-text-secondary mt-0.5">{eng.name}</p>
+              <h2 className="text-[1rem] font-bold text-text">Action Trail Report</h2>
+              <p className="text-[0.75rem] text-text-secondary mt-0.5">{eng.name}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
@@ -158,13 +159,13 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
           <>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               <div>
-                <label className="block text-[12px] font-semibold text-text mb-2">Period of analysis</label>
+                <label className="block text-[0.75rem] font-semibold text-text mb-2">Period of analysis</label>
                 <div className="flex flex-wrap gap-2">
                   {PRESETS.map(p => (
                     <button
                       key={p.id}
                       onClick={() => setPreset(p.id)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold border transition-colors cursor-pointer ${
                         preset === p.id
                           ? 'bg-primary text-white border-primary'
                           : 'bg-white text-text-secondary border-border hover:border-primary/30 hover:text-primary'
@@ -179,29 +180,29 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
               {preset === 'custom' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11.5px] font-medium text-text-secondary mb-1">From</label>
-                    <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-border text-[13px] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                    <label className="block text-[0.75rem] font-medium text-text-secondary mb-1">From</label>
+                    <DatePicker value={from} onChange={e => setFrom(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-border text-[0.8125rem] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                   </div>
                   <div>
-                    <label className="block text-[11.5px] font-medium text-text-secondary mb-1">To</label>
-                    <input type="date" value={to} onChange={e => setTo(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-border text-[13px] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                    <label className="block text-[0.75rem] font-medium text-text-secondary mb-1">To</label>
+                    <DatePicker value={to} onChange={e => setTo(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-border text-[0.8125rem] text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-surface-2/50 border border-border-light text-[12px] text-text-secondary">
+              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-surface-2/50 border border-border-light text-[0.75rem] text-text-secondary">
                 <Calendar size={13} className="text-text-muted shrink-0" />
                 <span><span className="font-semibold text-text">{metrics.total}</span> events in {periodLabel.toLowerCase()}</span>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border-light bg-surface-1/40">
-              <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[13px] font-semibold text-text-secondary transition-colors cursor-pointer">Cancel</button>
+              <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer">Cancel</button>
               <button
                 onClick={handleGenerate}
                 disabled={!customValid}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Sparkles size={14} />Generate with AI
               </button>
@@ -213,8 +214,8 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
         {stage === 'generating' && (
           <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 gap-3">
             <Loader2 size={28} className="text-primary animate-spin" />
-            <div className="text-[13.5px] font-semibold text-text">Analysing the action trail…</div>
-            <div className="text-[12px] text-text-muted">Summarising {metrics.total} events across {periodLabel.toLowerCase()}</div>
+            <div className="text-[0.75rem] font-semibold text-text">Analysing the action trail…</div>
+            <div className="text-[0.75rem] text-text-muted">Summarising {metrics.total} events across {periodLabel.toLowerCase()}</div>
           </div>
         )}
 
@@ -223,15 +224,15 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
           <>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">
+                <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-bold uppercase tracking-wide bg-primary/10 text-primary">
                   <Sparkles size={10} />AI-generated
                 </span>
-                <span className="text-[11.5px] text-text-muted">{periodLabel}</span>
+                <span className="text-[0.75rem] text-text-muted">{periodLabel}</span>
               </div>
 
               {/* Executive summary */}
               <Section icon={FileText} title="Executive summary">
-                <p className="text-[13px] text-text-secondary leading-relaxed">
+                <p className="text-[0.8125rem] text-text-secondary leading-relaxed">
                   Over {periodLabel.toLowerCase()}, <span className="font-semibold text-text">{eng.name}</span> logged{' '}
                   <span className="font-semibold text-text">{metrics.total}</span> trail events —{' '}
                   <span className="font-semibold text-risk-700">{metrics.opened}</span> exceptions opened and{' '}
@@ -262,18 +263,18 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
               {/* Notable events & patterns */}
               <Section icon={AlertTriangle} title="Notable events & patterns">
                 <ul className="space-y-2">
-                  <li className="text-[12.5px] text-text-secondary flex gap-2">
+                  <li className="text-[0.75rem] text-text-secondary flex gap-2">
                     <span className="text-primary mt-0.5">•</span>
                     Busiest day was <span className="font-semibold text-text">{metrics.busiestDay}</span> with {metrics.busiestCount} events.
                   </li>
                   {metrics.topWorkflowCount > 0 && (
-                    <li className="text-[12.5px] text-text-secondary flex gap-2">
+                    <li className="text-[0.75rem] text-text-secondary flex gap-2">
                       <span className="text-primary mt-0.5">•</span>
                       <span><span className="font-semibold text-text">{metrics.topWorkflow}</span> generated the most activity ({metrics.topWorkflowCount} events).</span>
                     </li>
                   )}
                   {metrics.notable.map(e => (
-                    <li key={e.id} className="text-[12.5px] text-text-secondary flex gap-2">
+                    <li key={e.id} className="text-[0.75rem] text-text-secondary flex gap-2">
                       <span className="text-primary mt-0.5">•</span>
                       <span>
                         <span className="font-medium text-text">{e.title}</span>
@@ -289,8 +290,8 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
               <Section icon={Lightbulb} title="Recommendations">
                 <ul className="space-y-2">
                   {recommendations.map((r, i) => (
-                    <li key={i} className="text-[12.5px] text-text-secondary flex gap-2">
-                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0 mt-0.5">{i + 1}</span>
+                    <li key={i} className="text-[0.75rem] text-text-secondary flex gap-2">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/10 text-primary text-[0.625rem] font-bold shrink-0 mt-0.5">{i + 1}</span>
                       <span>{r}</span>
                     </li>
                   ))}
@@ -301,13 +302,13 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
             <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-border-light bg-surface-1/40">
               <button
                 onClick={() => setStage('setup')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 <RefreshCw size={13} />Change period
               </button>
               <button
                 onClick={() => { addToast({ message: 'Action trail report exported (PDF)', type: 'success' }); onClose(); }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Download size={14} />Export PDF
               </button>
@@ -324,7 +325,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
     <div>
       <div className="flex items-center gap-1.5 mb-2">
         <Icon size={13} className="text-primary" />
-        <h3 className="text-[12px] font-bold text-text uppercase tracking-wider">{title}</h3>
+        <h3 className="text-[0.75rem] font-bold text-text uppercase tracking-wider">{title}</h3>
       </div>
       {children}
     </div>
@@ -335,10 +336,10 @@ function Stat({ label, value, tone, icon: Icon }: { label: string; value: number
   return (
     <div className="rounded-lg border border-border-light bg-white px-3 py-2.5">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
+        <span className="text-[0.625rem] uppercase tracking-wide font-semibold text-text-muted">{label}</span>
         {Icon && <Icon size={11} className="text-text-muted" />}
       </div>
-      <div className={`text-[18px] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
+      <div className={`text-[1.125rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
     </div>
   );
 }

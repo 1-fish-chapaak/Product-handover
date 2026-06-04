@@ -95,7 +95,7 @@ function TestingBadge({ status }: { status: string }) {
   };
   const s = map[status] || map['Not Started'];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap`}>
       {s.icon}
       {status}
     </span>
@@ -103,7 +103,7 @@ function TestingBadge({ status }: { status: string }) {
 }
 
 function ConclusionBadge({ conclusion }: { conclusion: string }) {
-  if (!conclusion) return <span className="text-gray-300 text-[12px]">-</span>;
+  if (!conclusion) return <span className="text-gray-300 text-[0.75rem]">-</span>;
   const map: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
     'Effective': { bg: 'bg-green-50', text: 'text-green-700', icon: <ShieldCheck size={11} /> },
     'Ineffective': { bg: 'bg-red-50', text: 'text-red-700', icon: <XCircle size={11} /> },
@@ -112,7 +112,7 @@ function ConclusionBadge({ conclusion }: { conclusion: string }) {
   };
   const s = map[conclusion] || map['Pending'];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap`}>
       {s.icon}
       {conclusion}
     </span>
@@ -120,13 +120,13 @@ function ConclusionBadge({ conclusion }: { conclusion: string }) {
 }
 
 function EvidenceBadge({ label, status }: { label: string; status: 'complete' | 'partial' | 'none' }) {
-  if (label === '-') return <span className="text-gray-300 text-[12px]">-</span>;
+  if (label === '-') return <span className="text-gray-300 text-[0.75rem]">-</span>;
   const colors = {
     complete: 'text-green-600',
     partial: 'text-amber-600',
     none: 'text-gray-400',
   };
-  return <span className={`text-[12px] font-medium ${colors[status]}`}>{label}</span>;
+  return <span className={`text-[0.75rem] font-medium ${colors[status]}`}>{label}</span>;
 }
 
 function ActionButton({ label, type, onClick }: { label: string; type: string; onClick?: () => void }) {
@@ -140,7 +140,7 @@ function ActionButton({ label, type, onClick }: { label: string; type: string; o
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition-all cursor-pointer active:scale-[0.97] ${styles[type] || styles.default}`}
+      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[0.75rem] font-semibold transition-all cursor-pointer active:scale-[0.97] ${styles[type] || styles.default}`}
     >
       {label}
       <ArrowRight size={10} />
@@ -176,7 +176,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             <p className="text-sm text-text-secondary mt-1">Execute testing, manage evidence, and document conclusions.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Filter size={14} />
               Advanced Filters
             </button>
@@ -189,14 +189,14 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             <button
               key={f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[12px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[0.75rem] font-medium transition-all cursor-pointer ${
                 activeFilter === f.key
                   ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary/20'
                   : 'border-border-light bg-white text-text-secondary hover:shadow-md hover:border-primary/20 active:scale-[0.98]'
               }`}
             >
               {f.label}
-              <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${
                 activeFilter === f.key ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500'
               }`}>
                 {f.count}
@@ -216,7 +216,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
           ].map(card => (
             <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
               <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-              <div className="text-[12px] text-text-muted uppercaser">{card.label}</div>
+              <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               {card.progress !== undefined && (
                 <div className="mt-1.5 h-1.5 bg-border-light rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${card.progress}%` }} />
@@ -234,18 +234,18 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             placeholder="Search controls by ID, name, engagement, or workflow..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-[13px] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
+            className="w-full pl-9 pr-4 py-2.5 text-[0.8125rem] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
           />
         </div>
 
         {/* Pipeline Table */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[0.75rem]">
               <thead>
                 <tr className="border-b border-border-light bg-surface-2/50">
                   {['Control', 'Engagement', 'Workflow', 'Population', 'Sample', 'Evidence', 'Testing', 'Conclusion', 'Next Action', ''].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-[12px] font-semibold text-text-muted">
+                    <th key={h} className="px-3 py-3 text-left text-[0.75rem] font-semibold text-text-muted">
                       {h}
                     </th>
                   ))}
@@ -264,23 +264,23 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
                     >
                       <td className="px-3 py-3">
                         <div className="flex flex-col">
-                          <span className="font-mono text-[12px] text-text-muted">{row.id}</span>
-                          <span className="text-text font-medium text-[12px]">{row.control}</span>
+                          <span className="font-mono text-[0.75rem] text-text-muted">{row.id}</span>
+                          <span className="text-text font-medium text-[0.75rem]">{row.control}</span>
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span className="text-text-secondary font-mono text-[12px] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
+                        <span className="text-text-secondary font-mono text-[0.75rem] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1">
                             <Workflow size={10} className="text-indigo-500" />
-                            <span className="text-[11px] text-indigo-700 font-medium">{row.workflowName}</span>
+                            <span className="text-[0.6875rem] text-indigo-700 font-medium">{row.workflowName}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-text-muted font-mono">{row.workflowVersion}</span>
-                            <span className="text-[10px] text-text-muted">&middot;</span>
-                            <span className="text-[10px] text-text-muted">{row.attributeCount} attrs</span>
+                            <span className="text-[0.625rem] text-text-muted font-mono">{row.workflowVersion}</span>
+                            <span className="text-[0.625rem] text-text-muted">&middot;</span>
+                            <span className="text-[0.625rem] text-text-muted">{row.attributeCount} attrs</span>
                           </div>
                         </div>
                       </td>
@@ -288,17 +288,17 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1">
                             <Workflow size={10} className="text-indigo-500" />
-                            <span className="text-[11px] text-indigo-700 font-medium">{row.workflowName}</span>
+                            <span className="text-[0.6875rem] text-indigo-700 font-medium">{row.workflowName}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-text-muted font-mono">{row.workflowVersion}</span>
-                            <span className="text-[10px] text-text-muted">&middot;</span>
-                            <span className="text-[10px] text-text-muted">{row.attributeCount} attrs</span>
+                            <span className="text-[0.625rem] text-text-muted font-mono">{row.workflowVersion}</span>
+                            <span className="text-[0.625rem] text-text-muted">&middot;</span>
+                            <span className="text-[0.625rem] text-text-muted">{row.attributeCount} attrs</span>
                           </div>
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`text-[12px] font-medium ${
+                        <span className={`text-[0.75rem] font-medium ${
                           row.populationStatus === 'validated' ? 'text-green-600' :
                           row.populationStatus === 'received' ? 'text-blue-600' :
                           'text-gray-400'
@@ -307,7 +307,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`text-[12px] ${row.sample === '-' ? 'text-gray-300' : 'text-text-secondary'}`}>
+                        <span className={`text-[0.75rem] ${row.sample === '-' ? 'text-gray-300' : 'text-text-secondary'}`}>
                           {row.sample}
                         </span>
                       </td>
@@ -380,11 +380,11 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
 
           {/* Table Footer */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-            <span className="text-[12px] text-text-muted">
+            <span className="text-[0.75rem] text-text-muted">
               Showing {filtered.length} of {CONTROLS.length} controls
             </span>
             <div className="flex items-center gap-1">
-              <span className="text-[12px] text-text-muted">Page 1 of 1</span>
+              <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
               <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer">
                 <ChevronRight size={14} />
               </button>

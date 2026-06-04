@@ -29,12 +29,12 @@ export function KpiCard({
     <div className="flex flex-col h-full w-full bg-white rounded-2xl p-6 relative overflow-hidden">
       {/* Label - Fixed at top */}
       <div className="shrink-0 mb-4">
-        <div className="font-normal text-[14px] text-[#26064a]" style={fontStyle}>{displayLabel}</div>
+        <div className="font-normal text-[0.875rem] text-[#26064a]" style={fontStyle}>{displayLabel}</div>
       </div>
       
       {/* Value - Large display */}
       <div className="flex-1 flex items-start min-h-0">
-        <span className="leading-none font-bold tracking-tight text-[32px]" style={{ color, ...fontStyle }}>
+        <span className="leading-none font-bold tracking-tight text-[2rem]" style={{ color, ...fontStyle }}>
           {value}
         </span>
       </div>

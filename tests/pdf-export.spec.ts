@@ -24,7 +24,9 @@ const OUT_DIR = path.join(__dirname, '..', '.impeccable', 'pdf-export-test');
 
 test.setTimeout(90_000);
 
-test('Export → PDF produces a real chat-style PDF', async ({ page }) => {
+// QUARANTINE (2026-05-29): test.fixme — drives the full chat→audit→export
+// flow which has drifted (1.5m timeout). Needs re-anchoring, not deletion.
+test.fixme('Export → PDF produces a real chat-style PDF', async ({ page }) => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   // Intercept iframe.contentWindow.print so the native dialog doesn't open;

@@ -79,9 +79,9 @@ const SEVERITY_STYLE: Record<string, string> = {
 };
 
 /* ─── Shared field styles ─── */
-const inputClass = 'w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all';
+const inputClass = 'w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all';
 const selectClass = inputClass + ' cursor-pointer';
-const labelClass = 'block text-[12.5px] font-semibold text-ink-700 mb-1.5';
+const labelClass = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
 
 /* ─── Component ─── */
 export default function CreateControlDrawer({ onClose, onSave, defaultProcess, defaultRiskIds }: Props) {
@@ -200,7 +200,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                 <button
                   key={v}
                   onClick={() => setClassification(v)}
-                  className={`px-4 py-3 rounded-lg border text-[13px] font-medium transition-all cursor-pointer ${
+                  className={`px-4 py-3 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${
                     classification === v
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -221,7 +221,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                 <button
                   key={v}
                   onClick={() => setNature(v)}
-                  className={`px-4 py-3 rounded-lg border text-[13px] font-medium transition-all cursor-pointer ${
+                  className={`px-4 py-3 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${
                     nature === v
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -241,7 +241,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                 <button
                   key={v}
                   onClick={() => setAutomation(v)}
-                  className={`px-4 py-3 rounded-lg border text-[13px] font-medium transition-all cursor-pointer ${
+                  className={`px-4 py-3 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${
                     automation === v
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -261,7 +261,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                 <button
                   key={f}
                   onClick={() => setFrequency(f)}
-                  className={`px-3 py-2 rounded-lg border text-[12.5px] font-medium transition-all cursor-pointer ${
+                  className={`px-3 py-2 rounded-lg border text-[0.75rem] font-medium transition-all cursor-pointer ${
                     frequency === f
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
                       : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'
@@ -278,7 +278,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
 
       case 2: return (
         <div className="space-y-4">
-          <p className="text-[12.5px] text-ink-500">Select the financial statement assertions this control addresses.</p>
+          <p className="text-[0.75rem] text-ink-500">Select the financial statement assertions this control addresses.</p>
           <div className="space-y-2">
             {ASSERTIONS.map(a => {
               const selected = assertions.includes(a.id);
@@ -298,22 +298,22 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                     {selected && <Check size={12} className="text-white" />}
                   </div>
                   <div>
-                    <div className="text-[13px] font-medium text-ink-800">{a.label}</div>
-                    <div className="text-[11.5px] text-ink-500">{a.desc}</div>
+                    <div className="text-[0.8125rem] font-medium text-ink-800">{a.label}</div>
+                    <div className="text-[0.75rem] text-ink-500">{a.desc}</div>
                   </div>
                 </button>
               );
             })}
           </div>
           {assertions.length > 0 && (
-            <div className="text-[12px] text-ink-500">{assertions.length} assertion{assertions.length !== 1 ? 's' : ''} selected</div>
+            <div className="text-[0.75rem] text-ink-500">{assertions.length} assertion{assertions.length !== 1 ? 's' : ''} selected</div>
           )}
         </div>
       );
 
       case 3: return (
         <div className="space-y-4">
-          <p className="text-[12.5px] text-ink-500">Optionally map this control to existing risks from the Risk Register.</p>
+          <p className="text-[0.75rem] text-ink-500">Optionally map this control to existing risks from the Risk Register.</p>
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
@@ -327,12 +327,12 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
           {/* Selected risks */}
           {mappedRisks.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-[12px] font-semibold text-ink-600">{mappedRisks.length} risk{mappedRisks.length !== 1 ? 's' : ''} mapped</div>
+              <div className="text-[0.75rem] font-semibold text-ink-600">{mappedRisks.length} risk{mappedRisks.length !== 1 ? 's' : ''} mapped</div>
               <div className="flex flex-wrap gap-2">
                 {mappedRisks.map(rid => {
                   const risk = RISKS.find(r => r.id === rid);
                   return (
-                    <span key={rid} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-[12px] font-medium">
+                    <span key={rid} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-[0.75rem] font-medium">
                       <span className="font-mono">{rid}</span>
                       <button onClick={() => toggleRisk(rid)} className="hover:text-risk cursor-pointer"><X size={11} /></button>
                     </span>
@@ -363,12 +363,12 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-ink-500">{risk.id}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${SEVERITY_STYLE[risk.severity]}`}>
+                      <span className="font-mono text-[0.6875rem] text-ink-500">{risk.id}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase ${SEVERITY_STYLE[risk.severity]}`}>
                         {risk.severity}
                       </span>
                     </div>
-                    <div className="text-[12.5px] text-ink-800 truncate mt-0.5">{risk.name}</div>
+                    <div className="text-[0.75rem] text-ink-800 truncate mt-0.5">{risk.name}</div>
                   </div>
                 </button>
               );
@@ -379,7 +379,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
 
       case 4: return (
         <div className="space-y-5">
-          <p className="text-[12.5px] text-ink-500">
+          <p className="text-[0.75rem] text-ink-500">
             Choose how this control will get its workflow. A workflow defines how the control is tested during engagements.
           </p>
 
@@ -402,8 +402,8 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
               >
                 <opt.icon size={16} className={workflowChoice === opt.value ? 'text-brand-600' : 'text-ink-400'} />
                 <div>
-                  <div className="text-[13px] font-medium text-ink-800">{opt.title}</div>
-                  <div className="text-[11.5px] text-ink-500">{opt.desc}</div>
+                  <div className="text-[0.8125rem] font-medium text-ink-800">{opt.title}</div>
+                  <div className="text-[0.75rem] text-ink-500">{opt.desc}</div>
                 </div>
               </button>
             ))}
@@ -440,10 +440,10 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                         {selected && <Check size={10} className="text-white" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium text-ink-800">{wf.name}</div>
-                        <div className="text-[11.5px] text-ink-500 truncate">{wf.desc}</div>
+                        <div className="text-[0.8125rem] font-medium text-ink-800">{wf.name}</div>
+                        <div className="text-[0.75rem] text-ink-500 truncate">{wf.desc}</div>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-evidence-50 text-evidence-700 shrink-0 uppercase">{wf.type}</span>
+                      <span className="px-2 py-0.5 rounded text-[0.625rem] font-bold bg-evidence-50 text-evidence-700 shrink-0 uppercase">{wf.type}</span>
                     </button>
                   );
                 })}
@@ -485,9 +485,9 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
             <div>
               <div className="flex items-center gap-2">
                 <Shield size={18} className="text-brand-600" />
-                <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">Create Control</h2>
+                <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Create Control</h2>
               </div>
-              <p className="text-[12.5px] text-ink-500 mt-0.5">Define a new reusable governance control.</p>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new reusable governance control.</p>
             </div>
             <button
               onClick={onClose}
@@ -507,7 +507,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                 <button
                   key={s}
                   onClick={() => { if (i < step) setStep(i); }}
-                  className={`pb-3 px-2 text-[12px] font-medium transition-colors cursor-pointer border-b-2 whitespace-nowrap ${
+                  className={`pb-3 px-2 text-[0.75rem] font-medium transition-colors cursor-pointer border-b-2 whitespace-nowrap ${
                     active
                       ? 'border-brand-600 text-brand-700'
                       : done
@@ -515,7 +515,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                         : 'border-transparent text-ink-400'
                   }`}
                 >
-                  <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold mr-1.5 ${
+                  <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[0.625rem] font-bold mr-1.5 ${
                     done ? 'bg-brand-600 text-white' : active ? 'bg-brand-100 text-brand-700' : 'bg-canvas text-ink-400'
                   }`}>
                     {done ? <Check size={10} /> : i + 1}
@@ -544,14 +544,14 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between">
-          <div className="text-[12px] text-ink-400">
+          <div className="text-[0.75rem] text-ink-400">
             Step {step + 1} of {STEPS.length}
           </div>
           <div className="flex items-center gap-3">
             {step > 0 && (
               <button
                 onClick={() => setStep(s => s - 1)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
               >
                 <ChevronLeft size={14} />
                 Back
@@ -560,7 +560,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
             <button
               onClick={handleNext}
               disabled={!stepValid}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isLastStep
                 ? workflowChoice === 'link' ? 'Link Workflow & Create Control'

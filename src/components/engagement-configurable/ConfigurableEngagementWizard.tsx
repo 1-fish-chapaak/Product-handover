@@ -435,7 +435,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
             >
               {/* Header */}
               <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
-                <h3 className="text-[16px] font-semibold text-text">{modalTitle}</h3>
+                <h3 className="text-[1rem] font-semibold text-text">{modalTitle}</h3>
                 <button onClick={closeWizardModal} className="p-1.5 hover:bg-surface-2 rounded-md transition-colors cursor-pointer" aria-label="Close">
                   <X size={16} className="text-text-muted" />
                 </button>
@@ -451,14 +451,14 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
                       <React.Fragment key={step.id}>
                         {idx > 0 && <div className={`flex-1 h-px mx-3 ${isDone ? 'bg-primary' : 'bg-border-light'}`} />}
                         <div className="flex items-center gap-2 shrink-0">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold ${
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold ${
                             isActive ? 'bg-primary text-white' :
                             isDone ? 'bg-primary/15 text-primary' :
                             'bg-surface-2 text-text-muted'
                           }`}>
                             {isDone ? <Check size={13} strokeWidth={3} /> : idx + 1}
                           </div>
-                          <span className={`text-[12px] ${
+                          <span className={`text-[0.75rem] ${
                             isActive ? 'text-text font-semibold' :
                             isDone ? 'text-text' :
                             'text-text-muted'
@@ -506,7 +506,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
               <div className="px-6 py-3 border-t border-border-light shrink-0 flex items-center justify-between">
                 <button
                   onClick={handleModalBack}
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border-light text-[12px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors"
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border-light text-[0.75rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors"
                 >
                   <ChevronLeft size={13} />{currentStep <= 1 ? 'Cancel' : 'Back'}
                 </button>
@@ -514,7 +514,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
                   <button
                     onClick={handleModalNext}
                     disabled={!canGoNext()}
-                    className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Next<ChevronRight size={13} />
                   </button>

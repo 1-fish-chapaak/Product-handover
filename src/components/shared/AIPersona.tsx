@@ -255,7 +255,7 @@ export default function PersonaDemo() {
                       : 'bg-text-muted/40'
             }`}
           />
-          <span className="text-[12px] font-medium text-text-muted">
+          <span className="text-[0.75rem] font-medium text-text-muted">
             {state}
           </span>
         </div>
@@ -263,7 +263,7 @@ export default function PersonaDemo() {
 
       {/* Variant Selector */}
       <div className="flex w-full flex-col gap-2">
-        <span className="text-[12px] font-medium text-text-muted">
+        <span className="text-[0.75rem] font-medium text-text-muted">
           Variant
         </span>
         <div className="grid grid-cols-3 gap-1.5">
@@ -271,7 +271,7 @@ export default function PersonaDemo() {
             <button
               key={v}
               onClick={() => setVariant(v)}
-              className={`rounded-lg border px-3 py-1.5 text-[12px] font-medium capitalize transition-all duration-200 cursor-pointer ${
+              className={`rounded-lg border px-3 py-1.5 text-[0.75rem] font-medium capitalize transition-all duration-200 cursor-pointer ${
                 variant === v
                   ? 'border-primary/40 bg-primary-xlight text-primary shadow-[0_0_8px_rgba(106,18,205,0.08)]'
                   : 'border-border-light bg-surface text-text-secondary hover:border-primary/20 hover:bg-primary-xlight/50'
@@ -285,7 +285,7 @@ export default function PersonaDemo() {
 
       {/* State Controls */}
       <div className="flex w-full flex-col gap-2">
-        <span className="text-[12px] font-medium text-text-muted">
+        <span className="text-[0.75rem] font-medium text-text-muted">
           State
         </span>
         <div className="flex flex-wrap gap-1.5">
@@ -296,11 +296,11 @@ export default function PersonaDemo() {
               <button
                 key={s}
                 onClick={() => setState(s)}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[0.75rem] font-medium transition-all duration-200 cursor-pointer ${
                   isActive ? cfg.activeColor : cfg.color
                 }`}
               >
-                <span className="text-[12px]">{cfg.icon}</span>
+                <span className="text-[0.75rem]">{cfg.icon}</span>
                 {cfg.label}
               </button>
             );

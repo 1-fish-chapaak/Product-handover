@@ -54,10 +54,10 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[15px] font-bold text-text mb-0.5">Samples & Evidence</h3>
-          <p className="text-[12px] text-text-muted">Prepare test items and attach supporting evidence before attribute testing.</p>
+          <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Samples & Evidence</h3>
+          <p className="text-[0.75rem] text-text-muted">Prepare test items and attach supporting evidence before attribute testing.</p>
         </div>
-        <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-bold shrink-0">
+        <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-bold shrink-0">
           {METHOD_LABELS[method] || method}
         </span>
       </div>
@@ -73,8 +73,8 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
           { label: 'Ready Items', value: `${summary.readyItems}/${summary.testItemCount}`, cls: summary.ready ? 'text-emerald-600' : 'text-gray-400' },
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
-            <div className={`text-[16px] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[9px] text-gray-400 font-medium">{s.label}</div>
+            <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
+            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -91,14 +91,14 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
             <div key={batch.id} className="rounded-lg border border-border-light overflow-hidden">
               <div className="px-4 py-2.5 bg-surface-2/20 border-b border-border-light flex items-center justify-between">
                 <div>
-                  <div className="text-[12px] font-semibold text-text">{batch.name}</div>
-                  <div className="text-[10px] text-gray-400">{batch.sourceName} · {batch.sampleCount} items · {batch.uploadedAt}</div>
+                  <div className="text-[0.75rem] font-semibold text-text">{batch.name}</div>
+                  <div className="text-[0.625rem] text-gray-400">{batch.sourceName} · {batch.sampleCount} items · {batch.uploadedAt}</div>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">{batch.status}</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold">{batch.status}</span>
               </div>
-              <table className="w-full text-[11px]">
+              <table className="w-full text-[0.6875rem]">
                 <thead>
-                  <tr className="border-b border-border-light/50 text-[9px] font-semibold text-gray-400 uppercase">
+                  <tr className="border-b border-border-light/50 text-[0.5625rem] font-semibold text-gray-400 uppercase">
                     <th className="px-3 py-1.5 text-left">Test Item</th>
                     <th className="px-3 py-1.5 text-left">Reference</th>
                     <th className="px-3 py-1.5 text-left">Linked Control</th>
@@ -112,13 +112,13 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
                     const coverage = deriveTestItemAttributeCoverage(ti, samplesEvidence.evidence);
                     return (
                       <tr key={ti.id} className="border-b border-border-light/30">
-                        <td className="px-3 py-2 font-mono text-gray-500 text-[10px]">{ti.referenceId}</td>
+                        <td className="px-3 py-2 font-mono text-gray-500 text-[0.625rem]">{ti.referenceId}</td>
                         <td className="px-3 py-2 text-text">{ti.description}</td>
                         <td className="px-3 py-2 text-gray-500">{ti.linkedControlId}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${TI_STATUS_CLS[evStatus]}`}>{evStatus}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${TI_STATUS_CLS[evStatus]}`}>{evStatus}</span>
                         </td>
-                        <td className="px-3 py-2 text-center text-[10px] text-gray-500">{coverage.text}</td>
+                        <td className="px-3 py-2 text-center text-[0.625rem] text-gray-500">{coverage.text}</td>
                       </tr>
                     );
                   })}
@@ -132,9 +132,9 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
       {/* Evidence Repository */}
       <div className="rounded-lg border border-border-light p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-[12px] font-bold text-text">Evidence Repository</h4>
+          <h4 className="text-[0.75rem] font-bold text-text">Evidence Repository</h4>
           <button onClick={() => setShowEvidenceForm(true)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-semibold hover:bg-primary/20 cursor-pointer transition-colors">
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.625rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors">
             <Plus size={11} />Attach Evidence
           </button>
         </div>
@@ -148,11 +148,11 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
         )}
 
         {samplesEvidence.evidence.length === 0 ? (
-          <div className="text-[11px] text-gray-400 italic py-4 text-center">No evidence attached yet. Use "Attach Evidence" or add received PBC files below.</div>
+          <div className="text-[0.6875rem] text-gray-400 italic py-4 text-center">No evidence attached yet. Use "Attach Evidence" or add received PBC files below.</div>
         ) : (
-          <table className="w-full text-[10px]">
+          <table className="w-full text-[0.625rem]">
             <thead>
-              <tr className="border-b border-border-light/50 text-[8px] font-semibold text-gray-400 uppercase">
+              <tr className="border-b border-border-light/50 text-[0.5rem] font-semibold text-gray-400 uppercase">
                 <th className="px-2 py-1.5 text-left">File</th>
                 <th className="px-2 py-1.5 text-left">Type</th>
                 <th className="px-2 py-1.5 text-left">Control</th>
@@ -169,12 +169,12 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
                   <td className="px-2 py-1.5 text-gray-500">{ev.linkedControlId}</td>
                   <td className="px-2 py-1.5 text-center">{ev.linkedAttributeIds.length}</td>
                   <td className="px-2 py-1.5 text-center">
-                    <span className={`px-1 py-0.5 rounded text-[7px] font-bold ${ev.source === 'USER_UPLOADED' ? 'bg-gray-100 text-gray-600' : ev.source === 'RECEIVED_FROM_PBC' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+                    <span className={`px-1 py-0.5 rounded text-[0.4375rem] font-bold ${ev.source === 'USER_UPLOADED' ? 'bg-gray-100 text-gray-600' : ev.source === 'RECEIVED_FROM_PBC' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
                       {ev.source === 'USER_UPLOADED' ? 'User' : ev.source === 'RECEIVED_FROM_PBC' ? 'PBC' : 'System'}
                     </span>
                   </td>
                   <td className="px-2 py-1.5 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[7px] font-bold ${EV_STATUS_CLS[ev.status]}`}>{ev.status === 'ATTACHED' ? 'Attached' : ev.status === 'NEEDS_MAPPING' ? 'Needs Mapping' : 'Missing'}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[0.4375rem] font-bold ${EV_STATUS_CLS[ev.status]}`}>{ev.status === 'ATTACHED' ? 'Attached' : ev.status === 'NEEDS_MAPPING' ? 'Needs Mapping' : 'Missing'}</span>
                   </td>
                 </tr>
               ))}
@@ -186,10 +186,10 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
       {/* PBC Received Files */}
       {receivedPBC.length > 0 && (
         <div className="rounded-lg border border-blue-200/50 bg-blue-50/20 p-4 space-y-2">
-          <h4 className="text-[11px] font-bold text-blue-700 flex items-center gap-1.5"><FileText size={12} />Received from PBC</h4>
+          <h4 className="text-[0.6875rem] font-bold text-blue-700 flex items-center gap-1.5"><FileText size={12} />Received from PBC</h4>
           <div className="space-y-1">
             {receivedPBC.map(r => (
-              <div key={r.id} className="flex items-center justify-between text-[10px]">
+              <div key={r.id} className="flex items-center justify-between text-[0.625rem]">
                 <div>
                   <span className="text-text font-medium">{r.title}</span>
                   <span className="text-gray-400 ml-2">{r.filesReceived.length > 0 ? r.filesReceived.join(', ') : r.progressText || '—'}</span>
@@ -223,7 +223,7 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
                       status: hasFullMapping ? 'ATTACHED' : 'NEEDS_MAPPING',
                     });
                   });
-                }} className="px-2 py-1 rounded text-[9px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
+                }} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
                   Add to Evidence
                 </button>
               </div>
@@ -235,8 +235,8 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
       {/* Readiness */}
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <h4 className="text-[12px] font-bold text-text">Attribute Testing Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${summary.ready ? 'bg-emerald-50 text-emerald-700' : summary.batchCount > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+          <h4 className="text-[0.75rem] font-bold text-text">Attribute Testing Readiness</h4>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${summary.ready ? 'bg-emerald-50 text-emerald-700' : summary.batchCount > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
             {summary.ready ? 'Ready' : summary.batchCount > 0 ? 'Partially Ready' : 'Not Ready'}
           </span>
         </div>
@@ -248,7 +248,7 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
             { label: 'Evidence repository has mapped evidence', ok: summary.mapped > 0 },
             { label: 'All test items have evidence coverage', ok: summary.readyItems === summary.testItemCount && summary.testItemCount > 0 },
           ].map(c => (
-            <div key={c.label} className="flex items-center gap-2 text-[10px]">
+            <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
               <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
             </div>
@@ -257,7 +257,7 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
         <button
           onClick={() => onNavigateTab?.('attr-testing')}
           disabled={!hasBatches}
-          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           Go to Attribute Testing <ChevronRight size={11} />
         </button>
       </div>
@@ -307,22 +307,22 @@ function InputMethodPanel({ method, onCreateBatch, populationUploaded, onUploadP
   return (
     <div className="rounded-xl border-2 border-dashed border-border-light p-6 text-center space-y-3">
       <div className="p-3 rounded-xl bg-primary/10 inline-flex"><Icon size={24} className="text-primary" /></div>
-      <h4 className="text-[14px] font-semibold text-text">{cfg.title}</h4>
-      <p className="text-[12px] text-text-muted max-w-md mx-auto">{cfg.desc}</p>
+      <h4 className="text-[0.875rem] font-semibold text-text">{cfg.title}</h4>
+      <p className="text-[0.75rem] text-text-muted max-w-md mx-auto">{cfg.desc}</p>
       <div className="flex items-center justify-center gap-2">
         <button onClick={cfg.onAction}
-          className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold cursor-pointer transition-colors">
+          className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors">
           {cfg.cta}
         </button>
         {cfg.secondary && (
           <button onClick={cfg.secondary.onAction} disabled={cfg.secondary.disabled}
-            className="px-4 py-2 rounded-lg border border-border-light text-[12px] font-medium text-text-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-4 py-2 rounded-lg border border-border-light text-[0.75rem] font-medium text-text-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {cfg.secondary.cta}
           </button>
         )}
       </div>
       {populationUploaded && method === TestingInputMethod.GENERATE_SAMPLES_FROM_POPULATION && (
-        <div className="flex items-center justify-center gap-2 text-[10px] text-emerald-600">
+        <div className="flex items-center justify-center gap-2 text-[0.625rem] text-emerald-600">
           <CheckCircle2 size={11} />Population uploaded: invoice_population_fy26_q1.xlsx (10,000 records) · Method: Random · Sample size: 5
         </div>
       )}
@@ -332,9 +332,9 @@ function InputMethodPanel({ method, onCreateBatch, populationUploaded, onUploadP
 
 // ─── Attach Evidence Form ─────────────────────────────────────────────────
 
-const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[12px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
+const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[11px] font-semibold text-text-muted block mb-1';
+const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 
 function AttachEvidenceForm({ onSave, onCancel, testItems }: { onSave: (ev: EvidenceItem) => void; onCancel: () => void; testItems: { id: string; referenceId: string; linkedControlId: string }[] }) {
   const [fileName, setFileName] = useState('');
@@ -385,7 +385,7 @@ function AttachEvidenceForm({ onSave, onCancel, testItems }: { onSave: (ev: Evid
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h5 className="text-[12px] font-bold text-text">Attach Evidence</h5>
+        <h5 className="text-[0.75rem] font-bold text-text">Attach Evidence</h5>
         <button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -418,9 +418,9 @@ function AttachEvidenceForm({ onSave, onCancel, testItems }: { onSave: (ev: Evid
         <label className={labelCls}>Linked Attributes</label>
         <div className="flex flex-wrap gap-2 mt-1">
           {controlAttrs.length === 0 ? (
-            <span className="text-[10px] text-gray-400 italic">No attributes for this control</span>
+            <span className="text-[0.625rem] text-gray-400 italic">No attributes for this control</span>
           ) : controlAttrs.map(a => (
-            <label key={a.id} className="flex items-center gap-1.5 text-[10px] text-text cursor-pointer">
+            <label key={a.id} className="flex items-center gap-1.5 text-[0.625rem] text-text cursor-pointer">
               <input type="checkbox" checked={selectedAttrIds.has(a.id)} onChange={() => toggleAttr(a.id)}
                 className="w-3 h-3 rounded border-border accent-[#6a12cd] cursor-pointer" />
               <span className="font-bold text-primary">{a.code}</span> {a.name}
@@ -434,7 +434,7 @@ function AttachEvidenceForm({ onSave, onCancel, testItems }: { onSave: (ev: Evid
           <label className={labelCls}>Linked Test Items</label>
           <div className="flex flex-wrap gap-2 mt-1">
             {controlTestItems.map(ti => (
-              <label key={ti.id} className="flex items-center gap-1.5 text-[10px] text-text cursor-pointer">
+              <label key={ti.id} className="flex items-center gap-1.5 text-[0.625rem] text-text cursor-pointer">
                 <input type="checkbox" checked={selectedTestItemIds.has(ti.id)} onChange={() => toggleTestItem(ti.id)}
                   className="w-3 h-3 rounded border-border accent-[#6a12cd] cursor-pointer" />
                 {ti.referenceId}
@@ -444,13 +444,13 @@ function AttachEvidenceForm({ onSave, onCancel, testItems }: { onSave: (ev: Evid
         </div>
       )}
       <div className="flex items-center justify-between">
-        <span className="text-[9px] text-gray-400">
+        <span className="text-[0.5625rem] text-gray-400">
           {isAttached ? 'Evidence will be marked as Attached' : 'Evidence will be marked as Needs Mapping (select attributes + test items)'}
         </span>
         <div className="flex items-center gap-2">
-          <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[11px] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
+          <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={!fileName.trim()}
-            className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             Attach
           </button>
         </div>

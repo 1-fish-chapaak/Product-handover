@@ -1,3 +1,4 @@
+import DatePicker from '../shared/DatePicker';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -89,12 +90,12 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
       <div className="rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-4">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <span className="text-[10px] font-bold text-primary uppercase">Engagement Setup</span>
-            <p className="text-[13px] font-semibold text-text mt-0.5">Configure this engagement before moving to Planned</p>
+            <span className="text-[0.625rem] font-bold text-primary uppercase">Engagement Setup</span>
+            <p className="text-[0.8125rem] font-semibold text-text mt-0.5">Configure this engagement before moving to Planned</p>
           </div>
           <div className="text-right">
-            <span className="text-[18px] font-bold text-primary tabular-nums">{completionPct}%</span>
-            <p className="text-[10px] text-text-muted">Complete</p>
+            <span className="text-[1.125rem] font-bold text-primary tabular-nums">{completionPct}%</span>
+            <p className="text-[0.625rem] text-text-muted">Complete</p>
           </div>
         </div>
         <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
@@ -104,48 +105,48 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
 
       {/* Basic Info */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Edit3 size={11} />
           Basic Information
-          <span className="text-[9px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
+          <span className="text-[0.5625rem] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
         </h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Engagement Name</span><p className="text-[12px] font-medium text-text">{eng.name || <span className="text-high-700 italic">Not set</span>}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Audit Type</span><p className="text-[12px] text-text">{eng.auditType}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Framework</span><p className="text-[12px] text-text">{eng.framework}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Business Process</span><p className="text-[12px] text-text">{eng.businessProcess}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Engagement Name</span><p className="text-[0.75rem] font-medium text-text">{eng.name || <span className="text-high-700 italic">Not set</span>}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Type</span><p className="text-[0.75rem] text-text">{eng.auditType}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Framework</span><p className="text-[0.75rem] text-text">{eng.framework}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Business Process</span><p className="text-[0.75rem] text-text">{eng.businessProcess}</p></div>
           </div>
         </div>
       </div>
 
       {/* Audit Period & Timeline (Editable) */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <Calendar size={11} />Audit Period & Timeline
-          <span className="text-[9px] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
+          <span className="text-[0.5625rem] text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded ml-1">Editable</span>
         </h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] text-text-muted uppercase block mb-1">Audit Period Start</label>
-              <input type="date" value={eng.auditPeriodStart} onChange={e => onUpdate?.(eng.id, { auditPeriodStart: e.target.value })}
-                className="w-full px-2.5 py-2 border border-border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
+              <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Audit Period Start</label>
+              <DatePicker value={eng.auditPeriodStart} onChange={e => onUpdate?.(eng.id, { auditPeriodStart: e.target.value })}
+                className="w-full px-2.5 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
             </div>
             <div>
-              <label className="text-[10px] text-text-muted uppercase block mb-1">Audit Period End</label>
-              <input type="date" value={eng.auditPeriodEnd} onChange={e => onUpdate?.(eng.id, { auditPeriodEnd: e.target.value })}
-                className="w-full px-2.5 py-2 border border-border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
+              <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Audit Period End</label>
+              <DatePicker value={eng.auditPeriodEnd} onChange={e => onUpdate?.(eng.id, { auditPeriodEnd: e.target.value })}
+                className="w-full px-2.5 py-2 border border-border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all" />
             </div>
             <div>
-              <label className="text-[10px] text-text-muted uppercase block mb-1">Planned Start *</label>
-              <input type="date" value={eng.plannedStartDate} onChange={e => onUpdate?.(eng.id, { plannedStartDate: e.target.value })}
-                className={`w-full px-2.5 py-2 border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedStartDate ? 'border-risk/40' : 'border-border'}`} />
+              <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Planned Start *</label>
+              <DatePicker value={eng.plannedStartDate} onChange={e => onUpdate?.(eng.id, { plannedStartDate: e.target.value })}
+                className={`w-full px-2.5 py-2 border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedStartDate ? 'border-risk/40' : 'border-border'}`} />
             </div>
             <div>
-              <label className="text-[10px] text-text-muted uppercase block mb-1">Planned End *</label>
-              <input type="date" value={eng.plannedEndDate} onChange={e => onUpdate?.(eng.id, { plannedEndDate: e.target.value })}
-                className={`w-full px-2.5 py-2 border rounded-lg text-[12px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedEndDate ? 'border-risk/40' : 'border-border'}`} />
+              <label className="text-[0.625rem] text-text-muted uppercase block mb-1">Planned End *</label>
+              <DatePicker value={eng.plannedEndDate} onChange={e => onUpdate?.(eng.id, { plannedEndDate: e.target.value })}
+                className={`w-full px-2.5 py-2 border rounded-lg text-[0.75rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 bg-white transition-all ${!eng.plannedEndDate ? 'border-risk/40' : 'border-border'}`} />
             </div>
           </div>
         </div>
@@ -153,7 +154,7 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
 
       {/* RACM Version */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM Version <span className="text-[9px] text-risk-700 font-bold">MANDATORY</span></h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM Version <span className="text-[0.5625rem] text-risk-700 font-bold">MANDATORY</span></h4>
         <div className={`glass-card rounded-xl p-4 ${eng.sourceRacmVersionId && eng.controls > 0 ? 'border-compliant/20' : 'border-risk/30 bg-risk-50/10'}`}>
           {eng.sourceRacmVersionId && eng.controls > 0 ? (
             <div>
@@ -161,11 +162,11 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={14} className="text-compliant-700" />
                   <div>
-                    <p className="text-[12px] font-semibold text-text">{RACM_OPTIONS.find(r => r.id === eng.sourceRacmVersionId)?.label || eng.sourceRacmVersionId}</p>
-                    <p className="text-[10px] text-text-muted">{eng.controls} controls in scope</p>
+                    <p className="text-[0.75rem] font-semibold text-text">{RACM_OPTIONS.find(r => r.id === eng.sourceRacmVersionId)?.label || eng.sourceRacmVersionId}</p>
+                    <p className="text-[0.625rem] text-text-muted">{eng.controls} controls in scope</p>
                   </div>
                 </div>
-                <button onClick={() => setShowRacmPicker(!showRacmPicker)} className="text-[11px] text-primary font-semibold hover:underline cursor-pointer">Change</button>
+                <button onClick={() => setShowRacmPicker(!showRacmPicker)} className="text-[0.6875rem] text-primary font-semibold hover:underline cursor-pointer">Change</button>
               </div>
               {showRacmPicker && (
                 <div className="mt-2 space-y-1 border-t border-border-light pt-2">
@@ -173,11 +174,11 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
                     <button key={r.id} onClick={() => {
                       onUpdate?.(eng.id, { sourceRacmVersionId: r.id, controls: r.controls });
                       setShowRacmPicker(false);
-                    }} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[12px] transition-colors cursor-pointer ${
+                    }} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[0.75rem] transition-colors cursor-pointer ${
                       eng.sourceRacmVersionId === r.id ? 'bg-primary/10 text-primary font-semibold' : 'text-text-secondary hover:bg-surface-2'
                     }`}>
                       <span>{r.label}</span>
-                      <span className="text-[10px] text-text-muted">{r.controls} controls</span>
+                      <span className="text-[0.625rem] text-text-muted">{r.controls} controls</span>
                     </button>
                   ))}
                 </div>
@@ -188,18 +189,18 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <XCircle size={14} className="text-risk-700" />
-                  <p className="text-[12px] font-medium text-risk-700">{eng.sourceRacmVersionId ? 'RACM linked but no controls — select a version with controls' : 'No RACM version linked — required before activation'}</p>
+                  <p className="text-[0.75rem] font-medium text-risk-700">{eng.sourceRacmVersionId ? 'RACM linked but no controls — select a version with controls' : 'No RACM version linked — required before activation'}</p>
                 </div>
               </div>
               <div className="space-y-1">
                 {RACM_OPTIONS.map(r => (
                   <button key={r.id} onClick={() => {
                     onUpdate?.(eng.id, { sourceRacmVersionId: r.id, controls: r.controls });
-                  }} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[12px] transition-colors cursor-pointer ${
+                  }} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[0.75rem] transition-colors cursor-pointer ${
                     eng.sourceRacmVersionId === r.id ? 'bg-primary/10 text-primary font-semibold' : 'text-text-secondary hover:bg-surface-2'
                   }`}>
                     <span>{r.label}</span>
-                    <span className="text-[10px] text-text-muted">{r.controls} controls</span>
+                    <span className="text-[0.625rem] text-text-muted">{r.controls} controls</span>
                   </button>
                 ))}
               </div>
@@ -210,15 +211,15 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
 
       {/* Controls Preview */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5">
           <ShieldCheck size={11} />
           Controls Preview
-          <span className="text-[10px] text-text-muted font-normal ml-1">({eng.controls} controls · read-only)</span>
+          <span className="text-[0.625rem] text-text-muted font-normal ml-1">({eng.controls} controls · read-only)</span>
         </h4>
         {eng.controls > 0 ? (
           <div className="glass-card rounded-xl overflow-hidden">
             <button onClick={() => setShowControls(!showControls)} className="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-2/30 transition-colors">
-              <span className="text-[12px] font-medium text-text">{eng.controls} controls from {eng.sourceRacmVersionId}</span>
+              <span className="text-[0.75rem] font-medium text-text">{eng.controls} controls from {eng.sourceRacmVersionId}</span>
               <ChevronDown size={14} className={`text-text-muted transition-transform ${showControls ? 'rotate-180' : ''}`} />
             </button>
             {showControls && (
@@ -226,38 +227,38 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
                 {MOCK_RACM_CONTROLS.slice(0, eng.controls > 8 ? 8 : eng.controls).map(c => (
                   <div key={c.id} className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 last:border-0 hover:bg-surface-2/20">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-text-muted">{c.id}</span>
-                      <span className="text-[11px] font-medium text-text">{c.name}</span>
+                      <span className="text-[0.625rem] font-mono text-text-muted">{c.id}</span>
+                      <span className="text-[0.6875rem] font-medium text-text">{c.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-text-muted">{c.domain}</span>
-                      {c.isKey && <span className="text-[9px] font-bold bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 rounded">KEY</span>}
+                      <span className="text-[0.625rem] text-text-muted">{c.domain}</span>
+                      {c.isKey && <span className="text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 rounded">KEY</span>}
                     </div>
                   </div>
                 ))}
-                {eng.controls > 8 && <div className="px-4 py-2 text-[11px] text-text-muted text-center">+ {eng.controls - 8} more controls</div>}
+                {eng.controls > 8 && <div className="px-4 py-2 text-[0.6875rem] text-text-muted text-center">+ {eng.controls - 8} more controls</div>}
               </div>
             )}
           </div>
         ) : (
           <div className="glass-card rounded-xl p-4 border-risk/20 bg-risk-50/10">
-            <div className="flex items-center gap-2"><XCircle size={14} className="text-risk-700" /><p className="text-[12px] text-risk-700 font-medium">No controls mapped — link a RACM version first</p></div>
+            <div className="flex items-center gap-2"><XCircle size={14} className="text-risk-700" /><p className="text-[0.75rem] text-risk-700 font-medium">No controls mapped — link a RACM version first</p></div>
           </div>
         )}
       </div>
 
       {/* Assignment */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assignment</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assignment</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Owner / Lead Auditor</span>
-              <p className={`text-[12px] font-medium ${eng.owner ? 'text-text' : 'text-high-700 italic'}`}>{eng.owner || 'Not assigned'}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Owner / Lead Auditor</span>
+              <p className={`text-[0.75rem] font-medium ${eng.owner ? 'text-text' : 'text-high-700 italic'}`}>{eng.owner || 'Not assigned'}</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Reviewer</span>
-              <p className={`text-[12px] font-medium ${eng.reviewer ? 'text-text' : 'text-text-muted italic'}`}>{eng.reviewer || 'Not assigned'}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span>
+              <p className={`text-[0.75rem] font-medium ${eng.reviewer ? 'text-text' : 'text-text-muted italic'}`}>{eng.reviewer || 'Not assigned'}</p>
             </div>
           </div>
         </div>
@@ -265,24 +266,24 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
 
       {/* Description */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Description</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Description</h4>
         <div className="glass-card rounded-xl p-4">
-          <p className={`text-[12px] leading-relaxed ${eng.description ? 'text-text-secondary' : 'text-text-muted italic'}`}>{eng.description || 'No description provided yet.'}</p>
+          <p className={`text-[0.75rem] leading-relaxed ${eng.description ? 'text-text-secondary' : 'text-text-muted italic'}`}>{eng.description || 'No description provided yet.'}</p>
         </div>
       </div>
 
       {/* Setup Checklist */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Setup Checklist</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Setup Checklist</h4>
         <div className="glass-card rounded-xl p-4 space-y-2">
           {checklist.map(item => (
             <div key={item.label}>
               <div className="flex items-center gap-2.5">
                 {item.met ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-risk shrink-0" />}
-                <span className={`text-[12px] flex-1 ${item.met ? 'text-text-secondary' : 'text-risk-700 font-medium'}`}>{item.label}</span>
-                {!item.met && <span className="text-[9px] font-bold text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Required</span>}
+                <span className={`text-[0.75rem] flex-1 ${item.met ? 'text-text-secondary' : 'text-risk-700 font-medium'}`}>{item.label}</span>
+                {!item.met && <span className="text-[0.5625rem] font-bold text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Required</span>}
               </div>
-              {!item.met && <p className="text-[10px] text-risk-700/70 ml-6 mt-0.5">{item.resolution}</p>}
+              {!item.met && <p className="text-[0.625rem] text-risk-700/70 ml-6 mt-0.5">{item.resolution}</p>}
             </div>
           ))}
         </div>
@@ -293,14 +294,14 @@ function DraftSetup({ eng, onClose, onMoveToPlanned, onUpdate }: { eng: Engageme
         <button
           onClick={() => criticalMet && onMoveToPlanned(eng.id)}
           disabled={!criticalMet}
-          className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-[13px] font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-[0.8125rem] font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <ArrowRight size={14} />
           Move to Planned
         </button>
       </div>
       {!criticalMet && (
-        <p className="text-[11px] text-risk-700 text-center">Complete all required items before moving to Planned.</p>
+        <p className="text-[0.6875rem] text-risk-700 text-center">Complete all required items before moving to Planned.</p>
       )}
     </div>
   );
@@ -322,8 +323,8 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
           <div className="flex items-center gap-3">
             <CheckCircle2 size={20} className="text-compliant-700 shrink-0" />
             <div>
-              <p className="text-[13px] font-bold text-compliant-700">Ready for Activation</p>
-              <p className="text-[11px] text-compliant-700/80">All prerequisites are met. Activate to create an immutable snapshot and begin execution.</p>
+              <p className="text-[0.8125rem] font-bold text-compliant-700">Ready for Activation</p>
+              <p className="text-[0.6875rem] text-compliant-700/80">All prerequisites are met. Activate to create an immutable snapshot and begin execution.</p>
             </div>
           </div>
         </div>
@@ -332,8 +333,8 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
           <div className="flex items-center gap-3">
             <AlertTriangle size={20} className="text-high-700 shrink-0" />
             <div>
-              <p className="text-[13px] font-bold text-high-700">Not Ready for Activation</p>
-              <p className="text-[11px] text-high-700/80">Some prerequisites are missing. Review the checklist below.</p>
+              <p className="text-[0.8125rem] font-bold text-high-700">Not Ready for Activation</p>
+              <p className="text-[0.6875rem] text-high-700/80">Some prerequisites are missing. Review the checklist below.</p>
             </div>
           </div>
         </div>
@@ -341,71 +342,71 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
 
       {/* Engagement Summary */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Engagement Summary</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Engagement Summary</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Engagement</span><p className="text-[12px] font-semibold text-text">{eng.name}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Audit Type / Framework</span><p className="text-[12px] text-text">{eng.auditType} / {eng.framework}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Business Process</span><p className="text-[12px] text-text">{eng.businessProcess}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Priority</span><p className={`text-[12px] font-semibold ${eng.priority === 'Critical' ? 'text-risk-700' : eng.priority === 'High' ? 'text-high-700' : eng.priority === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{eng.priority}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Engagement</span><p className="text-[0.75rem] font-semibold text-text">{eng.name}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Type / Framework</span><p className="text-[0.75rem] text-text">{eng.auditType} / {eng.framework}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Business Process</span><p className="text-[0.75rem] text-text">{eng.businessProcess}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Priority</span><p className={`text-[0.75rem] font-semibold ${eng.priority === 'Critical' ? 'text-risk-700' : eng.priority === 'High' ? 'text-high-700' : eng.priority === 'Medium' ? 'text-mitigated-700' : 'text-compliant-700'}`}>{eng.priority}</p></div>
           </div>
-          {eng.description && <p className="text-[12px] text-text-secondary leading-relaxed mt-3 pt-3 border-t border-border-light/60">{eng.description}</p>}
+          {eng.description && <p className="text-[0.75rem] text-text-secondary leading-relaxed mt-3 pt-3 border-t border-border-light/60">{eng.description}</p>}
         </div>
       </div>
 
       {/* Linked RACM */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><FileText size={11} />Linked RACM</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 size={14} className="text-compliant-700" />
-            <span className="text-[12px] font-semibold text-text">{eng.sourceRacmVersionId}</span>
+            <span className="text-[0.75rem] font-semibold text-text">{eng.sourceRacmVersionId}</span>
           </div>
         </div>
       </div>
 
       {/* Scope KPIs */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Scope & Resources</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Scope & Resources</h4>
         <div className="grid grid-cols-4 gap-3">
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{eng.controls}</div>
-            <div className="text-[9px] text-text-muted uppercase">Total Controls</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Total Controls</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-brand-700 tabular-nums">{keyControls}</div>
-            <div className="text-[9px] text-text-muted uppercase">Key Controls</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Key Controls</div>
           </div>
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-text tabular-nums">{eng.plannedHours}</div>
-            <div className="text-[9px] text-text-muted uppercase">Planned Hours</div>
+            <div className="text-[0.5625rem] text-text-muted uppercase">Planned Hours</div>
           </div>
         </div>
       </div>
 
       {/* Timeline */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Calendar size={11} />Timeline</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Calendar size={11} />Timeline</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[10px] text-text-muted uppercase">Audit Period</span><p className="text-[12px] text-text">{eng.auditPeriodStart} — {eng.auditPeriodEnd}</p></div>
-            <div><span className="text-[10px] text-text-muted uppercase">Planned Dates</span><p className="text-[12px] text-text">{eng.plannedStartDate || '—'} — {eng.plannedEndDate || '—'}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Audit Period</span><p className="text-[0.75rem] text-text">{eng.auditPeriodStart} — {eng.auditPeriodEnd}</p></div>
+            <div><span className="text-[0.625rem] text-text-muted uppercase">Planned Dates</span><p className="text-[0.75rem] text-text">{eng.plannedStartDate || '—'} — {eng.plannedEndDate || '—'}</p></div>
           </div>
         </div>
       </div>
 
       {/* Assigned Users */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assigned Team</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2 flex items-center gap-1.5"><Users size={11} />Assigned Team</h4>
         <div className="glass-card rounded-xl p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Owner / Lead Auditor</span>
-              <p className="text-[12px] font-medium text-text">{eng.owner}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Owner / Lead Auditor</span>
+              <p className="text-[0.75rem] font-medium text-text">{eng.owner}</p>
             </div>
             <div>
-              <span className="text-[10px] text-text-muted uppercase">Reviewer</span>
-              <p className="text-[12px] font-medium text-text">{eng.reviewer || '—'}</p>
+              <span className="text-[0.625rem] text-text-muted uppercase">Reviewer</span>
+              <p className="text-[0.75rem] font-medium text-text">{eng.reviewer || '—'}</p>
             </div>
           </div>
         </div>
@@ -413,7 +414,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
 
       {/* Activation Checklist */}
       <div>
-        <h4 className="text-[11px] font-bold text-text-muted uppercase mb-2">Activation Checklist</h4>
+        <h4 className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Activation Checklist</h4>
         <div className="glass-card rounded-xl p-4 space-y-2">
           {checklist.map(item => (
             <div key={item.label}>
@@ -422,11 +423,11 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
                   ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" />
                   : <XCircle size={14} className="text-risk-700 shrink-0" />
                 }
-                <span className={`text-[12px] flex-1 ${item.met ? 'text-text-secondary' : 'text-risk-700 font-medium'}`}>{item.label}</span>
-                {!item.met && <span className="text-[9px] font-bold text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Required</span>}
+                <span className={`text-[0.75rem] flex-1 ${item.met ? 'text-text-secondary' : 'text-risk-700 font-medium'}`}>{item.label}</span>
+                {!item.met && <span className="text-[0.5625rem] font-bold text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Required</span>}
               </div>
               {!item.met && (
-                <p className="text-[10px] text-risk-700/70 ml-6 mt-0.5">{item.resolution}</p>
+                <p className="text-[0.625rem] text-risk-700/70 ml-6 mt-0.5">{item.resolution}</p>
               )}
             </div>
           ))}
@@ -439,12 +440,12 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
           <button
             onClick={() => allCriticalMet && setShowConfirm(true)}
             disabled={!allCriticalMet}
-            className="w-full py-3 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[13px] font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.8125rem] font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Zap size={14} />
             Activate Engagement
           </button>
-          {!allCriticalMet && <p className="text-[11px] text-risk-700 text-center">Resolve all required items before activation.</p>}
+          {!allCriticalMet && <p className="text-[0.6875rem] text-risk-700 text-center">Resolve all required items before activation.</p>}
         </>
       ) : (
         /* ── ACTIVATION CONFIRMATION ── */
@@ -455,14 +456,14 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
                 <Lock size={16} className="text-white" />
               </div>
               <div>
-                <h3 className="text-[14px] font-bold text-text">Activate Engagement?</h3>
-                <p className="text-[11px] text-text-muted">This is a controlled audit transition and cannot be undone.</p>
+                <h3 className="text-[0.875rem] font-bold text-text">Activate Engagement?</h3>
+                <p className="text-[0.6875rem] text-text-muted">This is a controlled audit transition and cannot be undone.</p>
               </div>
             </div>
 
             {/* What activation does */}
             <div className="mb-4">
-              <p className="text-[11px] font-bold text-text-muted uppercase mb-2">Activating this engagement will:</p>
+              <p className="text-[0.6875rem] font-bold text-text-muted uppercase mb-2">Activating this engagement will:</p>
               <div className="space-y-1.5">
                 {[
                   'Create an immutable Engagement Snapshot from ' + eng.sourceRacmVersionId,
@@ -471,7 +472,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
                   'Enable population upload, sampling, evidence collection, testing, working paper, and review flows',
                   'Prevent further RACM scope changes inside this engagement',
                 ].map((text, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <div key={i} className="flex items-start gap-2 text-[0.6875rem]">
                     <ChevronRight size={10} className="text-primary mt-0.5 shrink-0" />
                     <span className="text-text-secondary">{text}</span>
                   </div>
@@ -481,10 +482,10 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
 
             {/* Checklist recap (all green) */}
             <div className="mb-4 p-3 bg-compliant-50/30 rounded-lg border border-compliant/20">
-              <p className="text-[10px] font-bold text-compliant-700 uppercase mb-1.5">All prerequisites verified</p>
+              <p className="text-[0.625rem] font-bold text-compliant-700 uppercase mb-1.5">All prerequisites verified</p>
               <div className="grid grid-cols-2 gap-1">
                 {checklist.map(item => (
-                  <div key={item.label} className="flex items-center gap-1.5 text-[10px] text-compliant-700">
+                  <div key={item.label} className="flex items-center gap-1.5 text-[0.625rem] text-compliant-700">
                     <CheckCircle2 size={10} />
                     <span>{item.label}</span>
                   </div>
@@ -493,7 +494,7 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
             </div>
 
             {/* Engagement summary */}
-            <div className="p-3 bg-surface-2 rounded-lg text-[12px] space-y-1 mb-4">
+            <div className="p-3 bg-surface-2 rounded-lg text-[0.75rem] space-y-1 mb-4">
               <div className="flex justify-between"><span className="text-text-muted">Engagement</span><span className="font-medium text-text">{eng.name}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">RACM Version</span><span className="font-medium text-text">{eng.sourceRacmVersionId}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">Controls</span><span className="font-medium text-text">{eng.controls}</span></div>
@@ -504,17 +505,17 @@ function PlannedOverview({ eng, onClose, onActivate }: { eng: EngagementData; on
             {/* Warning */}
             <div className="flex items-start gap-2 p-3 bg-high-50/50 rounded-lg border border-high/20 mb-4">
               <AlertTriangle size={13} className="text-high-700 mt-0.5 shrink-0" />
-              <p className="text-[10px] text-high-700">This action cannot be undone. Configuration changes will be locked for the duration of execution.</p>
+              <p className="text-[0.625rem] text-high-700">This action cannot be undone. Configuration changes will be locked for the duration of execution.</p>
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-3">
               <button onClick={() => setShowConfirm(false)}
-                className="flex-1 py-2.5 border border-border rounded-xl text-[12px] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
+                className="flex-1 py-2.5 border border-border rounded-xl text-[0.75rem] font-medium text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer">
                 Cancel
               </button>
               <button onClick={() => onActivate(eng.id)}
-                className="flex-1 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[12px] font-bold transition-all cursor-pointer flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 bg-gradient-to-r from-primary to-primary-medium hover:brightness-110 text-white rounded-xl text-[0.75rem] font-bold transition-all cursor-pointer flex items-center justify-center gap-2">
                 <Zap size={13} />
                 Confirm Activation
               </button>
@@ -553,17 +554,17 @@ export default function EngagementSetupPanel({ engagement, onClose, onMoveToPlan
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`px-2.5 h-6 rounded-full text-[11px] font-semibold inline-flex items-center ${
+                <span className={`px-2.5 h-6 rounded-full text-[0.6875rem] font-semibold inline-flex items-center ${
                   isDraft ? 'bg-draft-50 text-draft-700' : 'bg-evidence-50 text-evidence-700'
                 }`}>{isDraft ? 'Draft' : 'Planned'}</span>
                 {engagement.priority && (
-                  <span className={`text-[10px] font-bold ${
+                  <span className={`text-[0.625rem] font-bold ${
                     engagement.priority === 'Critical' ? 'text-risk-700' : engagement.priority === 'High' ? 'text-high-700' : 'text-mitigated-700'
                   }`}>{engagement.priority} Priority</span>
                 )}
               </div>
-              <h2 className="text-[15px] font-bold text-text">{isDraft ? 'Engagement Setup Workspace' : 'Pre-Execution Overview'}</h2>
-              <p className="text-[11px] text-text-muted mt-0.5">{engagement.name}</p>
+              <h2 className="text-[0.9375rem] font-bold text-text">{isDraft ? 'Engagement Setup Workspace' : 'Pre-Execution Overview'}</h2>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">{engagement.name}</p>
             </div>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} className="text-text-muted" /></button>
           </div>

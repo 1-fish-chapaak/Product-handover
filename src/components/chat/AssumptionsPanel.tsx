@@ -26,10 +26,10 @@ export default function AssumptionsPanel({
         {/* Header */}
         <div className="flex items-center gap-2.5 mb-4">
           <AlertTriangle size={15} className="text-mitigated-700" />
-          <span className="text-[14px] font-semibold text-ink-800">
+          <span className="text-[0.875rem] font-semibold text-ink-800">
             Assumptions
           </span>
-          <span className="inline-flex items-center px-2 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[12px] font-medium tabular-nums">
+          <span className="inline-flex items-center px-2 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-medium tabular-nums">
             {assumptions.length}
           </span>
         </div>
@@ -37,7 +37,7 @@ export default function AssumptionsPanel({
         {/* Confirmed answers */}
         {answerEntries.length > 0 && (
           <div className="mb-4">
-            <p className="text-[12px] font-semibold text-ink-500 mb-2">
+            <p className="text-[0.75rem] font-semibold text-ink-500 mb-2">
               Confirmed
             </p>
             <div className="space-y-2">
@@ -52,7 +52,7 @@ export default function AssumptionsPanel({
                   <div className="flex items-center justify-center w-4 h-4 rounded-full bg-compliant mt-0.5 shrink-0">
                     <Check size={10} className="text-white" strokeWidth={3} />
                   </div>
-                  <span className="text-[13px] text-ink-800 leading-snug">
+                  <span className="text-[0.8125rem] text-ink-800 leading-snug">
                     {value}
                   </span>
                 </motion.div>
@@ -63,7 +63,7 @@ export default function AssumptionsPanel({
 
         {/* Assumptions list */}
         <div className="mb-4">
-          <p className="text-[12px] font-semibold text-ink-500 mb-2">
+          <p className="text-[0.75rem] font-semibold text-ink-500 mb-2">
             IRA will assume
           </p>
           <div className="space-y-2">
@@ -76,7 +76,7 @@ export default function AssumptionsPanel({
                 className="flex items-start gap-2.5 px-3 py-2 rounded-md bg-canvas-elevated border border-mitigated/30"
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-mitigated-700 mt-1.5 shrink-0" />
-                <span className="text-[13px] text-ink-800 leading-snug">
+                <span className="text-[0.8125rem] text-ink-800 leading-snug">
                   {assumption}
                 </span>
               </motion.div>
@@ -87,7 +87,7 @@ export default function AssumptionsPanel({
         {/* Confirm button */}
         <button
           onClick={onConfirm}
-          className="flex items-center justify-center gap-2 w-full h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[13px] font-semibold transition-colors cursor-pointer"
+          className="flex items-center justify-center gap-2 w-full h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
           <Play size={14} />
           Confirm and execute

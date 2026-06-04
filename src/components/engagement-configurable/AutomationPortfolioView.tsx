@@ -183,7 +183,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
     <div className="space-y-7">
       {/* Back to Work Type */}
       {onBack && (
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer -mb-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer -mb-3">
           <ArrowLeft size={14} />Back to Engagement Library
         </button>
       )}
@@ -191,11 +191,11 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-[22px] font-bold text-ink-900 tracking-tight">Automation Projects</h2>
-          <p className="text-[13px] text-ink-400 mt-1">Monitor recurring workflow automations, exceptions, cases, and reporting across project areas.</p>
+          <h2 className="text-[1.375rem] font-bold text-ink-900 tracking-tight">Automation Projects</h2>
+          <p className="text-[0.8125rem] text-ink-400 mt-1">Monitor recurring workflow automations, exceptions, cases, and reporting across project areas.</p>
         </div>
         <button onClick={onCreateNew}
-          className="flex items-center gap-2 px-5 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm shrink-0">
+          className="flex items-center gap-2 px-5 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[0.8125rem] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm shrink-0">
           <Plus size={15} />Create Automation Project
         </button>
       </div>
@@ -212,8 +212,8 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
         ].map((kpi, i) => (
           <motion.div key={kpi.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 + i * 0.04 }}
             className="glass-card rounded-xl px-5 py-4 hover:border-brand-200 transition-all">
-            <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-3">{kpi.title}</p>
-            <p className="text-[26px] font-bold text-ink-900 leading-none tabular-nums">{kpi.value}</p>
+            <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-3">{kpi.title}</p>
+            <p className="text-[1.625rem] font-bold text-ink-900 leading-none tabular-nums">{kpi.value}</p>
           </motion.div>
         ))}
       </motion.div>
@@ -223,11 +223,11 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
         <div className="relative flex-1 max-w-[380px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..."
-            className="w-full pl-10 pr-4 h-10 rounded-xl border border-canvas-border bg-white text-[13px] text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all" />
+            className="w-full pl-10 pr-4 h-10 rounded-xl border border-canvas-border bg-white text-[0.8125rem] text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all" />
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => setStatusFilter('')}
-            className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50 hover:text-brand-700'}`}>
+            className={`px-3.5 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50 hover:text-brand-700'}`}>
             All ({projects.length})
           </button>
           {statuses.map(s => {
@@ -235,7 +235,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
             if (count === 0) return null;
             return (
               <button key={s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
-                className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${statusFilter === s ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50 hover:text-brand-700'}`}>
+                className={`px-3.5 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${statusFilter === s ? 'bg-brand-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-brand-50 hover:text-brand-700'}`}>
                 {s} ({count})
               </button>
             );
@@ -261,17 +261,17 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
                 <div className="inline-flex p-2.5 rounded-xl bg-brand-50 text-brand-700">
                   <Activity size={18} />
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${STATUS_CLS[project.status] || 'bg-canvas-elevated text-ink-400'}`}>
+                <span className={`px-2.5 py-1 rounded-full text-[0.625rem] font-bold ${STATUS_CLS[project.status] || 'bg-canvas-elevated text-ink-400'}`}>
                   {project.status}
                 </span>
               </div>
 
               {/* Title + description */}
               <div className="mb-4 flex-1">
-                <h3 className="text-[15px] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
+                <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
                   {project.name}
                 </h3>
-                <p className="text-[12px] text-ink-500 leading-relaxed line-clamp-2">{project.description}</p>
+                <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">{project.description}</p>
               </div>
 
               {/* Metrics row */}
@@ -283,8 +283,8 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
                   { value: project.recordsProcessed > 999 ? `${(project.recordsProcessed / 1000).toFixed(1)}K` : project.recordsProcessed, label: 'Records', cls: '' },
                 ].map(m => (
                   <div key={m.label} className="text-center">
-                    <div className={`text-[16px] font-bold tabular-nums ${m.cls || 'text-ink-900'}`}>{m.value}</div>
-                    <div className="text-[10px] text-ink-400 font-medium">{m.label}</div>
+                    <div className={`text-[1rem] font-bold tabular-nums ${m.cls || 'text-ink-900'}`}>{m.value}</div>
+                    <div className="text-[0.625rem] text-ink-400 font-medium">{m.label}</div>
                   </div>
                 ))}
               </div>
@@ -292,8 +292,8 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
               {/* Progress bar */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] text-ink-400 font-medium">Coverage</span>
-                  <span className="text-[11px] font-bold text-ink-600">{project.completionPct}%</span>
+                  <span className="text-[0.6875rem] text-ink-400 font-medium">Coverage</span>
+                  <span className="text-[0.6875rem] font-bold text-ink-600">{project.completionPct}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-canvas-border overflow-hidden">
                   <motion.div
@@ -307,7 +307,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-canvas-border mt-auto">
-                <div className="flex items-center gap-3 text-[11px]">
+                <div className="flex items-center gap-3 text-[0.6875rem]">
                   <span className="text-ink-500 font-medium">{project.businessProcess}</span>
                   {project.frequency && (
                     <span className="flex items-center gap-1 text-ink-400">
@@ -317,7 +317,7 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
                 </div>
                 <div className="flex items-center gap-2">
                   {project.lastRunStatus !== 'Never' && (
-                    <span className={`text-[11px] font-semibold flex items-center gap-1 ${RUN_STATUS_CLS[project.lastRunStatus]}`}>
+                    <span className={`text-[0.6875rem] font-semibold flex items-center gap-1 ${RUN_STATUS_CLS[project.lastRunStatus]}`}>
                       {project.lastRunStatus === 'Completed' && <CheckCircle2 size={11} />}
                       {project.lastRunStatus}
                     </span>
@@ -333,8 +333,8 @@ export default function AutomationPortfolioView({ onOpenProject, onCreateNew, on
       {filtered.length === 0 && (
         <div className="glass-card rounded-2xl p-16 text-center">
           <Search size={32} className="text-ink-300 mx-auto mb-3" />
-          <p className="text-[14px] text-ink-500 font-medium">No projects match your search.</p>
-          <p className="text-[12px] text-ink-400 mt-1">Try adjusting your filters or search term.</p>
+          <p className="text-[0.875rem] text-ink-500 font-medium">No projects match your search.</p>
+          <p className="text-[0.75rem] text-ink-400 mt-1">Try adjusting your filters or search term.</p>
         </div>
       )}
     </div>

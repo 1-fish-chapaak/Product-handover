@@ -19,20 +19,20 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   return (
     <div className="my-3 rounded-lg overflow-hidden border border-ink-700 bg-ink-900">
       <div className="flex items-center justify-between px-3 py-1.5 bg-ink-800 border-b border-ink-700">
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-400">
+        <span className="font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-ink-400">
           {language || 'code'}
         </span>
         <button
           type="button"
           onClick={onCopy}
           aria-label={copied ? 'Copied' : 'Copy code'}
-          className="inline-flex items-center gap-1 px-1.5 h-6 rounded text-[11px] font-medium text-ink-400 hover:text-canvas-elevated hover:bg-ink-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="inline-flex items-center gap-1 px-1.5 h-6 rounded text-[0.6875rem] font-medium text-ink-400 hover:text-canvas-elevated hover:bg-ink-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           {copied ? <Check size={12} /> : <Copy size={12} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="px-4 py-3 overflow-x-auto text-[13px] leading-[1.55] text-canvas-elevated font-mono">
+      <pre className="px-4 py-3 overflow-x-auto text-[0.8125rem] leading-[1.55] text-canvas-elevated font-mono">
         <code>{code}</code>
       </pre>
     </div>
@@ -52,7 +52,7 @@ export function renderAssistantText(text: string): ReactNode {
     <ReactMarkdown
       components={{
         p: ({ children }) => (
-          <p className="mb-5 last:mb-0 leading-[1.7] text-[14px] text-ink-800">{children}</p>
+          <p className="mb-5 last:mb-0 leading-[1.7] text-[0.875rem] text-ink-800">{children}</p>
         ),
         strong: ({ children }) => (
           <strong className="font-bold text-ink-900">{children}</strong>
@@ -66,25 +66,25 @@ export function renderAssistantText(text: string): ReactNode {
           </a>
         ),
         ul: ({ children }) => (
-          <ul className="my-5 pl-6 space-y-2 list-disc marker:text-ink-400 text-[14px]">{children}</ul>
+          <ul className="my-5 pl-6 space-y-2 list-disc marker:text-ink-400 text-[0.875rem]">{children}</ul>
         ),
         ol: ({ children }) => (
-          <ol className="my-5 pl-6 space-y-2 list-decimal marker:text-ink-400 text-[14px]">{children}</ol>
+          <ol className="my-5 pl-6 space-y-2 list-decimal marker:text-ink-400 text-[0.875rem]">{children}</ol>
         ),
         li: ({ children }) => (
           <li className="leading-[1.7] pl-1">{children}</li>
         ),
         h1: ({ children }) => (
-          <h1 className="mt-5 mb-2 text-[18px] font-bold leading-tight text-ink-900">{children}</h1>
+          <h1 className="mt-5 mb-2 text-[1.125rem] font-bold leading-tight text-ink-900">{children}</h1>
         ),
         h2: ({ children }) => (
-          <h2 className="mt-5 mb-2 text-[16px] font-bold leading-tight text-ink-900">{children}</h2>
+          <h2 className="mt-5 mb-2 text-[1rem] font-bold leading-tight text-ink-900">{children}</h2>
         ),
         h3: ({ children }) => (
-          <h3 className="mt-4 mb-1.5 text-[14px] font-bold leading-tight text-ink-900">{children}</h3>
+          <h3 className="mt-4 mb-1.5 text-[0.875rem] font-bold leading-tight text-ink-900">{children}</h3>
         ),
         h4: ({ children }) => (
-          <h4 className="mt-4 mb-1.5 text-[13px] font-bold leading-tight text-ink-900">{children}</h4>
+          <h4 className="mt-4 mb-1.5 text-[0.8125rem] font-bold leading-tight text-ink-900">{children}</h4>
         ),
         blockquote: ({ children }) => (
           <blockquote className="my-3 pl-3 border-l-2 border-brand-200 text-ink-700 italic">{children}</blockquote>

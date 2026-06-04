@@ -35,7 +35,7 @@ export default function Stepper({ current, completed, onJump }: Props) {
             >
               <span
                 className={[
-                  'w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0',
+                  'w-5 h-5 rounded-full flex items-center justify-center text-[0.75rem] font-bold shrink-0',
                   isCurrent
                     ? 'bg-brand-600 text-white'
                     : isDone
@@ -47,7 +47,7 @@ export default function Stepper({ current, completed, onJump }: Props) {
               </span>
               <span
                 className={[
-                  'text-[12px] font-semibold',
+                  'text-[0.75rem] font-semibold',
                   isCurrent ? 'text-brand-700' : isDone ? 'text-ink-700' : 'text-ink-400',
                 ].join(' ')}
               >

@@ -94,7 +94,7 @@ export default function ClarificationPanel({
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
           >
             <ArrowLeft size={14} />
             Back to AI Concierge
@@ -112,11 +112,11 @@ export default function ClarificationPanel({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="flex items-center gap-1 text-[12px] text-ink-400 font-medium mb-2">
+            <div className="flex items-center gap-1 text-[0.75rem] text-ink-400 font-medium mb-2">
               <ChevronRight size={12} />
               <span>Asking a few clarifying questions</span>
             </div>
-            <h2 className="font-serif text-[26px] tracking-tight text-ink-900 leading-snug">
+            <h2 className="font-serif text-[1.625rem] tracking-tight text-ink-900 leading-snug">
               One quick check before I run. <span className="text-ink-500 italic">Pick what fits, or type your own.</span>
             </h2>
           </motion.div>
@@ -139,10 +139,10 @@ export default function ClarificationPanel({
             {/* Card header */}
             <div className="flex items-center justify-between gap-3 px-4 py-3 bg-canvas-elevated">
               <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-[14px] font-semibold text-ink-800 truncate">
+                <span className="text-[0.875rem] font-semibold text-ink-800 truncate">
                   {current.title}
                 </span>
-                <span className="text-[12px] text-ink-400 whitespace-nowrap">
+                <span className="text-[0.75rem] text-ink-400 whitespace-nowrap">
                   · {index + 1} of {total}
                 </span>
               </div>
@@ -175,7 +175,7 @@ export default function ClarificationPanel({
                     >
                       <span
                         className={[
-                          'w-6 h-6 rounded-md text-[11px] font-semibold flex items-center justify-center shrink-0 tabular-nums',
+                          'w-6 h-6 rounded-md text-[0.6875rem] font-semibold flex items-center justify-center shrink-0 tabular-nums',
                           isSelected
                             ? 'bg-brand-100 text-brand-700'
                             : 'bg-canvas text-ink-500',
@@ -183,7 +183,7 @@ export default function ClarificationPanel({
                       >
                         {i + 1}
                       </span>
-                      <span className="flex-1 text-[13.5px] text-ink-800">{opt}</span>
+                      <span className="flex-1 text-[0.75rem] text-ink-800">{opt}</span>
                       {isSelected && (
                         <span className="text-ink-400">
                           <CornerDownLeft size={13} />
@@ -210,12 +210,12 @@ export default function ClarificationPanel({
                   }
                 }}
                 placeholder="Something else"
-                className="flex-1 bg-transparent border-none outline-none text-[13px] text-ink-800 placeholder:text-ink-400"
+                className="flex-1 bg-transparent border-none outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
               />
               <button
                 type="button"
                 onClick={() => onSkip(current.id)}
-                className="rounded-md border border-canvas-border bg-white hover:bg-canvas text-[12px] font-semibold text-ink-600 px-3 py-1 cursor-pointer transition-colors"
+                className="rounded-md border border-canvas-border bg-white hover:bg-canvas text-[0.75rem] font-semibold text-ink-600 px-3 py-1 cursor-pointer transition-colors"
               >
                 Skip
               </button>
@@ -223,7 +223,7 @@ export default function ClarificationPanel({
           </motion.div>
 
           {/* Footer hints */}
-          <div className="flex items-center justify-between mt-3 text-[11.5px] text-ink-400 px-1">
+          <div className="flex items-center justify-between mt-3 text-[0.75rem] text-ink-400 px-1">
             <div className="flex items-center gap-2">
               <span>↑↓ to navigate</span>
               <span>·</span>

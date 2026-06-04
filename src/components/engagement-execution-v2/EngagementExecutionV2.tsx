@@ -96,7 +96,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
       <div className="px-10 py-6 max-w-[1440px] mx-auto">
 
         {/* Back */}
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors mb-4">
           <ArrowLeft size={14} />Back to Engagements
         </button>
 
@@ -104,10 +104,10 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
         <div className="bg-white rounded-2xl border border-border-light p-6 mb-5">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-[11px] text-text-muted font-medium uppercase tracking-wider mb-1">Engagement Execution Workspace</p>
-              <h1 className="text-[20px] font-bold text-text">{engagement.name}</h1>
+              <p className="text-[0.6875rem] text-text-muted font-medium uppercase tracking-wider mb-1">Engagement Execution Workspace</p>
+              <h1 className="text-[1.25rem] font-bold text-text">{engagement.name}</h1>
             </div>
-            <span className={`px-3 py-1 rounded-full text-[11px] font-semibold ${
+            <span className={`px-3 py-1 rounded-full text-[0.6875rem] font-semibold ${
               engagement.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' :
               engagement.status === 'COMPLETED' ? 'bg-blue-50 text-blue-700' :
               engagement.status === 'IN_REVIEW' ? 'bg-purple-50 text-purple-700' :
@@ -115,7 +115,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             }`}>{engagement.status === 'ACTIVE' ? 'Active' : engagement.status === 'IN_REVIEW' ? 'In Review' : engagement.status === 'COMPLETED' ? 'Completed' : 'Draft'}</span>
           </div>
 
-          <div className="grid grid-cols-6 gap-4 text-[12px]">
+          <div className="grid grid-cols-6 gap-4 text-[0.75rem]">
             {[
               { icon: FileText, label: 'Audit Type', value: engagement.auditType },
               { icon: Shield, label: 'Framework', value: engagement.framework },
@@ -127,7 +127,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
               <div key={item.label} className="flex items-center gap-2">
                 <item.icon size={13} className="text-gray-400 shrink-0" />
                 <div>
-                  <span className="text-gray-400 block text-[10px]">{item.label}</span>
+                  <span className="text-gray-400 block text-[0.625rem]">{item.label}</span>
                   <span className="text-text font-medium">{item.value}</span>
                 </div>
               </div>
@@ -147,8 +147,8 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             { label: 'Ineffective', value: kpis.ineffective, color: 'text-red-700', bg: kpis.ineffective > 0 ? 'bg-red-50/40' : 'bg-white' },
           ].map(card => (
             <div key={card.label} className={`${card.bg} rounded-xl border border-border-light px-3.5 py-2.5`}>
-              <span className={`text-[20px] font-bold ${card.color} block tabular-nums`}>{card.value}</span>
-              <span className="text-[9px] text-gray-400 font-medium">{card.label}</span>
+              <span className={`text-[1.25rem] font-bold ${card.color} block tabular-nums`}>{card.value}</span>
+              <span className="text-[0.5625rem] text-gray-400 font-medium">{card.label}</span>
             </div>
           ))}
         </div>
@@ -159,10 +159,10 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             <div className="p-2 rounded-lg bg-primary/10"><Shield size={16} className="text-primary" /></div>
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[13px] font-semibold text-text">Linked RACM Snapshot</span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">Locked</span>
+                <span className="text-[0.8125rem] font-semibold text-text">Linked RACM Snapshot</span>
+                <span className="px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold bg-emerald-50 text-emerald-700">Locked</span>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-gray-500">
+              <div className="flex items-center gap-3 text-[0.6875rem] text-gray-500">
                 <span className="font-medium text-text">FY26 P2P — Vendor Payment</span>
                 <span className="text-gray-300">·</span>
                 <span>{engagement.framework}</span>
@@ -174,7 +174,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             </div>
           </div>
           <button onClick={() => setShowRacmModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[11px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
             <ExternalLink size={12} />Open RACM
           </button>
         </div>
@@ -184,43 +184,43 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
           <div className="relative w-[260px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search controls..."
-              className="w-full pl-8 pr-3 h-9 rounded-lg border border-border bg-white text-[12px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
+              className="w-full pl-8 pr-3 h-9 rounded-lg border border-border bg-white text-[0.75rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all" />
           </div>
           <div className="flex items-center gap-1">
             {statusFilters.map(f => (
               <button key={f.id} onClick={() => setStatusFilter(f.id)}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition-all ${
+                className={`px-2.5 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer transition-all ${
                   statusFilter === f.id ? 'bg-primary text-white' : 'bg-white text-text-muted border border-border-light hover:bg-primary/5'
                 }`}>
                 {f.label} ({f.count})
               </button>
             ))}
           </div>
-          <span className="ml-auto text-[11px] text-text-muted">{displayList.length} control{displayList.length !== 1 ? 's' : ''}</span>
+          <span className="ml-auto text-[0.6875rem] text-text-muted">{displayList.length} control{displayList.length !== 1 ? 's' : ''}</span>
         </div>
 
         {/* ═══ Controls Table ═══ */}
         <div className="bg-white rounded-xl border border-border-light overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-[11px]" style={{ minWidth: 1200 }}>
+            <table className="w-full text-[0.6875rem]" style={{ minWidth: 1200 }}>
               <thead className="bg-white sticky top-0 z-10 border-b border-border-light">
                 <tr>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Control ID</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted">Control Name</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[80px]">Type</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[160px]">Workflow Coverage</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[110px]">Exec Status</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Pop / Samples</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[70px]">Evidence</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Attr Testing</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[70px]">Review</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[80px]">Conclusion</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-text-muted w-[120px]">Next Action</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Control ID</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted">Control Name</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[80px]">Type</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[160px]">Workflow Coverage</th>
+                  <th className="px-3 py-2.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[110px]">Exec Status</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Pop / Samples</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[70px]">Evidence</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[90px]">Attr Testing</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[70px]">Review</th>
+                  <th className="px-3 py-2.5 text-center text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[80px]">Conclusion</th>
+                  <th className="px-3 py-2.5 text-right text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted w-[120px]">Next Action</th>
                 </tr>
               </thead>
               <tbody>
                 {displayList.length === 0 ? (
-                  <tr><td colSpan={11} className="px-4 py-10 text-center text-[12px] text-text-muted">No controls match the current filter</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No controls match the current filter</td></tr>
                 ) : displayList.map((ctrl, i) => (
                   <ControlTableRow
                     key={ctrl.id}
@@ -265,8 +265,8 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
               <div className="shrink-0 px-6 py-4 border-b border-border-light">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h2 className="text-[16px] font-bold text-text">Linked RACM Snapshot</h2>
-                    <p className="text-[12px] text-text-muted mt-0.5">FY26 P2P — Vendor Payment · {engagement.framework} · {engagement.primaryProcess}</p>
+                    <h2 className="text-[1rem] font-bold text-text">Linked RACM Snapshot</h2>
+                    <p className="text-[0.75rem] text-text-muted mt-0.5">FY26 P2P — Vendor Payment · {engagement.framework} · {engagement.primaryProcess}</p>
                   </div>
                   <button onClick={() => setShowRacmModal(false)} className="w-8 h-8 rounded-full text-gray-400 hover:text-text hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors">
                     <X size={16} />
@@ -276,10 +276,10 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                 <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-dashed border-primary/30 bg-primary/[0.03]">
                   <Upload size={14} className="text-primary shrink-0" />
                   <div className="flex-1">
-                    <span className="text-[11px] font-semibold text-text">Upload RACM</span>
-                    <span className="text-[10px] text-gray-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
+                    <span className="text-[0.6875rem] font-semibold text-text">Upload RACM</span>
+                    <span className="text-[0.625rem] text-gray-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
                   </div>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors">
                     <Upload size={11} />Choose File
                     <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -304,8 +304,8 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
               </div>
               {/* Modal Footer */}
               <div className="shrink-0 px-6 py-3 border-t border-border-light bg-gray-50/50 flex items-center justify-between">
-                <span className="text-[10px] text-gray-400">Changes to the source RACM may require refreshing the engagement snapshot before testing.</span>
-                <button onClick={() => setShowRacmModal(false)} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors">
+                <span className="text-[0.625rem] text-gray-400">Changes to the source RACM may require refreshing the engagement snapshot before testing.</span>
+                <button onClick={() => setShowRacmModal(false)} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors">
                   Close
                 </button>
               </div>
@@ -349,23 +349,23 @@ function ControlTableRow({ ctrl, index, isSelected, onSelect, onActionClick }: {
 
       {/* Control ID */}
       <td className="px-3 py-3">
-        <span className="text-[11px] font-mono text-gray-500">{ctrl.id.replace('exec-', '')}</span>
+        <span className="text-[0.6875rem] font-mono text-gray-500">{ctrl.id.replace('exec-', '')}</span>
       </td>
 
       {/* Control Name */}
       <td className="px-3 py-3">
-        <span className="text-[12px] font-medium text-text">{ctrl.name}</span>
+        <span className="text-[0.75rem] font-medium text-text">{ctrl.name}</span>
       </td>
 
       {/* Type */}
       <td className="px-3 py-3">
-        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${typeDisplay.bg} ${typeDisplay.text}`}>{typeDisplay.label}</span>
+        <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${typeDisplay.bg} ${typeDisplay.text}`}>{typeDisplay.label}</span>
       </td>
 
       {/* Workflow Coverage */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-text">{coverage.displayText}</span>
+          <span className="text-[0.625rem] text-text">{coverage.displayText}</span>
           {coverage.unmappedAttributes > 0 && (
             <AlertTriangle size={10} className="text-amber-500 shrink-0" />
           )}
@@ -374,44 +374,44 @@ function ControlTableRow({ ctrl, index, isSelected, onSelect, onActionClick }: {
 
       {/* Execution Status */}
       <td className="px-3 py-3">
-        <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${statusDisplay.bg} ${statusDisplay.text}`}>
+        <span className={`px-2 h-5 rounded-full text-[0.5625rem] font-semibold inline-flex items-center ${statusDisplay.bg} ${statusDisplay.text}`}>
           {statusDisplay.label}
         </span>
       </td>
 
       {/* Population / Samples */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[10px] tabular-nums ${popSamples === '—' ? 'text-gray-300' : 'text-text'}`}>{popSamples}</span>
+        <span className={`text-[0.625rem] tabular-nums ${popSamples === '—' ? 'text-gray-300' : 'text-text'}`}>{popSamples}</span>
       </td>
 
       {/* Evidence */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[10px] tabular-nums ${evidenceCount === 0 ? 'text-gray-300' : 'text-text'}`}>{evidenceCount || '—'}</span>
+        <span className={`text-[0.625rem] tabular-nums ${evidenceCount === 0 ? 'text-gray-300' : 'text-text'}`}>{evidenceCount || '—'}</span>
       </td>
 
       {/* Attribute Testing */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[10px] tabular-nums ${attrDisplay === '—' ? 'text-gray-300' : 'text-text'}`}>{attrDisplay}</span>
+        <span className={`text-[0.625rem] tabular-nums ${attrDisplay === '—' ? 'text-gray-300' : 'text-text'}`}>{attrDisplay}</span>
       </td>
 
       {/* Review */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[10px] font-semibold ${reviewDisplay.text}`}>{reviewDisplay.label}</span>
+        <span className={`text-[0.625rem] font-semibold ${reviewDisplay.text}`}>{reviewDisplay.label}</span>
       </td>
 
       {/* Conclusion */}
       <td className="px-3 py-3 text-center">
         {conclusionDisplay ? (
-          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${conclusionDisplay.bg} ${conclusionDisplay.text}`}>{conclusionDisplay.label}</span>
+          <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${conclusionDisplay.bg} ${conclusionDisplay.text}`}>{conclusionDisplay.label}</span>
         ) : (
-          <span className="text-[10px] text-gray-300">—</span>
+          <span className="text-[0.625rem] text-gray-300">—</span>
         )}
       </td>
 
       {/* Next Action */}
       <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
         <button onClick={onActionClick}
-          className="px-2.5 py-1 rounded-lg text-[10px] font-semibold cursor-pointer transition-colors bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-1">
+          className="px-2.5 py-1 rounded-lg text-[0.625rem] font-semibold cursor-pointer transition-colors bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-1">
           {nextAction}<ChevronRight size={8} />
         </button>
       </td>

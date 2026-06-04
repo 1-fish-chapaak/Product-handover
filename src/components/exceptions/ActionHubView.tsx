@@ -156,10 +156,10 @@ function CollapsibleSection({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-[14px] font-semibold text-ink-900">{title}</h3>
+              <h3 className="text-[0.875rem] font-semibold text-ink-900">{title}</h3>
               {badge}
             </div>
-            {subtitle && <p className="text-[12px] text-ink-500 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-[0.75rem] text-ink-500 mt-0.5">{subtitle}</p>}
           </div>
         </div>
         <ChevronDown size={16} className={`text-ink-500 transition-transform ${open ? '' : '-rotate-90'}`} />
@@ -200,7 +200,7 @@ export function CircularProgress({ pct, size = 64, stroke = 5, label }: { pct: n
           strokeDasharray={`${dash} ${c}`}
         />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-brand-700 tabular-nums">
+      <div className="absolute inset-0 flex items-center justify-center text-[0.8125rem] font-semibold text-brand-700 tabular-nums">
         {label ?? `${pct}%`}
       </div>
     </div>
@@ -242,13 +242,13 @@ function StatCard({
       }`}
     >
       <div className="flex items-start justify-between w-full">
-        <div className="text-[12px] text-ink-500">{label}</div>
+        <div className="text-[0.75rem] text-ink-500">{label}</div>
         <div className={`w-7 h-7 ${tones.iconBg} ${tones.iconColor} rounded-full flex items-center justify-center shrink-0`}>
           <Icon size={14} strokeWidth={1.75} />
         </div>
       </div>
       <div className="flex items-end justify-between w-full">
-        <div className={`text-[28px] leading-none font-semibold tabular-nums ${tones.valueColor}`}>{value}</div>
+        <div className={`text-[1.75rem] leading-none font-semibold tabular-nums ${tones.valueColor}`}>{value}</div>
         {navigable && <ArrowRight size={14} className="text-ink-400" />}
       </div>
     </button>
@@ -281,10 +281,10 @@ function MetricCell({
       onClick={onClick}
       className="group text-left cursor-pointer flex flex-col gap-1.5 py-1 transition-opacity hover:opacity-70"
     >
-      <span className={`font-display text-[36px] leading-none tabular-nums tracking-[-0.01em] ${color}`}>
+      <span className={`font-display text-[2.25rem] leading-none tabular-nums tracking-[-0.01em] ${color}`}>
         {value}
       </span>
-      <span className="text-[11.5px] text-ink-500 group-hover:text-ink-700 transition-colors">
+      <span className="text-[0.75rem] text-ink-500 group-hover:text-ink-700 transition-colors">
         {label}
       </span>
     </button>
@@ -340,8 +340,8 @@ function ClassificationDonut({ rows }: { rows: { label: string; count: number; t
         </svg>
         {/* Center label */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <div className="text-[28px] leading-none font-semibold text-ink-900 tabular-nums">{total}</div>
-          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mt-1">classified</div>
+          <div className="text-[1.75rem] leading-none font-semibold text-ink-900 tabular-nums">{total}</div>
+          <div className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-500 mt-1">classified</div>
         </div>
       </div>
 
@@ -356,11 +356,11 @@ function ClassificationDonut({ rows }: { rows: { label: string; count: number; t
                 style={{ backgroundColor: BREAKDOWN_HEX[row.tone] }}
                 aria-hidden="true"
               />
-              <span className={`flex-1 text-[12.5px] font-medium truncate ${BREAKDOWN_LABEL[row.tone]}`}>
+              <span className={`flex-1 text-[0.75rem] font-medium truncate ${BREAKDOWN_LABEL[row.tone]}`}>
                 {row.label}
               </span>
-              <span className="text-[12.5px] font-semibold text-ink-900 tabular-nums w-6 text-right">{row.count}</span>
-              <span className="text-[11.5px] text-ink-500 tabular-nums w-10 text-right">{pct}%</span>
+              <span className="text-[0.75rem] font-semibold text-ink-900 tabular-nums w-6 text-right">{row.count}</span>
+              <span className="text-[0.75rem] text-ink-500 tabular-nums w-10 text-right">{pct}%</span>
             </li>
           );
         })}
@@ -374,19 +374,19 @@ function TimelineEntry({ event }: { event: ActionHubEvent }) {
   const dot = ROLE_DOT[event.role];
   return (
     <li className="relative flex gap-3 py-3">
-      <div className={`shrink-0 w-8 h-8 rounded-full ${avatar.bg} ${avatar.fg} flex items-center justify-center text-[10px] font-semibold tracking-wider`}>
+      <div className={`shrink-0 w-8 h-8 rounded-full ${avatar.bg} ${avatar.fg} flex items-center justify-center text-[0.625rem] font-semibold tracking-wider`}>
         {avatar.initials}
       </div>
       <div className="flex-1 min-w-0 pr-6">
         <div className="flex items-center gap-2 flex-wrap mb-0.5">
-          <span className="text-[13px] text-ink-900 font-medium leading-snug">{event.message}</span>
+          <span className="text-[0.8125rem] text-ink-900 font-medium leading-snug">{event.message}</span>
           {event.exceptionId && event.exceptionId !== '—' && (
-            <span className="inline-flex items-center h-5 px-2 text-[10.5px] font-medium bg-brand-50 text-brand-700 rounded-full font-mono">
+            <span className="inline-flex items-center h-5 px-2 text-[0.75rem] font-medium bg-brand-50 text-brand-700 rounded-full font-mono">
               {event.exceptionId}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[11.5px] text-ink-500">
+        <div className="flex items-center gap-2 text-[0.75rem] text-ink-500">
           <span>{event.actor} <span className="text-ink-400">[{event.role}]</span></span>
           <span className="text-ink-300">·</span>
           <span className="tabular-nums">{event.time}</span>
@@ -394,10 +394,10 @@ function TimelineEntry({ event }: { event: ActionHubEvent }) {
           <em className="not-italic">{event.relative}</em>
         </div>
         {event.comment && (
-          <p className="mt-1.5 text-[12px] italic text-ink-500 leading-relaxed">{event.comment}</p>
+          <p className="mt-1.5 text-[0.75rem] italic text-ink-500 leading-relaxed">{event.comment}</p>
         )}
         {event.attachment && (
-          <button className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-600 hover:text-brand-700 cursor-pointer">
+          <button className="mt-2 inline-flex items-center gap-1.5 text-[0.75rem] text-ink-600 hover:text-brand-700 cursor-pointer">
             <Paperclip size={11} />
             {event.attachment.name}
           </button>
@@ -455,13 +455,13 @@ export default function ActionHubView() {
         {/* ATR Readiness — single horizontal hero, gates as flat rows */}
         <section className="mb-6 bg-canvas-elevated border border-canvas-border rounded-[12px] p-6">
           <div className="flex items-baseline justify-between gap-4 mb-1">
-            <h2 className="text-[15px] text-ink-900 font-semibold">ATR readiness</h2>
-            <span className="text-[12px] text-ink-500 tabular-nums">
+            <h2 className="text-[0.9375rem] text-ink-900 font-semibold">ATR readiness</h2>
+            <span className="text-[0.75rem] text-ink-500 tabular-nums">
               <span className="font-semibold text-ink-900">{s.atrReadiness.overallPct}%</span>
               <span className="text-ink-400"> · {s.atrReadiness.completedSteps} of {s.atrReadiness.totalSteps} gates closed</span>
             </span>
           </div>
-          <p className="text-[12.5px] text-ink-500 mb-5 leading-relaxed max-w-[64ch]">
+          <p className="text-[0.75rem] text-ink-500 mb-5 leading-relaxed max-w-[64ch]">
             Three gates must close before the audit-to-record can be issued.
           </p>
           <div className="h-[3px] rounded-full bg-canvas-border overflow-hidden mb-6">
@@ -473,11 +473,11 @@ export default function ActionHubView() {
               const done = step.current >= step.total;
               return (
                 <li key={step.id} className="grid grid-cols-[28px_1fr_auto] items-center gap-4">
-                  <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-400 font-medium tabular-nums">{String(idx + 1).padStart(2, '0')}</span>
+                  <span className="text-[0.75rem] uppercase tracking-[0.14em] text-ink-400 font-medium tabular-nums">{String(idx + 1).padStart(2, '0')}</span>
                   <div className="min-w-0">
                     <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                      <span className="text-[13px] text-ink-800 leading-snug">{step.label}</span>
-                      <span className="shrink-0 text-[12px] tabular-nums">
+                      <span className="text-[0.8125rem] text-ink-800 leading-snug">{step.label}</span>
+                      <span className="shrink-0 text-[0.75rem] tabular-nums">
                         <span className={`font-semibold ${done ? 'text-compliant-700' : 'text-ink-900'}`}>{step.current}</span>
                         <span className="text-ink-400"> / {step.total}</span>
                       </span>
@@ -506,7 +506,7 @@ export default function ActionHubView() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-1.5 mb-1.5">
-                  <span className="text-[13.5px] text-ink-900 font-semibold">
+                  <span className="text-[0.75rem] text-ink-900 font-semibold">
                     {s.overdue.length} overdue {s.overdue.length === 1 ? 'case needs' : 'cases need'} attention
                   </span>
                 </div>
@@ -514,7 +514,7 @@ export default function ActionHubView() {
                   {s.overdue.map(c => (
                     <span
                       key={c.id}
-                      className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[11px] font-medium bg-canvas-base border border-canvas-border text-ink-700 rounded-full"
+                      className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.6875rem] font-medium bg-canvas-base border border-canvas-border text-ink-700 rounded-full"
                     >
                       <span className="font-mono text-ink-800">{c.id}</span>
                       <span className="text-ink-300">·</span>
@@ -534,7 +534,7 @@ export default function ActionHubView() {
             {/* Snapshot */}
             <div className="pr-6">
               <div className="mb-4">
-                <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500 font-medium">Snapshot</span>
+                <span className="text-[0.75rem] uppercase tracking-[0.14em] text-ink-500 font-medium">Snapshot</span>
               </div>
               <div className="grid grid-cols-3 gap-x-3">
                 <MetricCell label="Total" value={s.counts.total} onClick={() => openDrawer('total')} />
@@ -546,7 +546,7 @@ export default function ActionHubView() {
             {/* Lifecycle — flanked by separators */}
             <div className="px-6 border-l border-r border-canvas-border">
               <div className="mb-4">
-                <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500 font-medium">Lifecycle</span>
+                <span className="text-[0.75rem] uppercase tracking-[0.14em] text-ink-500 font-medium">Lifecycle</span>
               </div>
               <div className="grid grid-cols-4 gap-x-3">
                 <MetricCell label="Open" value={openCount} onClick={() => openDrawer('open')} />
@@ -559,7 +559,7 @@ export default function ActionHubView() {
             {/* Outcomes */}
             <div className="pl-6">
               <div className="mb-4">
-                <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500 font-medium">Outcomes</span>
+                <span className="text-[0.75rem] uppercase tracking-[0.14em] text-ink-500 font-medium">Outcomes</span>
               </div>
               <div className="grid grid-cols-3 gap-x-3">
                 <MetricCell label="Implemented" value={implCounts['Implemented']} onClick={() => openDrawer('implImplemented')} />

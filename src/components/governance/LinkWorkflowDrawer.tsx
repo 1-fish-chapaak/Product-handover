@@ -61,9 +61,9 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
             <div>
               <div className="flex items-center gap-2">
                 <Link2 size={18} className="text-brand-600" />
-                <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">Link Workflow</h2>
+                <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Link Workflow</h2>
               </div>
-              <p className="text-[12.5px] text-ink-500 mt-0.5">Select a workflow from the Workflow Library to link to this control.</p>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Select a workflow from the Workflow Library to link to this control.</p>
             </div>
             <button
               onClick={onClose}
@@ -83,16 +83,16 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search workflows..."
-              className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all"
+              className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/10 transition-all"
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold text-ink-500">Process:</span>
+            <span className="text-[0.6875rem] font-semibold text-ink-500">Process:</span>
             {['all', 'p2p', 'o2c', 'r2r', 's2c'].map(bp => (
               <button
                 key={bp}
                 onClick={() => setBpFilter(bp)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold transition-all cursor-pointer ${
                   bpFilter === bp
                     ? 'bg-brand-600 text-white'
                     : 'bg-canvas text-ink-500 hover:bg-brand-50 hover:text-brand-700'
@@ -109,8 +109,8 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
           {filtered.length === 0 ? (
             <div className="text-center py-12">
               <Workflow size={24} className="mx-auto text-ink-400 mb-2" />
-              <p className="text-[13px] text-ink-500">No workflows available</p>
-              <p className="text-[11.5px] text-ink-400 mt-0.5">All workflows are already linked or no matches found.</p>
+              <p className="text-[0.8125rem] text-ink-500">No workflows available</p>
+              <p className="text-[0.75rem] text-ink-400 mt-0.5">All workflows are already linked or no matches found.</p>
             </div>
           ) : (
             filtered.map(wf => {
@@ -133,11 +133,11 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[13px] font-semibold text-ink-800">{wf.name}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-evidence-50 text-evidence-700 uppercase">{wf.type}</span>
+                        <span className="text-[0.8125rem] font-semibold text-ink-800">{wf.name}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[0.625rem] font-bold bg-evidence-50 text-evidence-700 uppercase">{wf.type}</span>
                       </div>
-                      <p className="text-[12px] text-ink-500 line-clamp-2">{wf.desc}</p>
-                      <div className="flex items-center gap-4 mt-2 text-[11px] text-ink-400">
+                      <p className="text-[0.75rem] text-ink-500 line-clamp-2">{wf.desc}</p>
+                      <div className="flex items-center gap-4 mt-2 text-[0.6875rem] text-ink-400">
                         <span>{BP_LABELS[wf.bpId] || wf.bpId.toUpperCase()}</span>
                         <span>{wf.steps.length} steps</span>
                         <span>{wf.runs} runs</span>
@@ -153,20 +153,20 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between">
-          <div className="text-[12px] text-ink-400">
+          <div className="text-[0.75rem] text-ink-400">
             {available.length} workflow{available.length !== 1 ? 's' : ''} available
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => { if (selectedWf) onLink(selectedWf.id, selectedWf.name); }}
               disabled={!selectedId}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Link2 size={14} />
               Link Workflow

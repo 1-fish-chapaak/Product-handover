@@ -77,7 +77,7 @@ export default function ClarificationCard({
     >
       {/* Header — serif title + labeled Back/Next + close */}
       <div className="flex items-center justify-between px-5 pt-4 pb-3 gap-4">
-        <h3 className="font-display text-[17px] font-semibold text-ink-800 leading-snug flex-1 tracking-tight">
+        <h3 className="font-display text-[1.0625rem] font-semibold text-ink-800 leading-snug flex-1 tracking-tight">
           {current.question}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
@@ -85,19 +85,19 @@ export default function ClarificationCard({
             disabled={currentPage === 0}
             onClick={() => goTo(currentPage - 1)}
             aria-label="Previous question"
-            className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
+            className="flex items-center gap-1 h-7 px-2 rounded-md text-[0.75rem] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
           >
             <ChevronLeft size={13} />
             Back
           </button>
-          <span className="text-[11px] text-ink-500 tabular-nums px-1.5 min-w-[44px] text-center">
+          <span className="text-[0.6875rem] text-ink-500 tabular-nums px-1.5 min-w-[44px] text-center">
             {currentPage + 1} of {total}
           </span>
           <button
             disabled={currentPage === total - 1}
             onClick={() => goTo(currentPage + 1)}
             aria-label="Next question"
-            className="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
+            className="flex items-center gap-1 h-7 px-2 rounded-md text-[0.75rem] font-medium text-ink-600 hover:bg-paper-100 hover:text-ink-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer transition-colors"
           >
             Next
             <ChevronRight size={13} />
@@ -122,14 +122,14 @@ export default function ClarificationCard({
               role="option"
               aria-selected={isSelected}
               onClick={() => handleOptionClick(option)}
-              className={`group w-full flex items-center gap-3 px-5 py-3 text-left text-[13.5px] transition-colors cursor-pointer border-t border-canvas-border/70 first:border-t-0 ${
+              className={`group w-full flex items-center gap-3 px-5 py-3 text-left text-[0.75rem] transition-colors cursor-pointer border-t border-canvas-border/70 first:border-t-0 ${
                 isSelected
                   ? 'bg-primary/5 text-ink-800'
                   : 'text-ink-700 hover:bg-paper-50'
               }`}
             >
               <span
-                className={`flex items-center justify-center w-7 h-7 rounded-md text-[12px] font-semibold tabular-nums shrink-0 transition-colors ${
+                className={`flex items-center justify-center w-7 h-7 rounded-md text-[0.75rem] font-semibold tabular-nums shrink-0 transition-colors ${
                   isSelected
                     ? 'bg-primary text-white'
                     : 'bg-paper-100 text-ink-500 group-hover:bg-paper-200 group-hover:text-ink-700'
@@ -154,14 +154,14 @@ export default function ClarificationCard({
       {/* Submit row — surfaces progress + lets the user commit early */}
       {answeredCount > 0 && (
         <div className="border-t border-canvas-border flex items-center justify-between gap-3 px-5 py-2.5 bg-paper-50/40">
-          <span className="text-[12px] text-ink-500 tabular-nums">
+          <span className="text-[0.75rem] text-ink-500 tabular-nums">
             {answeredCount} of {total} answered
           </span>
           <motion.button
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={() => onComplete(answers)}
-            className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             Submit {answeredCount} answer{answeredCount === 1 ? '' : 's'}
           </motion.button>
@@ -174,7 +174,7 @@ export default function ClarificationCard({
           <>
             <button
               onClick={() => setCustomMode(true)}
-              className="flex-1 flex items-center gap-3 text-left text-[13.5px] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"
+              className="flex-1 flex items-center gap-3 text-left text-[0.75rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"
             >
               <span className="flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated shrink-0">
                 <Pencil size={12} className="text-ink-400" />
@@ -183,7 +183,7 @@ export default function ClarificationCard({
             </button>
             <button
               onClick={handleSkip}
-              className="h-8 px-4 rounded-md border border-canvas-border bg-canvas-elevated text-[12.5px] font-medium text-ink-700 hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
+              className="h-8 px-4 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
             >
               Skip
             </button>
@@ -200,7 +200,7 @@ export default function ClarificationCard({
               onKeyDown={e => { if (e.key === 'Enter') handleCustomSubmit(); }}
               placeholder="Type your answer..."
               autoFocus
-              className="no-focus-ring flex-1 h-8 px-3 rounded-md border border-canvas-border bg-white text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-primary/40"
+              className="no-focus-ring flex-1 h-8 px-3 rounded-md border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-primary/40"
             />
             <button
               onClick={handleCustomSubmit}

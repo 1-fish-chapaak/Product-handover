@@ -162,7 +162,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
   return (
     <div className="space-y-6">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-ink-400 hover:text-brand-700 transition-colors cursor-pointer">
         <ArrowLeft size={14} />Back to Engagement Library
       </button>
 
@@ -178,7 +178,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
           <p className="text-sm text-text-secondary mt-1 ml-9">Plan, execute, review, and track internal audit assignments from scope to final report and action plan.</p>
         </div>
         <button onClick={onCreateNew}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 text-white text-[13px] font-semibold hover:from-purple-700 hover:to-purple-600 transition-all cursor-pointer shadow-sm">
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 text-white text-[0.8125rem] font-semibold hover:from-purple-700 hover:to-purple-600 transition-all cursor-pointer shadow-sm">
           <Plus size={14} />Create IA Assignment
         </button>
       </div>
@@ -194,8 +194,8 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
           { label: 'Closed', value: closedCount, color: 'text-compliant-700' },
         ].map(s => (
           <div key={s.label} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border-light">
-            <span className="text-[11px] text-text-muted">{s.label}</span>
-            <span className={`text-[15px] font-bold tabular-nums ${s.color}`}>{s.value}</span>
+            <span className="text-[0.6875rem] text-text-muted">{s.label}</span>
+            <span className={`text-[0.9375rem] font-bold tabular-nums ${s.color}`}>{s.value}</span>
           </div>
         ))}
       </div>
@@ -205,11 +205,11 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
         <div className="relative max-w-md flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search assignments..."
-            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
+            className="w-full pl-9 pr-4 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={() => setStatusFilter('')}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-purple-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-purple-50'}`}>
+            className={`px-3 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${!statusFilter ? 'bg-purple-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-purple-50'}`}>
             All ({assignments.length})
           </button>
           {statusGroups.map(s => {
@@ -217,7 +217,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
             if (count === 0) return null;
             return (
               <button key={s.key} onClick={() => setStatusFilter(statusFilter === s.key ? '' : s.key)}
-                className={`px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${statusFilter === s.key ? 'bg-purple-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-purple-50'}`}>
+                className={`px-3 py-1.5 rounded-full text-[0.75rem] font-semibold cursor-pointer transition-all ${statusFilter === s.key ? 'bg-purple-600 text-white shadow-sm' : 'bg-canvas-elevated text-ink-500 hover:bg-purple-50'}`}>
                 {s.label} ({count})
               </button>
             );
@@ -227,9 +227,9 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
 
       {/* Assignment table */}
       <div className="rounded-xl border border-border-light bg-white overflow-hidden">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-[0.75rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider">
               <th className="px-4 py-2.5 text-left">Assignment</th>
               <th className="px-4 py-2.5 text-left">Entity</th>
               <th className="px-4 py-2.5 text-left">Owner</th>
@@ -257,15 +257,15 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                   >
                     <td className="px-4 py-3">
                       <div className="font-semibold text-text group-hover:text-purple-700 transition-colors">{a.name}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">{a.businessProcess}</div>
+                      <div className="text-[0.625rem] text-gray-400 mt-0.5">{a.businessProcess}</div>
                     </td>
                     <td className="px-4 py-3 text-text-muted">{a.entity}</td>
                     <td className="px-4 py-3">
                       <div className="text-text font-medium">{a.owner}</div>
-                      <div className="text-[10px] text-gray-400">{a.reviewer}</div>
+                      <div className="text-[0.625rem] text-gray-400">{a.reviewer}</div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${tone.bg} ${tone.text}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${tone.bg} ${tone.text}`}>
                         {tone.label}
                       </span>
                     </td>
@@ -274,7 +274,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                         <div>
                           <span className="font-semibold text-text tabular-nums">{a.observations}</span>
                           {a.openObservations > 0 && (
-                            <span className="text-[10px] text-mitigated-700 ml-1">({a.openObservations} open)</span>
+                            <span className="text-[0.625rem] text-mitigated-700 ml-1">({a.openObservations} open)</span>
                           )}
                         </div>
                       ) : (
@@ -295,7 +295,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
                     </td>
                     <td className="px-4 py-3">
                       {a.nextAction !== '—' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 text-purple-700 text-[10px] font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 text-purple-700 text-[0.625rem] font-semibold">
                           <NextIcon size={10} />{a.nextAction}
                         </span>
                       ) : (
@@ -309,7 +309,7 @@ export default function InternalAuditAssignmentView({ onOpenAssignment, onCreate
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-[13px] text-text-muted">No assignments match your search.</div>
+          <div className="text-center py-12 text-[0.8125rem] text-text-muted">No assignments match your search.</div>
         )}
       </div>
     </div>

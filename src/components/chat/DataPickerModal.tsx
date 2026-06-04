@@ -8,8 +8,11 @@ function defaultGroupName(): string {
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Search, Layers, FileText, Database, Upload, Check, Mail, Plus, Loader2, Folder,
+  AlertTriangle, Lock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import ConfirmationModal from '../shared/ConfirmationModal';
+import { validateUploadFile, isAllowedKnowledgeFile } from '../data-sources/datasetFiles';
 import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource,
@@ -24,7 +27,7 @@ import {
 //  - connect-db: a fresh database connection from the kh-add Connect tab
 export type AttachmentSelection =
   | { kind: 'source'; sourceId: string; name: string; subtype: string; type: DataSource['type'] }
-  | { kind: 'upload'; localId: string; name: string; sizeBytes: number; path?: string }
+  | { kind: 'upload'; localId: string; name: string; sizeBytes: number; path?: string; file?: File }
   | { kind: 'connect-db'; dbType: string; name: string; database: string; host: string };
 
 interface Props {
@@ -51,6 +54,9 @@ const CHAT_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'integrated', label: 'DB',       icon: Database },
 ];
 
+// kh-add mode surfaces two tabs: Upload (drop files/folders) and Connect
+// database (configure a DB integration). The Connect flow is a demo mechanic
+// today — a real backend would wire OAuth / credential storage / sync.
 const KH_ADD_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'upload',  label: 'Upload',            icon: Upload },
   { id: 'connect', label: 'Connect database',  icon: Database },
@@ -71,12 +77,17 @@ export default function DataPickerModal({
   const [search, setSearch] = useState('');
   // Multi-select state — keyed by source id (for source rows) or local upload id.
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
-  const [pendingUploads, setPendingUploads] = useState<Array<{ localId: string; name: string; sizeBytes: number; progress: number; path?: string }>>([]);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   // Optional "combine" name (kh-add only). Visible in the pending list when
   // 2+ loose files (no folder) are queued. Filled → all loose files commit
   // as one source under this name. Empty → each loose file = its own source.
   // Folder uploads are unaffected and always commit per-folder.
   const [combinedName, setCombinedName] = useState('');
+  // Guards a close while uploads are still in flight — shows a confirm first.
+  const [confirmClose, setConfirmClose] = useState(false);
+  // Guards Attach while uploads are still in flight (in-flight files won't be
+  // added) — shows a confirm first.
+  const [confirmAttach, setConfirmAttach] = useState(false);
 
   // Reset transient state when the modal opens fresh. The starting tab is
   // caller-controlled (defaults to Upload, which is the chat default).
@@ -87,6 +98,8 @@ export default function DataPickerModal({
       setSelectedSourceIds(new Set());
       setPendingUploads([]);
       setCombinedName('');
+      setConfirmClose(false);
+      setConfirmAttach(false);
     }
   }, [open, defaultTab]);
 
@@ -110,15 +123,22 @@ export default function DataPickerModal({
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tab, search]);
 
-  // Only fully-uploaded files count toward the Attach total — in-flight files
-  // shouldn't be attachable until they finish.
-  const readyUploads = pendingUploads.filter(u => u.progress >= 100);
+  // Only fully-validated, fully-uploaded files count toward the Attach total —
+  // in-flight files aren't attachable yet, and errored files never are.
+  const readyUploads = pendingUploads.filter(u => u.status === 'ready');
   const totalSelected = selectedSourceIds.size + readyUploads.length;
-  const inFlightCount = pendingUploads.length - readyUploads.length;
+  const inFlightCount = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+
+  // Closing while uploads are still running would silently discard them, so
+  // intercept every dismiss path (backdrop, ✕, Cancel) and confirm first.
+  const requestClose = () => {
+    if (inFlightCount > 0) setConfirmClose(true);
+    else onClose();
+  };
 
   // Loose pending uploads (no folder path). Used to decide whether to show
   // the "Combine into one source" name input — only meaningful for 2+ loose.
-  const loosePendingCount = pendingUploads.filter(u => !u.path || u.path === u.name).length;
+  const loosePendingCount = pendingUploads.filter(u => (!u.path || u.path === u.name) && u.status !== 'error').length;
 
   // Auto-fill the combine name with a sensible default the first time 2+
   // loose files appear in this modal session. User can edit or clear; if
@@ -158,16 +178,23 @@ export default function DataPickerModal({
     const uploadSelections: AttachmentSelection[] = readyUploads.map(u => {
       const isLoose = !u.path || u.path === u.name;
       const path = combine && isLoose ? `${combinedRoot}/${u.name}` : u.path;
-      return { kind: 'upload' as const, localId: u.localId, name: u.name, sizeBytes: u.sizeBytes, path };
+      return { kind: 'upload' as const, localId: u.localId, name: u.name, sizeBytes: u.sizeBytes, path, file: u.file };
     });
 
     onConfirm([...sourceSelections, ...uploadSelections]);
   };
 
+  // Attaching while files are still in flight would drop them silently (only
+  // ready uploads are attached) — confirm first.
+  const requestConfirm = () => {
+    if (inFlightCount > 0) setConfirmAttach(true);
+    else handleConfirm();
+  };
+
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="dpicker-title">
+        <div className="kh-no-focus-ring fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="dpicker-title">
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -175,7 +202,7 @@ export default function DataPickerModal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-text/30 backdrop-blur-[3px]"
-            onClick={onClose}
+            onClick={requestClose}
           />
           <motion.div
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -188,7 +215,7 @@ export default function DataPickerModal({
           >
             {/* Header — title + (search) + close. Search is suppressed in kh-add mode. */}
             <div className="flex items-center gap-3 px-5 py-3 border-b border-paper-200">
-              <h2 id="dpicker-title" className="text-[15px] font-semibold text-ink-800 shrink-0">{title}</h2>
+              <h2 id="dpicker-title" className="text-[0.9375rem] font-semibold text-ink-800 shrink-0">{title}</h2>
               {mode === 'chat' && (
                 <div className="relative flex-1 max-w-md ml-2">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -198,14 +225,14 @@ export default function DataPickerModal({
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     disabled={tab === 'upload'}
-                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[13px] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:bg-paper-50 disabled:text-text-muted transition-colors"
+                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary disabled:bg-canvas disabled:text-text-muted transition-colors"
                   />
                 </div>
               )}
               <div className="ml-auto flex items-center gap-1">
                 <button
-                  onClick={onClose}
-                  className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-paper-50 transition-colors cursor-pointer"
+                  onClick={requestClose}
+                  className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-brand-50 transition-colors cursor-pointer"
                   aria-label="Close picker"
                 >
                   <X size={16} />
@@ -222,14 +249,14 @@ export default function DataPickerModal({
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[12.5px] font-medium transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[0.75rem] font-medium transition-colors cursor-pointer ${
                       isActive ? 'text-primary' : 'text-text-muted hover:text-text'
                     }`}
                   >
                     <Icon size={13} />
                     {t.label}
                     {t.id !== 'upload' && t.id !== 'connect' && (
-                      <span className={`tabular-nums text-[11px] ${isActive ? 'text-primary' : 'text-text-muted/60'}`}>
+                      <span className={`tabular-nums text-[0.6875rem] ${isActive ? 'text-primary' : 'text-text-muted/60'}`}>
                         {tabCounts[t.id]}
                       </span>
                     )}
@@ -248,7 +275,7 @@ export default function DataPickerModal({
             {/* Body — tab-aware. The Connect tab renders its own panel + footer. */}
             {tab === 'connect' ? (
               <ConnectDbPanel
-                onCancel={onClose}
+                onCancel={requestClose}
                 onConnect={(sel) => onConfirm([sel])}
               />
             ) : (
@@ -278,16 +305,16 @@ export default function DataPickerModal({
             <div className="border-t border-border-light px-5 py-3 flex items-center justify-between gap-3 bg-surface-2/60">
               {mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
                 <label className="flex items-center gap-2 flex-1 min-w-0 max-w-md">
-                  <span className="text-[12px] font-medium text-text-secondary shrink-0">Group as</span>
+                  <span className="text-[0.75rem] font-medium text-text-secondary shrink-0">Group as</span>
                   <input
                     value={combinedName}
                     onChange={(e) => setCombinedName(e.target.value)}
                     placeholder="Leave empty to add as separate files"
-                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[12.5px] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-colors"
+                    className="flex-1 min-w-0 h-8 px-2.5 rounded-md border border-border-light bg-white text-[0.75rem] text-ink-900 placeholder:text-text-muted/60 focus:outline-none focus:border-primary transition-colors"
                   />
                 </label>
               ) : (
-                <div className="text-[12px] text-text-muted tabular-nums flex items-center gap-2">
+                <div className="text-[0.75rem] text-text-muted tabular-nums flex items-center gap-2">
                   {totalSelected === 0 && inFlightCount === 0 && (
                     <>Pick sources or files to attach to your message.</>
                   )}
@@ -304,15 +331,15 @@ export default function DataPickerModal({
               )}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={onClose}
-                  className="px-3 h-9 rounded-md text-[12.5px] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
+                  onClick={requestClose}
+                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-text-muted hover:text-text hover:bg-white transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleConfirm}
+                  onClick={requestConfirm}
                   disabled={totalSelected === 0}
-                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover disabled:bg-surface-2 disabled:text-text-muted disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
                   <Check size={13} />
                   {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}
@@ -323,6 +350,36 @@ export default function DataPickerModal({
             )}
 
           </motion.div>
+
+          {/* Confirm before discarding in-flight uploads. */}
+          <ConfirmationModal
+            open={confirmClose}
+            title="Uploads still in progress"
+            description={
+              <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading.
+              {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}.</>
+            }
+            confirmLabel="Cancel uploads"
+            cancelLabel="Keep uploading"
+            tone="destructive"
+            onConfirm={() => { setConfirmClose(false); onClose(); }}
+            onClose={() => setConfirmClose(false)}
+          />
+
+          {/* Confirm before attaching while uploads are still finishing. */}
+          <ConfirmationModal
+            open={confirmAttach}
+            title="Uploads still in progress"
+            description={
+              <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading and won{'’'}t be included.
+              {' '}Continue without {inFlightCount === 1 ? 'it' : 'them'}?</>
+            }
+            confirmLabel="Continue"
+            cancelLabel="Wait"
+            tone="primary"
+            onConfirm={() => { setConfirmAttach(false); handleConfirm(); }}
+            onClose={() => setConfirmAttach(false)}
+          />
         </div>
       )}
     </AnimatePresence>
@@ -345,14 +402,14 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
     return (
       <div className="text-center py-16 px-6">
         <Search size={24} className="mx-auto text-text-muted/60 mb-3" />
-        <p className="text-[13px] text-text-muted">
+        <p className="text-[0.8125rem] text-text-muted">
           {search ? `No sources match "${search}".` : 'No sources available.'}
         </p>
         {showRequestIntegration && !search && (
           <a
             href="mailto:support@irame.ai?subject=Database%20integration%20request"
             onClick={onRequestIntegration}
-            className="inline-flex items-center gap-2 mt-4 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 mt-4 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={13} />
             Request a DB integration
@@ -379,14 +436,14 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
         <div className="px-5 py-4 border-t border-border-light bg-surface-2/60 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <Mail size={13} className="text-text-muted shrink-0" />
-            <span className="text-[12px] text-text-muted truncate">
+            <span className="text-[0.75rem] text-text-muted truncate">
               Need another source? IT can wire it up.
             </span>
           </div>
           <a
             href="mailto:support@irame.ai?subject=Database%20integration%20request"
             onClick={onRequestIntegration}
-            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-border-light bg-white text-[12px] font-semibold text-text-secondary hover:border-primary-light transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-border-light bg-white text-[0.75rem] font-semibold text-text-secondary hover:border-primary-light transition-colors cursor-pointer shrink-0"
           >
             <Plus size={12} />
             Request a DB integration
@@ -398,7 +455,9 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
 }
 
 function SourceRow({ source, selected, onToggle }: { source: DataSource; selected: boolean; onToggle: () => void }) {
-  const { icon: Icon, tone, label: typeLabel } = TYPE_META[source.type];
+  // One calm brand tile tone for every source so the icon frame reads the same
+  // here as it does in the Knowledge Hub; the glyph still distinguishes type.
+  const { icon: Icon, label: typeLabel } = TYPE_META[source.type];
   return (
     <li>
       <button
@@ -416,23 +475,23 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
           {selected && <Check size={11} className="text-white" />}
         </div>
 
-        {/* Type-tinted icon tile */}
-        <div className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${tone}`}>
+        {/* Brand icon tile — same flat lavender frame everywhere */}
+        <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
           <Icon size={15} />
         </div>
 
         {/* Name + meta */}
         <div className="flex-1 min-w-0">
-          <div className={`text-[13px] font-medium truncate ${selected ? 'text-primary' : 'text-text'}`}>
+          <div className={`text-[0.8125rem] font-medium truncate ${selected ? 'text-primary' : 'text-text'}`}>
             {source.name}
           </div>
-          <div className="text-[11px] text-text-muted mt-0.5 tabular-nums truncate">
+          <div className="text-[0.6875rem] text-text-muted mt-0.5 tabular-nums truncate">
             {source.subtype} <span className="text-text-muted/60">· {formatDate(source.createdAt)}</span>
           </div>
         </div>
 
         {/* Type label pill (subtle, right-aligned) */}
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold text-text-muted bg-surface-2">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
           {typeLabel}
         </span>
       </button>
@@ -442,7 +501,8 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
 
 // ─── Upload panel — drag/drop + native file picker ──────────────────────────
 
-type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string };
+type UploadStatus = 'validating' | 'uploading' | 'ready' | 'error';
+type PendingUpload = { localId: string; name: string; sizeBytes: number; progress: number; path?: string; file?: File; status: UploadStatus; error?: string };
 
 interface UploadPanelProps {
   pendingUploads: PendingUpload[];
@@ -452,11 +512,9 @@ interface UploadPanelProps {
   mode: 'chat' | 'kh-add';
 }
 
-const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx', '.doc', '.docx'];
 function isAllowedForMode(name: string, mode: 'chat' | 'kh-add'): boolean {
   if (mode === 'chat') return true;
-  const lower = name.toLowerCase();
-  return KH_ALLOWED_EXTS.some(ext => lower.endsWith(ext));
+  return isAllowedKnowledgeFile(name);
 }
 
 // Walk a DataTransferItemList recursively. webkitGetAsEntry is supported in
@@ -469,30 +527,39 @@ type Entry = {
   createReader?: () => { readEntries: (cb: (entries: Entry[]) => void, err?: () => void) => void };
 };
 
-async function walkItems(items: DataTransferItemList, mode: 'chat' | 'kh-add'): Promise<Array<{ file: File; path: string }>> {
+// Accumulates files dropped that were filtered out by type, so the drop path
+// can give the same "N skipped" feedback the file/folder pickers do.
+type WalkAcc = { skipped: number };
+
+async function walkItems(items: DataTransferItemList, mode: 'chat' | 'kh-add'): Promise<{ files: Array<{ file: File; path: string }>; skipped: number }> {
   const out: Array<{ file: File; path: string }> = [];
+  const acc: WalkAcc = { skipped: 0 };
   const walks: Promise<void>[] = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     // webkitGetAsEntry isn't on the standard typings.
     const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => Entry | null }).webkitGetAsEntry?.();
     if (entry) {
-      walks.push(walkEntry(entry, '', out, mode));
+      walks.push(walkEntry(entry, '', out, mode, acc));
     } else {
       const f = item.getAsFile();
-      if (f && isAllowedForMode(f.name, mode)) out.push({ file: f, path: f.name });
+      if (f) {
+        if (isAllowedForMode(f.name, mode)) out.push({ file: f, path: f.name });
+        else acc.skipped++;
+      }
     }
   }
   await Promise.all(walks);
-  return out;
+  return { files: out, skipped: acc.skipped };
 }
 
-function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: string }>, mode: 'chat' | 'kh-add'): Promise<void> {
+function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: string }>, mode: 'chat' | 'kh-add', acc: WalkAcc): Promise<void> {
   if (entry.isFile && entry.file) {
     return new Promise<void>(resolve => {
       entry.file!(
         f => {
           if (isAllowedForMode(f.name, mode)) out.push({ file: f, path: prefix ? `${prefix}/${f.name}` : f.name });
+          else acc.skipped++;
           resolve();
         },
         () => resolve(),
@@ -507,7 +574,7 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
         reader.readEntries(
           async entries => {
             if (entries.length === 0) return resolve();
-            await Promise.all(entries.map(e => walkEntry(e, newPrefix, out, mode)));
+            await Promise.all(entries.map(e => walkEntry(e, newPrefix, out, mode, acc)));
             readBatch(); // readEntries returns batches; keep reading until empty
           },
           () => resolve(),
@@ -520,57 +587,112 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
 }
 
 function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelProps) {
+  const { addToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Add a batch of {file, path} to pending list and start progress simulators.
+  // Track every progress-simulator interval so they can be stopped if the user
+  // closes the modal (or switches away) mid-upload. Without this the timers
+  // leak and keep calling setState after unmount.
+  const intervalsRef = useRef<number[]>([]);
+  useEffect(() => () => { intervalsRef.current.forEach(clearInterval); intervalsRef.current = []; }, []);
+
+  // Wrong-extension files are filtered before they ever queue — tell the user
+  // rather than dropping them silently.
+  const noteSkipped = (n: number) => {
+    if (n > 0 && mode === 'kh-add') {
+      addToast({ type: 'info', message: `${n} file${n > 1 ? 's' : ''} skipped — only PDF, CSV, XLSX are supported.` });
+    }
+  };
+
+  // Validate a queued file, then either flip it to an error row (with a reason)
+  // or run the upload simulation through to "ready". Catches the edge cases a
+  // real ingest must reject: empty, oversized, password-protected, corrupt.
+  const runUpload = async (localId: string, file: File) => {
+    const res = await validateUploadFile(file);
+    if (!res.ok) {
+      setPendingUploads(prev => prev.map(p => p.localId === localId
+        ? { ...p, status: 'error' as const, error: res.reason } : p));
+      return;
+    }
+    setPendingUploads(prev => prev.map(p => p.localId === localId ? { ...p, status: 'uploading' as const } : p));
+    const step = 5 + Math.round(Math.random() * 7); // ~1.5s total
+    const t = window.setInterval(() => {
+      setPendingUploads(prev => {
+        const current = prev.find(p => p.localId === localId);
+        // Row was removed (user clicked Cancel mid-upload) — stop the timer so
+        // it doesn't fire setState forever.
+        if (!current) {
+          clearInterval(t);
+          intervalsRef.current = intervalsRef.current.filter(id => id !== t);
+          return prev;
+        }
+        const next = prev.map(p => p.localId === localId
+          ? { ...p, progress: Math.min(100, p.progress + step) } : p);
+        const updated = next.find(p => p.localId === localId)!;
+        if (updated.progress >= 100) {
+          clearInterval(t);
+          intervalsRef.current = intervalsRef.current.filter(id => id !== t);
+          return next.map(p => p.localId === localId ? { ...p, status: 'ready' as const } : p);
+        }
+        return next;
+      });
+    }, 100);
+    intervalsRef.current.push(t);
+  };
+
+  // Add a batch of {file, path}. Dedupes against what's already queued AND
+  // within the batch itself (a dropped folder can contain repeats). Keyed by
+  // path+size, not name+size, so two same-named files in different folders are
+  // both kept. Then validates + uploads each fresh file.
   const addFiles = (batch: Array<{ file: File; path: string }>) => {
     if (batch.length === 0) return;
+    const seen = new Set(pendingUploads.map(p => `${p.path ?? p.name}:${p.sizeBytes}`));
+    const fresh = batch.filter(b => {
+      const key = `${b.path}:${b.file.size}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const dupes = batch.length - fresh.length;
+    if (dupes > 0) addToast({ type: 'info', message: `${dupes} duplicate file${dupes > 1 ? 's' : ''} skipped.` });
+    if (fresh.length === 0) return;
+
     const ts = Date.now();
-    const incoming: PendingUpload[] = batch.map((b, i) => ({
+    const incoming: PendingUpload[] = fresh.map((b, i) => ({
       localId: `up-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
       name: b.file.name,
       sizeBytes: b.file.size,
       progress: 0,
       path: b.path !== b.file.name ? b.path : undefined,
+      file: b.file,
+      status: 'validating',
     }));
 
     setPendingUploads(prev => [...incoming, ...prev]);
-    incoming.forEach(uf => {
-      const step = 5 + Math.round(Math.random() * 7); // ~1.5s total
-      const t = setInterval(() => {
-        setPendingUploads(prev => {
-          const next = prev.map(p => p.localId === uf.localId
-            ? { ...p, progress: Math.min(100, p.progress + step) }
-            : p);
-          const updated = next.find(p => p.localId === uf.localId);
-          if (updated && updated.progress >= 100) clearInterval(t);
-          return next;
-        });
-      }, 100);
-    });
+    incoming.forEach((uf, i) => { void runUpload(uf.localId, fresh[i].file); });
   };
 
   // File-input handler — flat list of files, no folder structure.
   const handleFileInput = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const batch = Array.from(fileList)
-      .filter(f => isAllowedForMode(f.name, mode))
-      .map(f => ({ file: f, path: f.name }));
-    addFiles(batch);
+    const all = Array.from(fileList);
+    const accepted = all.filter(f => isAllowedForMode(f.name, mode));
+    noteSkipped(all.length - accepted.length);
+    addFiles(accepted.map(f => ({ file: f, path: f.name })));
   };
 
   // Folder-input handler — files have webkitRelativePath set to "Folder/sub/file.ext".
   const handleFolderInput = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const batch = Array.from(fileList)
-      .filter(f => isAllowedForMode(f.name, mode))
-      .map(f => {
-        const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
-        return { file: f, path: rel || f.name };
-      });
-    addFiles(batch);
+    const all = Array.from(fileList);
+    const accepted = all.filter(f => isAllowedForMode(f.name, mode));
+    noteSkipped(all.length - accepted.length);
+    addFiles(accepted.map(f => {
+      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
+      return { file: f, path: rel || f.name };
+    }));
   };
 
   // Drop handler — uses entry walker so dropped folders work.
@@ -578,8 +700,9 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      const batch = await walkItems(e.dataTransfer.items, mode);
-      addFiles(batch);
+      const { files, skipped } = await walkItems(e.dataTransfer.items, mode);
+      noteSkipped(skipped);
+      addFiles(files);
     } else if (e.dataTransfer.files) {
       handleFileInput(e.dataTransfer.files);
     }
@@ -601,13 +724,13 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         }`}
       >
         <Upload size={28} className={`mx-auto mb-3 ${isDragging ? 'text-primary' : 'text-text-muted/60'}`} />
-        <p className="text-[14px] text-text-secondary font-medium">Drop files or a folder here</p>
-        <p className="text-[12px] text-text-muted mt-1">or pick from your computer</p>
+        <p className="text-[0.875rem] text-text-secondary font-medium">Drop files or a folder here</p>
+        <p className="text-[0.75rem] text-text-muted mt-1">or pick from your computer</p>
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          {...(mode === 'kh-add' ? { accept: '.pdf,.csv,.xlsx,.doc,.docx' } : {})}
+          {...(mode === 'kh-add' ? { accept: '.pdf,.csv,.xlsx' } : {})}
           className="hidden"
           onChange={(e) => { handleFileInput(e.target.files); e.target.value = ''; }}
         />
@@ -622,21 +745,21 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         <div className="inline-flex items-center gap-2 mt-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover active:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Upload size={13} />
             Choose files
           </button>
           <button
             onClick={() => folderInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-paper-300 hover:bg-paper-50 text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
           >
             <Folder size={13} />
             Choose folder
           </button>
         </div>
         {mode === 'kh-add' && (
-          <p className="text-[11px] text-ink-400 mt-3">PDF · CSV · XLSX · DOC</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-3">PDF · CSV · XLSX</p>
         )}
       </div>
 
@@ -646,15 +769,26 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
       {pendingUploads.length > 0 && (
         <div className="rounded-xl border border-border-light bg-white overflow-hidden">
           <div className="px-4 py-2 border-b border-border-light bg-surface-2/60 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">
               Uploads · {pendingUploads.length}
             </span>
-            {pendingUploads.some(u => u.progress < 100) && (
-              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-primary">
-                <Loader2 size={10} className="animate-spin" />
-                Uploading {pendingUploads.filter(u => u.progress < 100).length}…
-              </span>
-            )}
+            {(() => {
+              const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+              const failed = pendingUploads.filter(u => u.status === 'error').length;
+              if (inFlight > 0) return (
+                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-primary">
+                  <Loader2 size={10} className="animate-spin" />
+                  Uploading {inFlight}…
+                </span>
+              );
+              if (failed > 0) return (
+                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk">
+                  <AlertTriangle size={10} />
+                  {failed} failed
+                </span>
+              );
+              return null;
+            })()}
           </div>
 
           <ul className="divide-y divide-border-light">
@@ -747,7 +881,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
       <div className="flex-1 px-6 py-4 space-y-4">
         {/* Engine grid — selected uses brand-50 bg + brand-600 border per DESIGN.md selected state. */}
         <section>
-          <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-ink-500 mb-2">Engine</div>
+          <div className="text-[0.6875rem] font-medium uppercase tracking-[0.06em] text-ink-500 mb-2">Engine</div>
           <div className="grid grid-cols-3 gap-2">
             {DB_TYPES.map(t => {
               const selected = dbType?.id === t.id;
@@ -760,7 +894,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
                   className={`flex items-center gap-2.5 px-3 h-10 rounded-lg border text-left transition-colors cursor-pointer ${
                     selected
                       ? 'border-brand-600 bg-brand-50'
-                      : 'border-paper-200 bg-paper-0 hover:border-paper-300 hover:bg-paper-50'
+                      : 'border-paper-200 bg-paper-0 hover:border-brand-300 hover:bg-brand-50'
                   }`}
                 >
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
@@ -768,7 +902,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
                   }`}>
                     <Database size={12} />
                   </div>
-                  <div className={`text-[12.5px] font-semibold truncate ${selected ? 'text-brand-700' : 'text-ink-800'}`}>
+                  <div className={`text-[0.75rem] font-semibold truncate ${selected ? 'text-brand-700' : 'text-ink-800'}`}>
                     {t.label}
                   </div>
                 </button>
@@ -805,37 +939,37 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
               type="button"
               onClick={runTest}
               disabled={!requiredFilled || testStatus === 'testing'}
-              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[12.5px] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:bg-paper-100 disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-brand-300 hover:bg-brand-50 disabled:bg-canvas disabled:text-ink-400 disabled:border-paper-200 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               {testStatus === 'testing' && <Loader2 size={12} className="animate-spin" />}
               {testStatus === 'testing' ? 'Testing…' : 'Test connection'}
             </button>
             {testStatus === 'ok' && (
-              <span className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-semibold bg-compliant-50 text-compliant-700">
+              <span className="inline-flex items-center h-6 px-2 rounded-full text-[0.75rem] font-semibold bg-compliant-50 text-compliant-700">
                 Connection successful
               </span>
             )}
             {testStatus === 'fail' && (
-              <span className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-semibold bg-risk-50 text-risk-700">
+              <span className="inline-flex items-center h-6 px-2 rounded-full text-[0.75rem] font-semibold bg-risk-50 text-risk-700">
                 Could not connect
               </span>
             )}
             {testStatus === 'idle' && (
-              <span className="text-[11.5px] text-ink-500">
+              <span className="text-[0.75rem] text-ink-500">
                 {requiredFilled ? 'Test before connecting.' : !dbType ? 'Pick an engine to begin.' : 'Fill the required fields.'}
               </span>
             )}
         </div>
       </div>
 
-      {/* Footer — paper-50 strip, helper on left, action group on right. */}
-      <div className="border-t border-paper-200 px-6 py-3 flex items-center justify-between bg-paper-50">
-        <span className="text-[11.5px] text-ink-500">Credentials are stored encrypted.</span>
+      {/* Footer — cool canvas strip, helper on left, action group on right. */}
+      <div className="border-t border-paper-200 px-6 py-3 flex items-center justify-between bg-canvas">
+        <span className="text-[0.75rem] text-ink-500">Credentials are stored encrypted.</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[12.5px] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 transition-colors cursor-pointer"
+            className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-brand-300 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -843,7 +977,7 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
             type="button"
             onClick={submit}
             disabled={!canConnect}
-            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold disabled:bg-brand-600/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold disabled:bg-brand-600/40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             {connecting && <Loader2 size={13} className="animate-spin" />}
             {connecting ? 'Connecting…' : 'Connect'}
@@ -855,14 +989,14 @@ function ConnectDbPanel({ onCancel, onConnect }: ConnectDbPanelProps) {
 }
 
 const inputCls =
-  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 disabled:bg-paper-100 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
+  'w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 disabled:bg-canvas disabled:text-ink-400 disabled:cursor-not-allowed transition-colors';
 
 function Field({
   label, required, full, children,
 }: { label: string; required?: boolean; full?: boolean; children: React.ReactNode }) {
   return (
     <label className={`flex flex-col gap-1.5 ${full ? 'col-span-2' : ''}`}>
-      <span className="text-[12px] font-medium text-ink-700">
+      <span className="text-[0.75rem] font-medium text-ink-700">
         {label}{required && <span className="text-risk ml-0.5" aria-hidden>*</span>}
       </span>
       {children}
@@ -878,42 +1012,57 @@ function Field({
 function PendingFileRow({
   upload, onRemove, indent,
 }: { upload: PendingUpload; onRemove: (id: string) => void; indent: boolean }) {
-  const isDone = upload.progress >= 100;
+  const isReady = upload.status === 'ready';
+  const isError = upload.status === 'error';
+  const isValidating = upload.status === 'validating';
+  const isUploading = upload.status === 'uploading';
+  const isPasswordErr = isError && /password|unlock/i.test(upload.error ?? '');
   // Path tag = the directory portion of the path (everything except the
   // file name itself). Empty when file is loose.
   const pathTag = upload.path && upload.path !== upload.name
     ? upload.path.replace(`/${upload.name}`, '') || upload.path
     : '';
+  const LeadIcon = isError ? (isPasswordErr ? Lock : AlertTriangle) : (pathTag ? Folder : FileText);
+  const leadTone = isError ? 'text-risk' : isReady ? 'text-primary' : 'text-text-muted/60';
   return (
     <li className={`flex items-center gap-3 py-3 ${indent ? 'pl-10 pr-4' : 'px-4'}`}>
-      {pathTag ? (
-        <Folder size={14} className={`shrink-0 ${isDone ? 'text-primary' : 'text-text-muted/60'}`} />
-      ) : (
-        <FileText size={14} className={`shrink-0 ${isDone ? 'text-primary' : 'text-text-muted/60'}`} />
-      )}
+      <LeadIcon size={14} className={`shrink-0 ${leadTone}`} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <div className="text-[13px] text-text truncate flex-1 min-w-0">
+          <div className={`text-[0.8125rem] truncate flex-1 min-w-0 ${isError ? 'text-text-secondary' : 'text-text'}`}>
             {upload.name}
             {pathTag && (
-              <span className="ml-1.5 text-[11px] text-ink-400 font-normal" title={upload.path}>
+              <span className="ml-1.5 text-[0.6875rem] text-ink-400 font-normal" title={upload.path}>
                 · {pathTag}
               </span>
             )}
           </div>
-          {isDone ? (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold text-compliant bg-compliant-50">
+          {isReady && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-compliant bg-compliant-50">
               <Check size={10} />
               Ready
             </span>
-          ) : (
-            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold text-primary bg-primary-xlight">
+          )}
+          {isError && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-risk bg-risk-50">
+              <AlertTriangle size={10} />
+              Failed
+            </span>
+          )}
+          {isValidating && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
+              <Loader2 size={10} className="animate-spin" />
+              Checking…
+            </span>
+          )}
+          {isUploading && (
+            <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.75rem] font-semibold text-primary bg-primary-xlight">
               <Loader2 size={10} className="animate-spin" />
               {upload.progress}%
             </span>
           )}
         </div>
-        {!isDone && (
+        {isUploading && (
           <div className="mt-1.5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
             <motion.div
               className="h-full bg-primary"
@@ -923,14 +1072,14 @@ function PendingFileRow({
             />
           </div>
         )}
-        <div className={`text-[11px] tabular-nums mt-${isDone ? '0.5' : '1'} text-text-muted`}>
-          {formatBytesShort(upload.sizeBytes)}
+        <div className={`text-[0.6875rem] tabular-nums mt-1 ${isError ? 'text-risk font-medium' : 'text-text-muted'}`}>
+          {isError ? upload.error : formatBytesShort(upload.sizeBytes)}
         </div>
       </div>
       <button
         onClick={() => onRemove(upload.localId)}
         className="p-1.5 text-text-muted hover:text-risk hover:bg-surface-2 rounded-md transition-colors cursor-pointer shrink-0"
-        aria-label={`${isDone ? 'Remove' : 'Cancel'} ${upload.name}`}
+        aria-label={`${isReady || isError ? 'Remove' : 'Cancel'} ${upload.name}`}
       >
         <X size={13} />
       </button>

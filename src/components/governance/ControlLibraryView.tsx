@@ -191,14 +191,14 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
           <div className="flex items-center gap-3">
             <button
               onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
-              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[13px] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
             >
               <Download size={14} />
               Export
             </button>
             <button
               onClick={() => setShowCreateDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} />
               Create Control
@@ -207,7 +207,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
         </div>
 
         {/* Summary line */}
-        <div className="flex items-center gap-6 text-[12px] text-text-muted mb-5">
+        <div className="flex items-center gap-6 text-[0.75rem] text-text-muted mb-5">
           <span><span className="font-semibold text-text">{totalControls}</span> controls</span>
           <span><span className="font-semibold text-text">{keyControls}</span> key</span>
           <span><span className="font-semibold text-text">{automatedControls}</span> automated</span>
@@ -239,7 +239,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               <select
                 value={bpFilter}
                 onChange={e => setBpFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[12px] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
               >
                 <option value="all">All Processes</option>
                 <option value="P2P">P2P</option>
@@ -251,7 +251,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               <select
                 value={classFilter}
                 onChange={e => setClassFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[12px] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
               >
                 <option value="all">All Classifications</option>
                 <option value="Key">Key</option>
@@ -260,7 +260,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               <select
                 value={automationFilter}
                 onChange={e => setAutomationFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[12px] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
               >
                 <option value="all">All Automation</option>
                 <option value="Manual">Manual</option>
@@ -270,7 +270,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               <select
                 value={workflowStatusFilter}
                 onChange={e => setWorkflowStatusFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[12px] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-border bg-white text-[0.75rem] text-text-secondary outline-none focus:border-primary/40 cursor-pointer"
               >
                 <option value="all">All Workflow Status</option>
                 <option value="linked">Workflow Mapped</option>
@@ -279,7 +279,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="px-3 py-1.5 rounded-lg text-[12px] text-primary font-semibold hover:bg-primary-xlight cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-[0.75rem] text-primary font-semibold hover:bg-primary-xlight cursor-pointer transition-colors"
                 >
                   Clear filters
                 </button>
@@ -292,14 +292,14 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               label: 'Control ID',
               width: '90px',
               render: (item) => (
-                <span className="font-mono text-text-muted text-[12px]">{String(item.controlId)}</span>
+                <span className="font-mono text-text-muted text-[0.75rem]">{String(item.controlId)}</span>
               ),
             },
             {
               key: 'name',
               label: 'Control Name',
               render: (item) => (
-                <div className="text-text font-medium text-[12.5px]">{String(item.name)}</div>
+                <div className="text-text font-medium text-[0.75rem]">{String(item.name)}</div>
               ),
             },
             {
@@ -311,7 +311,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 return (
                   <span className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: BP_COLORS[bp] || '#888' }} />
-                    <span className="text-text-secondary text-[12px] font-medium">{bp}</span>
+                    <span className="text-text-secondary text-[0.75rem] font-medium">{bp}</span>
                   </span>
                 );
               },
@@ -325,14 +325,14 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 const ctrl = item as unknown as ControlRow;
                 if (ctrl.classification === 'Key') {
                   return (
-                    <span className="inline-flex items-center gap-1 bg-mitigated-50 text-mitigated-700 px-2 py-0.5 rounded text-[12px] font-semibold">
+                    <span className="inline-flex items-center gap-1 bg-mitigated-50 text-mitigated-700 px-2 py-0.5 rounded text-[0.75rem] font-semibold">
                       <Star size={10} className="fill-mitigated text-mitigated" />
                       Key
                     </span>
                   );
                 }
                 return (
-                  <span className="inline-flex items-center bg-gray-50 text-gray-500 px-2 py-0.5 rounded text-[12px] font-medium">
+                  <span className="inline-flex items-center bg-gray-50 text-gray-500 px-2 py-0.5 rounded text-[0.75rem] font-medium">
                     Non-Key
                   </span>
                 );
@@ -346,7 +346,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 const ctrl = item as unknown as ControlRow;
                 const s = NATURE_STYLES[ctrl.nature];
                 return (
-                  <span className={`inline-flex items-center ${s.bg} ${s.text} px-2.5 py-0.5 rounded text-[12px] font-bold whitespace-nowrap`}>
+                  <span className={`inline-flex items-center ${s.bg} ${s.text} px-2.5 py-0.5 rounded text-[0.75rem] font-bold whitespace-nowrap`}>
                     {ctrl.nature}
                   </span>
                 );
@@ -360,7 +360,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 const ctrl = item as unknown as ControlRow;
                 const s = AUTOMATION_STYLES[ctrl.automation];
                 return (
-                  <span className={`inline-flex items-center ${s.bg} ${s.text} px-2.5 py-0.5 rounded text-[12px] font-bold whitespace-nowrap`}>
+                  <span className={`inline-flex items-center ${s.bg} ${s.text} px-2.5 py-0.5 rounded text-[0.75rem] font-bold whitespace-nowrap`}>
                     {ctrl.automation}
                   </span>
                 );
@@ -374,14 +374,14 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 const ctrl = item as unknown as ControlRow;
                 if (ctrl.linkedWorkflows.length === 0) {
                   return (
-                    <span className="inline-flex items-center gap-1 text-risk-700 text-[12px] font-medium">
+                    <span className="inline-flex items-center gap-1 text-risk-700 text-[0.75rem] font-medium">
                       <AlertTriangle size={11} />
                       None
                     </span>
                   );
                 }
                 return (
-                  <span className="inline-flex items-center gap-1 text-evidence-700 text-[12px] font-medium">
+                  <span className="inline-flex items-center gap-1 text-evidence-700 text-[0.75rem] font-medium">
                     <Link2 size={11} />
                     {ctrl.linkedWorkflows.length} linked
                   </span>
@@ -396,10 +396,10 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
               render: (item) => {
                 const ctrl = item as unknown as ControlRow;
                 if (ctrl.usedInRACMs === 0) {
-                  return <span className="text-[12px] text-text-muted">&mdash;</span>;
+                  return <span className="text-[0.75rem] text-text-muted">&mdash;</span>;
                 }
                 return (
-                  <span className="text-[12px] text-text-secondary font-medium">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
+                  <span className="text-[0.75rem] text-text-secondary font-medium">{ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}</span>
                 );
               },
             },
@@ -411,7 +411,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 const ctrl = item as unknown as ControlRow;
                 const s = STATUS_STYLES[ctrl.status] || STATUS_STYLES['Draft'];
                 return (
-                  <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} px-2.5 py-0.5 rounded-full text-[12px] font-semibold whitespace-nowrap`}>
+                  <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold whitespace-nowrap`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                     {ctrl.status}
                   </span>
@@ -464,7 +464,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
           expandable={(item) => {
             const ctrl = item as unknown as ControlRow;
             return (
-              <div className="flex items-start gap-8 text-[12px]">
+              <div className="flex items-start gap-8 text-[0.75rem]">
                 <div>
                   <span className="font-semibold text-text">Business Process:</span>
                   <span className="text-text-secondary ml-1.5">{ctrl.businessProcess}</span>
@@ -501,8 +501,8 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                 <Sparkles size={14} className="text-primary" />
               </div>
               <div>
-                <h3 className="text-[13px] font-semibold text-text">AI Control Recommendations</h3>
-                <p className="text-[12px] text-text-muted mt-0.5">
+                <h3 className="text-[0.8125rem] font-semibold text-text">AI Control Recommendations</h3>
+                <p className="text-[0.75rem] text-text-muted mt-0.5">
                   {missingWorkflow} control{missingWorkflow !== 1 ? 's' : ''} need workflow linkage. AI can suggest matching workflows from the Workflow Library.
                 </p>
               </div>
@@ -510,7 +510,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             <div className="flex justify-center">
               <button
                 onClick={() => addToast({ message: 'AI is analyzing controls for workflow recommendations...', type: 'info' })}
-                className="flex items-center gap-1.5 text-[12px] text-primary font-semibold hover:underline cursor-pointer"
+                className="flex items-center gap-1.5 text-[0.75rem] text-primary font-semibold hover:underline cursor-pointer"
               >
                 Auto-suggest workflows
                 <ArrowRight size={10} />

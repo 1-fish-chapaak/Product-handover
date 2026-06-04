@@ -382,7 +382,7 @@ function AppInner() {
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
               <Sparkles size={24} className="text-brand-600" />
             </motion.div>
-            <span className="text-[13px] text-ink-500">Loading…</span>
+            <span className="text-[0.8125rem] text-ink-500">Loading…</span>
           </div>
         </div>
       );

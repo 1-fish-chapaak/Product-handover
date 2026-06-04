@@ -46,15 +46,15 @@ export default function PlatformUsageView(): JSX.Element {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <div className="p-2 rounded-lg bg-brand-50 text-brand-700"><TrendingUp size={18} /></div>
-            <h1 className="text-[20px] font-bold text-text">Platform Usage</h1>
-            <span className="text-[10px] text-text-muted font-mono bg-canvas px-1.5 py-0.5 rounded">FY26 · to date</span>
+            <h1 className="text-[1.25rem] font-bold text-text">Platform Usage</h1>
+            <span className="text-[0.625rem] text-text-muted font-mono bg-canvas px-1.5 py-0.5 rounded">FY26 · to date</span>
           </div>
-          <p className="text-[12.5px] text-text-secondary ml-12">Aggregate signal on how much of the platform your org is using. Updated nightly.</p>
+          <p className="text-[0.75rem] text-text-secondary ml-12">Aggregate signal on how much of the platform your org is using. Updated nightly.</p>
         </div>
 
         {/* Hero KPI grid — the five things the user asked for */}
         <section>
-          <h2 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Core usage</h2>
+          <h2 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Core usage</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <BigKpi icon={Workflow}        label="Workflows created"  value={stats.workflows}  tone="bg-brand-50 text-brand-700"            sub="across all processes" />
             <BigKpi icon={MessageSquare}   label="Queries done"       value={stats.queries}    tone="bg-evidence-50 text-evidence-700"      sub="from Ask IRA + history" />
@@ -66,7 +66,7 @@ export default function PlatformUsageView(): JSX.Element {
 
         {/* Secondary breakdown — context the user might want next */}
         <section>
-          <h2 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Around the edges</h2>
+          <h2 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Around the edges</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <SmallKpi icon={Database}  label="Business processes" value={stats.processes} />
             <SmallKpi icon={Calendar}  label="Engagements"        value={stats.engagements} />
@@ -77,7 +77,7 @@ export default function PlatformUsageView(): JSX.Element {
 
         {/* Activity rhythm — gentle sparkline strip so the page feels alive */}
         <section>
-          <h2 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Activity over the last 8 weeks</h2>
+          <h2 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Activity over the last 8 weeks</h2>
           <div className="rounded-2xl border border-canvas-border bg-white p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               <ActivityBar label="Workflow runs"  values={[4, 6, 9, 12, 8, 15, 11, 18]} accent="bg-brand-500" />
@@ -89,7 +89,7 @@ export default function PlatformUsageView(): JSX.Element {
         </section>
 
         {/* Note */}
-        <p className="text-[11px] text-text-muted">
+        <p className="text-[0.6875rem] text-text-muted">
           <Activity size={10} className="inline mr-1" />
           Numbers shown reflect seed data in this prototype. In production this view subscribes to the platform-events stream.
         </p>
@@ -109,9 +109,9 @@ function BigKpi({ icon: Icon, label, value, sub, tone }: {
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${tone}`}>
         <Icon size={16} />
       </div>
-      <div className="text-[28px] font-bold text-text tabular-nums leading-none mt-1">{value}</div>
-      <div className="text-[12px] font-semibold text-text">{label}</div>
-      <div className="text-[10.5px] text-text-muted">{sub}</div>
+      <div className="text-[1.75rem] font-bold text-text tabular-nums leading-none mt-1">{value}</div>
+      <div className="text-[0.75rem] font-semibold text-text">{label}</div>
+      <div className="text-[0.75rem] text-text-muted">{sub}</div>
     </motion.div>
   );
 }
@@ -123,9 +123,9 @@ function SmallKpi({ icon: Icon, label, value }: {
     <div className="rounded-xl border border-canvas-border bg-white px-4 py-3.5">
       <div className="flex items-center gap-2 mb-1">
         <Icon size={11} className="text-text-muted" />
-        <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{label}</span>
+        <span className="text-[0.625rem] uppercase tracking-wider font-bold text-text-muted">{label}</span>
       </div>
-      <div className="text-[18px] font-bold text-text tabular-nums">{value}</div>
+      <div className="text-[1.125rem] font-bold text-text tabular-nums">{value}</div>
     </div>
   );
 }
@@ -136,10 +136,10 @@ function ActivityBar({ label, values, accent }: { label: string; values: number[
   const delta = values.length >= 2 ? values[values.length - 1]! - values[values.length - 2]! : 0;
   return (
     <div className="space-y-1.5">
-      <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">{label}</div>
       <div className="flex items-baseline gap-2">
-        <span className="text-[18px] font-bold text-text tabular-nums leading-none">{total}</span>
-        <span className={`text-[10px] tabular-nums font-semibold ${delta >= 0 ? 'text-compliant-700' : 'text-risk-700'}`}>
+        <span className="text-[1.125rem] font-bold text-text tabular-nums leading-none">{total}</span>
+        <span className={`text-[0.625rem] tabular-nums font-semibold ${delta >= 0 ? 'text-compliant-700' : 'text-risk-700'}`}>
           {delta >= 0 ? '+' : ''}{delta} wk/wk
         </span>
       </div>

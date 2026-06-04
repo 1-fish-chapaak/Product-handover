@@ -51,9 +51,9 @@ export default function PatternPlaceholderTab({ tabId, tabLabel, patternType }: 
       <div className="p-3 rounded-xl bg-surface-2/40 mb-4">
         <Construction size={24} className="text-gray-300" />
       </div>
-      <h4 className="text-[14px] font-semibold text-text mb-2">{tabLabel}</h4>
-      <p className="text-[12px] text-text-muted leading-relaxed mb-4">{description}</p>
-      <span className="px-3 py-1 rounded-full bg-gray-100 text-[10px] text-gray-400 font-medium">
+      <h4 className="text-[0.875rem] font-semibold text-text mb-2">{tabLabel}</h4>
+      <p className="text-[0.75rem] text-text-muted leading-relaxed mb-4">{description}</p>
+      <span className="px-3 py-1 rounded-full bg-gray-100 text-[0.625rem] text-gray-400 font-medium">
         Coming in a future build step
       </span>
     </div>

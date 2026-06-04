@@ -129,7 +129,7 @@ export default function ConditionalFormattingSection({
           <div className="size-[18px] rounded-[4px] flex items-center justify-center">
             <Palette className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
-          <span className="text-[12px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Conditional Formatting</span>
+          <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Conditional Formatting</span>
         </div>
         <ChevronDown
           className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -144,8 +144,8 @@ export default function ConditionalFormattingSection({
           {/* Rules Section */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <label className="text-[12px] font-semibold text-[#26064a]">Rules</label>
-              <span className="text-[10px] text-[#64748b] font-medium">{rules.length} active</span>
+              <label className="text-[0.75rem] font-semibold text-[#26064a]">Rules</label>
+              <span className="text-[0.625rem] text-[#64748b] font-medium">{rules.length} active</span>
             </div>
             <div className="space-y-2">
               {rules.map((rule, index) => {
@@ -156,7 +156,7 @@ export default function ConditionalFormattingSection({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         
-                        <span className="text-[12px] font-semibold text-[#26064a]">
+                        <span className="text-[0.75rem] font-semibold text-[#26064a]">
                           Rule {index + 1}
                         </span>
                       </div>
@@ -172,7 +172,7 @@ export default function ConditionalFormattingSection({
 
                     {/* Evaluate Field for this rule */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-[12px] font-semibold text-[#26064a]">Evaluate Field</label>
+                      <label className="text-[0.75rem] font-semibold text-[#26064a]">Evaluate Field</label>
                       <CustomDropdown
                         value={rule.evaluateField}
                         onChange={(value) => updateRule(rule.id, "evaluateField", value)}
@@ -183,7 +183,7 @@ export default function ConditionalFormattingSection({
 
                     {/* Condition */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-[12px] font-semibold text-[#26064a]">Condition</label>
+                      <label className="text-[0.75rem] font-semibold text-[#26064a]">Condition</label>
                       <WhiteDropdown
                         value={rule.condition}
                         onChange={(value) => updateRule(rule.id, "condition", value)}
@@ -199,29 +199,29 @@ export default function ConditionalFormattingSection({
                         {/* Two value fields in one row */}
                         <div className="grid grid-cols-2 gap-2">
                           <div className="flex flex-col gap-1">
-                            <label className="text-[12px] font-semibold text-[#26064a]">From</label>
+                            <label className="text-[0.75rem] font-semibold text-[#26064a]">From</label>
                             <input
                               type="text"
                               value={rule.value}
                               onChange={(e) => updateRule(rule.id, "value", e.target.value)}
                               placeholder="Min value"
-                              className="w-full px-2.5 py-2 text-[12px] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                             />
                           </div>
                           <div className="flex flex-col gap-1">
-                            <label className="text-[12px] font-semibold text-[#26064a]">To</label>
+                            <label className="text-[0.75rem] font-semibold text-[#26064a]">To</label>
                             <input
                               type="text"
                               value={rule.value2 || ""}
                               onChange={(e) => updateRule(rule.id, "value2", e.target.value)}
                               placeholder="Max value"
-                              className="w-full px-2.5 py-2 text-[12px] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                              className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                             />
                           </div>
                         </div>
                         {/* Color field in second row */}
                         <div className="flex flex-col gap-1">
-                          <label className="text-[12px] font-semibold text-[#26064a]">Color</label>
+                          <label className="text-[0.75rem] font-semibold text-[#26064a]">Color</label>
                           <WhiteDropdown
                             value={rule.color}
                             onChange={(value) => updateRule(rule.id, "color", value)}
@@ -235,17 +235,17 @@ export default function ConditionalFormattingSection({
                       // Default layout: Value and Color side by side
                       <div className="grid grid-cols-2 gap-2">
                         <div className="flex flex-col gap-1">
-                          <label className="text-[12px] font-semibold text-[#26064a]">Value</label>
+                          <label className="text-[0.75rem] font-semibold text-[#26064a]">Value</label>
                           <input
                             type="text"
                             value={rule.value}
                             onChange={(e) => updateRule(rule.id, "value", e.target.value)}
                             placeholder="Enter value"
-                            className="w-full px-2.5 py-2 text-[12px] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-2.5 py-2 text-[0.75rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] placeholder:text-[#cbd5e1] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="text-[12px] font-semibold text-[#26064a]">Color</label>
+                          <label className="text-[0.75rem] font-semibold text-[#26064a]">Color</label>
                           <WhiteDropdown
                             value={rule.color}
                             onChange={(value) => updateRule(rule.id, "color", value)}
@@ -265,7 +265,7 @@ export default function ConditionalFormattingSection({
           {/* Add Condition Button */}
           <button
             onClick={addRule}
-            className="relative w-full py-2.5 rounded-[8px] bg-white border border-[#6a12cd] border-dashed text-[#6a12cd] text-[12px] font-semibold flex items-center justify-center gap-2 hover:bg-[#faf5ff] active:bg-[#f5f0ff] transition-all shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[0px] py-[10px]"
+            className="relative w-full py-2.5 rounded-[8px] bg-white border border-[#6a12cd] border-dashed text-[#6a12cd] text-[0.75rem] font-semibold flex items-center justify-center gap-2 hover:bg-[#faf5ff] active:bg-[#f5f0ff] transition-all shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[0px] py-[10px]"
           >
             <Plus className="size-[14px]" strokeWidth={2.5} />
             Add Condition

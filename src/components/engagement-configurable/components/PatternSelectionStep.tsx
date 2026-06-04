@@ -68,11 +68,11 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
     <div className="space-y-6">
       {/* ── Page header ── */}
       <div>
-        <h2 className="text-[20px] font-bold text-text tracking-tight">Engagement Library</h2>
-        <p className="text-[13px] text-text-muted mt-1 leading-relaxed max-w-2xl">
+        <h2 className="text-[1.25rem] font-bold text-text tracking-tight">Engagement Library</h2>
+        <p className="text-[0.8125rem] text-text-muted mt-1 leading-relaxed max-w-2xl">
           Choose the right engagement pattern for control testing, internal audit assignments, or workflow-driven automation projects.
         </p>
-        <div className="flex items-start gap-2 mt-3 px-3 py-2 rounded-lg bg-blue-50/60 border border-blue-100 text-[11px] text-blue-600 max-w-2xl">
+        <div className="flex items-start gap-2 mt-3 px-3 py-2 rounded-lg bg-blue-50/60 border border-blue-100 text-[0.6875rem] text-blue-600 max-w-2xl">
           <Lightbulb size={13} className="shrink-0 mt-0.5" />
           <span>Each engagement pattern comes with its own workflow, tabs, review steps, and reporting structure.</span>
         </div>
@@ -88,8 +88,8 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
           <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border-light bg-white px-4 py-3">
             <s.icon size={16} className={s.color} />
             <div>
-              <div className={`text-[12px] font-semibold ${s.color}`}>{s.label}</div>
-              <div className="text-[10px] text-gray-400">{s.sub}</div>
+              <div className={`text-[0.75rem] font-semibold ${s.color}`}>{s.label}</div>
+              <div className="text-[0.625rem] text-gray-400">{s.sub}</div>
             </div>
           </div>
         ))}
@@ -115,21 +115,21 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <h3 className="text-[15px] font-bold text-text">{pattern.label}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${meta.accentBg} ${meta.accent}`}>
+                      <h3 className="text-[0.9375rem] font-bold text-text">{pattern.label}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${meta.accentBg} ${meta.accent}`}>
                         {pattern.displayLabel}
                       </span>
                     </div>
-                    <p className="text-[12px] text-text-muted leading-relaxed">{meta.purpose}</p>
+                    <p className="text-[0.75rem] text-text-muted leading-relaxed">{meta.purpose}</p>
                   </div>
                 </div>
 
                 {/* Best for */}
                 <div className="mb-3">
-                  <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Best for</div>
+                  <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Best for</div>
                   <div className="flex flex-wrap gap-1.5">
                     {meta.bestFor.map(item => (
-                      <span key={item} className="px-2 py-0.5 rounded-full bg-surface-2/50 border border-border-light/50 text-[10px] text-text-muted font-medium">
+                      <span key={item} className="px-2 py-0.5 rounded-full bg-surface-2/50 border border-border-light/50 text-[0.625rem] text-text-muted font-medium">
                         {item}
                       </span>
                     ))}
@@ -138,11 +138,11 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
 
                 {/* Flow chips */}
                 <div className="mb-4">
-                  <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Workflow</div>
+                  <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Workflow</div>
                   <div className="flex flex-wrap items-center gap-1">
                     {pattern.workspaceTabs.map((tab, i) => (
                       <React.Fragment key={tab.id}>
-                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-semibold ${meta.accentBg} ${meta.accent}`}>
+                        <span className={`px-2 py-0.5 rounded-md text-[0.5625rem] font-semibold ${meta.accentBg} ${meta.accent}`}>
                           {tab.label}
                         </span>
                         {i < pattern.workspaceTabs.length - 1 && (
@@ -156,7 +156,7 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
                 {/* CTA */}
                 <button
                   onClick={() => onSelect(pattern.id)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold text-white cursor-pointer transition-all ${
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[0.75rem] font-semibold text-white cursor-pointer transition-all ${
                     pattern.id === EPT.COMPLIANCE_CONTROL_TESTING ? 'bg-primary hover:bg-primary/90' :
                     pattern.id === EPT.INTERNAL_AUDIT_ASSIGNMENT ? 'bg-purple-600 hover:bg-purple-700' :
                     'bg-emerald-600 hover:bg-emerald-700'
@@ -173,13 +173,13 @@ export default function PatternSelectionStep({ selectedPattern, onSelect }: Prop
 
       {/* ── Which one should I choose? ── */}
       <div className="rounded-xl border border-border-light bg-white p-5">
-        <h4 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2">
+        <h4 className="text-[0.8125rem] font-bold text-text mb-3 flex items-center gap-2">
           <Lightbulb size={14} className="text-amber-500" />
           Which one should I choose?
         </h4>
         <div className="space-y-2">
           {RECOMMENDATIONS.map(rec => (
-            <div key={rec.pattern} className="flex items-start gap-2 text-[12px] text-text-secondary leading-relaxed">
+            <div key={rec.pattern} className="flex items-start gap-2 text-[0.75rem] text-text-secondary leading-relaxed">
               <span className="text-primary mt-0.5 shrink-0 font-bold">&#8226;</span>
               <span>
                 Choose <span className="font-semibold text-text">{rec.pattern}</span> when {rec.when}

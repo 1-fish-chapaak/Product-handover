@@ -33,7 +33,7 @@ export default function StepWritePrompt({
         className="text-center pt-12 pb-6"
       >
         <h1
-          className="text-[56px] leading-[1.05] font-extrabold"
+          className="text-[3.5rem] leading-[1.05] font-extrabold"
           style={{ fontFamily: 'var(--font-display)' }}
         >
           <span className="text-ink-900">Audit smarter. </span>
@@ -41,7 +41,7 @@ export default function StepWritePrompt({
             Not harder.
           </span>
         </h1>
-        <p className="mt-3 text-[14px] text-ink-500">
+        <p className="mt-3 text-[0.875rem] text-ink-500">
           Your AI copilot already knows what to look for. Just ask.
         </p>
       </motion.div>
@@ -59,7 +59,7 @@ export default function StepWritePrompt({
             onChange={(e) => setPrompt(e.target.value)}
             rows={3}
             placeholder="Describe a workflow and let Auditify do the rest…"
-            className="no-focus-ring w-full bg-transparent resize-none text-[14px] text-ink-800 placeholder:text-ink-400 focus:outline-none leading-relaxed"
+            className="no-focus-ring w-full bg-transparent resize-none text-[0.875rem] text-ink-800 placeholder:text-ink-400 focus:outline-none leading-relaxed"
           />
           <div className="flex items-center justify-between pt-3 border-t border-canvas-border">
             <div className="flex items-center gap-1.5">
@@ -71,7 +71,7 @@ export default function StepWritePrompt({
               >
                 <Plus size={16} />
                 {attachmentCount > 0 && (
-                  <span className="text-[11.5px] font-semibold text-brand-700">
+                  <span className="text-[0.75rem] font-semibold text-brand-700">
                     {attachmentCount} attached
                   </span>
                 )}
@@ -82,7 +82,7 @@ export default function StepWritePrompt({
               disabled={!hasPrompt}
               onClick={onGenerate}
               className={[
-                'inline-flex items-center gap-1.5 rounded-lg text-[13px] font-semibold px-4 py-2 transition-colors',
+                'inline-flex items-center gap-1.5 rounded-lg text-[0.8125rem] font-semibold px-4 py-2 transition-colors',
                 hasPrompt
                   ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer'
                   : 'bg-brand-100 text-brand-300 cursor-not-allowed',
@@ -104,12 +104,12 @@ export default function StepWritePrompt({
       >
         <div className="flex items-start justify-between mb-3">
           <div>
-            <h2 className="text-[14px] font-semibold text-ink-800">
+            <h2 className="text-[0.875rem] font-semibold text-ink-800">
               Recent Workflows
             </h2>
-            <p className="text-[12px] text-ink-400 mt-0.5">Pick up where you left off</p>
+            <p className="text-[0.75rem] text-ink-400 mt-0.5">Pick up where you left off</p>
           </div>
-          <span className="text-[12px] text-ink-400 font-semibold">
+          <span className="text-[0.75rem] text-ink-400 font-semibold">
             {totalWorkflows} workflows
           </span>
         </div>
@@ -127,15 +127,15 @@ export default function StepWritePrompt({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[13px] font-semibold text-ink-800 truncate">
+                    <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                       {w.name}
                     </span>
-                    <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
+                    <span className="text-[0.75rem] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
                       Template
                     </span>
                   </div>
-                  <p className="text-[12px] text-ink-500 truncate">{w.description}</p>
-                  <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
+                  <p className="text-[0.75rem] text-ink-500 truncate">{w.description}</p>
+                  <div className="flex items-center gap-3 text-[0.75rem] text-ink-400 mt-1">
                     <span className="inline-flex items-center gap-1">
                       <FileText size={11} />
                       {w.inputs.length} inputs
@@ -150,11 +150,11 @@ export default function StepWritePrompt({
                   className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 px-3 py-1.5">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-600 px-3 py-1.5">
                     <Settings2 size={12} />
                     Configure
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold px-3 py-1.5">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold px-3 py-1.5">
                     <Play size={12} />
                     Run
                   </span>
@@ -171,18 +171,18 @@ export default function StepWritePrompt({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[13px] font-semibold text-ink-800 truncate">
+                    <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">
                       {w.name}
                     </span>
-                    <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
+                    <span className="text-[0.75rem] font-semibold rounded-full px-1.5 py-0.5 bg-compliant-50 text-compliant-700">
                       {w.status === 'active' ? 'Active' : 'Draft'}
                     </span>
-                    <span className="text-[12px] font-semibold rounded-full px-1.5 py-0.5 bg-brand-50 text-brand-700">
+                    <span className="text-[0.75rem] font-semibold rounded-full px-1.5 py-0.5 bg-brand-50 text-brand-700">
                       {w.type}
                     </span>
                   </div>
-                  <p className="text-[12px] text-ink-500 truncate">{w.desc}</p>
-                  <div className="flex items-center gap-3 text-[12px] text-ink-400 mt-1">
+                  <p className="text-[0.75rem] text-ink-500 truncate">{w.desc}</p>
+                  <div className="flex items-center gap-3 text-[0.75rem] text-ink-400 mt-1">
                     <span className="inline-flex items-center gap-1">
                       <Clock size={11} />
                       Last run {w.lastRun}
@@ -200,14 +200,14 @@ export default function StepWritePrompt({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas text-[12px] font-semibold text-ink-600 px-3 py-1.5 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas text-[0.75rem] font-semibold text-ink-600 px-3 py-1.5 transition-colors cursor-pointer"
                   >
                     <Settings2 size={12} />
                     Configure
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
                   >
                     <Play size={12} />
                     Run
