@@ -19,6 +19,19 @@ import ColumnFilter from '../shared/ColumnFilter';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
+// RACMs surfaced in the P2P RACM tab so the list mirrors the "RACM Ready" SOPs in
+// the SOP section — each shares its source SOP's name (sop-102/104/105). Injected
+// through the RacmListTable `extraRacms` prop (NOT the global RACM_SEED_DATA), so
+// Audit Planning and every other RACM consumer stay untouched. Badge state is a
+// deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
+// while Testing RACM is mapped but still Workflow Missing.
+const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
+  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
+  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+];
+const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
+
 interface Props {
   selectedBPId: string | null;
   onSelectBP: (id: string | null) => void;
@@ -1347,7 +1360,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       uploadedBy: s.by, uploadedAt: s.at,
       status: (s.racmId ? 'Linked' : idx % 3 === 0 ? 'Processed' : 'Draft') as SOPStatus,
       progress: s.racmId ? 100 : 0, processingStep: s.racmId ? 6 : 0,
-      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null, failureReason: null,
+      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null,
+      failureReason: s.status === 'failed' ? 'RACM generation timed out — no progress for over 15 minutes. Please re-upload the SOP to retry.' : null,
       extractedRisks: s.racmId ? [] : buildMockExtractions().risks,
       extractedControls: s.racmId ? [] : buildMockExtractions().controls,
     }))
@@ -1367,6 +1381,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Inline SOP rename — the pencil action puts a card's title into edit mode.
+  const [editingSopNameId, setEditingSopNameId] = useState<string | null>(null);
+  const [editingSopName, setEditingSopName] = useState('');
+  const saveSopName = (id: string) => {
+    const name = editingSopName.trim();
+    const current = localSops.find(s => s.id === id);
+    if (name && current && name !== current.name) {
+      setLocalSops(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+      addToast({ message: `SOP renamed to "${name}".`, type: 'success' });
+    }
+    setEditingSopNameId(null);
+  };
 
   // URL sync — ?sop=sop-001
   useEffect(() => {
@@ -1716,7 +1742,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border text-[11px] font-medium cursor-pointer transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border text-[12px] font-medium cursor-pointer transition-colors ${
             hasFilter
               ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
               : 'border-border bg-white text-ink-700 hover:bg-paper-50'
@@ -1759,7 +1785,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
                     >
                       <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
-                        {checked && <CheckCircle2 size={9} className="text-white" strokeWidth={3} />}
+                        {checked && <Check size={9} className="text-white" strokeWidth={3} />}
                       </span>
                       <span className="truncate">{opt}</span>
                     </button>
@@ -1802,8 +1828,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </div>
       ) : (
         <>
-          {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT. */}
-          <div className="flex items-center justify-between gap-3 px-6 py-3">
+          {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT.
+              -mt-4 cancels the shared header's mb-4 so the header→search gap is exactly
+              py-5 (20px); pb-5 keeps the search→list gap at 20px too. */}
+          <div className="flex items-center justify-between gap-3 py-5 -mt-4">
             <div className="relative shrink-0">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
@@ -1825,7 +1853,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               )}
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
-              <FilterCTA label="Uploader" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              <button
+                type="button"
+                onClick={() => setShowUploadDrawer(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />Create new SOP
+              </button>
             </div>
           </div>
 
@@ -1855,8 +1889,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
             </div>
           )}
 
-          {/* Card stack */}
-          <div className="border-t border-border-light min-h-[calc(100vh-280px)] px-6 py-4 space-y-2">
+          {/* SOP cards */}
+          <div className="min-h-[calc(100vh-280px)] pb-4 space-y-2">
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
@@ -1888,13 +1922,27 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               </div>
             ) : (
               sortedSops.map((sop, i) => {
-                const isProcessing = sop.status === 'Processing';
-                const isChecked = selectedIds.includes(sop.id);
-                const extractedRiskCount = sop.extractedRisks?.length ?? 0;
-                const extractedControlCount = sop.extractedControls?.length ?? 0;
-                const hasExtraction = extractedRiskCount > 0 || extractedControlCount > 0;
-                const fileType = getFileType(sop);
-                const currentStep = PROCESSING_STEPS[sop.processingStep] ?? PROCESSING_STEPS[0];
+                // Status shown to match the SOP-section screenshot:
+                //   failed generation → "Generation Failed" (red)
+                //   SOP with a RACM   → "RACM Ready" (green)
+                const statusLabel = sop.failureReason ? 'Generation Failed' : sop.racmId ? 'RACM Ready' : sop.status;
+                const statusCls = sop.failureReason
+                  ? 'bg-risk-50 text-risk-700'
+                  : sop.racmId
+                    ? 'bg-compliant-50 text-compliant-700'
+                    : SOP_STATUS_STYLES[sop.status];
+                // RACM Ready = has a RACM and generation didn't fail. Only these
+                // open their RACM on card-body click; everything else is inert.
+                const isRacmReady = !sop.failureReason && !!sop.racmId;
+                // Commented out — these drove elements not present in the screenshot
+                // (status spinner, selection, extraction summary, file-type, readiness):
+                // const isProcessing = sop.status === 'Processing';
+                // const isChecked = selectedIds.includes(sop.id);
+                // const extractedRiskCount = sop.extractedRisks?.length ?? 0;
+                // const extractedControlCount = sop.extractedControls?.length ?? 0;
+                // const hasExtraction = extractedRiskCount > 0 || extractedControlCount > 0;
+                // const fileType = getFileType(sop);
+                // const currentStep = PROCESSING_STEPS[sop.processingStep] ?? PROCESSING_STEPS[0];
 
                 return (
                   <motion.div
@@ -1902,128 +1950,119 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    onClick={() => setDetailSopId(sop.id)}
-                    className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
-                      isChecked
-                        ? 'border-primary/40 ring-1 ring-primary/20'
-                        : sop.status === 'Archived'
-                          ? 'border-border-light opacity-60'
-                          : 'border-border-light'
-                    }`}
+                    onClick={isRacmReady && sop.racmId && onViewRacm ? () => onViewRacm(sop.racmId!) : undefined}
+                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all ${isRacmReady ? 'cursor-pointer hover:border-primary/50 hover:shadow-sm' : 'cursor-default'} ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
                   >
-                    {/* Col 1 — select checkbox */}
-                    <div onClick={e => e.stopPropagation()} className="pt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleSelectOne(sop.id)}
-                        className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
-                        aria-label={`Select ${sop.name}`}
-                      />
-                    </div>
-
-                    {/* Col 2 — title + status + summary + meta + tags */}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
-                        <span className="font-mono text-[10px] text-ink-500 bg-paper-50 border border-canvas-border px-2 py-0.5 rounded-full tabular-nums">v{sop.version.replace(/^v/i, '')}</span>
-                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
-                          {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
-                          {sop.status}
+                    {/* Main — name + status badge inline, failure message, uploader · date.
+                        Card layout per the Risk-card reference (image #21); same data as the table. */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2.5 mb-1 flex-wrap">
+                        {editingSopNameId === sop.id ? (
+                          <input
+                            autoFocus
+                            value={editingSopName}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => setEditingSopName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveSopName(sop.id); }
+                              else if (e.key === 'Escape') { setEditingSopNameId(null); }
+                            }}
+                            onBlur={() => saveSopName(sop.id)}
+                            className="text-[15px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
+                          />
+                        ) : (
+                          <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
+                        )}
+                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>
+                          {statusLabel}
                         </span>
                       </div>
-                      {(sop.description || '').trim() && (
-                        <p className="line-clamp-2 text-[12px] text-text-secondary mb-1.5">{sop.description}</p>
+                      {sop.failureReason && (
+                        <p className="text-[12.5px] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
                       )}
-                      <div className="text-[11px] text-text-muted mb-1.5">
-                        <span className="font-mono">{sop.id}</span>
-                        <span className="mx-1">·</span>
-                        uploaded by {sop.uploadedBy}
-                        <span className="mx-1">·</span>
-                        {sop.uploadedAt}
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
-                          {fileType}
-                        </span>
-                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
-                          {sop.racmId ? `linked to ${sop.racmId}` : 'Standalone'}
-                        </span>
+                      <div className="text-[12px] text-ink-400">
+                        {sop.uploadedBy}
+                        <span className="mx-1.5">·</span>
+                        Uploaded {sop.uploadedAt}
                       </div>
                     </div>
 
-                    {/* Col 3 — extraction summary */}
-                    <div className="pt-0.5">
-                      {hasExtraction || sop.status === 'Draft' ? (
-                        <span className="inline-flex items-center px-2 h-5 rounded-[6px] text-[11px] bg-paper-100 text-ink-700 border border-border-light tabular-nums">
-                          {extractedRiskCount} risks · {extractedControlCount} controls
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-text-muted italic">Not extracted</span>
-                      )}
-                    </div>
-
-                    {/* Col 4 — processing readiness */}
-                    <div className="pt-0.5">
-                      {sop.status === 'Processing' ? (
-                        <span className="text-[11px] text-text-secondary inline-flex items-center gap-1.5">
-                          <Loader2 size={11} className="animate-spin text-brand-600" />
-                          {currentStep.label}
-                        </span>
-                      ) : sop.status === 'Draft' ? (
-                        <span className="text-[11px] text-mitigated-700 italic inline-flex items-center gap-1">
-                          <AlertTriangle size={11} className="text-mitigated-700" />
-                          Pending upload
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-compliant-700 italic inline-flex items-center gap-1">
-                          <CheckCircle2 size={11} className="text-compliant-700" />
-                          Ready
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Col 5 — actions */}
-                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1">
-                      {isChecked ? (
+                    {/* Actions — Edit RACM Draft pill + preview + delete. */}
+                    <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
+                      {editingSopNameId === sop.id ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => archiveSop(sop.id)}
-                            aria-label={`Archive ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <Archive size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleSelectOne(sop.id)}
-                            aria-label={`Cancel selection of ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <X size={13} />
-                          </button>
+                          {/* onMouseDown preventDefault keeps the input focused so its
+                              onBlur doesn't fire before these click handlers run. */}
+                          <div className="relative group/cancel">
+                            <button
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => setEditingSopNameId(null)}
+                              aria-label="Cancel rename"
+                              className="w-7 h-7 rounded-[6px] border border-ink-300/20 inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
+                            >
+                              <X size={15} />
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">
+                              Cancel
+                            </span>
+                          </div>
+                          <div className="relative group/save">
+                            <button
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => saveSopName(sop.id)}
+                              aria-label="Save name"
+                              className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center bg-brand-600 text-paper-0 hover:bg-brand-500 cursor-pointer transition-colors"
+                            >
+                              <Check size={15} strokeWidth={2.5} />
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">
+                              Save
+                            </span>
+                          </div>
                         </>
                       ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewingSopId(sop.id)}
-                            aria-label={`Open ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <Play size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => archiveSop(sop.id)}
-                            aria-label={`Archive ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 hover:text-risk-700 cursor-pointer transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
+                      <div className="relative group/edit">
+                        <button
+                          type="button"
+                          onClick={() => { setEditingSopNameId(sop.id); setEditingSopName(sop.name); }}
+                          aria-label="Edit SOP"
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">
+                          Edit SOP
+                        </span>
+                      </div>
                       )}
+                      <div className="relative group/view">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewingSopId(sop.id)}
+                          aria-label={`View ${sop.name}`}
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/view:opacity-100 pointer-events-none transition-opacity z-50">
+                          View
+                        </span>
+                      </div>
+                      <div className="relative group/delete">
+                        <button
+                          type="button"
+                          onClick={() => archiveSop(sop.id)}
+                          aria-label={`Delete ${sop.name}`}
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/delete:opacity-100 pointer-events-none transition-opacity z-50">
+                          Delete
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -2459,9 +2498,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 -mt-4 pt-5">
 
-      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right. */}
+      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right.
+          -mt-4 cancels the shared header's mb-4 → 20px above; space-y-5 → 20px below. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative shrink-0">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -3003,8 +3043,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   };
 
   return (
-    <div className="space-y-4">
-      {/* Search (LEFT) + Clear all + Filter pills (RIGHT) */}
+    <div className="space-y-5 -mt-4 pt-5">
+      {/* Search (LEFT) + Clear all + Filter pills (RIGHT).
+          -mt-4 cancels the shared header's mb-4 → 20px above; space-y-5 → 20px below. */}
       <div className="flex items-center gap-3">
         <div className="relative w-[260px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -3023,6 +3064,12 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           <FilterPill filterKey="nature" label="Trigger" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
+          <button
+            type="button"
+            onClick={() => setShowCreateDrawer(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+            <Plus size={13} />Create new Workflow
+          </button>
         </div>
       </div>
 
@@ -4574,6 +4621,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     controls: 'Controls',
     workflows: 'Workflows',
   };
+  // Tab icons — SOP upload, RACM document, risk triangle, control shield, workflow nodes.
+  const sectionTabIcon: Record<SectionKey, React.ComponentType<{ size?: number; className?: string }>> = {
+    sop: Upload,
+    racm: FileText,
+    risks: AlertTriangle,
+    controls: Shield,
+    workflows: Workflow,
+  };
   // Switch to a different drilled section in-place (also updates URL).
   const switchDrilledSection = (next: SectionKey) => {
     if (next === drilledSection) return;
@@ -4672,13 +4727,13 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
       onClick={onExpand}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(); } }}
       aria-label={`Expand ${title}`}
-      className="self-start shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-center gap-2 cursor-pointer hover:border-brand-200 transition-colors"
+      className="self-stretch shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-start gap-2 cursor-pointer hover:border-brand-200 transition-colors"
     >
-      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
-        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </span>
       <span className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${gradient ? 'bg-gradient-to-r from-brand-400 to-brand-600 text-paper-0' : 'bg-brand-50 text-brand-700'}`}>
         <Icon size={16} />
+      </span>
+      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
+        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </span>
     </motion.section>
   );
@@ -4724,7 +4779,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4">
+          <div className={`bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 ${(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? '' : 'border-b border-border'}`}>
             <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
               <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
                 <ArrowLeft size={12} />Process Hub
@@ -4748,11 +4803,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             {/* Section switcher pills + section-specific create button — share one row.
                 Hidden when a risk/control detail page is open so the detail owns the screen. */}
             {!detailIsOpen && !(drilledSection === 'racm' && racmTakeover) && (
-              <div className="flex items-center justify-between gap-3 mt-3">
-                <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
+              <div className="flex items-end justify-between gap-3 -mb-4">
+                <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
                 {sectionOrder.map(key => {
                   const m = sectionMeta[key];
                   const active = drilledSection === key;
+                  const TabIcon = sectionTabIcon[key];
                   return (
                     <button
                       type="button"
@@ -4760,27 +4816,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                       aria-label={`Switch to ${m.title}`}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => switchDrilledSection(key)}
-                      className={`shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                      className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
                         active
-                          ? 'bg-brand-600 text-paper-0'
-                          : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
+                          ? 'border-brand-600 text-brand-700 font-semibold'
+                          : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
                       }`}
                     >
-                      {sectionPillLabel[key]}
+                      <TabIcon size={15} className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
+                      <span>{sectionPillLabel[key]}</span>
                       {m.count > 0 && (
-                        <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
+                        <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
+                          active ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
+                        }`}>{m.count}</span>
                       )}
                     </button>
                   );
                 })}
                 </div>
-                {/* Section-specific create button — text changes per drilled section. */}
-                <button
-                  type="button"
-                  onClick={() => triggerSectionCreate(drilledSection)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                  <Plus size={13} />{sectionCreateLabel[drilledSection]}
-                </button>
+                {/* Per-section create buttons now live in each section's own filter row
+                    (SOP / RACM / Risks / Workflows) or toolbar (Controls "New control"),
+                    not in this shared header. */}
               </div>
             )}
 
@@ -4804,9 +4859,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               onViewRacm={(racmId) => {
                 const exists = createdRacms.some(r => r.id === racmId);
                 if (!exists) {
+                  // A RACM generated from a SOP carries that SOP's name (pre-seeded in mockData RACMS).
+                  const seeded = RACMS.find(r => r.id === racmId);
+                  const sourceSop = SOPS.find(s => s.racmId === racmId);
                   setCreatedRacms(prev => [...prev, {
-                    id: racmId, name: `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                    risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                    id: racmId, name: seeded?.name ?? `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: seeded?.fw ?? 'SOX ICFR',
+                    risks: sourceSop?.risks ?? 0, controls: sourceSop?.controls ?? 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
                     workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
                     isFrozen: false,
                   }]);
@@ -4816,10 +4874,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             />
           )}
           {drilledSection === 'racm' && (
-            <div className="space-y-4">
+            <div className="space-y-4 -mt-4 pt-5">
               <RacmListTable
                 processFilter={bp.abbr}
-                extraRacms={createdRacms}
+                extraRacms={
+                  bp.id === 'p2p'
+                    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
+                    : createdRacms
+                }
                 onCreate={() => setShowCreateRacm(true)}
                 onEditDraft={(racm) => {
                   const exists = createdRacms.some(r => r.id === racm.id);
@@ -4863,7 +4925,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               </AnimatePresence>
             </div>
           )}
-          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
+          {drilledSection === 'risks' && <div className="-mt-4 pt-5"><RiskRegister processFilter={bp.abbr} /></div>}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
           {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />}
         </div>

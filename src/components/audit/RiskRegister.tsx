@@ -19,7 +19,7 @@ type RiskCategory = 'Financial' | 'Operational' | 'Compliance' | 'IT' | 'Fraud' 
 // RiskEntry.status directly; the last two are derived presets.
 const STATUS_FILTER_OPTIONS = ['Draft', 'Active', 'Under Review', 'Archived', 'High Priority', 'Unreviewed'];
 
-interface RiskEntry {
+export interface RiskEntry {
   id: string;
   name: string;
   description: string;
@@ -93,7 +93,7 @@ interface DrawerProps {
   defaultProcess?: string;
 }
 
-function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
+export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
   const isEdit = !!risk;
   // Capture initial values once so dirty-tracking is stable across re-renders
   const [initial] = useState({
@@ -778,6 +778,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <ColumnFilter variant="button" label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} align="end" />
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
+            {embedded && (
+              <button
+                type="button"
+                onClick={() => setShowCreateDrawer(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />Create new Risk
+              </button>
+            )}
           </div>
         </div>
 

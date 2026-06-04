@@ -18,6 +18,7 @@ import { useToast } from '../shared/Toast';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
 import ControlDetailView from './ControlDetailView';
+import { LinkWorkflowToControlDrawer, type ControlWorkflow } from '../audit/RacmMappingWorkspace';
 import {
   type ControlRow,
   BP_COLORS, AUTOMATION_STYLES, NATURE_STYLES, STATUS_STYLES,
@@ -70,6 +71,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
 
   // Drawer state
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+  const [linkWfControlId, setLinkWfControlId] = useState<string | null>(null);
 
   // Filters — lock BP filter when processFilter is provided
   const [bpFilter, setBpFilter] = useState<string>(processFilter || 'all');
@@ -150,7 +152,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
       controlId,
       name: data.name,
       description: data.description,
-      objective: '',
+      objective: data.objective,
       businessProcess: data.businessProcess as ControlRow['businessProcess'],
       subProcess: data.subProcess,
       classification: data.classification,
@@ -443,14 +445,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                       <Pencil size={13} />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (ctrl.linkedWorkflows.length > 0) {
-                          addToast({ message: `${ctrl.linkedWorkflows.length} workflow(s) already linked to ${ctrl.controlId}`, type: 'info' });
-                        } else {
-                          addToast({ message: `Link a workflow to ${ctrl.controlId}`, type: 'info' });
-                        }
-                      }}
+                      onClick={(e) => { e.stopPropagation(); setLinkWfControlId(ctrl.id); }}
                       title="Link Workflow"
                       className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
                     >
@@ -529,6 +524,31 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             defaultProcess={processFilter}
           />
         )}
+      </AnimatePresence>
+
+      {/* Link Workflow to Control — per-row action; links a workflow onto the control object */}
+      <AnimatePresence>
+        {linkWfControlId && (() => {
+          const ctrl = controls.find(c => c.id === linkWfControlId);
+          if (!ctrl) return null;
+          return (
+            <LinkWorkflowToControlDrawer
+              control={{ name: ctrl.name, description: ctrl.description, isKey: ctrl.classification === 'Key', workflows: [] }}
+              onClose={() => setLinkWfControlId(null)}
+              onLink={(wf: ControlWorkflow) => {
+                setControls(prev => prev.map(c => c.id === ctrl.id
+                  ? {
+                      ...c,
+                      linkedWorkflows: c.linkedWorkflows.includes(wf.name) ? c.linkedWorkflows : [...c.linkedWorkflows, wf.name],
+                      linkedWorkflowIds: c.linkedWorkflowIds.includes(wf.id) ? c.linkedWorkflowIds : [...c.linkedWorkflowIds, wf.id],
+                    }
+                  : c));
+                addToast({ message: `Linked "${wf.name}" to ${ctrl.controlId}`, type: 'success' });
+                setLinkWfControlId(null);
+              }}
+            />
+          );
+        })()}
       </AnimatePresence>
     </div>
   );
