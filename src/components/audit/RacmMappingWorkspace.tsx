@@ -30,7 +30,7 @@ interface ControlAttribute {
   passLogic: string;
 }
 
-interface ControlWorkflow {
+export interface ControlWorkflow {
   id: string;
   name: string;
   version: string;
@@ -40,7 +40,7 @@ interface ControlWorkflow {
   attributes: ControlAttribute[];
 }
 
-interface MappedControl {
+export interface MappedControl {
   id: string;
   name: string;
   description: string;
@@ -110,7 +110,7 @@ interface Props {
 
 // ─── Seed Data ──────────────────────────────────────────────────────────────
 
-const CONTROL_LIBRARY: MappedControl[] = [
+export const CONTROL_LIBRARY: MappedControl[] = [
   { id: 'ctl-001', name: 'Three-Way PO/GRN/Invoice Matching', description: 'System-enforced three-way matching before payment release', isKey: true, automation: 'Automated', nature: 'Preventive', workflowLinked: true, workflowName: 'PO Validation Workflow v2.0', attributeCount: 5, lastExecution: 'Apr 12, 2026', status: 'Effective', owner: 'Rajiv Sharma', labels: ['SOX', 'P2P'],
     workflows: [
       { id: 'wf-pv', name: 'PO Validation Workflow', version: 'v2.0', status: 'Active', lastRun: 'Apr 12, 2026', dataRequired: true, attributes: [
@@ -193,7 +193,7 @@ const EXEC_CLS: Record<string, string> = {
   Pending: 'bg-mitigated-50 text-mitigated-700',
   'Not Tested': 'bg-draft-50 text-draft-700',
 };
-const AUTO_CLS: Record<string, string> = {
+export const AUTO_CLS: Record<string, string> = {
   Automated: 'bg-evidence-50 text-evidence-700',
   Manual: 'bg-gray-100 text-gray-700',
   'IT-dependent': 'bg-purple-100 text-purple-800',
@@ -1900,8 +1900,8 @@ const AVAILABLE_WORKFLOWS: ControlWorkflow[] = [
   ]},
 ];
 
-function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
-  control: MappedControl;
+export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
+  control: Pick<MappedControl, 'name' | 'description' | 'isKey' | 'workflows'>;
   onClose: () => void;
   onLink: (wf: ControlWorkflow) => void;
 }) {

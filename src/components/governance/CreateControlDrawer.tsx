@@ -7,17 +7,20 @@ import {
   Search,
   Check,
   Link2,
-  Sparkles,
   Wrench,
   Clock,
   Shield,
+  Plus,
 } from 'lucide-react';
-import { RISKS, WORKFLOWS } from '../../data/mockData';
+import { WORKFLOWS } from '../../data/mockData';
+import { OWNER_NAMES } from '../../data/grc-domain';
 
 /* ─── Types ─── */
 export interface NewControlData {
+  risk: string;
   name: string;
   description: string;
+  objective: string;
   businessProcess: string;
   subProcess: string;
   owner: string;
@@ -26,6 +29,7 @@ export interface NewControlData {
   automation: 'Manual' | 'IT-dependent' | 'Automated';
   frequency: string;
   assertions: string[];
+  attributes: { name: string; description: string }[];
   mappedRisks: string[];
   workflowChoice: 'link' | 'ask-ira' | 'manual' | 'skip';
   linkedWorkflowId: string | null;
@@ -38,10 +42,12 @@ interface Props {
   defaultProcess?: string;
   /** Optional prefill for risk mapping (e.g., from RACM row) */
   defaultRiskIds?: string[];
+  /** Optional prefill for the Risk field in Basic Details (the risk this control addresses) */
+  defaultRisk?: string;
 }
 
 /* ─── Constants ─── */
-const STEPS = ['Basic Details', 'Classification', 'Assertions', 'Risk Mapping', 'Workflow Setup'];
+const STEPS = ['Basic Details', 'Classification', 'Assertions', 'Attributes', 'Workflow Setup'];
 
 const BUSINESS_PROCESSES = [
   { value: 'P2P', label: 'Procure to Pay (P2P)' },
@@ -84,12 +90,14 @@ const selectClass = inputClass + ' cursor-pointer';
 const labelClass = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
 
 /* ─── Component ─── */
-export default function CreateControlDrawer({ onClose, onSave, defaultProcess, defaultRiskIds }: Props) {
+export default function CreateControlDrawer({ onClose, onSave, defaultProcess, defaultRiskIds, defaultRisk }: Props) {
   const [step, setStep] = useState(0);
 
   // Form state — with optional prefills
+  const [risk, setRisk] = useState(defaultRisk || '');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [objective, setObjective] = useState('');
   const [businessProcess, setBusinessProcess] = useState(defaultProcess || '');
   const [subProcess, setSubProcess] = useState('');
   const [owner, setOwner] = useState('');
@@ -98,8 +106,11 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
   const [automation, setAutomation] = useState<'Manual' | 'IT-dependent' | 'Automated'>('Manual');
   const [frequency, setFrequency] = useState('');
   const [assertions, setAssertions] = useState<string[]>([]);
-  const [mappedRisks, setMappedRisks] = useState<string[]>(defaultRiskIds || []);
-  const [riskSearch, setRiskSearch] = useState('');
+  const [attributes, setAttributes] = useState<{ name: string; description: string }[]>([]);
+  const [attrName, setAttrName] = useState('');
+  const [attrDesc, setAttrDesc] = useState('');
+  // Prefilled from RACM context (defaultRiskIds); the visible Risk Mapping step was removed.
+  const [mappedRisks] = useState<string[]>(defaultRiskIds || []);
   const [workflowChoice, setWorkflowChoice] = useState<'link' | 'ask-ira' | 'manual' | 'skip'>('skip');
   const [linkedWorkflowId, setLinkedWorkflowId] = useState<string | null>(null);
   const [workflowSearch, setWorkflowSearch] = useState('');
@@ -110,33 +121,31 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
       case 0: return name.trim().length > 0 && businessProcess !== '' && owner.trim().length > 0;
       case 1: return frequency !== '';
       case 2: return true; // assertions optional
-      case 3: return true; // risk mapping optional
-      case 4: return workflowChoice === 'link' ? linkedWorkflowId !== null : true; // ask-ira, manual, skip always valid
+      case 3: return true; // attributes optional
+      // Workflow setup — must pick an option (Link/Ask IRA/Manual) to use the primary
+      // button; the footer "Skip" button handles the no-workflow path separately.
+      case 4: return workflowChoice === 'skip' ? false : workflowChoice === 'link' ? linkedWorkflowId !== null : true;
       default: return true;
     }
   }, [step, name, businessProcess, owner, frequency, workflowChoice, linkedWorkflowId]);
 
   const isLastStep = step === STEPS.length - 1;
 
-  const handleNext = () => {
-    if (isLastStep) {
-      onSave({
-        name, description, businessProcess, subProcess, owner,
-        classification, nature, automation, frequency, assertions,
-        mappedRisks, workflowChoice, linkedWorkflowId,
-      });
-    } else {
-      setStep(s => s + 1);
-    }
+  const save = (choice: NewControlData['workflowChoice'], wfId: string | null) => {
+    onSave({
+      risk, name, description, objective, businessProcess, subProcess, owner,
+      classification, nature, automation, frequency, assertions, attributes,
+      mappedRisks, workflowChoice: choice, linkedWorkflowId: wfId,
+    });
   };
 
-  // Risk search
-  const filteredRisks = useMemo(() => {
-    const q = riskSearch.toLowerCase();
-    return RISKS.filter(r =>
-      r.id.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
-    );
-  }, [riskSearch]);
+  const handleNext = () => {
+    if (isLastStep) save(workflowChoice, linkedWorkflowId);
+    else setStep(s => s + 1);
+  };
+
+  // Footer "Skip" — finish without a workflow (it can be linked later from the Control Library).
+  const handleSkip = () => save('skip', null);
 
   // Workflow search
   const filteredWorkflows = useMemo(() => {
@@ -150,9 +159,13 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
     setAssertions(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]);
   };
 
-  const toggleRisk = (id: string) => {
-    setMappedRisks(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+  const addAttribute = () => {
+    if (!attrName.trim()) return;
+    setAttributes(prev => [...prev, { name: attrName.trim(), description: attrDesc.trim() }]);
+    setAttrName('');
+    setAttrDesc('');
   };
+  const removeAttribute = (i: number) => setAttributes(prev => prev.filter((_, idx) => idx !== i));
 
   /* ─── Step renderers ─── */
   const renderStep = () => {
@@ -160,12 +173,20 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
       case 0: return (
         <div className="space-y-4">
           <div>
+            <label className={labelClass}>Risk</label>
+            <input value={risk} onChange={e => setRisk(e.target.value)} placeholder="Risk this control addresses" className={inputClass} />
+          </div>
+          <div>
             <label className={labelClass}>Control Name <span className="text-risk">*</span></label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Three-Way PO Match" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Description</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the governance intent of this control..." rows={3} className={inputClass + ' resize-none'} />
+          </div>
+          <div>
+            <label className={labelClass}>Objective</label>
+            <textarea value={objective} onChange={e => setObjective(e.target.value)} placeholder="What should this control achieve or prevent?" rows={2} className={inputClass + ' resize-none'} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -185,7 +206,10 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
           </div>
           <div>
             <label className={labelClass}>Control Owner <span className="text-risk">*</span></label>
-            <input value={owner} onChange={e => setOwner(e.target.value)} placeholder="e.g. Tushar Goel" className={inputClass} />
+            <select value={owner} onChange={e => setOwner(e.target.value)} className={selectClass}>
+              <option value="">Select owner</option>
+              {OWNER_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
         </div>
       );
@@ -313,106 +337,86 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
 
       case 3: return (
         <div className="space-y-4">
-          <p className="text-[0.75rem] text-ink-500">Optionally map this control to existing risks from the Risk Register.</p>
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input
-              value={riskSearch}
-              onChange={e => setRiskSearch(e.target.value)}
-              placeholder="Search risks..."
-              className={inputClass + ' pl-8'}
-            />
+          <p className="text-[0.75rem] text-ink-500">Define the test attributes for this control — the specific checks performed when it's tested.</p>
+          {/* Add attribute */}
+          <div className="rounded-lg border border-canvas-border bg-canvas/40 p-3 space-y-2.5">
+            <input value={attrName} onChange={e => setAttrName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttribute(); } }} placeholder="Attribute name (e.g. PO number matches invoice)" className={inputClass} />
+            <input value={attrDesc} onChange={e => setAttrDesc(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttribute(); } }} placeholder="Expected result (optional)" className={inputClass} />
+            <button type="button" onClick={addAttribute} disabled={!attrName.trim()} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+              <Plus size={13} />Add attribute
+            </button>
           </div>
-
-          {/* Selected risks */}
-          {mappedRisks.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[0.75rem] font-semibold text-ink-600">{mappedRisks.length} risk{mappedRisks.length !== 1 ? 's' : ''} mapped</div>
-              <div className="flex flex-wrap gap-2">
-                {mappedRisks.map(rid => {
-                  const risk = RISKS.find(r => r.id === rid);
-                  return (
-                    <span key={rid} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 text-[0.75rem] font-medium">
-                      <span className="font-mono">{rid}</span>
-                      <button onClick={() => toggleRisk(rid)} className="hover:text-risk cursor-pointer"><X size={11} /></button>
-                    </span>
-                  );
-                })}
-              </div>
+          {/* Added attributes */}
+          {attributes.length === 0 ? (
+            <p className="text-[0.75rem] text-ink-400 italic">No attributes added yet. Attributes are optional but recommended.</p>
+          ) : (
+            <div className="space-y-2">
+              {attributes.map((a, i) => (
+                <div key={i} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-white">
+                  <div className="w-5 h-5 rounded-md bg-brand-50 text-brand-700 text-[0.625rem] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[0.8125rem] font-medium text-ink-800">{a.name}</div>
+                    {a.description && <div className="text-[0.75rem] text-ink-500 mt-0.5">{a.description}</div>}
+                  </div>
+                  <button type="button" onClick={() => removeAttribute(i)} aria-label="Remove attribute" className="text-ink-400 hover:text-risk cursor-pointer shrink-0"><X size={13} /></button>
+                </div>
+              ))}
             </div>
           )}
-
-          {/* Risk list */}
-          <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
-            {filteredRisks.map(risk => {
-              const selected = mappedRisks.includes(risk.id);
-              return (
-                <button
-                  key={risk.id}
-                  onClick={() => toggleRisk(risk.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                    selected
-                      ? 'border-brand-500 bg-brand-50/50'
-                      : 'border-canvas-border bg-white hover:bg-canvas'
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                    selected ? 'border-brand-600 bg-brand-600' : 'border-canvas-border'
-                  }`}>
-                    {selected && <Check size={10} className="text-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[0.6875rem] text-ink-500">{risk.id}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase ${SEVERITY_STYLE[risk.severity]}`}>
-                        {risk.severity}
-                      </span>
-                    </div>
-                    <div className="text-[0.75rem] text-ink-800 truncate mt-0.5">{risk.name}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          {attributes.length > 0 && <div className="text-[0.75rem] text-ink-500">{attributes.length} attribute{attributes.length !== 1 ? 's' : ''} defined</div>}
         </div>
       );
 
-      case 4: return (
-        <div className="space-y-5">
-          <p className="text-[0.75rem] text-ink-500">
-            Choose how this control will get its workflow. A workflow defines how the control is tested during engagements.
-          </p>
+      // Risk Mapping step removed per design — the risk is now captured in Basic Details (the "Risk" field).
 
-          {/* Choice cards */}
-          <div className="space-y-2">
-            {[
-              { value: 'link' as const, icon: Link2, title: 'Link existing workflow', desc: 'Choose from the Workflow Library' },
-              { value: 'ask-ira' as const, icon: Sparkles, title: 'Create new workflow with Ask IRA', desc: 'Use AI-guided Q&A to build a workflow for this control' },
-              { value: 'manual' as const, icon: Wrench, title: 'Create workflow manually', desc: 'Open the standard Workflow Builder' },
-              { value: 'skip' as const, icon: Clock, title: 'Skip for now', desc: 'Save control without workflow; can be linked later' },
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => { setWorkflowChoice(opt.value); if (opt.value !== 'link') setLinkedWorkflowId(null); }}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-lg border text-left transition-all cursor-pointer ${
-                  workflowChoice === opt.value
-                    ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500/20'
-                    : 'border-canvas-border bg-white hover:bg-canvas'
-                }`}
-              >
-                <opt.icon size={16} className={workflowChoice === opt.value ? 'text-brand-600' : 'text-ink-400'} />
-                <div>
-                  <div className="text-[0.8125rem] font-medium text-ink-800">{opt.title}</div>
-                  <div className="text-[0.75rem] text-ink-500">{opt.desc}</div>
-                </div>
-              </button>
-            ))}
+      case 4: return (
+        <div className="flex flex-col gap-5 h-full">
+          <div className="flex items-start justify-between gap-4 shrink-0">
+            {workflowChoice === 'link' ? (
+              <h3 className="font-display text-[15px] font-semibold text-ink-900">Link existing workflow</h3>
+            ) : (
+              <p className="text-[0.75rem] text-ink-500">
+                Choose how this control will get its workflow. A workflow defines how the control is tested during engagements.
+              </p>
+            )}
+            <button
+              onClick={handleSkip}
+              className="shrink-0 px-3 py-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-600 hover:bg-white hover:border-ink-300 transition-colors cursor-pointer"
+            >
+              Skip
+            </button>
           </div>
 
-          {/* Workflow picker — only for Link option */}
+          {/* Choice cards — hidden once Link is selected; the heading + list take over */}
+          {workflowChoice !== 'link' && (
+            <div className="space-y-2 shrink-0">
+              {[
+                { value: 'link' as const, icon: Link2, title: 'Link existing workflow', desc: 'Choose from the Workflow Library' },
+                { value: 'manual' as const, icon: Wrench, title: 'Create workflow', desc: 'Open the standard Workflow Builder' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setWorkflowChoice(opt.value); if (opt.value !== 'link') setLinkedWorkflowId(null); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    workflowChoice === opt.value
+                      ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500/20'
+                      : 'border-canvas-border bg-white hover:bg-canvas'
+                  }`}
+                >
+                  <opt.icon size={16} className={workflowChoice === opt.value ? 'text-brand-600' : 'text-ink-400'} />
+                  <div>
+                    <div className="text-[0.8125rem] font-medium text-ink-800">{opt.title}</div>
+                    <div className="text-[0.75rem] text-ink-500">{opt.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Workflow picker — only for Link option; fills the remaining container height */}
           {workflowChoice === 'link' && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3 overflow-hidden">
-              <div className="relative">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3 flex-1 min-h-0">
+              <div className="relative shrink-0">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
                   value={workflowSearch}
@@ -421,7 +425,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
                   className={inputClass + ' pl-8'}
                 />
               </div>
-              <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1">
+              <div className="space-y-1 flex-1 min-h-0 overflow-y-auto pr-1">
                 {filteredWorkflows.map(wf => {
                   const selected = linkedWorkflowId === wf.id;
                   return (
@@ -528,10 +532,11 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
+              className="h-full"
               initial={{ opacity: 0, x: 8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
@@ -543,33 +548,42 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
         </div>
 
         {/* Footer */}
-        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between">
-          <div className="text-[0.75rem] text-ink-400">
-            Step {step + 1} of {STEPS.length}
-          </div>
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end">
           <div className="flex items-center gap-3">
             {step > 0 && (
               <button
-                onClick={() => setStep(s => s - 1)}
+                onClick={() => {
+                  // On the workflow step, if the Link list is showing, Back first returns to
+                  // the two options; another Back then goes to the previous step.
+                  if (isLastStep && workflowChoice === 'link') {
+                    setWorkflowChoice('skip');
+                    setLinkedWorkflowId(null);
+                  } else {
+                    setStep(s => s - 1);
+                  }
+                }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
               >
                 <ChevronLeft size={14} />
                 Back
               </button>
             )}
-            <button
-              onClick={handleNext}
-              disabled={!stepValid}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isLastStep
-                ? workflowChoice === 'link' ? 'Link Workflow & Create Control'
-                : workflowChoice === 'ask-ira' ? 'Continue in Ask IRA'
-                : workflowChoice === 'manual' ? 'Open Workflow Builder'
-                : 'Create Control'
-                : 'Continue'}
-              {!isLastStep && <ChevronRight size={14} />}
-            </button>
+            {/* On the workflow step the primary appears once an option is chosen; until
+                then the user proceeds via the Skip button (next to the step description) or Back. */}
+            {(!isLastStep || workflowChoice !== 'skip') && (
+              <button
+                onClick={handleNext}
+                disabled={!stepValid}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isLastStep
+                  ? workflowChoice === 'link' ? 'Link Workflow & Create Control'
+                  : workflowChoice === 'manual' ? 'Open Workflow Builder'
+                  : 'Create Control'
+                  : 'Continue'}
+                {!isLastStep && <ChevronRight size={14} />}
+              </button>
+            )}
           </div>
         </footer>
       </motion.aside>

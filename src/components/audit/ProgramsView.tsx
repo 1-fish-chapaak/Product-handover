@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Building2, Search, Plus, X, Trash2, HelpCircle,
+  Building2, Search, Plus, X, Trash2, HelpCircle, ChevronRight,
 } from 'lucide-react';
 import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
@@ -71,14 +71,14 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
   return (
     <div className="h-full overflow-y-auto bg-canvas relative">
       <div className="px-[124px] py-8 relative">
-        {/* Header — full-bleed white strip, matches Reports */}
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-6 border-b border-border">
-          <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">Process Hub</div>
+        {/* Header — full-bleed white strip, 124px side margins to match Reports. */}
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-4 border-b border-border">
           <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
+          <p className="text-[13px] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
         </div>
 
-        {/* Toolbar — Search + New Process */}
-        <div className="flex items-center justify-end gap-3 mb-5">
+        {/* Toolbar — Search on the LEFT, New Process on the RIGHT. */}
+        <div className="flex items-center justify-between gap-3 mb-5">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input type="text" placeholder="Search processes..." value={search} onChange={e => setSearch(e.target.value)}
@@ -96,7 +96,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
           {filteredProcesses.length === 0 ? (
             <div className="bg-canvas-elevated border border-canvas-border rounded-[8px] p-10 text-center"><Building2 size={32} className="text-text-muted mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No processes found</p><p className="text-[12px] text-text-muted">Try adjusting your search.</p></div>
           ) : (
-            <ChromaGrid className="grid grid-cols-1 md:grid-cols-2 gap-4" radius={320} damping={0.45} fadeOut={0.6}>
+            <ChromaGrid className="grid grid-cols-1 md:grid-cols-2 gap-5" radius={320} damping={0.45} fadeOut={0.6}>
               {filteredProcesses.map((bp, i) => {
                 const coverage = coverageForProcess(bp);
                 return (
@@ -104,33 +104,36 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     onClick={() => handleProcessClick(bp)}
                     onMouseMove={handleChromaCardMove}
                     className="chroma-card-lite text-left bg-canvas-elevated border border-canvas-border rounded-[12px] p-6 hover:border-brand-200 transition-colors cursor-pointer group">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-[8px] flex items-center justify-center bg-brand-50 text-brand-700 text-[13px] font-bold">{bp.abbr}</div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[16px] font-semibold text-text">{bp.name}</span>
-                            {bp.status === 'Draft' && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold bg-paper-100 text-ink-500">Draft</span>}
-                          </div>
-                          <div className="text-[11px] text-text-muted">{bp.abbr}</div>
+                    {/* Identity row — abbr stamp + process name, with a quiet open affordance. */}
+                    <div className="flex items-start justify-between gap-3 mb-5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[12px] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[16px] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">{bp.name}</span>
+                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] text-[9px] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
                         </div>
                       </div>
+                      <ChevronRight size={16} className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
                     </div>
+
+                    {/* Metric row — coverage is the hero number; counts read like a ledger annotation. */}
                     <div className="flex items-end justify-between gap-4 mb-3">
                       <div>
-                        <div className="text-[13px] font-semibold text-ink-700 tabular-nums leading-none">{coverage}%</div>
-                        <span className="inline-flex items-center gap-1 group/tip relative text-[10px] text-text-muted mt-1">
+                        <div className={`font-mono text-[26px] font-semibold tabular-nums leading-none ${coverage === 0 ? 'text-ink-400' : 'text-ink-900'}`}>{coverage}<span className="text-[15px] text-ink-400">%</span></div>
+                        <span className="inline-flex items-center gap-1 group/tip relative text-[10.5px] uppercase tracking-wide text-ink-400 mt-2">
                           Coverage
-                          <HelpCircle className="w-3 h-3 text-ink-400" aria-label="What is Coverage?" />
-                          <span className="absolute bottom-full left-0 mb-1 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
+                          <HelpCircle className="w-3 h-3 text-ink-300" aria-label="What is Coverage?" />
+                          <span className="absolute bottom-full left-0 mb-1.5 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
                             Percent of identified risks that have at least one linked control.
                           </span>
                         </span>
                       </div>
-                      <div className="flex gap-5">
-                        {[{ label: 'Risks', value: bp.risks }, { label: 'Controls', value: bp.controls }, { label: 'RACMs', value: racmsForProcess(bp.id) }].map(m => (
-                          <div key={m.label} className="text-right"><div className="text-[13px] font-semibold text-ink-700 tabular-nums">{m.value}</div><div className="text-[10px] text-text-muted">{m.label}</div></div>
-                        ))}
+                      <div className="flex items-baseline gap-1.5 text-[12px] text-ink-400 pb-0.5">
+                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{bp.risks}</span> risks</span>
+                        <span className="text-ink-300" aria-hidden>·</span>
+                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{bp.controls}</span> controls</span>
+                        <span className="text-ink-300" aria-hidden>·</span>
+                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.id)}</span> RACMs</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-paper-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${coverage}%` }} /></div>

@@ -13,6 +13,12 @@ export const SOPS = [
   { id: "sop-003", bpId: "o2c", name: "Invoice Management SOP", version: "v1.0", by: "Neha Joshi", at: "Jan 20, 2026", racmId: "RACM-003", risks: 7, controls: 18, status: "processed" },
   { id: "sop-004", bpId: "r2r", name: "Financial Close SOP", version: "v3.0", by: "Karan Mehta", at: "Dec 15, 2025", racmId: "RACM-004", risks: 11, controls: 31, status: "processed" },
   { id: "sop-005", bpId: "r2r", name: "GL Reconciliation SOP", version: "v1.2", by: "Sneha Desai", at: "Jan 10, 2026", racmId: "RACM-005", risks: 5, controls: 15, status: "processed" },
+  // Process Hub · P2P SOP list (sourced from the SOP section screenshot)
+  { id: "sop-101", bpId: "p2p", name: "memory", version: "v1.0", by: "Kuldeep Pandey", at: "May 5, 2026", racmId: "RACM-101", risks: 0, controls: 0, status: "failed" },
+  { id: "sop-102", bpId: "p2p", name: "Sample SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 6, 2026", racmId: "RACM-102", risks: 6, controls: 16, status: "processed" },
+  { id: "sop-103", bpId: "p2p", name: "Sample Flow Chart SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 6, 2026", racmId: "RACM-103", risks: 0, controls: 0, status: "failed" },
+  { id: "sop-104", bpId: "p2p", name: "Testing RACM (4)_RACM", version: "v1.0", by: "Superadmin", at: "May 6, 2026", racmId: "RACM-104", risks: 8, controls: 20, status: "processed" },
+  { id: "sop-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 11, 2026", racmId: "RACM-105", risks: 7, controls: 19, status: "processed" },
 ];
 
 // ─── RACMs ───
@@ -23,6 +29,10 @@ export const RACMS = [
   { id: "RACM-004", bpId: "r2r", name: "FY26 R2R · Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Mar 15, 2026", sopId: "sop-004" },
   { id: "RACM-005", bpId: "r2r", name: "FY26 R2R · GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Feb 28, 2026", sopId: "sop-005" },
   { id: "RACM-006", bpId: "s2c", name: "FY26 S2C · Contract Review", fw: "Internal", status: "draft", owner: "Rohan Patel", lastRun: "Never", sopId: null },
+  // RACMs generated from the P2P SOP-list "RACM Ready" SOPs — each shares its SOP's name.
+  { id: "RACM-102", bpId: "p2p", name: "Sample SOP", fw: "SOX", status: "active", owner: "Kuldeep Pandey", lastRun: "May 6, 2026", sopId: "sop-102" },
+  { id: "RACM-104", bpId: "p2p", name: "Testing RACM (4)_RACM", fw: "SOX", status: "active", owner: "Superadmin", lastRun: "May 6, 2026", sopId: "sop-104" },
+  { id: "RACM-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", fw: "SOX", status: "active", owner: "Kuldeep Pandey", lastRun: "May 11, 2026", sopId: "sop-105" },
 ];
 
 // ─── Risks ───
