@@ -575,6 +575,32 @@ button.no-focus-ring:focus,
   background: #f3f4f6;
 }
 
+/* Table preview scroll — a thin, always-visible classic scrollbar so a wide
+   spreadsheet reads as scrollable from the first render (no macOS overlay that
+   only pops up on hover, and no fade obscuring the right-hand columns). */
+.kh-table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-canvas-border) transparent;
+}
+.kh-table-scroll::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 9px;
+  height: 9px;
+}
+.kh-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.kh-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-canvas-border);
+  border-radius: 9999px;
+}
+.kh-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-300);
+}
+.kh-table-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Remove focus outline from Recharts chart containers */
 .recharts-wrapper,
 .recharts-wrapper *,

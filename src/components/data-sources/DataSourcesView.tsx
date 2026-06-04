@@ -4,7 +4,7 @@ import {
   Database, FileText, Layers, FolderOpen,
   Search, Upload, MoreHorizontal, Plus, X,
   Pencil, Trash2, Unplug, Check,
-  MessageSquare, AlertTriangle,
+  AlertTriangle,
   LayoutGrid, Rows3, ChevronDown,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
@@ -44,13 +44,27 @@ function formatExt(name: string): string {
   return name.slice(dot + 1).toUpperCase();
 }
 
+// Size/count tail for a folder card ("300 files · 1005.7 KB"). Uploaded folders
+// persist their real file list in DATASET_FILES, so derive the count + total
+// size from it — that way the card stays in sync when files are added/removed in
+// the reading pane (matching the detail header, which counts the same list).
+// Seed/synthetic folders have no stored list; fall back to the frozen subtype.
+function folderTail(source: DataSource): string {
+  const files = DATASET_FILES[source.id];
+  if (files) {
+    const bytes = files.reduce((sum, f) => sum + f.sizeBytes, 0);
+    return `${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytesShort(bytes)}`;
+  }
+  return source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ');
+}
+
 // Map a filename's extension onto the DatasetFile FileFormat enum. Unknown
 // extensions default to PDF (most common doc upload).
 function fileFormat(name: string): FileFormat {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'csv')  return 'CSV';
-  if (ext === 'xlsx') return 'XLSX';
-  return 'PDF';
+  if (ext === 'csv') return 'CSV';
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return 'XLSX';
+  return 'PDF'; // pdf, pptx, jpg/jpeg, png — document-style tile
 }
 
 // First path segment, or null if the file isn't in any folder.
@@ -82,12 +96,12 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'all',        label: 'All',             icon: Layers },
   { id: 'file',       label: 'Files',           icon: FileText },
   { id: 'folder',     label: 'Folders',         icon: FolderOpen },
-  { id: 'integrated', label: 'Integrated DBs',  icon: Database },
+  { id: 'integrated', label: 'Databases',       icon: Database },
 ];
 
 type ViewMode = 'grid' | 'list';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 12;
 
 
 // Parse "Folder · 12 files · 84.2 MB" or "CSV · 4.8 MB" — best-effort size sum
@@ -231,10 +245,11 @@ function HealthDot({ health }: { health: 'healthy' | 'degraded' }) {
     ? 'bg-compliant-50 text-compliant-700'
     : 'bg-mitigated-50 text-mitigated-700';
   const dot = health === 'healthy' ? 'bg-compliant' : 'bg-mitigated';
+  const label = health === 'healthy' ? 'Connection healthy' : 'Connection degraded';
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold uppercase tracking-wider ${tone}`}>
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold whitespace-nowrap ${tone}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
-      {health}
+      {label}
     </span>
   );
 }
@@ -268,9 +283,11 @@ function SourceTile({
   // For files/folders: pull the size/count tail (everything after the format
   // token) so the footer reads "4.2 KB · May 28, 2026" without repeating the
   // type the icon and filename already convey.
-  const sizeTail = !isIntegrated
-    ? source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ')
-    : '';
+  const sizeTail = isIntegrated
+    ? ''
+    : source.isFolder
+      ? folderTail(source)
+      : source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ');
 
   // Editing replaces the whole card with an inline rename row (icon + input +
   // save/cancel) so the <input> never nests inside the card <button>.
@@ -355,7 +372,7 @@ function SourceTile({
               // against files at a glance (files carry size · date instead).
               <span className={`inline-flex items-center gap-1.5 font-medium ${health === 'degraded' ? 'text-mitigated-700' : 'text-compliant-700'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${health === 'degraded' ? 'bg-mitigated' : 'bg-compliant'}`} aria-hidden />
-                {health === 'degraded' ? 'Needs reconnection' : 'Connected'}
+                {health === 'degraded' ? 'Connection degraded' : 'Connection healthy'}
               </span>
             ) : (
               <>
@@ -373,7 +390,7 @@ function SourceTile({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-opacity cursor-pointer shrink-0 ${
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-opacity cursor-pointer shrink-0 ${
             menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
           }`}
           aria-label="Source actions"
@@ -416,7 +433,9 @@ function SourceRow({
   // "Snowflake"), which is real information shown nowhere else.
   const detail = isIntegrated
     ? source.subtype
-    : source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ');
+    : source.isFolder
+      ? folderTail(source)
+      : source.subtype.split('·').slice(1).map(s => s.trim()).join(' · ');
 
   if (editing) {
     return (
@@ -441,11 +460,7 @@ function SourceRow({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-center gap-3 px-3 h-10 rounded-lg border transition-colors cursor-pointer text-left ${
-          selected
-            ? 'border-brand-600 bg-brand-50/30'
-            : 'border-transparent hover:border-canvas-border hover:bg-canvas-elevated'
-        }`}
+        className="group w-full flex items-center gap-3 px-3 h-10 transition-colors cursor-pointer text-left hover:bg-canvas"
       >
         {/* Hover-revealed checkbox overlaying the type-icon tile. Same layout
             slot regardless of state so nothing shifts. */}
@@ -489,7 +504,7 @@ function SourceRow({
         <div className="hidden md:block flex-1 max-w-[18rem] text-[0.75rem] text-ink-500 truncate tabular-nums">
           {detail}
         </div>
-        <div className="hidden md:flex items-center gap-2 shrink-0 w-32 justify-end">
+        <div className="hidden md:flex items-center gap-2 shrink-0 w-40 justify-end">
           {health && <HealthDot health={health} />}
         </div>
         <div className="text-[0.75rem] text-ink-400 tabular-nums shrink-0 w-24 text-right">
@@ -500,7 +515,7 @@ function SourceRow({
           tabIndex={0}
           onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setMenuOpen(o => !o); } }}
-          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-opacity cursor-pointer shrink-0 ${
+          className={`p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-opacity cursor-pointer shrink-0 ${
             menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
           }`}
           aria-label="Source actions"
@@ -547,7 +562,7 @@ function SourceMenu({ source, onClose, onRequestRemove, onRename }: SourceMenuPr
       <div className="fixed inset-0 z-30" onClick={onClose} aria-hidden />
       <div
         role="menu"
-        className="absolute right-2 top-12 z-40 w-48 rounded-lg border border-paper-200 bg-paper-0 shadow-md py-1"
+        className="absolute right-2 top-11 z-40 w-32 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_32px_rgb(15_8_30_/_0.15)] py-1"
         onClick={(e) => e.stopPropagation()}
       >
         <MenuItem icon={Pencil} label="Rename" onClick={handle(onRename)} />
@@ -573,7 +588,7 @@ function MenuItem({
       className={`w-full flex items-center gap-2.5 px-3 h-8 text-[0.75rem] font-medium text-left transition-colors cursor-pointer ${
         destructive
           ? 'text-risk-700 hover:bg-risk-50'
-          : 'text-ink-800 hover:bg-brand-50'
+          : 'text-ink-800 hover:bg-canvas'
       }`}
     >
       <Icon size={13} className="shrink-0" />
@@ -596,7 +611,7 @@ function FilterChip({ label, onClear }: { label: React.ReactNode; onClear: () =>
       {label}
       <button
         onClick={onClear}
-        className="p-0.5 rounded-full hover:bg-brand-100 cursor-pointer"
+        className="p-0.5 rounded-full hover:bg-canvas cursor-pointer"
         aria-label="Clear this filter"
       >
         <X size={11} />
@@ -618,7 +633,7 @@ interface PerTabEmptyStateProps {
   search: string;
   dateActive: boolean;
   dateLabel: string;
-  onOpenPicker: () => void;
+  onOpenPicker: (tab?: 'upload' | 'connect') => void;
   onRequestIntegration: () => void;
 }
 
@@ -650,7 +665,7 @@ function PerTabEmptyState({
           Drop a folder via Add source, and IRA bundles its files into one card.
         </p>
         <div className="mt-4">
-          <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Add source</Button>
+          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
         </div>
       </EmptyShell>
     );
@@ -661,11 +676,11 @@ function PerTabEmptyState({
       <EmptyShell icon={Database}>
         <p className="text-[0.875rem] text-ink-700 font-medium">No integrations connected yet.</p>
         <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
-          Connect PostgreSQL, MySQL, Snowflake, Oracle, SQL Server and BigQuery
+          Connect PostgreSQL, MySQL, Snowflake, Oracle, SQL Server, and BigQuery
           from the Add source picker.
         </p>
         <div className="mt-4">
-          <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Connect a source</Button>
+          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker('connect')}>Connect database</Button>
         </div>
       </EmptyShell>
     );
@@ -674,10 +689,10 @@ function PerTabEmptyState({
   // Catch-all: 'all' or 'file' with no items.
   return (
     <EmptyShell icon={Upload}>
-      <p className="text-[0.875rem] text-ink-700 font-medium">No sources connected yet.</p>
-      <p className="text-[0.75rem] text-ink-500 mt-1">Upload a file or connect a source to get started.</p>
+      <p className="text-[0.875rem] text-ink-700 font-medium">No sources yet.</p>
+      <p className="text-[0.75rem] text-ink-500 mt-1">Upload a file or connect a database to get started.</p>
       <div className="mt-4">
-        <Button variant="primary" leftIcon={<Plus size={13} />} onClick={onOpenPicker}>Add source</Button>
+        <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
       </div>
     </EmptyShell>
   );
@@ -803,12 +818,36 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   // closure always sees fresh data without forcing the handle to re-create.
   const sourcesRef = useRef<DataSource[]>(sources);
   useEffect(() => { sourcesRef.current = sources; }, [sources]);
+
+  // Keep folder `subtype` in sync with its live file list. An uploaded folder
+  // stores its real files in DATASET_FILES; the card + detail header count that
+  // list, but `subtype` is a one-time snapshot written at upload. If the list
+  // later changes (e.g. files added in the reading pane) the snapshot drifts, so
+  // surfaces that read `subtype` directly (picker, chat chips, dashboard, the
+  // storage-total sum) disagree with the card. Reconcile any mismatch here, at
+  // the single source of truth, so every reader self-corrects. Folders without a
+  // stored list are synthesised from `subtype` itself and are left untouched.
+  const setSubtype = knowledge.setSubtype;
+  useEffect(() => {
+    for (const s of sources) {
+      if (!s.isFolder) continue;
+      const files = DATASET_FILES[s.id];
+      if (!files) continue;
+      const bytes = files.reduce((sum, f) => sum + f.sizeBytes, 0);
+      const next = `Folder · ${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytesShort(bytes)}`;
+      if (next !== s.subtype) void setSubtype(s.id, next);
+    }
+  }, [sources, setSubtype]);
   // Single unified picker — same multi-tab UX as the chat composer's Add data.
   // The picker is locked to the Upload tab in kh-add mode (DB connect is a
   // backend-dependent flow; see DataPickerModal's KH_ADD_TABS comment).
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Which tab the picker should land on when opened. Most entry points want
+  // Upload; the "Connect database" empty-state CTA opens straight on Connect.
+  const [pickerTab, setPickerTab] = useState<'upload' | 'connect'>('upload');
+  const openPickerOn = (t: 'upload' | 'connect' = 'upload') => { setPickerTab(t); setPickerOpen(true); };
   useImperativeHandle(ref, () => ({
-    openPicker: () => setPickerOpen(true),
+    openPicker: () => openPickerOn(),
     focusSource: (id: string) => {
       const match = sourcesRef.current.find(s => s.id === id);
       if (match) setActiveSource(match);
@@ -826,6 +865,14 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   // data" expands by another PAGE_SIZE; resets to PAGE_SIZE on tab/search/date
   // changes so users don't carry a deep scroll into a fresh slice.
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
+  // The single scroll region (source list). After an upload/connect we bump
+  // it back to the top so the freshly-added source — sorted newest-first — is
+  // actually in view, not silently appended above a scrolled-down list.
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  // Set true by "Load more" so the post-render effect scrolls the freshly
+  // revealed rows into view. Guarded by a flag so tab/filter resets (which also
+  // change visibleLimit) don't trigger an unwanted scroll.
+  const scrollToEndRef = useRef(false);
   // View mode — grid (rich tiles) vs list (dense rows). Persisted to localStorage.
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'grid';
@@ -973,20 +1020,6 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     setPendingRemove(snapshots);
   };
 
-  // Bulk path: bulk action bar's "Add to chat" button. Placeholder action —
-  // surfaces a toast confirming the intent; the actual chat-attach flow lives
-  // in the chat composer's @-mention model and will be wired once the back-
-  // end-attach API exists.
-  const addSelectedToChat = () => {
-    const n = selectedIds.size;
-    if (n === 0) return;
-    addToast({
-      type: 'success',
-      message: `Started a new chat with ${n} ${n === 1 ? 'source' : 'sources'} attached.`,
-    });
-    clearSelection();
-  };
-
   // Confirmed: actually remove + show toast with Undo so a misclick on the
   // confirm button is still recoverable. The hook's addMany dedupes by id so
   // Undo is safe to fire even if the user re-added a same-id source manually.
@@ -1116,13 +1149,17 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     const uploads   = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'upload' }>     => s.kind === 'upload');
     const dbConnect = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'connect-db' }> => s.kind === 'connect-db');
 
-    // Per-file row/page metadata. With real bytes we parse the true count —
-    // PDFs via pdf.js (page count), CSV/XLSX via SheetJS (data-row count) — so
-    // the header count matches the live preview. Byte-less files (or parse
-    // failures) fall back to the size-based estimate.
+    // Per-file row/page metadata. For SMALL real files we parse the true count
+    // (PDFs via pdf.js, CSV/XLSX via SheetJS) so the header matches the live
+    // preview. Parsing is synchronous on the main thread, so for anything but
+    // small files — and especially a batch of them on "Add" — we skip it and
+    // use the size-based estimate; otherwise the parses pile up and freeze the
+    // UI. The real count still appears lazily when the file is opened to preview
+    // (and a real backend returns exact counts without any in-browser parse).
+    const INLINE_COUNT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const fileMeta = async (name: string, sizeBytes: number, real?: File) => {
       const fmt = fileFormat(name);
-      if (real) {
+      if (real && sizeBytes <= INLINE_COUNT_MAX_BYTES) {
         if (fmt === 'PDF') {
           const pages = await countPdfPages(real);
           if (pages != null) return { pages };
@@ -1240,12 +1277,25 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         };
       });
 
-      knowledge.addMany([...folderAdds, ...looseAdds, ...dbAdds]);
+      const added = [...folderAdds, ...looseAdds, ...dbAdds];
+      knowledge.addMany(added);
+      // Grow the page limit by however many we just added, so a fully-loaded
+      // list ("Showing 24 of 24") doesn't push an old item off the bottom and
+      // resurrect a spurious "Load 1 more" — the new sources sit on top of what
+      // was already shown. Then snap the list back to the top so the user sees
+      // the file they just added (it sorts newest-first) instead of it landing
+      // off-screen above a scrolled-down list.
+      if (added.length > 0) {
+        setVisibleLimit(l => l + added.length);
+        requestAnimationFrame(() => {
+          listScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      }
     }
 
     // Toast wording reflects what actually happened.
     if (dbConnect.length > 0) {
-      addToast({ type: 'success', message: `Connected to ${dbConnect[0].name}` });
+      addToast({ type: 'success', message: `Connected to ${dbConnect[0].name}.` });
     } else if (uploads.length > 0) {
       const parts: string[] = [];
       if (folderCount > 0) parts.push(`${folderCount} ${folderCount === 1 ? 'folder' : 'folders'} (${totalFiles - looseCount} files)`);
@@ -1262,9 +1312,25 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   const buckets = bucketByDate(paginatedVisible);
   const hasMore = visible.length > visibleLimit;
 
+  // After "Load more" grows the list, smooth-scroll to the end so the newly
+  // revealed rows (and the next Load-more button) come into view rather than
+  // staying below the fold. Runs post-render so scrollHeight reflects the new rows.
+  useEffect(() => {
+    if (!scrollToEndRef.current) return;
+    scrollToEndRef.current = false;
+    const el = listScrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [paginatedVisible.length]);
+
   // ── Demo override: loading skeleton ──────────────────────────────────────
+  // Wrapped so it scrolls if it ever outgrows a short viewport — the page
+  // wrapper no longer scrolls on its behalf.
   if (displayMode === 'loading') {
-    return <CatalogLoadingSkeleton />;
+    return (
+      <div className="h-full min-h-0 overflow-y-auto [scrollbar-gutter:stable]">
+        <CatalogLoadingSkeleton />
+      </div>
+    );
   }
 
   // ── True-empty state ─────────────────────────────────────────────────────
@@ -1273,7 +1339,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   // a distinct surface, not a faded smudge.
   if (displayMode === 'empty' || sources.length === 0) {
     return (
-      <>
+      <div className="h-full min-h-0 overflow-y-auto [scrollbar-gutter:stable]">
         <div className="rounded-lg border-2 border-dashed border-brand-100 bg-canvas-elevated/95 shadow-[0_1px_3px_rgb(15_8_30_/_0.03)]">
           <div className="flex flex-col items-center justify-center text-center py-24 px-8">
             <div className="w-14 h-14 rounded-lg border border-paper-200 bg-paper-0 flex items-center justify-center mb-6">
@@ -1284,13 +1350,13 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             </h2>
             <p className="text-[0.9375rem] text-ink-500 mt-3 max-w-xl leading-relaxed">
               Files, databases, and cloud sources you add here become available across the platform —
-              chats, dashboards, and workflows all read from the same catalog.
+              chats, dashboards, and workflows all draw on the same sources.
             </p>
             <div className="mt-7">
               <Button
                 variant="primary"
                 leftIcon={<Plus size={14} />}
-                onClick={() => setPickerOpen(true)}
+                onClick={() => openPickerOn()}
               >
                 Add your first source
               </Button>
@@ -1305,11 +1371,12 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           onConfirm={handlePickerConfirm}
-          title="Add data source"
+          title="Add source"
           confirmLabel="Add"
           mode="kh-add"
+          defaultTab={pickerTab}
         />
-      </>
+      </div>
     );
   }
 
@@ -1329,7 +1396,11 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col h-full min-h-0">
+      {/* ── Pinned toolbar — header, filters, search and view toggle stay
+          fixed; only the source list below this block scrolls, so the page
+          never nests a scroll under another scroll. ── */}
+      <div className="shrink-0 space-y-5">
       {/* Storage-failure banner — surfaced when the localStorage mirror fails
           (typically quota exceeded). The error clears automatically on the
           next successful save, so the banner is self-dismissing. */}
@@ -1386,7 +1457,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             button: solid brand-600, no gradient, simple color-shift hover. */}
         <button
           type="button"
-          onClick={() => setPickerOpen(true)}
+          onClick={() => openPickerOn()}
           className="shrink-0 flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
           <Plus size={14} />
@@ -1412,7 +1483,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 cursor-pointer"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas cursor-pointer"
               aria-label="Clear search"
             >
               <X size={12} />
@@ -1499,7 +1570,12 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           </button>
         </div>
       )}
+      </div>
 
+      {/* ── Source list — the single scroll region on the page. The toolbar
+          above stays pinned; this list scrolls underneath it. Gutter is
+          reserved so rows don't nudge when the scrollbar appears. ── */}
+      <div ref={listScrollRef} className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] pt-5 pb-8">
       {/* ── Body ── */}
       <AnimatePresence mode="wait">
         <motion.div
@@ -1517,14 +1593,13 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               search={search}
               dateActive={dateActive}
               dateLabel={dateLabel}
-              onOpenPicker={() => setPickerOpen(true)}
+              onOpenPicker={(t) => openPickerOn(t)}
               onRequestIntegration={() => addToast({ type: 'info', message: 'Opening email…' })}
             />
           )}
 
           {buckets.map(b => {
             const allInBucket = b.items.length > 0 && b.items.every(d => selectedIds.has(d.id));
-            const anyInBucket = b.items.some(d => selectedIds.has(d.id));
             return (
             <div key={b.id} className="group/bucket">
               {/* Bucket header — label + count on left, per-bucket Select all
@@ -1544,7 +1619,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
                   }`}
                   aria-label={allInBucket ? `Clear selection in ${b.label}` : `Select all in ${b.label}`}
                 >
-                  {allInBucket ? 'Clear' : anyInBucket ? 'Select all' : 'Select all'}
+                  {allInBucket ? 'Clear' : 'Select all'}
                 </button>
               </div>
               {viewMode === 'grid' ? (
@@ -1602,15 +1677,15 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           count reflects what's actually rendered ("9 of 1602") so users know
           there's more to fetch — and the button reveals the next page. */}
       {visible.length > 0 && (
-        <div className="flex flex-col items-center gap-4 pt-2">
+        <div className="flex flex-col items-center gap-3 pt-2 pb-2">
           <div className="text-[0.8125rem] text-ink-500 tabular-nums">
             Showing <span className="font-semibold text-ink-700">{paginatedVisible.length}</span> of <span className="font-semibold text-ink-700">{visible.length}</span> {visible.length === 1 ? 'source' : 'sources'}
           </div>
           {hasMore && (
             <button
               type="button"
-              onClick={() => setVisibleLimit(l => l + PAGE_SIZE)}
-              className="group inline-flex items-center gap-2 pl-5 pr-4 h-10 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.8125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-200 hover:bg-brand-50 transition-colors cursor-pointer"
+              onClick={() => { scrollToEndRef.current = true; setVisibleLimit(l => l + PAGE_SIZE); }}
+              className="group inline-flex items-center gap-2 pl-5 pr-4 h-10 rounded-lg bg-canvas-elevated border border-canvas-border text-[0.8125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer"
             >
               Load {Math.min(PAGE_SIZE, visible.length - paginatedVisible.length)} more
               <ChevronDown size={15} className="text-ink-400 group-hover:text-brand-600 transition-[color,transform] group-hover:translate-y-0.5 motion-reduce:transition-none" />
@@ -1618,15 +1693,17 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           )}
         </div>
       )}
+      </div>
 
       {/* ── Shared add-data picker — Upload-only in kh-add mode today. ── */}
       <DataPickerModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onConfirm={handlePickerConfirm}
-        title="Add data source"
+        title="Add source"
         confirmLabel="Add"
         mode="kh-add"
+        defaultTab={pickerTab}
       />
 
       {/* ── Sticky bulk action bar ──
@@ -1647,38 +1724,30 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
               role="toolbar"
               aria-label="Bulk actions for selected sources"
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-lg bg-ink-900 text-paper-0 shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-ink-800/60"
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-lg bg-brand-900 text-white shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-white/10"
             >
-              <span className="text-[0.8125rem] font-semibold tabular-nums">
+              <span className="text-[0.8125rem] font-semibold tabular-nums text-white">
                 {selectedIds.size} selected
               </span>
-              <div className="w-px h-5 bg-ink-700/60 mx-1" aria-hidden />
-              <button
-                type="button"
-                onClick={addSelectedToChat}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[0.8125rem] font-medium text-paper-0/90 hover:text-paper-0 hover:bg-ink-800 cursor-pointer transition-colors"
-              >
-                <MessageSquare size={14} />
-                Add to chat
-              </button>
+              <div className="w-px h-5 bg-white/10 mx-1" aria-hidden />
               <button
                 type="button"
                 onClick={requestBulkRemove}
                 className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[0.8125rem] font-medium cursor-pointer transition-colors ${
                   allIntegrated
-                    ? 'text-paper-0/90 hover:text-paper-0 hover:bg-ink-800'
-                    : 'text-risk-300 hover:text-paper-0 hover:bg-risk-700'
+                    ? 'text-white/90 hover:text-white hover:bg-white/10'
+                    : 'text-risk-300 hover:text-white hover:bg-risk-700'
                 }`}
               >
                 {allIntegrated ? <Unplug size={14} /> : <Trash2 size={14} />}
                 {allIntegrated ? 'Disconnect' : 'Remove'}
               </button>
-              <div className="w-px h-5 bg-ink-700/60 mx-1" aria-hidden />
+              <div className="w-px h-5 bg-white/10 mx-1" aria-hidden />
               <button
                 type="button"
                 onClick={clearSelection}
                 aria-label="Cancel selection"
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-paper-0/70 hover:text-paper-0 hover:bg-ink-800 cursor-pointer transition-colors"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/70 hover:text-white hover:bg-white/10 cursor-pointer transition-colors"
               >
                 <X size={15} />
               </button>
@@ -1704,8 +1773,8 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             title={`${verb} ${name}?`}
             description={
               allIntegrated
-                ? <>The connection settings are kept, but IRA can't read from {queued.length === 1 ? 'this source' : 'these sources'} until you re-connect. You can undo this from the toast that appears next.</>
-                : <>{queued.length === 1 ? 'This file is' : 'These files are'} removed from your Knowledge Hub. You can undo this from the toast that appears next.</>
+                ? <>The connection settings are kept, but IRA can't read from {queued.length === 1 ? 'this source' : 'these sources'} until you reconnect. You can undo it right after.</>
+                : <>{queued.length === 1 ? 'This file' : 'These files'} will be removed from your Knowledge Hub. You can undo it right after.</>
             }
             confirmLabel={verb}
             tone="destructive"
