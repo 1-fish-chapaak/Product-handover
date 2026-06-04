@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ConfirmationModal from '../shared/ConfirmationModal';
-import { validateUploadFile, isAllowedKnowledgeFile } from '../data-sources/datasetFiles';
+import { validateUploadFile, isAllowedKnowledgeFile, KH_ALLOWED_LABEL, KH_ALLOWED_ACCEPT } from '../data-sources/datasetFiles';
 import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource,
@@ -136,10 +136,12 @@ export default function DataPickerModal({
   // ingest can't proceed with a corrupt/locked file in the batch).
   const errorCount = pendingUploads.filter(u => u.status === 'error').length;
 
-  // Closing while uploads are still running would silently discard them, so
-  // intercept every dismiss path (backdrop, ✕, Cancel) and confirm first.
+  // Closing with unsaved uploads — files still uploading OR ready-but-not-yet-
+  // added — would silently discard them, so intercept every dismiss path
+  // (backdrop, ✕, Cancel) and confirm first. Errored-only files have nothing to
+  // lose, so they don't trigger the guard.
   const requestClose = () => {
-    if (inFlightCount > 0) setConfirmClose(true);
+    if (inFlightCount > 0 || readyUploads.length > 0) setConfirmClose(true);
     else onClose();
   };
 
@@ -386,16 +388,20 @@ export default function DataPickerModal({
 
           </motion.div>
 
-          {/* Confirm before discarding in-flight uploads. */}
+          {/* Confirm before discarding unsaved uploads — files still uploading
+              OR ready-but-not-yet-added. Copy adapts to which applies. */}
           <ConfirmationModal
             open={confirmClose}
-            title="Uploads still in progress"
+            title={inFlightCount > 0 ? 'Uploads still in progress' : 'Discard uploaded files?'}
             description={
-              <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading.
-              {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}.</>
+              inFlightCount > 0
+                ? <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading.
+                  {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}{readyUploads.length > 0 ? ` and discard ${readyUploads.length} ready file${readyUploads.length === 1 ? '' : 's'}` : ''}.</>
+                : <>{readyUploads.length} file{readyUploads.length === 1 ? ' is' : 's are'} ready to add.
+                  {' '}Closing now will discard {readyUploads.length === 1 ? 'it' : 'them'} — {readyUploads.length === 1 ? 'it won’t' : 'they won’t'} be added to your Knowledge Hub.</>
             }
-            confirmLabel="Cancel uploads"
-            cancelLabel="Keep uploading"
+            confirmLabel={inFlightCount > 0 ? 'Cancel uploads' : 'Discard'}
+            cancelLabel={inFlightCount > 0 ? 'Keep uploading' : 'Keep files'}
             tone="destructive"
             onConfirm={() => { setConfirmClose(false); onClose(); }}
             onClose={() => setConfirmClose(false)}
@@ -638,7 +644,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
   // rather than dropping them silently.
   const noteSkipped = (n: number) => {
     if (n > 0 && mode === 'kh-add') {
-      addToast({ type: 'info', message: `${n} file${n > 1 ? 's' : ''} skipped — only PDF, CSV, XLSX are supported.` });
+      addToast({ type: 'info', message: `${n} file${n > 1 ? 's' : ''} skipped — supported types: ${KH_ALLOWED_LABEL}.` });
     }
   };
 
@@ -750,8 +756,13 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     setPendingUploads(prev => prev.filter(u => u.localId !== id));
   };
 
+  // Collapse the drop zone to the compact "Drop more files" bar only past a few
+  // files — for a small batch keep the full drop zone so it still reads as the
+  // primary affordance. The uploads list shows whenever there's at least one.
+  const compact = pendingUploads.length > 4;
+
   return (
-    <div className="flex flex-col min-h-0 h-full p-6 gap-3">
+    <div className="flex flex-col min-h-0 h-full px-6 py-3 gap-3">
       {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -759,13 +770,13 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
         onDrop={handleDrop}
         className={`shrink-0 rounded-xl border-2 border-dashed transition-colors ${
           isDragging ? 'border-brand-600 bg-brand-50' : 'border-paper-200 bg-canvas'
-        } ${pendingUploads.length > 0 ? 'px-4 py-2.5' : 'text-center px-6 py-7'}`}
+        } ${compact ? 'px-4 py-2.5' : 'text-center px-6 py-7'}`}
       >
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          {...(mode === 'kh-add' ? { accept: '.pdf,.csv,.xlsx' } : {})}
+          {...(mode === 'kh-add' ? { accept: KH_ALLOWED_ACCEPT } : {})}
           className="hidden"
           onChange={(e) => { handleFileInput(e.target.files); e.target.value = ''; }}
         />
@@ -777,8 +788,8 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           className="hidden"
           onChange={(e) => { handleFolderInput(e.target.files); e.target.value = ''; }}
         />
-        {pendingUploads.length > 0 ? (
-          // Compact bar once files are queued — frees the modal height for the list.
+        {compact ? (
+          // Compact bar once several files are queued — frees the modal height for the list.
           <div className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-600 min-w-0">
               <Upload size={15} className={`shrink-0 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
@@ -787,14 +798,14 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 <Upload size={13} />
                 Choose files
               </button>
               <button
                 onClick={() => folderInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 <Folder size={13} />
                 Choose folder
@@ -809,21 +820,21 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
             <div className="inline-flex items-center gap-2 mt-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
-                <Upload size={13} />
+                <Upload size={14} />
                 Choose files
               </button>
               <button
                 onClick={() => folderInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 h-10 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
-                <Folder size={13} />
+                <Folder size={14} />
                 Choose folder
               </button>
             </div>
             {mode === 'kh-add' && (
-              <p className="text-[0.6875rem] text-ink-400 mt-3">PDF · CSV · XLSX</p>
+              <p className="text-[0.6875rem] text-ink-400 mt-3">{KH_ALLOWED_LABEL}</p>
             )}
           </>
         )}

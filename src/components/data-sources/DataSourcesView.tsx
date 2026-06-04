@@ -62,9 +62,9 @@ function folderTail(source: DataSource): string {
 // extensions default to PDF (most common doc upload).
 function fileFormat(name: string): FileFormat {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'csv')  return 'CSV';
-  if (ext === 'xlsx') return 'XLSX';
-  return 'PDF';
+  if (ext === 'csv') return 'CSV';
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return 'XLSX';
+  return 'PDF'; // pdf, pptx, jpg/jpeg, png — document-style tile
 }
 
 // First path segment, or null if the file isn't in any folder.

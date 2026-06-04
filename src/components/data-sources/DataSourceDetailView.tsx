@@ -15,7 +15,7 @@ import FloatingLines from '../shared/FloatingLines';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import {
   filesForSource, getFileBlob, loadFileBlob, registerFileBlob, setSourceFiles, metaForFormat, countPdfPages, countSheetRows, getPdfjs,
-  validateUploadFile, isAllowedKnowledgeFile,
+  validateUploadFile, isAllowedKnowledgeFile, KH_ALLOWED_LABEL, KH_ALLOWED_ACCEPT,
   INTEGRATION_CONFIGS, formatBytes,
   type DatasetFile, type FileStatus, type FileFormat, type IntegrationConfig,
 } from './datasetFiles';
@@ -308,7 +308,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
     const typed = all.filter(f => isAllowedKnowledgeFile(f.name));
     const skippedType = all.length - typed.length;
     if (skippedType > 0) {
-      addToast({ type: 'info', message: `${skippedType} file${skippedType > 1 ? 's' : ''} skipped — only PDF, CSV, XLSX are supported.` });
+      addToast({ type: 'info', message: `${skippedType} file${skippedType > 1 ? 's' : ''} skipped — supported types: ${KH_ALLOWED_LABEL}.` });
     }
     if (typed.length === 0) return;
 
@@ -766,7 +766,7 @@ function FileSourceBody({
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept=".pdf,.csv,.xlsx"
+                    accept={KH_ALLOWED_ACCEPT}
                     className="hidden"
                     onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
                   />

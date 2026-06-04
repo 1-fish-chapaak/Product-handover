@@ -317,7 +317,13 @@ export async function countSheetRows(file: File): Promise<number | null> {
 // The only file types the Knowledge Hub accepts. Single source of truth shared
 // by BOTH upload entry points (the Add-source picker and a source's detail-view
 // "Add files to this folder") so the restriction can't drift between them.
-export const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx'] as const;
+export const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xls', '.xlsx', '.ods', '.pptx', '.jpg', '.jpeg', '.png'] as const;
+// Human-readable label for the supported formats, shown in the picker hint and
+// the "unsupported type" toast. Kept here so both copies stay in sync with the
+// gate above (note: .jpeg shares the JPG label).
+export const KH_ALLOWED_LABEL = 'PDF · CSV · XLS · XLSX · ODS · PPTX · JPG · PNG';
+// `accept` attribute string for the native file/folder inputs.
+export const KH_ALLOWED_ACCEPT = KH_ALLOWED_EXTS.join(',');
 export function isAllowedKnowledgeFile(name: string): boolean {
   const lower = name.toLowerCase();
   return KH_ALLOWED_EXTS.some(ext => lower.endsWith(ext));
@@ -420,7 +426,7 @@ function parseSubtypeBytes(subtype: string): number | null {
 function formatFromName(name: string): FileFormat {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
   if (ext === 'csv') return 'CSV';
-  if (ext === 'xlsx' || ext === 'xls') return 'XLSX';
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return 'XLSX';
   return 'PDF'; // pdf and anything else preview as PDF
 }
 
