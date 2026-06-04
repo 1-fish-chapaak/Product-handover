@@ -132,6 +132,9 @@ export default function DataPickerModal({
   const readyUploads = pendingUploads.filter(u => u.status === 'ready');
   const totalSelected = selectedSourceIds.size + readyUploads.length;
   const inFlightCount = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+  // Failed files block the confirm — the user must remove them first (a real
+  // ingest can't proceed with a corrupt/locked file in the batch).
+  const errorCount = pendingUploads.filter(u => u.status === 'error').length;
 
   // Closing while uploads are still running would silently discard them, so
   // intercept every dismiss path (backdrop, ✕, Cancel) and confirm first.
@@ -204,6 +207,10 @@ export default function DataPickerModal({
   // Attaching while files are still in flight would drop them silently (only
   // ready uploads are attached) — confirm first.
   const requestConfirm = () => {
+    if (errorCount > 0) {
+      addToast({ type: 'error', message: `Remove the ${errorCount} failed file${errorCount > 1 ? 's' : ''} to continue.` });
+      return;
+    }
     if (inFlightCount > 0) setConfirmAttach(true);
     else void handleConfirm();
   };
@@ -320,7 +327,14 @@ export default function DataPickerModal({
                 if 2+ loose files are queued, replace the status text with a
                 slim "Group as" input on the left side. */}
             <div className="shrink-0 border-t border-paper-200 px-5 py-3 flex items-center justify-between gap-3 bg-canvas">
-              {mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
+              {errorCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-risk min-w-0">
+                  <AlertTriangle size={13} className="shrink-0" />
+                  <span className="truncate">
+                    Remove the {errorCount === 1 ? 'failed file' : `${errorCount} failed files`} to continue.
+                  </span>
+                </span>
+              ) : mode === 'kh-add' && tab === 'upload' && loosePendingCount >= 2 ? (
                 <label className="flex items-center gap-2 flex-1 min-w-0 max-w-md">
                   <span className="text-[0.75rem] font-medium text-ink-700 shrink-0">Group as</span>
                   <input
@@ -358,7 +372,7 @@ export default function DataPickerModal({
                 </button>
                 <button
                   onClick={requestConfirm}
-                  disabled={totalSelected === 0 || submitting}
+                  disabled={totalSelected === 0 || submitting || errorCount > 0}
                   className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-brand-600/40 disabled:text-white disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
                   {submitting
@@ -636,6 +650,8 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
     if (!res.ok) {
       setPendingUploads(prev => prev.map(p => p.localId === localId
         ? { ...p, status: 'error' as const, error: res.reason } : p));
+      // Tell the user why + that it must go before they can add the batch.
+      addToast({ type: 'error', message: `${file.name} — ${res.reason}. Remove it to continue.` });
       return;
     }
     setPendingUploads(prev => prev.map(p => p.localId === localId ? { ...p, status: 'uploading' as const } : p));
@@ -843,7 +859,11 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
 
           <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-paper-200">
             <AnimatePresence initial={false}>
-              {pendingUploads.map((u, idx) => (
+              {/* Failed files float to the top (stable sort keeps each group's
+                  order) so the thing blocking the Add button is always in view. */}
+              {[...pendingUploads]
+                .sort((a, b) => Number(b.status === 'error') - Number(a.status === 'error'))
+                .map((u, idx) => (
                 <PendingFileRow
                   key={u.localId}
                   upload={u}
