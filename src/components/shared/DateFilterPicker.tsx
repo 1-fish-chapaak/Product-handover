@@ -86,14 +86,14 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
   const todayIso = today.toISOString().slice(0, 10);
 
   const [from, setFrom] = useState<string>(filter.kind === 'custom' ? filter.from : '');
-  const [to, setTo] = useState<string>(filter.kind === 'custom' ? filter.to : todayIso);
+  const [to, setTo] = useState<string>(filter.kind === 'custom' ? filter.to : '');
 
   useEffect(() => {
     if (open) {
       setFrom(filter.kind === 'custom' ? filter.from : '');
-      setTo(filter.kind === 'custom' ? filter.to : todayIso);
+      setTo(filter.kind === 'custom' ? filter.to : '');
     }
-  }, [open, filter, todayIso]);
+  }, [open, filter]);
 
   const canApplyCustom = from !== '' && to !== '' && new Date(from) <= new Date(to);
 
@@ -125,7 +125,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                     key={p.id}
                     onClick={() => onApply({ kind: 'preset', id: p.id })}
                     className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[0.75rem] cursor-pointer transition-colors ${
-                      isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'
+                      isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas'
                     }`}
                   >
                     <span>{p.label}</span>
@@ -144,6 +144,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                   <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">From</label>
                   <DatePicker value={from}
                     max={to || todayIso}
+                    today={today}
                     onChange={(e) => setFrom(e.target.value)}
                     className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />
@@ -153,6 +154,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                   <DatePicker value={to}
                     min={from || undefined}
                     max={todayIso}
+                    today={today}
                     onChange={(e) => setTo(e.target.value)}
                     className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />

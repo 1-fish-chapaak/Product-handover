@@ -71,6 +71,9 @@ export interface KnowledgeSourcesAPI {
   addMany: (sources: DataSource[]) => Promise<void>;
   /** Rename a source by id. No-op if the id doesn't exist. */
   rename: (id: string, newName: string) => Promise<void>;
+  /** Update a source's `subtype` string by id (e.g. to keep a folder's
+   *  "N files · size" tail in sync with its live file list). No-op if absent. */
+  setSubtype: (id: string, subtype: string) => Promise<void>;
   /** Remove sources by id. */
   removeMany: (ids: string[]) => Promise<void>;
   /** Replace the whole list (used by tests / dev tools / future bulk import). */
@@ -83,7 +86,7 @@ export interface KnowledgeSourcesAPI {
  *  v3 adds `health` (integration override) and ships a much wider seed
  *  catalogue covering every source type + edge cases (0 B, GB, very-long
  *  names, degraded integration). */
-const STORAGE_KEY = 'kh:sources:v3';
+const STORAGE_KEY = 'kh:sources:v5';
 
 // First-run seed — the catalog the user sees before they've added anything.
 // Mirrors the reference design's example surface: a handful of recent files,
@@ -103,36 +106,33 @@ function makeSeedSources(): DataSource[] {
   const HOUR = 60 * MIN;
   const DAY = 24 * HOUR;
   // Fresh demo catalogue (refreshed 2026-05). Structure is deliberate so the
-  // surface always shows a realistic spread: 24 sources = 16 files + 3 folders
-  // + 5 integrations (3 DB / 1 API / 1 cloud), fanned across the Today /
-  // Last-7-days / Earlier buckets, and still covering the edge rows the UI must
-  // handle gracefully (0 B, multi-GB, a very long name, a degraded integration).
+  // surface shows a realistic spread: 20 sources = 16 files + 3 folders + a
+  // single demo database (the only integration in the catalog), fanned across
+  // the Today / Last-7-days / Earlier buckets, and still covering the edge rows
+  // the UI must handle gracefully (0 B, multi-GB, a very long name).
   return [
     // ── TODAY (6) ────────────────────────────────────────────────────────
+    // Single demo database — the only integration in the whole catalog.
+    { id: 'seed-db',      name: 'Demo_Reporting_DB',           type: 'database',              subtype: 'PostgreSQL · demo',   createdAt: new Date(ref -   5 * MIN).toISOString(), health: 'healthy' },
     { id: 'seed-csv',     name: 'GL_Journal_Entries_May.csv',  type: 'file',                  subtype: 'CSV · 1.2 KB',        createdAt: new Date(ref -  10 * MIN).toISOString() },
     { id: 'seed-pdf-1',   name: 'Audit_Committee_Minutes.pdf', type: 'file',                  subtype: 'PDF · 8.4 KB',        createdAt: new Date(ref -  20 * MIN).toISOString() },
     { id: 'seed-xlsx',    name: 'Control_Testing_Tracker.xlsx', type: 'file',                 subtype: 'XLSX · 92.3 KB',      createdAt: new Date(ref -  30 * MIN).toISOString() },
     { id: 'seed-pdf-2',   name: 'Vendor_Contract_Renewal.pdf', type: 'file',                  subtype: 'PDF · 412.0 KB',      createdAt: new Date(ref -  40 * MIN).toISOString() },
     { id: 'seed-folder',  name: 'FY26_Q2_Workpapers',          type: 'file', isFolder: true,  subtype: 'Folder · 18 Files',   createdAt: new Date(ref -  50 * MIN).toISOString() },
-    { id: 'seed-db',      name: 'Oracle_ERP_Prod',             type: 'database',              subtype: 'Oracle · production', createdAt: new Date(ref -  60 * MIN).toISOString(), health: 'healthy' },
 
-    // ── LAST 7 DAYS (10) — mixed formats, sizes, and source types ────────
+    // ── LAST 7 DAYS (8) — mixed formats and sizes ───────────────────────
     { id: 'seed-l-1',     name: 'ITGC_Access_Review.xlsx',     type: 'file',                  subtype: 'XLSX · 1.6 MB',       createdAt: new Date(ref -  1 * DAY -  2 * HOUR).toISOString() },
     { id: 'seed-l-2',     name: 'Third_Party_Risk_Report.pdf', type: 'file',                  subtype: 'PDF · 1.1 MB',        createdAt: new Date(ref -  2 * DAY).toISOString() },
-    { id: 'seed-l-3',     name: 'Redshift_Analytics',          type: 'database',              subtype: 'Redshift · warehouse', createdAt: new Date(ref -  2 * DAY -  4 * HOUR).toISOString(), health: 'degraded' },
     { id: 'seed-l-4',     name: 'Internal_Controls_Memo.pdf',  type: 'file',                  subtype: 'PDF · 980 KB',        createdAt: new Date(ref -  3 * DAY).toISOString() },
     { id: 'seed-l-5',     name: 'Expense_Sampling_Workbook.xlsx', type: 'file',               subtype: 'XLSX · 740 KB',       createdAt: new Date(ref -  3 * DAY -  5 * HOUR).toISOString() },
     { id: 'seed-l-6',     name: 'Procurement_Evidence',        type: 'file', isFolder: true,  subtype: 'Folder · 11 Files',   createdAt: new Date(ref -  4 * DAY).toISOString() },
-    { id: 'seed-l-7',     name: 'ServiceNow_GRC',              type: 'api',                   subtype: 'ServiceNow · REST v2', createdAt: new Date(ref -  4 * DAY -  6 * HOUR).toISOString(), health: 'healthy' },
     { id: 'seed-l-8',     name: 'Payroll_Recon_Apr.xlsx',      type: 'file',                  subtype: 'XLSX · 1.3 MB',       createdAt: new Date(ref -  5 * DAY).toISOString() },
     { id: 'seed-l-9',     name: 'Bank_Reconciliations_Q1.xlsx', type: 'file',                 subtype: 'XLSX · 22.4 MB',      createdAt: new Date(ref -  5 * DAY -  3 * HOUR).toISOString() },
     { id: 'seed-l-10',    name: 'Travel_Claims_Export.csv',    type: 'file',                  subtype: 'CSV · 640 B',         createdAt: new Date(ref -  6 * DAY).toISOString() },
 
-    // ── EARLIER (8) — older, plus the edge-case rows ──────────────────────
+    // ── EARLIER (6) — older, plus the edge-case rows ──────────────────────
     { id: 'seed-e-1',     name: 'PCI_DSS_Attestation.pdf',     type: 'file',                  subtype: 'PDF · 4.0 MB',        createdAt: new Date(ref - 10 * DAY).toISOString() },
-    { id: 'seed-e-2',     name: 'MySQL_BillingDB',             type: 'database',              subtype: 'MySQL · billing',     createdAt: new Date(ref - 14 * DAY).toISOString(), health: 'healthy' },
     { id: 'seed-e-3',     name: 'Audit_Charter_FY26.pdf',      type: 'file',                  subtype: 'PDF · 310 KB',        createdAt: new Date(ref - 18 * DAY).toISOString() },
-    { id: 'seed-e-4',     name: 'Box_Compliance_Archive',      type: 'cloud',                 subtype: 'Box · /compliance',   createdAt: new Date(ref - 22 * DAY).toISOString(), health: 'healthy' },
     { id: 'seed-e-5',     name: 'Prior_Year_Workpapers',       type: 'file', isFolder: true,  subtype: 'Folder · 31 Files',   createdAt: new Date(ref - 28 * DAY).toISOString() },
     // ── Edge cases ───────────────────────────────────────────────────────
     { id: 'seed-edge-empty', name: 'failed_export.csv',        type: 'file',                  subtype: 'CSV · 0 B',           createdAt: new Date(ref - 35 * DAY).toISOString() },
@@ -219,6 +219,10 @@ export function useKnowledgeSources(): KnowledgeSourcesAPI {
     setSources(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
   }, []);
 
+  const setSubtype = useCallback(async (id: string, subtype: string) => {
+    setSources(prev => prev.map(s => s.id === id ? { ...s, subtype } : s));
+  }, []);
+
   const removeMany = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
@@ -236,6 +240,7 @@ export function useKnowledgeSources(): KnowledgeSourcesAPI {
     backend: 'local',
     addMany,
     rename,
+    setSubtype,
     removeMany,
     replaceAll,
   };

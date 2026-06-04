@@ -131,9 +131,10 @@ export default function KnowledgeHubView() {
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // stays in the future tense so the header never promises a feature that
   // isn't shipped yet (the tab is Coming Soon).
+  const ira = <span className="font-medium text-brand-700">IRA</span>;
   const subhead = tab === 'learn'
-    ? 'What IRA will remember about how you and your team work — coming soon.'
-    : 'Files, databases, and cloud sources IRA can read — unified in one catalog.';
+    ? <>What {ira} will remember about how you and your team work — coming soon.</>
+    : <>One place for every file, database, and cloud source {ira} can draw on.</>;
 
   useEffect(() => {
     if (tab !== 'data') return;
@@ -227,9 +228,11 @@ export default function KnowledgeHubView() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-              // Reserve the scrollbar gutter always, so the content doesn't nudge
-              // when the scrollbar appears (e.g. list → a taller detail/loading).
-              className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable]"
+              // Fills the height but doesn't scroll itself — DataSourcesView pins
+              // its own toolbar and scrolls only the source list inside, so the
+              // page header + filters stay fixed and the list is the single
+              // scroll region (no scroll-within-scroll).
+              className="flex-1 min-h-0 flex flex-col overflow-hidden"
             >
               <DataSourcesView ref={dataSourcesRef} onDetailChange={setDetailOpen} />
             </motion.div>
