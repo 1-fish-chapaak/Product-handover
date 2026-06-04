@@ -751,7 +751,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
   };
 
   return (
-    <div className="flex flex-col min-h-0 h-full p-6 gap-4">
+    <div className="flex flex-col min-h-0 h-full p-6 gap-3">
       {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
