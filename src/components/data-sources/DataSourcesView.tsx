@@ -1149,13 +1149,17 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     const uploads   = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'upload' }>     => s.kind === 'upload');
     const dbConnect = selections.filter((s): s is Extract<AttachmentSelection, { kind: 'connect-db' }> => s.kind === 'connect-db');
 
-    // Per-file row/page metadata. With real bytes we parse the true count —
-    // PDFs via pdf.js (page count), CSV/XLSX via SheetJS (data-row count) — so
-    // the header count matches the live preview. Byte-less files (or parse
-    // failures) fall back to the size-based estimate.
+    // Per-file row/page metadata. For SMALL real files we parse the true count
+    // (PDFs via pdf.js, CSV/XLSX via SheetJS) so the header matches the live
+    // preview. Parsing is synchronous on the main thread, so for anything but
+    // small files — and especially a batch of them on "Add" — we skip it and
+    // use the size-based estimate; otherwise the parses pile up and freeze the
+    // UI. The real count still appears lazily when the file is opened to preview
+    // (and a real backend returns exact counts without any in-browser parse).
+    const INLINE_COUNT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const fileMeta = async (name: string, sizeBytes: number, real?: File) => {
       const fmt = fileFormat(name);
-      if (real) {
+      if (real && sizeBytes <= INLINE_COUNT_MAX_BYTES) {
         if (fmt === 'PDF') {
           const pages = await countPdfPages(real);
           if (pages != null) return { pages };
