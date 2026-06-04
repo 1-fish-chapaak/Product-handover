@@ -33,7 +33,7 @@ export type AttachmentSelection =
 interface Props {
   open: boolean;
   onClose: () => void;
-  onConfirm: (selections: AttachmentSelection[]) => void;
+  onConfirm: (selections: AttachmentSelection[]) => void | Promise<void>;
   // Optional overrides — let callers reuse the picker outside chat with a
   // different starting tab and verb. Defaults preserve the chat-attach UX.
   defaultTab?: TabId;
@@ -88,6 +88,9 @@ export default function DataPickerModal({
   // Guards Attach while uploads are still in flight (in-flight files won't be
   // added) — shows a confirm first.
   const [confirmAttach, setConfirmAttach] = useState(false);
+  // True while the confirm handler is running (building entries / persisting).
+  // Drives the button's loading state so a large batch doesn't look frozen.
+  const [submitting, setSubmitting] = useState(false);
 
   // Reset transient state when the modal opens fresh. The starting tab is
   // caller-controlled (defaults to Upload, which is the chat default).
@@ -100,6 +103,7 @@ export default function DataPickerModal({
       setCombinedName('');
       setConfirmClose(false);
       setConfirmAttach(false);
+      setSubmitting(false);
     }
   }, [open, defaultTab]);
 
@@ -163,7 +167,7 @@ export default function DataPickerModal({
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const sourceSelections: AttachmentSelection[] = SEED
       .filter(s => selectedSourceIds.has(s.id))
       .map(s => ({ kind: 'source' as const, sourceId: s.id, name: s.name, subtype: s.subtype, type: s.type }));
@@ -181,14 +185,27 @@ export default function DataPickerModal({
       return { kind: 'upload' as const, localId: u.localId, name: u.name, sizeBytes: u.sizeBytes, path, file: u.file };
     });
 
-    onConfirm([...sourceSelections, ...uploadSelections]);
+    // Show the loading state for the duration of the (possibly slow) commit —
+    // building entries + persisting bytes can take a moment for a big batch, and
+    // without feedback the button looks frozen. The modal unmounts on success,
+    // so submitting only needs clearing if the handler rejects.
+    setSubmitting(true);
+    // Yield a frame so the spinner actually paints before the (synchronous-heavy)
+    // commit runs — otherwise the work can finish before the browser repaints and
+    // the loading state never shows.
+    await new Promise(r => requestAnimationFrame(() => r(undefined)));
+    try {
+      await onConfirm([...sourceSelections, ...uploadSelections]);
+    } catch {
+      setSubmitting(false);
+    }
   };
 
   // Attaching while files are still in flight would drop them silently (only
   // ready uploads are attached) — confirm first.
   const requestConfirm = () => {
     if (inFlightCount > 0) setConfirmAttach(true);
-    else handleConfirm();
+    else void handleConfirm();
   };
 
   return (
@@ -334,17 +351,19 @@ export default function DataPickerModal({
               <div className="flex items-center gap-2">
                 <button
                   onClick={requestClose}
-                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-paper-0 transition-colors cursor-pointer"
+                  disabled={submitting}
+                  className="px-3 h-9 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-paper-0 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={requestConfirm}
-                  disabled={totalSelected === 0}
+                  disabled={totalSelected === 0 || submitting}
                   className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-brand-600/40 disabled:text-white disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
-                  {mode === 'kh-add' ? <Plus size={13} /> : <Check size={13} />}
-                  {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}
+                  {submitting
+                    ? <><Loader2 size={13} className="animate-spin" /> {mode === 'kh-add' ? 'Adding…' : 'Attaching…'}</>
+                    : <>{mode === 'kh-add' ? <Plus size={13} /> : <Check size={13} />} {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}</>}
                 </button>
               </div>
             </div>
