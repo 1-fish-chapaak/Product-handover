@@ -266,9 +266,18 @@ export async function getPdfjs() {
   return pdfjs;
 }
 
-/** Real page count for a PDF File via pdf.js. Returns null on failure so the
- *  caller can fall back to the byte-size estimate. pdf.js is imported lazily. */
+// Deep content parsing (pdf.js / SheetJS) needs the whole file in memory and
+// runs synchronously. Above this size we skip the parse — loading + parsing a
+// large file (let alone a batch of them in parallel on "Add") spikes memory and
+// blocks the main thread, which can hang or crash the tab. Callers fall back to
+// the size-based estimate. It is NOT an upload size limit; the file still adds.
+const DEEP_PARSE_MAX_BYTES = 30 * 1024 * 1024; // 30 MB
+
+/** Real page count for a PDF File via pdf.js. Returns null on failure (or when
+ *  the file is too large to parse inline) so the caller can fall back to the
+ *  byte-size estimate. pdf.js is imported lazily. */
 export async function countPdfPages(file: File): Promise<number | null> {
+  if (file.size > DEEP_PARSE_MAX_BYTES) return null;
   try {
     const pdfjs = await getPdfjs();
     const buf = await file.arrayBuffer();
@@ -285,6 +294,7 @@ export async function countPdfPages(file: File): Promise<number | null> {
  *  with SheetJS. Returns null if it can't be read — callers then fall back to
  *  the byte-size estimate. Lets uploads show a true row count, not a guess. */
 export async function countSheetRows(file: File): Promise<number | null> {
+  if (file.size > DEEP_PARSE_MAX_BYTES) return null;
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
@@ -314,12 +324,6 @@ export function isAllowedKnowledgeFile(name: string): boolean {
 }
 
 export type UploadValidation = { ok: true } | { ok: false; reason: string };
-
-// Deep content parsing (pdf.js / SheetJS) needs the whole file in memory.
-// Above this size we skip the parse and accept the file rather than risk an
-// out-of-memory read error blocking a legitimate big upload — it is NOT a size
-// limit (the file still uploads), just a cap on how much we validate in-browser.
-const DEEP_VALIDATE_MAX_BYTES = 30 * 1024 * 1024; // 30 MB
 
 export async function validateUploadFile(file: File): Promise<UploadValidation> {
   // Empty files carry nothing to index — the only size gate we keep.
@@ -360,7 +364,7 @@ export async function validateUploadFile(file: File): Promise<UploadValidation> 
   }
 
   // Big PDF: skip the in-browser parse and let it through.
-  if (file.size > DEEP_VALIDATE_MAX_BYTES) return { ok: true };
+  if (file.size > DEEP_PARSE_MAX_BYTES) return { ok: true };
 
   if (ext === 'pdf') {
     let buf: ArrayBuffer;
