@@ -716,19 +716,16 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="flex flex-col min-h-0 h-full p-6 gap-4">
       {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        className={`rounded-xl border-2 border-dashed text-center px-6 py-7 transition-colors ${
+        className={`shrink-0 rounded-xl border-2 border-dashed transition-colors ${
           isDragging ? 'border-brand-600 bg-brand-50' : 'border-paper-200 bg-canvas'
-        }`}
+        } ${pendingUploads.length > 0 ? 'px-4 py-2.5' : 'text-center px-6 py-7'}`}
       >
-        <Upload size={24} className={`mx-auto mb-2 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
-        <p className="text-[0.875rem] text-ink-700 font-medium">Drop files or a folder here</p>
-        <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -745,24 +742,55 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           className="hidden"
           onChange={(e) => { handleFolderInput(e.target.files); e.target.value = ''; }}
         />
-        <div className="inline-flex items-center gap-2 mt-3">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
-          >
-            <Upload size={13} />
-            Choose files
-          </button>
-          <button
-            onClick={() => folderInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
-          >
-            <Folder size={13} />
-            Choose folder
-          </button>
-        </div>
-        {mode === 'kh-add' && (
-          <p className="text-[0.6875rem] text-ink-400 mt-3">PDF · CSV · XLSX</p>
+        {pendingUploads.length > 0 ? (
+          // Compact bar once files are queued — frees the modal height for the list.
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-600 min-w-0">
+              <Upload size={15} className={`shrink-0 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
+              <span className="truncate">Drop more files here, or</span>
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Upload size={13} />
+                Choose files
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Folder size={13} />
+                Choose folder
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Upload size={24} className={`mx-auto mb-2 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
+            <p className="text-[0.875rem] text-ink-700 font-medium">Drop files or a folder here</p>
+            <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
+            <div className="inline-flex items-center gap-2 mt-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Upload size={13} />
+                Choose files
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Folder size={13} />
+                Choose folder
+              </button>
+            </div>
+            {mode === 'kh-add' && (
+              <p className="text-[0.6875rem] text-ink-400 mt-3">PDF · CSV · XLSX</p>
+            )}
+          </>
         )}
       </div>
 
@@ -770,8 +798,8 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
           path tag inline. The Combine input above only renders in kh-add when
           2+ loose files are queued. */}
       {pendingUploads.length > 0 && (
-        <div className="rounded-lg border border-paper-200 bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-paper-200 bg-canvas flex items-center justify-between">
+        <div className="flex-1 min-h-0 flex flex-col rounded-lg border border-paper-200 bg-white overflow-hidden">
+          <div className="shrink-0 px-4 py-2 border-b border-paper-200 bg-canvas flex items-center justify-between">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
               Uploads · {pendingUploads.length}
             </span>
@@ -794,7 +822,7 @@ function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelPro
             })()}
           </div>
 
-          <ul className="divide-y divide-paper-200">
+          <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-paper-200">
             <AnimatePresence initial={false}>
               {pendingUploads.map((u, idx) => (
                 <PendingFileRow
