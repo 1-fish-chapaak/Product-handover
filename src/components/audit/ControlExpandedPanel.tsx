@@ -31,6 +31,11 @@ export default function ControlExpandedPanel({
   );
   const removeWf = (code: string) => setWfs(prev => prev.filter(w => w.code !== code));
 
+  // Status pill colour, echoing the risk row's Mapped/Unmapped pill: a settled
+  // workflow (Ready / Completed) reads compliant; a Draft reads mitigated.
+  const statusPill = (s: PanelWorkflow['status']) =>
+    s === 'Draft' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-compliant-50 text-compliant-700';
+
   return (
     <div className="px-6 py-5 pl-[68px]">
       {/* Description */}
@@ -69,38 +74,24 @@ export default function ControlExpandedPanel({
         ) : (
           <div className="space-y-1.5">
             {wfs.map(w => (
-              <div key={w.code} className="rounded-lg border border-canvas-border bg-white overflow-hidden">
-                <div className="flex items-center gap-2.5 px-3 py-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" aria-hidden="true" />
-                  <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0">{w.code}</span>
-                  <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0 truncate">{w.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeWf(w.code)}
-                    aria-label={`Remove ${w.code}`}
-                    className="shrink-0 p-0.5 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="border-t border-canvas-border bg-canvas/40 px-3 py-2.5 pl-[26px] grid grid-cols-4 gap-4">
-                  <div>
-                    <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1">Type</span>
-                    <span className="text-[12.5px] text-text block">{w.type}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1">Status</span>
-                    <span className="text-[12.5px] text-text block">{w.status}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1">Last run</span>
-                    <span className="text-[12.5px] text-text block">{w.lastRun}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1">Runs</span>
-                    <span className="text-[12.5px] text-text block tabular-nums">{w.runs}</span>
-                  </div>
-                </div>
+              /* Single-line row, matching the risk rows in the RACM expanded state:
+                 bullet · code · name (flex, truncates) · type · status pill · last run. */
+              <div key={w.code} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas/50 transition-colors">
+                <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" aria-hidden="true" />
+                <span className="font-mono text-[0.6875rem] font-semibold text-brand-700 shrink-0">{w.code}</span>
+                <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{w.name}</span>
+                <span className="shrink-0 text-[0.6875rem] text-ink-500">{w.type}</span>
+                <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${statusPill(w.status)}`}>{w.status}</span>
+                <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums">{w.lastRun} · {w.runs} run{w.runs !== 1 ? 's' : ''}</span>
+                <button
+                  type="button"
+                  onClick={() => removeWf(w.code)}
+                  aria-label={`Remove ${w.code}`}
+                  title={`Remove ${w.code}`}
+                  className="shrink-0 p-0.5 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
+                >
+                  <X size={12} />
+                </button>
               </div>
             ))}
           </div>

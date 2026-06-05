@@ -9,6 +9,8 @@ import {
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import { Button } from '../shared/Button';
+import ListLoadError from '../shared/ListLoadError';
 import { LinkControlPickerDrawer } from './RacmListTable';
 import { getRiskRelationships } from '../../data/processHubJoins';
 
@@ -184,7 +186,7 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
             <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         {/* Discard confirm strip — appears at top of body when user tries to close with unsaved changes */}
@@ -263,11 +265,10 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Button variant="outline" size="md" onClick={requestClose}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}>
             Save
-          </button>
+          </Button>
         </div>
       </motion.aside>
     </>
@@ -331,7 +332,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
             </div>
             <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -357,7 +358,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button type="button" onClick={onClose} className="w-full px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+          <Button variant="outline" size="md" onClick={onClose} className="w-full">Close</Button>
         </footer>
 
         {/* Edit drawer (nested) */}
@@ -398,13 +399,16 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
+            shape="lg"
             onClick={onEdit}
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            leftIcon={<Edit3 size={13} />}
+            className="shrink-0"
           >
-            <Edit3 size={13} />Edit risk
-          </button>
+            Edit risk
+          </Button>
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
@@ -438,8 +442,8 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
                       </div>
                       <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
                     </div>
@@ -465,7 +469,7 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
               {rels.workflows.map(w => (
                 <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
@@ -490,7 +494,7 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
               {rels.racms.map(r => (
                 <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
@@ -554,7 +558,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   // Inline card expansion — chevron opens a Description / Sub-process / Owner / Created panel.
   const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null);
   const [editingRiskCard, setEditingRiskCard] = useState<RiskEntry | null>(null);
@@ -567,8 +575,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   // Listen for header-level "Create new Risk" trigger from Process Hub.
@@ -722,6 +731,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     );
   }
 
+  // List load-failure guard — dormant with local data (sits after the detail-page
+  // takeover so it only governs the list view). Mirrors the empty-state guard below.
+  if (!isLoading && loadError) {
+    return <ListLoadError label="risks" onRetry={() => setLoadError(false)} />;
+  }
+
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
@@ -733,10 +748,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               <h1 className="font-display text-[18px] font-semibold text-ink-900">Risk Register</h1>
               <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
-            <button type="button" onClick={() => setShowCreateDrawer(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-              <Plus size={13} />New Risk
-            </button>
+            <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
+              leftIcon={<Plus size={13} />} className="shrink-0">
+              Create Risk
+            </Button>
           </div>
         )}
 
@@ -758,7 +773,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
             <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
             <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
-            <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>
+            <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>Create Risk</Button>
           </div>
         ) : (
         <>
@@ -792,12 +807,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             {embedded && (
-              <button
-                type="button"
-                onClick={() => setShowCreateDrawer(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />Create new Risk
-              </button>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
+                leftIcon={<Plus size={13} />} className="shrink-0">
+                Create Risk
+              </Button>
             )}
           </div>
         </div>
@@ -828,7 +841,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
         {/* Risk Cards — engagement-style list, one card per risk. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
-          {isLoading ? (
+          {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
               <div key={`skel-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
                 <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3 mb-2.5" />
@@ -883,7 +896,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     only in the expanded panel to avoid duplicating them here. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[14.5px] font-semibold text-text leading-snug">
+                    <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
                       <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
                       {risk.name}
                     </h3>
@@ -893,10 +906,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                       {risk.businessProcess}
                     </span>
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
                       {risk.category}
                     </span>
                   </div>

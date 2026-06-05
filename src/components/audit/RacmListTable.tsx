@@ -8,6 +8,8 @@ import {
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
 import SopDetailDrawer from './SopDetailDrawer';
 import { useToast } from '../shared/Toast';
+import { Button } from '../shared/Button';
+import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
 import { SEED_RISKS, RiskDrawer } from './RiskRegister';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
@@ -114,6 +116,83 @@ function renderArCell(e: ArRacmEntry, col: ArCol) {
     default:
       return <span className={`text-ink-700 ${col.nowrap ? 'whitespace-nowrap' : ''}`}>{val}</span>;
   }
+}
+
+// ─── Frozen anchors + column show/hide ───────────────────────────────────────
+// Risk ID + Control ID are the two pinned anchor columns: always visible (never in
+// the show/hide menu) and frozen left during horizontal scroll. Every other column
+// is toggleable. A fixed lane width keeps the second column's sticky offset reliable.
+const AR_FROZEN_KEYS: ReadonlySet<string> = new Set(['riskId', 'controlId']);
+const AR_ANCHOR_W = 140; // px width of each frozen anchor column (drives the sticky offset)
+const AR_TOGGLE_COLUMNS = AR_RACM_COLUMNS.filter(c => !AR_FROZEN_KEYS.has(c.key as string));
+const AR_ALL_KEYS = AR_RACM_COLUMNS.map(c => c.key as string);
+
+// Inline sticky style for a cell at column `index`. Only the first two (frozen)
+// columns get pinned; everything else returns undefined. Header cells sit above body
+// cells so rows scroll cleanly underneath. Backgrounds are applied via Tailwind on
+// the cell (bg-white) since sticky cells need an opaque fill.
+function arStickyStyle(index: number, isHeader: boolean): React.CSSProperties | undefined {
+  if (index > 1) return undefined;
+  return {
+    position: 'sticky',
+    left: index === 0 ? 0 : AR_ANCHOR_W,
+    zIndex: isHeader ? 3 : 1,
+  };
+}
+
+// Small "Columns" show/hide dropdown — mirrors the Download menu's popover styling
+// and closes on outside click. The frozen anchors are listed checked + disabled so
+// it's clear they can't be hidden; all other columns toggle membership in `visible`.
+function ColumnsMenu({ visible, onToggle }: {
+  visible: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (ev: MouseEvent) => {
+      if (ref.current && !ref.current.contains(ev.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const shownCount = AR_TOGGLE_COLUMNS.filter(c => visible.has(c.key as string)).length;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex items-center gap-1.5 rounded-[6px] border border-canvas-border bg-white px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:bg-paper-50 cursor-pointer transition-colors"
+      >
+        Columns <span className="font-mono tabular-nums text-ink-500">· {shownCount + AR_FROZEN_KEYS.size}/{AR_ALL_KEYS.length}</span>
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1.5 w-[230px] max-h-[320px] overflow-y-auto bg-white border border-border-light rounded-[8px] shadow-lg z-50 py-1">
+          {/* Frozen anchors — always on, can't be hidden. */}
+          {AR_RACM_COLUMNS.filter(c => AR_FROZEN_KEYS.has(c.key as string)).map(col => (
+            <label key={col.key} className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-ink-400 cursor-not-allowed">
+              <input type="checkbox" checked disabled className="w-3.5 h-3.5 rounded-[4px] accent-brand-600 cursor-not-allowed" />
+              <span className="truncate">{col.label}</span>
+              <span className="ml-auto text-[0.625rem] uppercase tracking-wide text-ink-300">Pinned</span>
+            </label>
+          ))}
+          <div className="my-1 border-t border-canvas-border/60" />
+          {AR_TOGGLE_COLUMNS.map(col => {
+            const key = col.key as string;
+            const checked = visible.has(key);
+            return (
+              <label key={col.key} className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">
+                <input type="checkbox" checked={checked} onChange={() => onToggle(key)} className="w-3.5 h-3.5 rounded-[4px] accent-brand-600 cursor-pointer" />
+                <span className="truncate">{col.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Shared RACM header ──────────────────────────────────────────────────────
@@ -399,6 +478,17 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
 
   // Entries-table search — functional filter on risk id / control id / description / sub-process.
   const [entriesQuery, setEntriesQuery] = useState('');
+
+  // Column show/hide for the Entries table — Risk ID + Control ID are the frozen
+  // anchors (always on, never in the menu). `shownEntryColumns` drives both the rich
+  // (AR) and seed Entries tables so the two stay in sync.
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => new Set(AR_ALL_KEYS));
+  const toggleColumn = (key: string) => setVisibleColumns(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const shownEntryColumns = AR_RACM_COLUMNS.filter(c => visibleColumns.has(c.key as string));
   const filteredEntries = isRichRacm && entriesQuery.trim()
     ? (() => {
         const q = entriesQuery.toLowerCase();
@@ -433,13 +523,14 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               {showSummary ? 'Hide Summary' : 'Show Summary'}
             </button>
             <div ref={downloadRef} className="relative">
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="md"
+                rightIcon={<ChevronDown size={13} />}
                 onClick={() => setDownloadOpen(v => !v)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 border border-canvas-border rounded-[8px] text-[12px] font-semibold text-ink-700 hover:bg-paper-50 cursor-pointer"
               >
-                Download<ChevronDown size={13} />
-              </button>
+                Download
+              </Button>
               {downloadOpen && (
                 <div className="absolute right-0 mt-1.5 w-[200px] bg-white border border-border-light rounded-[8px] shadow-lg z-50">
                   <button type="button" onClick={() => triggerDownload('xlsx')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as XLSX</button>
@@ -448,13 +539,15 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                 </div>
               )}
             </div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
+              className="shrink-0"
+              rightIcon={<ArrowRight size={13} />}
               onClick={onOpenMapping}
-              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
             >
-              Open mapping<ArrowRight size={13} />
-            </button>
+              Open mapping
+            </Button>
           </div>
         }
       />
@@ -670,19 +763,27 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                 />
               </div>
               <div className="flex items-center gap-3 text-[11px]">
-                <span className="text-ink-400">Scroll right for more columns →</span>
+                <ColumnsMenu visible={visibleColumns} onToggle={toggleColumn} />
+                <span className="text-ink-400">Risk ID &amp; Control ID stay pinned →</span>
                 <span className="text-ink-500 tabular-nums">{filteredEntries.length} entries</span>
               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-max min-w-full text-[12px]">
+                {/* Fix the two frozen anchor lanes to a known width so the 2nd column's
+                    sticky offset lines up; the rest stay content-sized. */}
+                <colgroup>
+                  {shownEntryColumns.map((col, idx) => (
+                    <col key={col.key} style={idx < 2 ? { width: AR_ANCHOR_W } : undefined} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                    {AR_RACM_COLUMNS.map(col => (
+                    {shownEntryColumns.map((col, idx) => (
                       <th
                         key={col.key}
-                        className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom"
-                        style={col.minW ? { minWidth: col.minW } : undefined}
+                        className={`py-2 font-semibold pr-4 whitespace-nowrap align-bottom ${idx < 2 ? 'bg-white' : ''}`}
+                        style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, true) }}
                       >
                         {col.label}
                       </th>
@@ -691,14 +792,14 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                 </thead>
                 <tbody>
                   {filteredEntries.length === 0 ? (
-                    <tr><td colSpan={AR_RACM_COLUMNS.length} className="py-6 text-center text-ink-400 italic">No entries match "{entriesQuery}".</td></tr>
+                    <tr><td colSpan={shownEntryColumns.length} className="py-6 text-center text-ink-400 italic">No entries match "{entriesQuery}".</td></tr>
                   ) : pagedEntries.map(e => (
                     <tr key={`${e.riskId}-${e.controlId}`} className="border-b border-canvas-border/40 last:border-0 align-top">
-                      {AR_RACM_COLUMNS.map(col => (
+                      {shownEntryColumns.map((col, idx) => (
                         <td
                           key={col.key}
-                          className="py-2.5 pr-4 align-top"
-                          style={col.minW ? { minWidth: col.minW } : undefined}
+                          className={`py-2.5 pr-4 align-top ${idx < 2 ? 'bg-white' : ''}`}
+                          style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, false) }}
                         >
                           {renderArCell(e, col)}
                         </td>
@@ -974,24 +1075,32 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); every field
           is synthesised for seed RACMs. ─── */}
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-        <div className="flex items-baseline justify-between mb-3">
+        <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
           <h2 className="text-[13px] font-bold text-ink-900">Entries</h2>
-          <span className="text-[11px] text-ink-500 tabular-nums">
-            {scopedControls.length} entries
-          </span>
+          <div className="flex items-center gap-3 text-[11px]">
+            <ColumnsMenu visible={visibleColumns} onToggle={toggleColumn} />
+            <span className="text-ink-500 tabular-nums">{scopedControls.length} entries</span>
+          </div>
         </div>
         {scopedControls.length === 0 ? (
           <p className="text-[12px] text-ink-400 italic">No risk–control pairs in this RACM yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-max min-w-full text-[12px]">
+              {/* Fix the two frozen anchor lanes so the 2nd column's sticky offset
+                  lines up; the rest stay content-sized. */}
+              <colgroup>
+                {shownEntryColumns.map((col, idx) => (
+                  <col key={col.key} style={idx < 2 ? { width: AR_ANCHOR_W } : undefined} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                  {AR_RACM_COLUMNS.map(col => (
+                  {shownEntryColumns.map((col, idx) => (
                     <th
                       key={col.key}
-                      className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom"
-                      style={col.minW ? { minWidth: col.minW } : undefined}
+                      className={`py-2 font-semibold pr-4 whitespace-nowrap align-bottom ${idx < 2 ? 'bg-white' : ''}`}
+                      style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, true) }}
                     >
                       {col.label}
                     </th>
@@ -1001,13 +1110,13 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               <tbody>
                 {seedEntryRows.map((row, i) => (
                   <tr key={`${row.riskId}-${row.controlId}-${i}`} className="border-b border-canvas-border/40 last:border-0 align-top">
-                    {AR_RACM_COLUMNS.map(col => {
+                    {shownEntryColumns.map((col, idx) => {
                       const val = row[col.key];
                       return (
                         <td
                           key={col.key}
-                          className="py-2.5 pr-4 align-top"
-                          style={col.minW ? { minWidth: col.minW } : undefined}
+                          className={`py-2.5 pr-4 align-top ${idx < 2 ? 'bg-white' : ''}`}
+                          style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, false) }}
                         >
                           {val === '[NA]' ? (
                             <span className="text-ink-400">[NA]</span>
@@ -1048,7 +1157,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           ) : (
             <div className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{rels.sop.name}</span>
+                <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{rels.sop.name}</span>
                 <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{rels.sop.version}</span>
               </div>
               <span className="text-[11px] text-ink-500 leading-snug">Uploaded by {rels.sop.by} · {rels.sop.at}</span>
@@ -1076,7 +1185,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                   <div className="flex items-start gap-2.5">
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
                       <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
                     </div>
                   </div>
@@ -1104,8 +1213,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
                       </div>
                       <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
                     </div>
@@ -1131,7 +1240,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               {rels.workflows.map(w => (
                 <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
@@ -1243,17 +1352,38 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
   const end = Math.min(start + perPage, filtered.length);
   const paged = filtered.slice(start, end);
 
+  // Column show/hide — every key visible by default; Risk ID + Control ID are the
+  // frozen anchors and stay always-on (ColumnsMenu never offers them). The displayed
+  // AR columns + the fixed-width calc both derive from this set.
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => new Set(AR_ALL_KEYS));
+  const toggleColumn = (key: string) => setVisibleColumns(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const shownColumns = AR_RACM_COLUMNS.filter(c => visibleColumns.has(c.key as string));
+  // Fixed 200px lanes for every shown column, plus the 3 appended mapping columns;
+  // the two frozen anchors use the narrower anchor width so their sticky offset lines up.
+  const matrixWidth = shownColumns.reduce((w, c) => w + (AR_FROZEN_KEYS.has(c.key as string) ? AR_ANCHOR_W : 200), 0) + 3 * 200;
+
   const FILTERS = [
     { key: 'all' as const, label: 'All', count: entries.length },
     { key: 'mapped' as const, label: 'Mapped', count: mappedCount },
     { key: 'unmapped' as const, label: 'Unmapped', count: entries.length - mappedCount },
   ];
+  // Inline workflow linking from the matrix's Workflow Status cell. Local to this
+  // read-only view; keyed by control so a linked workflow shows on every row for it.
+  const [linkedWf, setLinkedWf] = useState<Record<string, ControlWorkflow>>({});
+  const [linkWfEntry, setLinkWfEntry] = useState<ArRacmEntry | null>(null);
+  const linkedWfCount = Object.keys(linkedWf).length;
+  const uniqueControlCount = new Set(entries.map(e => e.controlId)).size;
+
   const readiness: Array<{ ok: boolean; label: string }> = [
     { ok: true, label: `Risks added (${entries.length})` },
     { ok: mappedCount === entries.length, label: `All risks mapped to controls (${mappedCount}/${entries.length})` },
     { ok: keyControls > 0, label: `Key controls identified (${keyControls})` },
     { ok: todDefined === entries.length, label: `Test of Design defined (${todDefined}/${entries.length})` },
-    { ok: false, label: 'Workflows linked to controls' },
+    { ok: linkedWfCount > 0, label: `Workflows linked to controls (${linkedWfCount}/${uniqueControlCount})` },
   ];
 
   return (
@@ -1263,13 +1393,15 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
       <RacmDetailHeader
         racm={racm}
         action={
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
+            className="shrink-0"
+            leftIcon={<FileText size={13} />}
             onClick={onBack}
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
           >
-            <FileText size={13} />RACM Summary
-          </button>
+            RACM Summary
+          </Button>
         }
       />
 
@@ -1312,8 +1444,9 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
       {/* Matrix — the detail table (AR_RACM_COLUMNS) + appended mapping columns */}
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
         <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
-          <span className="text-[11px] text-ink-400">Full RACM detail · scroll right for mapping status →</span>
+          <span className="text-[11px] text-ink-400">Risk ID &amp; Control ID stay pinned · scroll right for mapping status →</span>
           <div className="flex items-center gap-3 text-[11px]">
+            <ColumnsMenu visible={visibleColumns} onToggle={toggleColumn} />
             <label className="flex items-center gap-1.5 text-ink-500">
               Rows per page
               <select
@@ -1328,19 +1461,26 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
           </div>
         </div>
         <div className="overflow-x-auto">
-          {/* Fixed 200px columns so every field reads in a uniform lane; the matrix
-              stays horizontally scrollable. */}
-          <table className="text-[12px]" style={{ tableLayout: 'fixed', width: (AR_RACM_COLUMNS.length + 3) * 200 }}>
+          {/* Fixed-width columns so every field reads in a uniform lane; the matrix
+              stays horizontally scrollable. Risk ID + Control ID are frozen left. Width
+              and colgroup track the currently-visible columns + 3 mapping columns. */}
+          <table className="text-[12px]" style={{ tableLayout: 'fixed', width: matrixWidth }}>
             <colgroup>
-              {AR_RACM_COLUMNS.map(col => <col key={col.key} style={{ width: 200 }} />)}
+              {shownColumns.map(col => <col key={col.key} style={{ width: AR_FROZEN_KEYS.has(col.key as string) ? AR_ANCHOR_W : 200 }} />)}
               <col style={{ width: 200 }} />
               <col style={{ width: 200 }} />
               <col style={{ width: 200 }} />
             </colgroup>
             <thead>
               <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                {AR_RACM_COLUMNS.map(col => (
-                  <th key={col.key} className="py-2 font-semibold pr-4 align-bottom">{col.label}</th>
+                {shownColumns.map((col, idx) => (
+                  <th
+                    key={col.key}
+                    className={`py-2 font-semibold pr-4 align-bottom ${idx < 2 ? 'bg-white' : ''}`}
+                    style={arStickyStyle(idx, true)}
+                  >
+                    {col.label}
+                  </th>
                 ))}
                 <th className="py-2 font-semibold pr-4 align-bottom border-l border-canvas-border pl-4">Control(s)</th>
                 <th className="py-2 font-semibold pr-4 align-bottom">Workflow Status</th>
@@ -1349,16 +1489,35 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={AR_RACM_COLUMNS.length + 3} className="py-6 text-center text-ink-400 italic">No risks match "{query}".</td></tr>
+                <tr><td colSpan={shownColumns.length + 3} className="py-6 text-center text-ink-400 italic">No risks match "{query}".</td></tr>
               ) : paged.map(e => (
                 <tr key={`${e.riskId}-${e.controlId}`} className="border-b border-canvas-border/40 last:border-0 align-top">
-                  {AR_RACM_COLUMNS.map(col => (
-                    <td key={col.key} className="py-2.5 pr-4 align-top overflow-hidden">{renderArCell(e, col)}</td>
+                  {shownColumns.map((col, idx) => (
+                    <td
+                      key={col.key}
+                      className={`py-2.5 pr-4 align-top overflow-hidden ${idx < 2 ? 'bg-white' : ''}`}
+                      style={arStickyStyle(idx, false)}
+                    >
+                      {renderArCell(e, col)}
+                    </td>
                   ))}
                   <td className="py-2.5 pr-4 align-top border-l border-canvas-border pl-4">
                     <span className="inline-flex items-center px-2 h-5 rounded bg-paper-100 text-ink-700 text-[10px] font-mono tabular-nums whitespace-nowrap">{e.controlId}</span>
                   </td>
-                  <td className="py-2.5 pr-4 align-top whitespace-nowrap"><span className="text-ink-300">— not linked</span></td>
+                  <td className="py-2.5 pr-4 align-top whitespace-nowrap">
+                    {linkedWf[e.controlId] ? (
+                      <button type="button" onClick={() => setLinkWfEntry(e)} title="Change workflow"
+                        className="inline-flex items-center gap-1.5 max-w-full group cursor-pointer">
+                        <span className="truncate min-w-0 text-[0.6875rem] font-medium text-ink-700 group-hover:text-brand-700">{linkedWf[e.controlId].name}</span>
+                        <span className="shrink-0 px-1.5 h-4 rounded-full text-[0.625rem] font-semibold inline-flex items-center bg-compliant-50 text-compliant-700">{linkedWf[e.controlId].status}</span>
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => setLinkWfEntry(e)}
+                        className="inline-flex items-center gap-1 text-[0.6875rem] font-medium text-brand-700 hover:text-brand-500 cursor-pointer">
+                        <Link2 size={11} />Link workflow
+                      </button>
+                    )}
+                  </td>
                   <td className="py-2.5 pr-2 align-top">
                     {isMapped(e)
                       ? <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center bg-compliant-50 text-compliant-700 whitespace-nowrap">Mapped</span>
@@ -1387,7 +1546,7 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
         <div className="flex items-center gap-2 mb-3">
           <h2 className="text-[13px] font-bold text-ink-900">RACM Readiness</h2>
-          <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center bg-mitigated-50 text-mitigated-700">Workflow Missing</span>
+          {linkedWfCount === 0 && <span className="px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center bg-mitigated-50 text-mitigated-700">Workflow Missing</span>}
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2">
           {readiness.map(r => (
@@ -1400,6 +1559,25 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
           ))}
         </div>
       </div>
+
+      {/* Inline "Link workflow" drawer, opened from a Workflow Status cell. */}
+      <AnimatePresence>
+        {linkWfEntry && (() => {
+          const lwe = linkWfEntry;
+          return (
+            <LinkWorkflowToControlDrawer
+              control={{
+                name: lwe.controlId,
+                description: lwe.controlActivity || lwe.controlObjective || '',
+                isKey: String(lwe.controlType) === 'Key',
+                workflows: linkedWf[lwe.controlId] ? [linkedWf[lwe.controlId]] : [],
+              }}
+              onClose={() => setLinkWfEntry(null)}
+              onLink={(wf) => { setLinkedWf(prev => ({ ...prev, [lwe.controlId]: wf })); setLinkWfEntry(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1420,7 +1598,7 @@ interface Props {
   /** Called when the user clicks the "New RACM" CTA on the empty state. If omitted, the empty state falls back to the inline "No RACMs found" row. */
   onCreate?: () => void;
   /** Fired with true while a RACM detail/mapping takeover is on screen, so the parent can hide its section-pills chrome and let the RACM header own the top. */
-  onTakeoverChange?: (active: boolean) => void;
+  onTakeoverChange?: (mode: 'detail' | 'mapping' | null) => void;
 }
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
@@ -1451,7 +1629,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   })();
   const [showMappingWorkspace, setShowMappingWorkspace] = useState(false);
   const [mappingRacm, setMappingRacm] = useState<RacmEntry | null>(null);
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [archivedIds, setArchivedIds] = useState<string[]>([]);
   const [unfrozenIds, setUnfrozenIds] = useState<string[]>([]);
@@ -1538,7 +1720,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   // Tell the parent (BusinessProcesses) when a RACM detail or mapping takeover is on
   // screen, so it can hide its section-pills row and let the RACM header own the top.
   useEffect(() => {
-    onTakeoverChange?.(!!detailRacmId || (showMappingWorkspace && !!mappingRacm));
+    onTakeoverChange?.(detailRacmId ? 'detail' : (showMappingWorkspace && mappingRacm ? 'mapping' : null));
   }, [detailRacmId, showMappingWorkspace, mappingRacm, onTakeoverChange]);
 
   useEffect(() => {
@@ -1551,8 +1733,9 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   useEffect(() => {
@@ -1683,6 +1866,12 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     );
   }
 
+  // List-load error takeover — sits after the detail/mapping takeovers so it only
+  // governs the list view. Dormant with local data (loadError never flips true here).
+  if (!isLoading && loadError) {
+    return <ListLoadError label="RACMs" onRetry={() => setLoadError(false)} />;
+  }
+
   // Archive / cancel a single card.
   const handleArchiveOne = (id: string) => {
     setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
@@ -1723,7 +1912,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No RACMs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Build a Risk &amp; Controls Matrix from the SOP or from scratch.</p>
-          <button type="button" onClick={onCreate} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New RACM</button>
+          <Button variant="primary" size="md" onClick={onCreate}>Create RACM</Button>
         </div>
       ) : (
       <div className="space-y-5">
@@ -1753,12 +1942,15 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             <ColumnFilter variant="button" label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} align="end" />
             <ColumnFilter variant="button" label="Framework" options={frameworkOptions} value={frameworkFilter} onChange={setFrameworkFilter} align="end" />
             {onCreate && (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
+                className="shrink-0"
+                leftIcon={<Plus size={13} />}
                 onClick={onCreate}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />Create new RACM
-              </button>
+              >
+                Create new RACM
+              </Button>
             )}
           </div>
         </div>
@@ -1789,7 +1981,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
         {/* RACM Cards — engagement-style list, one card per RACM. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
-          {isLoading ? (
+          {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
               <div key={`skel-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
                 <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3 mb-2.5" />
@@ -1911,13 +2103,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           else if (e.key === 'Escape') { setEditingRacmNameId(null); }
                         }}
                         onBlur={() => saveRacmName(racm.id, displayName)}
-                        className="text-[14.5px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
+                        className="text-[0.9375rem] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
                       />
                     ) : (
                       <button
                         type="button"
                         onClick={() => setDetailRacmId(racm.id)}
-                        className="text-[14.5px] font-semibold text-text leading-snug hover:text-brand-700 hover:underline cursor-pointer text-left"
+                        className="text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 hover:underline cursor-pointer text-left"
                       >
                         {displayName}
                       </button>
@@ -1934,10 +2126,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                     <span className="font-mono tracking-tight">{racm.id}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                       {racm.process}
                     </span>
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
                       {racm.framework}
                     </span>
                   </div>
@@ -2107,8 +2299,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                             return (
                             <div key={risk.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas/50 transition-colors">
                               <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" aria-hidden="true" />
-                              <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0">{risk.id}</span>
-                              <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0 truncate">{risk.name}</span>
+                              <span className="font-mono text-[0.6875rem] font-semibold text-brand-700 shrink-0">{risk.id}</span>
+                              <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{risk.name}</span>
                               {/* Risk Status */}
                               <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${mapped ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{mapped ? 'Mapped' : 'Unmapped'}</span>
                               {/* Control(s) */}
@@ -2116,7 +2308,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                                 {controls.length === 0 ? (
                                   <span className="text-[11px] text-ink-400">—</span>
                                 ) : controls.map(ctl => (
-                                  <span key={ctl.id} title={ctl.isKey ? `${ctl.name} · Key control` : ctl.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                                  <span key={ctl.id} title={ctl.isKey ? `${ctl.name} · Key control` : ctl.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[0.6875rem] font-semibold text-brand-700">
                                     <Star size={10} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
                                     <span className="font-mono">{ctl.id}</span>
                                     <button type="button" onClick={() => setConfirmUnmap({ riskId: risk.id, ctlId: ctl.id })} className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors" aria-label={`Remove ${ctl.id}`}>
@@ -2375,7 +2567,7 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
             <h2 className="font-display text-[18px] font-semibold text-ink-900">Link Risk to RACM</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">Select risks from this business process to map to the RACM.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         {/* Search + Create Risk */}
@@ -2385,10 +2577,9 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search risks by ID or name..."
               className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] placeholder:text-ink-400 outline-none focus:border-brand-500/60 transition-all" />
           </div>
-          <button type="button" onClick={onCreateRisk}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-paper-0 text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-            <Plus size={13} />Create Risk
-          </button>
+          <Button variant="primary" size="md" className="shrink-0" leftIcon={<Plus size={13} />} onClick={onCreateRisk}>
+            Create Risk
+          </Button>
         </div>
 
         {/* Risk list */}
@@ -2401,14 +2592,14 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
               <label key={r.id}
                 className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${checked ? 'border-brand-400 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50'}`}>
                 <input type="checkbox" checked={checked} onChange={() => toggle(r.id)}
-                  className="mt-0.5 w-[18px] h-[18px] rounded-[5px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
+                  className="mt-0.5 w-[18px] h-[18px] rounded-[6px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-mono text-[11px] text-ink-500">{r.id}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${PRIORITY_BADGE[r.priority] ?? 'bg-paper-100 text-ink-500'}`}>{r.priority}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide ${PRIORITY_BADGE[r.priority] ?? 'bg-paper-100 text-ink-500'}`}>{r.priority}</span>
                   </div>
-                  <div className="text-[13.5px] font-semibold text-ink-900 leading-snug truncate">{r.name}</div>
-                  {r.description && <div className="text-[11.5px] text-ink-400 leading-snug truncate mt-0.5">{r.description}</div>}
+                  <div className="text-[0.875rem] font-semibold text-ink-900 leading-snug truncate">{r.name}</div>
+                  {r.description && <div className="text-[0.75rem] text-ink-400 leading-snug truncate mt-0.5">{r.description}</div>}
                 </div>
               </label>
             );
@@ -2417,13 +2608,15 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
-          <button type="button" disabled={selected.size === 0}
+          <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="md"
+            disabled={selected.size === 0}
             onClick={() => onLink(pool.filter(r => selected.has(r.id)).map(r => ({ id: r.id, name: r.name })))}
-            className="px-4 py-2 rounded-lg bg-brand-600 text-paper-0 text-[13px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          >
             Link Risks{selected.size > 0 ? ` (${selected.size})` : ''}
-          </button>
+          </Button>
         </footer>
       </motion.aside>
     </>
@@ -2483,7 +2676,7 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
             <div className="flex items-center gap-2"><Link2 size={18} className="text-brand-600 shrink-0" /><h2 className="font-display text-[18px] font-semibold text-ink-900">Link Existing Control</h2></div>
             <p className="text-[12px] text-ink-500 mt-0.5">Search the Control Library to map a control to <span className="font-semibold text-ink-700">{riskName}</span>.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
         </div>
 
         {/* Search + Create Control + Key filter + selected count */}
@@ -2494,10 +2687,9 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search controls..."
                 className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] placeholder:text-ink-400 outline-none focus:border-brand-500/60 transition-all" />
             </div>
-            <button type="button" onClick={onCreateControl}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-paper-0 text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-              <Plus size={13} />Create Control
-            </button>
+            <Button variant="primary" size="md" className="shrink-0" leftIcon={<Plus size={13} />} onClick={onCreateControl}>
+              Create Control
+            </Button>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -2523,7 +2715,7 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
               <label key={c.id}
                 className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${checked ? 'border-brand-400 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50'}`}>
                 <input type="checkbox" checked={checked} onChange={() => toggle(c.id)}
-                  className="mt-0.5 w-[18px] h-[18px] rounded-[5px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
+                  className="mt-0.5 w-[18px] h-[18px] rounded-[6px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="text-[13px] font-semibold text-ink-900 leading-snug line-clamp-2">{c.name}</div>
                   {c.isKey && <Star size={11} className="fill-amber-400 text-amber-500" aria-label="Key control" />}
@@ -2541,12 +2733,10 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
 
         {/* Footer */}
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
-          <button type="button" disabled={selected.size === 0} onClick={apply}
-            className="px-4 py-2 rounded-lg bg-brand-600 text-paper-0 text-[13px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" disabled={selected.size === 0} onClick={apply}>
             Apply Changes{selected.size > 0 ? ` (${selected.size})` : ''}
-          </button>
+          </Button>
         </footer>
       </motion.aside>
     </>
@@ -2569,14 +2759,12 @@ function ConfirmUnmapModal({ ctlId, onCancel, onConfirm }: {
           <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
           <h2 className="text-[17px] font-bold text-ink-900">Remove control mapping?</h2>
         </div>
-        <p className="text-[12.5px] text-ink-500 leading-relaxed mb-5">
+        <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-5">
           This unlinks <span className="font-mono font-semibold text-ink-700">{ctlId}</span> from this risk. It stays in the Control Library, so you can re-link it anytime from <span className="font-medium text-ink-700">Link Control</span>.
         </p>
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-risk text-paper-0 text-[13px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Remove</button>
+          <Button variant="outline" size="md" onClick={onCancel}>Cancel</Button>
+          <Button variant="destructive" size="md" onClick={onConfirm}>Remove</Button>
         </div>
       </motion.div>
     </motion.div>
@@ -2600,14 +2788,12 @@ function ConfirmDeleteRiskModal({ riskId, riskName, onCancel, onConfirm }: {
           <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
           <h2 className="text-[17px] font-bold text-ink-900">Delete this risk?</h2>
         </div>
-        <p className="text-[12.5px] text-ink-500 leading-relaxed mb-5">
+        <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-5">
           This removes <span className="font-mono font-semibold text-ink-700">{riskId}</span> <span className="text-ink-700">{riskName}</span> and its control mappings from this RACM. This can't be undone here.
         </p>
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-risk text-paper-0 text-[13px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Delete</button>
+          <Button variant="outline" size="md" onClick={onCancel}>Cancel</Button>
+          <Button variant="destructive" size="md" onClick={onConfirm}>Delete</Button>
         </div>
       </motion.div>
     </motion.div>
@@ -2638,7 +2824,7 @@ function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClose }: {
             <div className="flex items-center gap-2"><WorkflowIcon size={18} className="text-brand-600 shrink-0" /><h2 className="font-display text-[18px] font-semibold text-ink-900">Link Workflow</h2></div>
             <p className="text-[12px] text-ink-500 mt-0.5">Choose which control on <span className="font-semibold text-ink-700">{riskName}</span> to link a workflow to.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
@@ -2653,7 +2839,7 @@ function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClose }: {
               className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
               <Star size={12} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
               <span className="font-mono text-[11px] text-brand-700 font-semibold shrink-0">{ctl.id}</span>
-              <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0 truncate">{ctl.name}</span>
+              <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{ctl.name}</span>
               <ChevronRight size={14} className="shrink-0 text-ink-400" />
             </button>
           ))}
