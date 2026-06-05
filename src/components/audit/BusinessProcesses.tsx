@@ -5,12 +5,14 @@ import {
   ChevronRight, ChevronLeft, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
-  FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
+  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download,
   HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
+import { generateRacmForProcess, type RACMRow } from '../../data/racm';
+import type { ProcessCode } from '../../data/engagements';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
@@ -19,6 +21,7 @@ import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import ControlExpandedPanel from './ControlExpandedPanel';
+import SopDocumentModal from './SopDocumentModal';
 import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
@@ -37,6 +40,100 @@ const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
   { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
 ];
 const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
+
+// ─── New RACM flow (ported from the engagement RACM tab) ───────────────────
+// Two-card chooser: import an existing matrix, or upload an SOP and let IRA
+// extract the RACM. Mirrors RACMTab's NewRacmModal so the Process Hub create-
+// RACM flow is identical to the engagement one.
+function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => void; onUploadRacm: () => void; onUploadSop: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-[560px] bg-white rounded-2xl shadow-2xl overflow-hidden"
+      >
+        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
+          <div>
+            <h2 className="text-[16px] font-bold text-text">New RACM</h2>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+        </div>
+        <div className="p-6 grid grid-cols-2 gap-3">
+          <button onClick={onUploadRacm} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><FileUp size={16} className="text-evidence-700" /></div>
+            <div className="text-[13.5px] font-semibold text-text mb-1">Upload a RACM</div>
+            <div className="text-[11.5px] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
+          </button>
+          <button onClick={onUploadSop} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
+            <div className="text-[13.5px] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+            <div className="text-[11.5px] text-text-muted leading-relaxed">IRA reads a procedure (.pdf/.docx) and drafts the RACM.</div>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// SOP → RACM extraction overlay (ported from the engagement RACM tab).
+function RacmExtractionOverlay({ filename }: { filename: string }) {
+  const steps = ['Parsing the SOP document', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & test procedures'];
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-ink-900/50 backdrop-blur-[3px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.18 }} className="relative w-full max-w-[440px] bg-white rounded-2xl shadow-2xl p-6"
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 rounded-xl bg-brand-50"><Loader2 size={20} className="text-brand-600 animate-spin" /></div>
+          <div className="min-w-0">
+            <div className="text-[14px] font-bold text-text">Extracting RACM from SOP</div>
+            <div className="text-[11.5px] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {steps.map((s, i) => (
+            <motion.div key={s} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.32, duration: 0.3 }} className="flex items-center gap-2.5 text-[12px] text-text-secondary">
+              <span className="w-4 h-4 rounded-full bg-brand-50 border border-brand-100 inline-flex items-center justify-center shrink-0">
+                <Sparkles size={9} className="text-brand-600" />
+              </span>
+              {s}
+            </motion.div>
+          ))}
+        </div>
+        <div className="mt-5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+          <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Derive a readable RACM name from an uploaded file name (mirrors the engagement helper).
+function racmNameFromFilename(filename: string): string {
+  const base = filename
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\bSOP\b/ig, '')
+    .replace(/\bRACM\b/ig, '')
+    .replace(/\bv?\d+(\.\d+)?\b/gi, '')
+    .trim();
+  return base ? base.replace(/\b\w/g, c => c.toUpperCase()) : '';
+}
+
+// Roll up generated RACM rows into the counts the RACM list card needs.
+function racmStatsFromRows(rows: RACMRow[]) {
+  const risks = new Set(rows.map(r => r.riskId)).size;
+  const controls = new Set(rows.map(r => r.controlId)).size;
+  const keyControls = new Set(rows.filter(r => r.isKey).map(r => r.controlId)).size;
+  const withAttrs = rows.filter(r => r.attributes.length > 0).length;
+  const attributesCoverage = rows.length ? Math.round((withAttrs / rows.length) * 100) : 0;
+  return { risks, controls, keyControls, attributesCoverage };
+}
 
 interface Props {
   selectedBPId: string | null;
@@ -880,30 +977,6 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   );
 }
 
-// ─── SOP Preview Drawer ──────────────────────────────────────────────────
-
-function SOPPreviewDrawer({ sop, onClose }: { sop: LocalSOP; onClose: () => void; onGoToRacm?: () => void }) {
-  const { addToast } = useToast();
-  return (
-    <SopDetailDrawer
-      subProcess={sop.businessProcess}
-      title={sop.name}
-      version={sop.version}
-      uploadedAgo={sop.uploadedAt}
-      summary={sop.racmId ? {
-        controls: sop.controls,
-        risks: sop.risks,
-        attributes: sop.controls * 3,
-        racmName: sop.racmName || sop.racmId,
-      } : undefined}
-      sections={DEFAULT_SOP_SECTIONS}
-      controls={sop.extractedControls.map(c => ({ id: c.id, description: c.description }))}
-      onDownload={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
-      onClose={onClose}
-    />
-  );
-}
-
 // ─── Create RACM from SOP Modal ──────────────────────────────────────────
 
 const RACM_AUDIT_TYPES = ['IFC', 'Internal Audit', 'Operational Audit', 'Concurrent Audit', 'ITGC'];
@@ -1318,7 +1391,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   );
 
   const [reviewingSopId, setReviewingSopId] = useState<string | null>(null);
-  const [previewingSopId, setPreviewingSopId] = useState<string | null>(null);
+  const [viewingSopId, setViewingSopId] = useState<string | null>(null);
+  const [confirmDeleteSop, setConfirmDeleteSop] = useState<{ id: string; name: string } | null>(null);
   const [showUploadDrawer, setShowUploadDrawer] = useState(false);
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
@@ -1331,18 +1405,6 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // Inline SOP rename — the pencil action puts a card's title into edit mode.
-  const [editingSopNameId, setEditingSopNameId] = useState<string | null>(null);
-  const [editingSopName, setEditingSopName] = useState('');
-  const saveSopName = (id: string) => {
-    const name = editingSopName.trim();
-    const current = localSops.find(s => s.id === id);
-    if (name && current && name !== current.name) {
-      setLocalSops(prev => prev.map(s => s.id === id ? { ...s, name } : s));
-      addToast({ message: `SOP renamed to "${name}".`, type: 'success' });
-    }
-    setEditingSopNameId(null);
-  };
 
   // URL sync — ?sop=sop-001
   useEffect(() => {
@@ -1558,7 +1620,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       case 'Create RACM':       setShowCreateRacmForSopId(sop.id); break;
       case 'Edit RACM Draft':   if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'Configure RACM':    if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
-      case 'View SOP':          setPreviewingSopId(sop.id); break;
+      case 'View SOP':          setViewingSopId(sop.id); break;
     }
   };
 
@@ -1904,31 +1966,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all cursor-default ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
+                    className={`rounded-xl border bg-white transition-all cursor-default ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
                   >
+                    <div className="flex items-start gap-4 px-6 py-5">
                     {/* Main — name + status badge inline, failure message, uploader · date.
                         Card layout per the Risk-card reference (image #21); same data as the table. */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-                        {editingSopNameId === sop.id ? (
-                          <input
-                            autoFocus
-                            value={editingSopName}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => setEditingSopName(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); saveSopName(sop.id); }
-                              else if (e.key === 'Escape') { setEditingSopNameId(null); }
-                            }}
-                            onBlur={() => saveSopName(sop.id)}
-                            className="text-[15px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
-                          />
-                        ) : (
-                          <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
-                        )}
+                        <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
                         <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>
                           {statusLabel}
                         </span>
+                        <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-[4px]">{sop.version}</span>
                       </div>
                       {sop.failureReason && (
                         <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
@@ -1940,73 +1989,38 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       </div>
                     </div>
 
-                    {/* Actions — Edit RACM Draft pill + preview + delete. */}
+                    {/* Actions — view + download + delete. */}
                     <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
-                      {editingSopNameId === sop.id ? (
-                        <>
-                          {/* onMouseDown preventDefault keeps the input focused so its
-                              onBlur doesn't fire before these click handlers run. */}
-                          <div className="relative group/cancel">
-                            <button
-                              type="button"
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => setEditingSopNameId(null)}
-                              aria-label="Cancel rename"
-                              className="w-7 h-7 rounded-[6px] border border-ink-300/20 inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
-                            >
-                              <X size={15} />
-                            </button>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">
-                              Cancel
-                            </span>
-                          </div>
-                          <div className="relative group/save">
-                            <button
-                              type="button"
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => saveSopName(sop.id)}
-                              aria-label="Save name"
-                              className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center bg-brand-600 text-paper-0 hover:bg-brand-500 cursor-pointer transition-colors"
-                            >
-                              <Check size={15} strokeWidth={2.5} />
-                            </button>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">
-                              Save
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                      <div className="relative group/edit">
-                        <button
-                          type="button"
-                          onClick={() => { setEditingSopNameId(sop.id); setEditingSopName(sop.name); }}
-                          aria-label="Edit SOP"
-                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">
-                          Edit SOP
-                        </span>
-                      </div>
-                      )}
                       <div className="relative group/view">
                         <button
                           type="button"
-                          onClick={() => setPreviewingSopId(sop.id)}
+                          onClick={() => setViewingSopId(sop.id)}
                           aria-label={`View ${sop.name}`}
                           className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
                         >
                           <Eye size={15} />
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/view:opacity-100 pointer-events-none transition-opacity z-50">
-                          View
+                          View SOP
+                        </span>
+                      </div>
+                      <div className="relative group/download">
+                        <button
+                          type="button"
+                          onClick={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
+                          aria-label="Download SOP"
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Download size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/download:opacity-100 pointer-events-none transition-opacity z-50">
+                          Download SOP
                         </span>
                       </div>
                       <div className="relative group/delete">
                         <button
                           type="button"
-                          onClick={() => archiveSop(sop.id)}
+                          onClick={() => setConfirmDeleteSop({ id: sop.id, name: sop.name })}
                           aria-label={`Delete ${sop.name}`}
                           className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors"
                         >
@@ -2017,6 +2031,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         </span>
                       </div>
                     </div>
+                    </div>
                   </motion.div>
                 );
               })
@@ -2024,14 +2039,6 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
         </>
       )}
-
-      {/* SOP Preview Drawer */}
-      <AnimatePresence>
-        {previewingSopId && (() => {
-          const pSop = localSops.find(s => s.id === previewingSopId);
-          return pSop ? <SOPPreviewDrawer sop={pSop} onClose={() => setPreviewingSopId(null)} onGoToRacm={pSop.racmId ? onGoToRacm : undefined} /> : null;
-        })()}
-      </AnimatePresence>
 
       {/* Upload SOP Drawer */}
       <AnimatePresence>
@@ -2066,6 +2073,37 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           />;
         })()}
       </AnimatePresence>
+
+      {/* Delete-SOP confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteSop}
+        title="Delete this SOP?"
+        description={confirmDeleteSop
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteSop.name}</span> from this process. You can&apos;t undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteSop) archiveSop(confirmDeleteSop.id); setConfirmDeleteSop(null); }}
+        onClose={() => setConfirmDeleteSop(null)}
+      />
+
+      {/* SOP document viewer */}
+      {(() => {
+        const viewingSop = localSops.find(s => s.id === viewingSopId);
+        return (
+          <SopDocumentModal
+            open={!!viewingSop}
+            sopName={viewingSop?.name ?? ''}
+            subProcess={viewingSop?.businessProcess}
+            version={viewingSop?.version}
+            uploadedBy={viewingSop?.uploadedBy}
+            uploadedAgo={viewingSop?.uploadedAt}
+            sections={DEFAULT_SOP_SECTIONS}
+            onDownload={() => viewingSop && addToast({ message: `Downloading ${viewingSop.name}…`, type: 'info' })}
+            onClose={() => setViewingSopId(null)}
+          />
+        );
+      })()}
 
       {/* Version Conflict Modal */}
       <AnimatePresence>
@@ -4193,6 +4231,50 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   const { addToast } = useToast();
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
+  // Two-card "New RACM" flow (ported from the engagement RACM tab): pick a file,
+  // then either import the matrix straight in or run the SOP→RACM extraction overlay.
+  const racmFileRef = useRef<HTMLInputElement | null>(null);
+  const sopFileRef = useRef<HTMLInputElement | null>(null);
+  const [extractingFile, setExtractingFile] = useState<string | null>(null);
+  // Add a newly created RACM to the list (frozen/active — the review step is dropped).
+  const addCreatedRacm = (rows: RACMRow[], name: string, sourceFileName: string) => {
+    const s = racmStatsFromRows(rows);
+    setCreatedRacms(prev => [{
+      id: `racm-${Date.now()}`, name, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
+      risks: s.risks, controls: s.controls, mappedRisks: s.risks, unmappedRisks: 0,
+      keyControls: s.keyControls, workflowCoverage: 0, attributesCoverage: s.attributesCoverage,
+      isValidated: true, linkedToEngagement: false, isFrozen: true, sourceFileName,
+    }, ...prev]);
+  };
+  const triggerRacmUpload = () => { setShowCreateRacm(false); racmFileRef.current?.click(); };
+  const triggerSopUpload = () => { setShowCreateRacm(false); sopFileRef.current?.click(); };
+  const onRacmFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const rows = generateRacmForProcess(bp.abbr as ProcessCode);
+      const name = racmNameFromFilename(file.name) || `${bp.abbr} — Imported RACM`;
+      addCreatedRacm(rows, name, file.name);
+      const areas = new Set(rows.map(r => r.subProcess)).size;
+      addToast({ type: 'success', message: `Imported "${file.name}" — ${rows.length} rows · ${areas} sub-process${areas === 1 ? '' : 'es'}` });
+    }
+    e.target.value = '';
+  };
+  const onSopFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const filename = file.name;
+    e.target.value = '';
+    setExtractingFile(filename);
+    // Simulate the SOP → RACM extraction pipeline (matches the engagement overlay timing).
+    window.setTimeout(() => {
+      const rows = generateRacmForProcess(bp.abbr as ProcessCode).slice(0, 5);
+      const label = racmNameFromFilename(filename);
+      addCreatedRacm(rows, label ? `${label} RACM` : `${bp.abbr} RACM`, filename);
+      const s = racmStatsFromRows(rows);
+      setExtractingFile(null);
+      addToast({ type: 'success', message: `Extracted ${s.controls} controls · ${s.risks} risks from "${filename}"` });
+    }, 1600);
+  };
   /** Tracks which RACM is open in the Excel review editor. Stores the racmId. */
   const [reviewingRacmId, setReviewingRacmId] = useState<string | null>(null);
   const reviewingRacm = reviewingRacmId ? createdRacms.find(r => r.id === reviewingRacmId) : null;
@@ -4906,35 +4988,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                 onOpenInEditor={onOpenRacmEditor}
                 onTakeoverChange={setRacmTakeover}
               />
+              <input ref={racmFileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={onRacmFile} />
+              <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} />
               <AnimatePresence>
                 {showCreateRacm && (
-                  <CreateRacmFromSOPModal
-                    sopName=""
-                    bpAbbr={bp.abbr}
+                  <NewRacmModal
                     onClose={() => setShowCreateRacm(false)}
-                    onStartReview={(racmName, fileName) => {
-                      const racmId = `racm-${Date.now()}`;
-                      setCreatedRacms(prev => [...prev, {
-                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                        isFrozen: false, sourceFileName: fileName,
-                      }]);
-                      setReviewingRacmId(racmId);
-                      setShowCreateRacm(false);
-                    }}
-                    onCreate={(racmName, framework) => {
-                      const racmId = `racm-${Date.now()}`;
-                      setCreatedRacms(prev => [...prev, {
-                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework,
-                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                        isFrozen: true,
-                      }]);
-                      setShowCreateRacm(false);
-                    }}
+                    onUploadRacm={triggerRacmUpload}
+                    onUploadSop={triggerSopUpload}
                   />
                 )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {extractingFile && <RacmExtractionOverlay filename={extractingFile} />}
               </AnimatePresence>
             </div>
           )}
