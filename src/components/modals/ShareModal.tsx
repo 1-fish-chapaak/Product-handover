@@ -81,7 +81,7 @@ function Menu({ open, children, className = '' }: { open: boolean; children: Rea
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -4 }}
           transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
-          className={`absolute bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 z-30 origin-top ${className}`}
+          className={`absolute bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 z-30 ${className}`}
         >
           {children}
         </motion.div>
@@ -103,14 +103,14 @@ function AccessMenu({
     <div className="relative shrink-0">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-1 px-2 py-1 -mr-1 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
-          open ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-ink-900 hover:bg-canvas'
+        className={`flex items-center gap-1.5 pl-2.5 pr-2 h-7 rounded-md border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+          open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-canvas text-ink-700 hover:border-ink-300 hover:text-ink-900'
         }`}
       >
         {value}
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} />
       </button>
-      <Menu open={open} className="right-0 top-full mt-1.5 w-44">
+      <Menu open={open} className="right-0 top-full mt-1.5 w-44 origin-top-right">
         {ACCESS_OPTIONS.map(opt => (
           <button
             key={opt}
@@ -399,7 +399,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                     <div className="text-[0.75rem] text-ink-400 truncate">@{m.email}</div>
                   </div>
                   {m.owner ? (
-                    <span className="text-[0.8125rem] text-ink-400 pr-1">Full access</span>
+                    <span className="flex items-center h-7 px-2.5 rounded-md border border-canvas-border bg-canvas text-[0.8125rem] font-medium text-ink-400 shrink-0">Full access</span>
                   ) : (
                     <AccessMenu
                       value={m.permission}
@@ -434,7 +434,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                   </div>
                   <ChevronDown size={17} className={`text-ink-500 shrink-0 transition-transform ${openMenu === 'general' ? 'rotate-180' : ''}`} />
                 </button>
-                <Menu open={openMenu === 'general'} className="left-0 right-0 top-full mt-1.5">
+                <Menu open={openMenu === 'general'} className="left-0 right-0 bottom-full mb-1.5 origin-bottom">
                   {(['Only invited users', 'Anyone with the link'] as const).map(opt => (
                     <button
                       key={opt}
