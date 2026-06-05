@@ -15,6 +15,7 @@ import {
   Shield,
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
+import { Pill, type Tone } from '../shared/StatusBadge';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
@@ -47,6 +48,14 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
   Active: { bg: 'bg-success-bg', text: 'text-compliant-700', dot: 'bg-success' },
   'In Mapping': { bg: 'bg-warning-bg', text: 'text-mitigated-700', dot: 'bg-warning' },
   Draft: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+};
+
+// Tone equivalents for the shared Pill primitive (DESIGN.md §7.10.4). STATUS_STYLES
+// above is retained for the KPI filter buttons (which keep a dot + count).
+const STATUS_TONE: Record<string, Tone> = {
+  Active: 'compliant',
+  'In Mapping': 'mitigated',
+  Draft: 'draft',
 };
 
 /* ─── Mock hierarchy data for Risks tab ─── */
@@ -408,13 +417,7 @@ export default function RACMView({}: Props) {
               width: '110px',
               render: (item) => {
                 const racm = item as unknown as RACMRow;
-                const s = STATUS_STYLES[racm.status];
-                return (
-                  <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold whitespace-nowrap`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                    {racm.status}
-                  </span>
-                );
+                return <Pill tone={STATUS_TONE[racm.status]}>{racm.status}</Pill>;
               },
             },
             {

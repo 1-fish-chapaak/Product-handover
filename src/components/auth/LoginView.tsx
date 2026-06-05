@@ -1,7 +1,7 @@
 /**
- * Prototype workspace chooser. No real auth — pick a workspace and enter.
- * The signed-in identity is the default Administrator; role can be changed
- * any time from the sidebar "View as role" switcher.
+ * Workspace chooser. No backend auth — pick a workspace and enter. The
+ * signed-in identity is the default user; in production the user's role
+ * comes from their invited account, and that role drives all access.
  */
 
 import { useState } from 'react';

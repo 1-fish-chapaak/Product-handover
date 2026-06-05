@@ -23,12 +23,12 @@ interface SidebarProps {
   unreadNotifications: number;
   notificationDrawerOpen: boolean;
   onOpenNotifications: () => void;
-  onOpenShare: () => void;
+  onOpenShare: (anchor?: { top: number; left: number; right: number; bottom: number; width: number; height: number }) => void;
 }
 
 /* ── Flat nav item ── */
 function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
-  icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: () => void; badge?: string; dot?: boolean;
+  icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; badge?: string; dot?: boolean;
 }) {
   return (
     <button
@@ -115,10 +115,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signOutConfirm, setSignOutConfirm] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [rolesOpen, setRolesOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const { currentUser, activeRole, roles, can, canAny, setActiveRole, signOut,
+  const { currentUser, activeRole, can, canAny, signOut,
     activeWorkspaceId: activeTeam, setActiveWorkspace: setActiveTeam } = useCurrentUser();
 
   useEffect(() => {
@@ -368,7 +367,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
           {/* Global workspace share — opens the Share modal from anywhere. */}
-          <NavItem icon={Share2} label="Share" active={false} expanded={isExpanded} onClick={onOpenShare} />
+          <NavItem icon={Share2} label="Share" active={false} expanded={isExpanded} onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onOpenShare({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+          }} />
 
         </div>
       </nav>
@@ -445,37 +447,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                       <Building2 size={14} className="text-white" />
                       Irame Labs Pvt Ltd
                     </div>
-                    {/* View-as-role switcher (prototype demo affordance) */}
-                    <button
-                      onClick={() => setRolesOpen(p => !p)}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-                    >
-                      <Shield size={14} className="text-white" />
-                      <span className="flex-1 text-left">View as role</span>
-                      <span className="text-[11px] text-white/50 mr-1">{activeRole?.name}</span>
-                      <ChevronDown size={12} className={`text-white transition-transform duration-150 ${rolesOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {rolesOpen && (
-                      <>
-                        <div className="h-px mx-3 bg-white/[0.08]" />
-                        <div className="py-1 max-h-[220px] overflow-y-auto">
-                          {roles.map(r => (
-                            <button
-                              key={r.id}
-                              onClick={() => { setActiveRole(r.id); setRolesOpen(false); setUserMenuOpen(false); }}
-                              className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-                            >
-                              <span className="flex items-center gap-2">
-                                {r.name}
-                                <span className="text-[11px] text-white/40">{r.permissions.length}</span>
-                              </span>
-                              {activeRole?.id === r.id && <Check size={13} className="text-brand-400" strokeWidth={2.5} />}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="h-px mx-3 bg-white/[0.08]" />
-                      </>
-                    )}
                     <button
                       onClick={() => setHelpOpen(p => !p)}
                       className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"

@@ -6,6 +6,7 @@ import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
 import { CurrentUserProvider, useCurrentUser } from './context/CurrentUserContext';
 import { AdminDataProvider } from './context/AdminDataContext';
+import { ShareProvider } from './context/ShareContext';
 import { VIEW_PERMISSIONS } from './data/rbac';
 import EmptyState from './components/shared/EmptyState';
 import LoginView from './components/auth/LoginView';
@@ -929,6 +930,7 @@ function AppInner() {
   return (
     <ToastProvider>
       <BulkRunProgressProvider>
+      <ShareProvider openShare={({ type, id, anchor }) => setShowShareModal(true, { type, id: id ?? type }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
         {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (
           <Sidebar
@@ -940,7 +942,7 @@ function AppInner() {
             unreadNotifications={unreadNotifications}
             notificationDrawerOpen={state.notificationDrawerOpen}
             onOpenNotifications={openNotificationDrawer}
-            onOpenShare={() => setShowShareModal(true, { type: 'workspace', id: 'workspace' })}
+            onOpenShare={(anchor) => setShowShareModal(true, { type: 'workspace', id: 'workspace' }, anchor)}
           />
         )}
         <main ref={mainScrollRef} className="flex-1 flex flex-col overflow-hidden">
@@ -976,6 +978,7 @@ function AppInner() {
           {state.showShareModal && (
             <ShareModal
               scope={state.shareContext?.type === 'workflow-output' ? 'result' : state.shareContext?.type}
+              anchor={state.shareAnchor}
               onClose={() => setShowShareModal(false)}
               onShare={(recipients) => {
                 // Phase 3 producer: push a notification when reports or
@@ -1060,6 +1063,7 @@ function AppInner() {
         {/* Global Cmd+K command palette */}
         <CommandPalette />
       </div>
+      </ShareProvider>
       </BulkRunProgressProvider>
     </ToastProvider>
   );

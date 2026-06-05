@@ -7,8 +7,7 @@
  *    admin screen so the matrix actually drives enforcement),
  *  - the signed-in identity and their active role,
  *  - `can()` / `canAny()` for gating,
- *  - `setActiveRole()` — the "View as role" switcher (demo affordance),
- *  - `signIn()` / `signOut()` for the prototype login layer.
+ *  - `signIn()` / `signOut()` for the login layer.
  *
  * No backend: everything lives in React state for the session.
  */
@@ -53,8 +52,6 @@ interface CurrentUserContextValue {
   activeRole: Role | null;
   can: (key: PermissionKey) => boolean;
   canAny: (keys: PermissionKey[]) => boolean;
-  /** Switch the active role of the signed-in identity ("View as role"). */
-  setActiveRole: (roleId: string) => void;
   /** Sign in as a specific persona (prototype login). */
   signIn: (userId: string) => void;
   signOut: () => void;
@@ -86,10 +83,6 @@ export function CurrentUserProvider({ children, startSignedOut = false }: Provid
   const can = useCallback((key: PermissionKey) => permSet.has(key), [permSet]);
   const canAny = useCallback((keys: PermissionKey[]) => keys.some(k => permSet.has(k)), [permSet]);
 
-  const setActiveRole = useCallback((roleId: string) => {
-    setCurrentUser(u => (u ? { ...u, roleId } : u));
-  }, []);
-
   const signIn = useCallback((userId: string) => {
     const u = DEMO_USERS.find(d => d.id === userId) ?? DEFAULT_USER;
     setCurrentUser(u);
@@ -107,8 +100,8 @@ export function CurrentUserProvider({ children, startSignedOut = false }: Provid
 
   const value = useMemo<CurrentUserContextValue>(() => ({
     currentUser, activeWorkspaceId, setActiveWorkspace, roles, activeRole,
-    can, canAny, setActiveRole, signIn, signOut, updateRolePermissions, addRole,
-  }), [currentUser, activeWorkspaceId, roles, activeRole, can, canAny, setActiveRole, signIn, signOut, updateRolePermissions, addRole]);
+    can, canAny, signIn, signOut, updateRolePermissions, addRole,
+  }), [currentUser, activeWorkspaceId, roles, activeRole, can, canAny, signIn, signOut, updateRolePermissions, addRole]);
 
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>;
 }

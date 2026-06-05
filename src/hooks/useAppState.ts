@@ -119,7 +119,11 @@ export interface AppState {
   showEmailPreviewModal: boolean;
   showShareModal: boolean;
   showPowerBIWizard: boolean;
-  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace'; id: string } | null;
+  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process'; id: string } | null;
+  /** Bounding rect of the element that opened the share popover, so it can
+   *  anchor itself next to the trigger (Notion-style). Null → falls back to a
+   *  top-right viewport position. */
+  shareAnchor: { top: number; left: number; right: number; bottom: number; width: number; height: number } | null;
   emailPreviewRecipient: string | null;
   // Report builder
   reportBuilderContext: 'new' | 'action-report' | 'from-template' | null;
@@ -229,6 +233,7 @@ const INITIAL_STATE: AppState = {
   showShareModal: false,
   showPowerBIWizard: false,
   shareContext: null,
+  shareAnchor: null,
   emailPreviewRecipient: null,
   reportBuilderContext: null,
   workflowCanvasStage: 0,
@@ -342,8 +347,8 @@ export function useAppState() {
     setState(prev => ({ ...prev, showEmailPreviewModal: show, emailPreviewRecipient: recipient ?? null }));
   }, []);
 
-  const setShowShareModal = useCallback((show: boolean, context?: AppState['shareContext']) => {
-    setState(prev => ({ ...prev, showShareModal: show, shareContext: context ?? null }));
+  const setShowShareModal = useCallback((show: boolean, context?: AppState['shareContext'], anchor?: AppState['shareAnchor']) => {
+    setState(prev => ({ ...prev, showShareModal: show, shareContext: context ?? null, shareAnchor: anchor ?? null }));
   }, []);
 
   const setShowPowerBIWizard = useCallback((show: boolean) => {

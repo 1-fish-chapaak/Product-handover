@@ -1,5 +1,6 @@
 import DatePicker from './DatePicker';
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Calendar, ChevronDown } from 'lucide-react';
 
 // ─── Date filter model — preset windows + custom range ───────────────────────
@@ -78,9 +79,14 @@ interface DateFilterPickerProps {
   /** Trigger height (Tailwind class). Defaults to `h-9`; callers can override
    *  (e.g. Knowledge Hub uses `h-10` to match its toolbar). */
   triggerHeight?: string;
+  /** Popover width (Tailwind class). Defaults to `w-[280px]`. */
+  panelWidth?: string;
+  /** Stack the custom From/To inputs vertically instead of 2-up — needed when
+   *  the popover is narrow enough that two date fields won't fit side by side. */
+  rangeStacked?: boolean;
 }
 
-export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9' }: DateFilterPickerProps) {
+export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9', panelWidth = 'w-[280px]', rangeStacked = false }: DateFilterPickerProps) {
   const active = isDateFilterActive(filter);
   const label = dateFilterLabel(filter);
   const todayIso = today.toISOString().slice(0, 10);
@@ -95,7 +101,15 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     }
   }, [open, filter]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [open, onClose]);
+
   const canApplyCustom = from !== '' && to !== '' && new Date(from) <= new Date(to);
+  const reduce = useReducedMotion();
 
   return (
     <div className="relative">
@@ -112,10 +126,17 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
         <ChevronDown size={14} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
+      <AnimatePresence>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={onClose} />
-          <div className="absolute right-0 top-full mt-1 w-[280px] z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-2 shadow-lg">
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: reduce ? 0 : 0.14, ease: [0.2, 0, 0, 1] }}
+            className={`absolute right-0 top-full mt-1 origin-top-right ${panelWidth} z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-2 shadow-lg`}
+          >
             {/* Preset shortcuts */}
             <div className="px-1.5 py-1">
               {DATE_PRESETS.map(p => {
@@ -139,7 +160,7 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
             <div className="border-t border-canvas-border my-1" />
             <div className="px-3 pt-2 pb-1">
               <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Custom range</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`grid gap-2 ${rangeStacked ? 'grid-cols-1' : 'grid-cols-2'}`}>
                 <div>
                   <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">From</label>
                   <DatePicker value={from}
@@ -168,9 +189,10 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                 Apply custom range
               </button>
             </div>
-          </div>
+          </motion.div>
         </>
       )}
+      </AnimatePresence>
     </div>
   );
 }

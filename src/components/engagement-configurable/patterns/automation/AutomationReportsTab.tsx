@@ -11,6 +11,7 @@ import type { ConfigurableEngagement, AutomationProjectConfig } from '../../conf
 import type { AutomationProjectWorkspaceState } from './automationInputData';
 import type { AutomationRunOutput, AutomationRunException, AutomationRun } from './automationRunsData';
 import { EX_SEVERITY_CLS, EX_CAT_LABELS } from './automationRunsData';
+import { useShare, rectFromEvent } from '../../../../context/ShareContext';
 import {
   generateDraftReport, deriveReportReadiness, REPORT_STATUS_CLS,
   type AutomationReportsState, type AutomationReport, type ReportStatus,
@@ -236,6 +237,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
   const { ready, checks } = deriveReportReadiness(automationState, cfg);
   const [selectedReportId, setSelectedReportId] = useState(reportsState.reports[0]?.id || '');
+  const { openShare } = useShare();
   const selectedReport = reportsState.reports.find(r => r.id === selectedReportId);
   const workflowSections = useMemo(() => buildWorkflowSections(automationState), [automationState]);
 
@@ -351,7 +353,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           <button onClick={() => alert('Apply Template — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Layout size={13} /> Apply Template
           </button>
-          <button onClick={() => alert('Share — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: selectedReportId, anchor: rectFromEvent(e) }); }} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Share2 size={13} /> Share
           </button>
           <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">

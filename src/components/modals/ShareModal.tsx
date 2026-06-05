@@ -1,15 +1,22 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { X, Link2, Globe, Lock, ChevronDown, Check, UserPlus, Users, Trash2 } from 'lucide-react';
+import { Link2, Globe, Lock, ChevronDown, Check, Users, Trash2, Building2, X } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { Button } from '../shared/Button';
+
+type Anchor = { top: number; left: number; right: number; bottom: number; width: number; height: number };
 
 interface Props {
   onClose: () => void;
   /** Called after a successful invite. Used by App.tsx to push a
    *  notification into the platform feed (Phase 3 producer wiring). */
   onShare?: (recipients: string[]) => void;
-  /** What is being shared, e.g. "workspace", "report". Drives the title. */
+  /** What is being shared, e.g. "workspace", "report". Drives placeholder copy. */
   scope?: string;
+  /** Rect of the element that opened the popover, so it anchors next to it.
+   *  Null → top-right of the viewport. */
+  anchor?: Anchor | null;
 }
 
 interface Member {
@@ -18,6 +25,9 @@ interface Member {
   initials: string;
   permission: string;
   owner?: boolean;
+  you?: boolean;
+  /** Just-invited rows that haven't "accepted". */
+  pending?: boolean;
 }
 
 type DirEntry =
@@ -25,100 +35,176 @@ type DirEntry =
   | { kind: 'team'; name: string; members: number };
 
 const ACCESS_OPTIONS = ['Full access', 'Can edit', 'Can view'] as const;
+const GENERAL_PERMS = ['Can view', 'Can comment', 'Can edit'] as const;
+const AUDIENCES = ['Only invited users', 'Everyone at Irame', 'Anyone with the link'] as const;
+type Audience = typeof AUDIENCES[number];
 
-/** Tasteful, on-brand avatar tints — varied so the list reads like a real
- *  product (Notion/Slack) without using GRC semantic status colors. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const POPOVER_W = 460;
+
+/** Designed focus ring (PRODUCT.md: visible rings on every interactive element,
+ *  not browser defaults). brand-600 at low alpha, offset off the elevated sheet. */
+const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/45 focus-visible:ring-offset-1 focus-visible:ring-offset-canvas-elevated';
+
+/** Calm, on-brand avatar tints kept inside the violet / ink family. brand-600 is
+ *  reserved for signal (primary action, selection) — never a decorative avatar. */
 const AVATAR_TINTS = [
   'bg-brand-100 text-brand-700',
-  'bg-evidence-50 text-evidence-700',
   'bg-draft-50 text-draft-700',
+  'bg-brand-50 text-brand-600',
 ];
 const tintFor = (s: string) =>
   AVATAR_TINTS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
 
 const DIRECTORY: DirEntry[] = [
-  { kind: 'user', name: 'Sarah Johnson', email: 'sarah.johnson@irame.ai', initials: 'SJ' },
-  { kind: 'user', name: 'Michael Chen', email: 'michael.chen@irame.ai', initials: 'MC' },
-  { kind: 'user', name: 'Sneha Desai', email: 'sneha.desai@irame.ai', initials: 'SD' },
-  { kind: 'user', name: 'Priya Sharma', email: 'priya.sharma@irame.ai', initials: 'PS' },
-  { kind: 'user', name: 'David Kim', email: 'david.kim@irame.ai', initials: 'DK' },
+  { kind: 'user', name: 'Aastha Jain', email: 'aastha.jain@irame.ai', initials: 'A' },
+  { kind: 'user', name: 'Tushar Goel', email: 'tushar.goel@company.com', initials: 'T' },
+  { kind: 'user', name: 'Karan Mehta', email: 'karan.mehta@company.com', initials: 'K' },
+  { kind: 'user', name: 'Sarah Johnson', email: 'sarah.johnson@irame.ai', initials: 'S' },
+  { kind: 'user', name: 'Michael Chen', email: 'michael.chen@irame.ai', initials: 'M' },
+  { kind: 'user', name: 'Sneha Desai', email: 'sneha.desai@irame.ai', initials: 'S' },
+  { kind: 'user', name: 'Priya Sharma', email: 'priya.sharma@irame.ai', initials: 'P' },
+  { kind: 'user', name: 'David Kim', email: 'david.kim@irame.ai', initials: 'D' },
   { kind: 'team', name: 'Audit Team', members: 8 },
   { kind: 'team', name: 'Risk & Compliance', members: 5 },
 ];
 
+// First-run share: only the owner (you) has access. Invite others from here.
 const INITIAL_MEMBERS: Member[] = [
-  { name: 'Aastha Jain', email: 'aastha.jain@irame.ai', initials: 'AJ', permission: 'Full access', owner: true },
-  { name: 'Tushar Goel', email: 'tushar.goel@company.com', initials: 'TG', permission: 'Can edit' },
-  { name: 'Karan Mehta', email: 'karan.mehta@company.com', initials: 'KM', permission: 'Can view' },
+  { name: 'Nilesh Anand', email: 'nilesh.anand@irame.ai', initials: 'N', permission: 'Full access', owner: true, you: true },
 ];
 
-const initialsOf = (s: string) =>
-  s.replace(/^@/, '').split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?';
+// Your workspace domain, derived from the owner. People inside it get access
+// immediately; people from another workspace stay "Pending" until they accept.
+const ORG_DOMAIN = (INITIAL_MEMBERS.find(m => m.you)?.email.split('@')[1] ?? 'irame.ai').toLowerCase();
+const isExternalRecipient = (value: string) =>
+  !value.includes('(team)') && !value.toLowerCase().endsWith(`@${ORG_DOMAIN}`);
 
-function Avatar({ initials, owner, team, email }: { initials: string; owner?: boolean; team?: boolean; email?: string }) {
+const initialsOf = (s: string) => s.replace(/^@/, '').trim()[0]?.toUpperCase() ?? '?';
+const nameFromEmail = (email: string) =>
+  email.split('@')[0].split(/[._-]+/).filter(Boolean)
+    .map(w => w[0]?.toUpperCase() + w.slice(1)).join(' ') || email;
+
+function Avatar({ initials, you, team, email }: { initials: string; you?: boolean; team?: boolean; email?: string }) {
   if (team) {
     return (
-      <div className="w-8 h-8 rounded-full bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0">
-        <Users size={15} />
+      <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+        <Users size={16} aria-hidden="true" />
       </div>
     );
   }
-  const tint = owner ? 'bg-brand-600 text-white' : tintFor(email ?? initials);
+  const tint = you ? 'bg-canvas-elevated ring-1 ring-canvas-border text-ink-600' : tintFor(email ?? initials);
   return (
-    <div className={`w-8 h-8 rounded-full text-[0.6875rem] font-bold flex items-center justify-center shrink-0 ${tint}`}>
+    <div className={`w-8 h-8 rounded-full text-[0.75rem] font-semibold flex items-center justify-center shrink-0 ${tint}`}>
       {initials}
     </div>
   );
 }
 
-/** Animated dropdown surface — spring-pops from its trigger. */
-function Menu({ open, children, className = '' }: { open: boolean; children: React.ReactNode; className?: string }) {
-  return (
+/** Dropdown surface, portalled to <body> so it never gets clipped by the
+ *  popover's overflow and always positions the same way: anchored to its
+ *  trigger, opening down, flipping up only when there isn't room below, and
+ *  clamped to the viewport horizontally. One rule for every menu in here. */
+function Menu({
+  triggerRef, open, align, width, children,
+}: {
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  open: boolean;
+  align: 'left' | 'right';
+  width: number;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const t = triggerRef.current?.getBoundingClientRect();
+      if (!t) return;
+      const h = ref.current?.offsetHeight ?? 200;
+      const vw = window.innerWidth, vh = window.innerHeight, gap = 6, pad = 8;
+      let left = align === 'right' ? t.right - width : t.left;
+      left = Math.min(Math.max(pad, left), vw - width - pad);
+      let top = t.bottom + gap;                         // open down by default
+      if (top + h > vh - pad) {                         // not enough room → flip up
+        const up = t.top - gap - h;
+        top = up >= pad ? up : Math.max(pad, vh - h - pad);
+      }
+      setCoords({ top, left });
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    if (ref.current) ro.observe(ref.current);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { ro.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open, align, width, triggerRef]);
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: -4 }}
+          ref={ref}
+          role="menu"
+          initial={{ opacity: 0, scale: 0.97, y: -4 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -4 }}
-          transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
-          className={`absolute bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 z-30 ${className}`}
+          transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
+          style={{ position: 'fixed', top: coords?.top ?? -9999, left: coords?.left ?? -9999, width }}
+          className="z-[70] bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 origin-top"
         >
           {children}
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
-function AccessMenu({
-  value, open, onToggle, onChange, onRemove,
+/** Plain text + chevron permission control (no bordered box) — the minimal
+ *  Notion treatment. Used for member rows and the general-access permission. */
+function RoleControl({
+  value, options, open, onToggle, onSelect, onRemove, align = 'right', disabled = false,
 }: {
   value: string;
+  options: readonly string[];
   open: boolean;
   onToggle: () => void;
-  onChange: (next: string) => void;
+  onSelect: (v: string) => void;
   onRemove?: () => void;
+  align?: 'left' | 'right';
+  disabled?: boolean;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="relative shrink-0">
       <button
-        onClick={onToggle}
-        className={`flex items-center gap-1.5 pl-2.5 pr-2 h-7 rounded-md border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
-          open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-canvas text-ink-700 hover:border-ink-300 hover:text-ink-900'
+        ref={triggerRef}
+        onClick={disabled ? undefined : onToggle}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex items-center gap-1 px-1.5 py-1 -mr-1.5 rounded-md text-[0.75rem] transition-colors ${FOCUS} ${
+          disabled
+            ? 'text-ink-300 cursor-default'
+            : open
+              ? 'text-brand-700 bg-brand-50 cursor-pointer'
+              : 'text-ink-500 hover:text-brand-700 hover:bg-brand-50 cursor-pointer'
         }`}
       >
         {value}
-        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} />
+        {!disabled && <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} aria-hidden="true" />}
       </button>
-      <Menu open={open} className="right-0 top-full mt-1.5 w-44 origin-top-right">
-        {ACCESS_OPTIONS.map(opt => (
+      <Menu triggerRef={triggerRef} open={open} align={align} width={160}>
+        {options.map(opt => (
           <button
             key={opt}
-            onClick={() => onChange(opt)}
-            className="w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-[0.8125rem] text-ink-800 hover:bg-canvas cursor-pointer"
+            onClick={() => onSelect(opt)}
+            className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-[0.75rem] text-ink-800 hover:bg-canvas focus-visible:bg-canvas focus-visible:outline-none cursor-pointer ${opt === value ? 'font-medium' : ''}`}
           >
             {opt}
-            {opt === value && <Check size={14} className="text-brand-600" />}
+            {opt === value && <Check size={14} className="text-brand-600 shrink-0" aria-hidden="true" />}
           </button>
         ))}
         {onRemove && (
@@ -126,10 +212,10 @@ function AccessMenu({
             <div className="my-1 h-px bg-canvas-border" />
             <button
               onClick={onRemove}
-              className="w-full flex items-center gap-2 text-left px-3 py-2 text-[0.8125rem] text-risk hover:bg-risk-50 cursor-pointer"
+              className="w-full flex items-center gap-2 text-left px-3 py-2 text-[0.75rem] font-medium text-risk hover:bg-risk-50 focus-visible:bg-risk-50 focus-visible:outline-none cursor-pointer"
             >
-              <Trash2 size={14} />
-              Remove
+              <Trash2 size={14} aria-hidden="true" />
+              Remove access
             </button>
           </>
         )}
@@ -138,26 +224,99 @@ function AccessMenu({
   );
 }
 
-export default function ShareModal({ onClose, onShare, scope }: Props) {
+/** Skeleton placeholder for a member row while collaborators load.
+ *  Pulse conveys the loading state; it goes static under reduced-motion. */
+function MemberRowSkeleton({ pulse, widths }: { pulse: boolean; widths: [string, string] }) {
+  const block = `bg-canvas rounded ${pulse ? 'animate-pulse' : ''}`;
+  return (
+    <div className="flex items-center gap-3 px-2 py-2">
+      <div className={`w-8 h-8 rounded-full shrink-0 ${block}`} />
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <div className={`h-[0.6875rem] ${block}`} style={{ width: widths[0] }} />
+        <div className={`h-[0.625rem] ${block}`} style={{ width: widths[1] }} />
+      </div>
+      <div className={`h-3.5 w-16 ${block}`} />
+    </div>
+  );
+}
+
+export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
   const { addToast } = useToast();
   const reduce = useReducedMotion();
   const [query, setQuery] = useState('');
-  const [chips, setChips] = useState<{ label: string; value: string }[]>([]);
+  const [chips, setChips] = useState<{ label: string; value: string; invalid?: boolean }[]>([]);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [inviteAccess, setInviteAccess] = useState('Can view');
-  const [generalAccess, setGeneralAccess] = useState<'Only invited users' | 'Anyone with the link'>('Only invited users');
+  const [audience, setAudience] = useState<Audience>('Everyone at Irame');
+  const [generalPerm, setGeneralPerm] = useState('Can view');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);   // highlighted typeahead row
+  const [dismissed, setDismissed] = useState(false);   // Escape closed the list
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  // A real share dialog fetches the current collaborators on open. Simulate that
+  // round-trip so the loading (skeleton) state is real, not decorative.
+  const [loading, setLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const audienceRef = useRef<HTMLButtonElement>(null);
+  const suggestRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // Position the popover next to its trigger, clamped to the viewport. A
+  // ResizeObserver re-runs placement whenever the card's height changes
+  // (skeleton → loaded, invites, audience copy) so the footer never falls
+  // off-screen.
+  useLayoutEffect(() => {
+    const place = () => {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const h = cardRef.current?.offsetHeight ?? 480;
+      const gap = 8, pad = 12;
+      // Clamp against the anticipated loaded height, not the shorter skeleton,
+      // so the popover holds its position while collaborators load (no shift).
+      const hStable = Math.max(h, 340);
+      const clampX = (x: number) => Math.min(Math.max(pad, x), vw - POPOVER_W - pad);
+      const clampY = (y: number) => Math.min(Math.max(pad, y), vh - hStable - pad);
+      if (!anchor) { setPos({ top: Math.max(pad, Math.min(64, vh - hStable - pad)), left: Math.max(pad, vw - POPOVER_W - 24) }); return; }
+
+      // Far-left rail trigger (sidebar, collapsed or hover-expanded): open to
+      // the RIGHT of it so it clears the rail. Detected by the left edge, not
+      // width, so it's stable whether the rail is collapsed or expanded.
+      if (anchor.left < 64 && anchor.right + gap + POPOVER_W <= vw - pad) {
+        setPos({ left: clampX(anchor.right + gap), top: clampY(anchor.top) });
+        return;
+      }
+
+      // Every other trigger (toolbar / list icons): drop DOWN like a menu,
+      // flipping ABOVE only when there isn't room below — never beside or over
+      // the trigger. Hang from the trigger's right edge, fall back to the left
+      // edge, then clamp to the viewport.
+      //
+      // Decide below/above against the *anticipated* loaded height (not the
+      // shorter skeleton), so the popover doesn't visibly jump direction when
+      // the collaborator list finishes loading.
+      const fitsBelow = anchor.bottom + gap + hStable <= vh - pad;
+      const top = fitsBelow ? anchor.bottom + gap : anchor.top - gap - h;
+      let left = anchor.right - POPOVER_W;
+      if (left < pad) left = anchor.left;
+      setPos({ left: clampX(left), top: clampY(top) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    const ro = new ResizeObserver(place);
+    if (cardRef.current) ro.observe(cardRef.current);
+    return () => { window.removeEventListener('resize', place); ro.disconnect(); };
+  }, [anchor]);
+
+  // Land keyboard focus inside the popover on open.
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // Resolve the simulated collaborator fetch.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [onClose]);
+    const t = setTimeout(() => setLoading(false), reduce ? 0 : 360);
+    return () => clearTimeout(t);
+  }, [reduce]);
 
   const takenEmails = useMemo(
     () => new Set([...members.map(m => m.email), ...chips.map(c => c.value)]),
@@ -174,29 +333,58 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
     }).slice(0, 5);
   }, [query, takenEmails]);
 
-  const addChip = (label: string, value: string) => {
+  // Escape steps back one layer: typeahead list → open dropdown → popover.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const suggestOpen = focused && suggestions.length > 0 && !dismissed;
+      if (suggestOpen) { e.stopPropagation(); setDismissed(true); }
+      else if (openMenu) { e.stopPropagation(); setOpenMenu(null); }
+      else onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, openMenu, focused, suggestions.length, dismissed]);
+
+  // Keep the highlighted typeahead row in view as arrows move it.
+  useEffect(() => {
+    if (dismissed) return;
+    (suggestRef.current?.children[activeIndex] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, dismissed]);
+
+  const addChip = (label: string, value: string, invalid = false) => {
     if (takenEmails.has(value)) return;
-    setChips(prev => [...prev, { label, value }]);
+    setChips(prev => [...prev, { label, value, invalid }]);
     setQuery('');
+    setActiveIndex(0);
+    setDismissed(false);
     inputRef.current?.focus();
   };
 
   const addRaw = (raw: string) => {
-    raw.split(',').map(s => s.trim()).filter(Boolean).forEach(v => addChip(v, v));
+    raw.split(',').map(s => s.trim()).filter(Boolean).forEach(v => addChip(v, v, !EMAIL_RE.test(v)));
+  };
+
+  const pickSuggestion = (s: DirEntry) => {
+    if (s.kind === 'user') addChip(s.name, s.email);
+    else addChip(s.name, `${s.name} (team)`);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const suggestOpen = focused && suggestions.length > 0 && !dismissed;
+    // Arrow keys move the highlight through the typeahead.
+    if (suggestOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      setActiveIndex(i => e.key === 'ArrowDown'
+        ? (i + 1) % suggestions.length
+        : (i - 1 + suggestions.length) % suggestions.length);
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (suggestions.length > 0) {
-        const top = suggestions[0];
-        if (top.kind === 'user') addChip(top.name, top.email);
-        else addChip(top.name, `${top.name} (team)`);
-      } else if (query.trim()) {
-        addRaw(query);
-      } else {
-        handleInvite();
-      }
+      if (suggestOpen) pickSuggestion(suggestions[activeIndex] ?? suggestions[0]);
+      else if (query.trim()) addRaw(query);
+      else handleInvite();
     } else if (e.key === ',') {
       e.preventDefault();
       if (query.trim()) addRaw(query);
@@ -209,15 +397,31 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
 
   const handleInvite = () => {
     const pending = [...chips];
-    if (query.trim()) { query.split(',').map(s => s.trim()).filter(Boolean).forEach(v => pending.push({ label: v, value: v })); }
+    if (query.trim()) {
+      query.split(',').map(s => s.trim()).filter(Boolean).forEach(v => pending.push({ label: v, value: v, invalid: !EMAIL_RE.test(v) }));
+    }
     if (pending.length === 0) return;
+
+    const bad = pending.filter(p => p.invalid);
+    if (bad.length > 0) {
+      setChips(pending);
+      setQuery('');
+      addToast({ type: 'error', message: bad.length === 1
+        ? `${bad[0].value} doesn't look like a valid email address.`
+        : `${bad.length} entries don't look like valid email addresses.` });
+      return;
+    }
+
     const fresh = pending.filter(p => !members.some(m => m.email === p.value));
     setMembers(prev => [
       ...prev,
-      ...fresh.map(p => ({ name: p.label, email: p.value, initials: initialsOf(p.label), permission: inviteAccess })),
+      ...fresh.map(p => {
+        const name = p.label === p.value ? nameFromEmail(p.value) : p.label;
+        return { name, email: p.value, initials: initialsOf(name), permission: inviteAccess, pending: isExternalRecipient(p.value) };
+      }),
     ]);
-    if (fresh[0]) { setJustAdded(fresh[0].value); setTimeout(() => setJustAdded(null), 1200); }
-    addToast({ type: 'success', message: `Invitation sent to ${pending.map(p => p.label).join(', ')}` });
+    if (fresh[0]) { setJustAdded(fresh[0].value); setTimeout(() => setJustAdded(null), 1400); }
+    addToast({ type: 'success', message: `Invitation sent to ${pending.map(p => p.label).join(', ')}.` });
     setChips([]);
     setQuery('');
     onShare?.(pending.map(p => p.value));
@@ -229,240 +433,305 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
     setOpenMenu(null);
   };
   const removeMember = (email: string) => {
+    const removed = members.find(m => m.email === email);
+    const at = members.findIndex(m => m.email === email);
     setMembers(prev => prev.filter(m => m.email !== email));
     setOpenMenu(null);
+    if (!removed) return;
+    // Undo over confirm (Nielsen #3): restore at the original position.
+    addToast({
+      type: 'success',
+      message: `${removed.name} removed.`,
+      action: {
+        label: 'Undo',
+        onClick: () => setMembers(prev =>
+          prev.some(m => m.email === removed.email)
+            ? prev
+            : [...prev.slice(0, at), removed, ...prev.slice(at)]),
+      },
+    });
   };
 
-  const handleCopyLink = () => addToast({ type: 'success', message: 'Link copied to clipboard.' });
-  const title = scope ? `Share this ${scope}` : 'Share';
-  const showSuggestions = focused && suggestions.length > 0;
+  const shareLink = `join.irame.ai/${scope ?? 'workspace'}`;
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`https://${shareLink}`);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = `https://${shareLink}`;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+    addToast({ type: 'success', message: 'Link copied to clipboard.' });
+  };
 
-  // Opacity-only cascade — NO transform, so settled rows don't create stacking
-  // contexts that would trap the access-menu dropdowns behind later rows.
-  const rowRise = (i: number) =>
-    reduce
-      ? {}
-      : {
-          initial: { opacity: 0 },
-          animate: { opacity: 1 },
-          transition: { delay: 0.08 + i * 0.04, duration: 0.22 },
-        };
+  const showSuggestions = focused && suggestions.length > 0 && !dismissed;
+  const showNoResults = focused && query.trim().length > 0 && suggestions.length === 0 && !dismissed;
+  const restricted = audience === 'Only invited users';
+  const AudienceIcon = audience === 'Anyone with the link' ? Globe : audience === 'Everyone at Irame' ? Building2 : Lock;
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-[60]"
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ opacity: 0, y: 12, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 12, scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.8 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-none"
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={title}
-          className="pointer-events-auto w-full max-w-[460px] max-h-[85vh] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl shadow-brand-900/10 flex flex-col overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Header */}
-          <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center gap-3">
-            <motion.div
-              initial={reduce ? false : { scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 20, mass: 0.7, delay: 0.05 }}
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 text-brand-600 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60"
-            >
-              <UserPlus size={17} />
-            </motion.div>
-            <h2 className="flex-1 font-display text-[1.25rem] leading-[1.2] font-semibold tracking-tight text-ink-900 truncate">
-              {title}
-            </h2>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="w-8 h-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas flex items-center justify-center cursor-pointer shrink-0"
-            >
-              <X size={17} />
-            </button>
-          </header>
+      {/* Transparent click-catcher — no dim, this is a popover not a modal. */}
+      <div className="fixed inset-0 z-[60]" onClick={onClose} />
 
-          <div className="flex-1 overflow-y-auto">
-            {/* Invite row + typeahead */}
-            <div className="px-6 pt-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <div className="flex items-center gap-1.5 flex-wrap px-2.5 py-1 min-h-[38px] rounded-lg border border-canvas-border bg-canvas focus-within:bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-4 focus-within:ring-brand-600/15 transition-all">
-                    {chips.map(chip => (
-                      <span key={chip.value} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-brand-50 text-[0.8125rem] text-brand-700 font-medium">
-                        {chip.label}
-                        <button onClick={() => removeChip(chip.value)} className="p-0.5 text-brand-600/70 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${chip.label}`}>
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
+      <motion.div
+        ref={cardRef}
+        initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, x: -6 }}
+        animate={{ opacity: 1, scale: 1, x: 0 }}
+        transition={{ type: 'spring', stiffness: 460, damping: 34, mass: 0.7 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={scope ? `Share this ${scope}` : 'Share'}
+        onClick={e => e.stopPropagation()}
+        style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
+        className="fixed z-[61] origin-top-left bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg flex flex-col max-h-[82vh] overflow-hidden"
+      >
+        <div style={{ width: POPOVER_W }} className="flex flex-col min-h-0 flex-1">
+          {/* Invite row */}
+          <div className="px-4 pt-4 pb-2">
+            <div className="flex items-start gap-2">
+              <div className="relative flex-1">
+                <div className="flex items-start gap-2 px-2.5 py-1.5 min-h-[36px] rounded-md border border-canvas-border bg-canvas focus-within:bg-canvas-elevated focus-within:border-brand-600 transition-all">
+                  {/* Chips + input fill the left column, wrapping row by row.
+                      Capped at ~4 rows + scrollable so many recipients don't
+                      stretch the modal (or get clipped). */}
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap max-h-[124px] overflow-y-auto">
+                    <AnimatePresence initial={false}>
+                      {chips.map(chip => (
+                        <motion.span
+                          key={chip.value}
+                          layout
+                          initial={reduce ? false : { opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                          transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
+                          className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md text-[0.75rem] font-medium ${
+                            chip.invalid ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'
+                          }`}
+                          title={chip.invalid ? 'Not a valid email address' : undefined}
+                        >
+                          {chip.label}
+                          <button onClick={() => removeChip(chip.value)} className={`p-0.5 rounded cursor-pointer ${FOCUS} ${chip.invalid ? 'text-risk/70 hover:text-risk' : 'text-brand-600/70 hover:text-brand-700'}`} aria-label={`Remove ${chip.label}`}>
+                            <X size={12} aria-hidden="true" />
+                          </button>
+                        </motion.span>
+                      ))}
+                    </AnimatePresence>
                     <input
                       ref={inputRef}
                       type="text"
                       value={query}
-                      onChange={e => setQuery(e.target.value)}
+                      onChange={e => { setQuery(e.target.value); setActiveIndex(0); setDismissed(false); }}
+                      role="combobox"
+                      aria-expanded={showSuggestions}
+                      aria-controls="share-typeahead"
+                      aria-activedescendant={showSuggestions ? `share-sug-${activeIndex}` : undefined}
+                      aria-autocomplete="list"
                       onKeyDown={handleInputKeyDown}
                       onFocus={() => setFocused(true)}
                       onBlur={() => setTimeout(() => setFocused(false), 120)}
-                      placeholder={chips.length === 0 ? 'Email, Team & Users' : 'Add another…'}
-                      className="flex-1 min-w-[120px] bg-transparent px-1 py-0.5 text-[0.875rem] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+                      placeholder={chips.length === 0 ? 'Add people by name or email' : 'Add another…'}
+                      aria-label="Add people, teams, or email addresses"
+                      className="flex-1 min-w-[120px] bg-transparent px-1 py-0.5 text-[0.75rem] text-ink-900 placeholder:text-ink-400 focus:outline-none"
                     />
-                    {chips.length > 0 && (
-                      <AccessMenu
-                        value={inviteAccess}
-                        open={openMenu === 'invite'}
-                        onToggle={() => setOpenMenu(openMenu === 'invite' ? null : 'invite')}
-                        onChange={(v) => { setInviteAccess(v); setOpenMenu(null); }}
-                      />
-                    )}
                   </div>
-
-                  {/* Typeahead */}
-                  <AnimatePresence>
-                    {showSuggestions && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -4, scale: 0.98 }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
-                        className="absolute left-0 right-0 top-full mt-1.5 bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1.5 z-30 overflow-hidden origin-top"
-                      >
-                        {suggestions.map(s => (
-                          <button
-                            key={s.kind === 'user' ? s.email : s.name}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              if (s.kind === 'user') addChip(s.name, s.email);
-                              else addChip(s.name, `${s.name} (team)`);
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-canvas cursor-pointer text-left"
-                          >
-                            <Avatar initials={s.kind === 'user' ? s.initials : ''} team={s.kind === 'team'} email={s.kind === 'user' ? s.email : ''} />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[0.875rem] font-medium text-ink-900 truncate">{s.name}</div>
-                              <div className="text-[0.75rem] text-ink-400 truncate">
-                                {s.kind === 'user' ? s.email : `Team · ${s.members} members`}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <button
-                  onClick={handleInvite}
-                  disabled={!canInvite}
-                  className={`px-4 h-[38px] shrink-0 rounded-lg text-[0.875rem] font-semibold transition-all cursor-pointer active:scale-[0.97] ${
-                    canInvite
-                      ? 'bg-primary text-white shadow-sm shadow-brand-900/15 hover:bg-primary-hover hover:shadow-md hover:shadow-brand-900/20'
-                      : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed'
-                  }`}
-                >
-                  Invite
-                </button>
-              </div>
-            </div>
-
-            {/* People with access */}
-            <div className="px-4 pt-4 pb-1">
-              <div className="px-2 mb-1 text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-ink-400">
-                People with access · {members.length}
-              </div>
-              {members.map((m, i) => (
-                <motion.div
-                  key={m.email}
-                  {...rowRise(i)}
-                  className={`relative flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors ${
-                    openMenu === m.email ? 'z-30' : ''
-                  } ${justAdded === m.email ? 'bg-brand-50' : 'hover:bg-canvas'}`}
-                >
-                  <Avatar initials={m.initials} owner={m.owner} email={m.email} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{m.name}</span>
-                      {m.owner && <span className="px-1.5 py-0.5 rounded-md bg-draft-50 text-[0.625rem] font-medium text-ink-600 shrink-0">Owner</span>}
-                    </div>
-                    <div className="text-[0.75rem] text-ink-400 truncate">@{m.email}</div>
-                  </div>
-                  {m.owner ? (
-                    <span className="flex items-center h-7 px-2.5 rounded-md border border-canvas-border bg-canvas text-[0.8125rem] font-medium text-ink-400 shrink-0">Full access</span>
-                  ) : (
-                    <AccessMenu
-                      value={m.permission}
-                      open={openMenu === m.email}
-                      onToggle={() => setOpenMenu(openMenu === m.email ? null : m.email)}
-                      onChange={(v) => setPermission(m.email, v)}
-                      onRemove={() => removeMember(m.email)}
+                  {/* Role selector pinned to the top-right — never wraps. */}
+                  {chips.length > 0 && (
+                    <RoleControl
+                      value={inviteAccess}
+                      options={ACCESS_OPTIONS}
+                      open={openMenu === 'invite'}
+                      onToggle={() => setOpenMenu(openMenu === 'invite' ? null : 'invite')}
+                      onSelect={(v) => { setInviteAccess(v); setOpenMenu(null); }}
+                      align="right"
                     />
                   )}
-                </motion.div>
-              ))}
-            </div>
+                </div>
 
-            {/* General access */}
-            <div className="px-6 pb-5 pt-2">
-              <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-ink-400 mb-1.5">General access</div>
-              <div className="relative">
-                <button
-                  onClick={() => setOpenMenu(openMenu === 'general' ? null : 'general')}
-                  className="w-full flex items-center gap-2.5 px-2 -mx-2 py-1.5 rounded-lg hover:bg-canvas transition-colors cursor-pointer"
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                    generalAccess === 'Only invited users' ? 'bg-canvas border border-canvas-border text-ink-600' : 'bg-brand-50 text-brand-600'
-                  }`}>
-                    {generalAccess === 'Only invited users' ? <Lock size={15} /> : <Globe size={15} />}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-[0.875rem] font-semibold text-ink-900">{generalAccess}</div>
-                    <div className="text-[0.75rem] text-ink-400 truncate">
-                      {generalAccess === 'Only invited users' ? 'Only people added can open' : 'Anyone with the link can view'}
-                    </div>
-                  </div>
-                  <ChevronDown size={17} className={`text-ink-500 shrink-0 transition-transform ${openMenu === 'general' ? 'rotate-180' : ''}`} />
-                </button>
-                <Menu open={openMenu === 'general'} className="left-0 right-0 bottom-full mb-1.5 origin-bottom">
-                  {(['Only invited users', 'Anyone with the link'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => { setGeneralAccess(opt); setOpenMenu(null); }}
-                      className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 hover:bg-canvas cursor-pointer"
+                <AnimatePresence>
+                  {(showSuggestions || showNoResults) && (
+                    <motion.div
+                      ref={suggestRef}
+                      id="share-typeahead"
+                      role="listbox"
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
+                      className="absolute left-0 right-0 top-full mt-1.5 max-h-[264px] overflow-y-auto bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1.5 z-50 origin-top"
                     >
-                      {opt === 'Only invited users'
-                        ? <Lock size={16} className="text-ink-700 shrink-0" />
-                        : <Globe size={16} className="text-brand-600 shrink-0" />}
-                      <span className="flex-1 text-[0.8125rem] text-ink-800">{opt}</span>
-                      {opt === generalAccess && <Check size={14} className="text-brand-600 shrink-0" />}
-                    </button>
-                  ))}
-                </Menu>
+                      {showSuggestions ? suggestions.map((s, idx) => {
+                        const active = idx === activeIndex;
+                        return (
+                        <button
+                          key={s.kind === 'user' ? s.email : s.name}
+                          id={`share-sug-${idx}`}
+                          role="option"
+                          aria-selected={active}
+                          onMouseEnter={() => setActiveIndex(idx)}
+                          onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                          className={`w-full flex items-center gap-3 px-3 py-2 cursor-pointer text-left transition-colors ${active ? 'bg-brand-50' : ''}`}
+                        >
+                          <Avatar initials={s.kind === 'user' ? s.initials : ''} team={s.kind === 'team'} email={s.kind === 'user' ? s.email : ''} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[0.75rem] font-medium text-ink-900 truncate">{s.name}</div>
+                            <div className="text-[0.75rem] text-ink-500 truncate">
+                              {s.kind === 'user' ? s.email : `Team · ${s.members} members`}
+                            </div>
+                          </div>
+                        </button>
+                        );
+                      }) : (
+                        <div className="px-3 py-2 text-[0.75rem] text-ink-500 leading-snug">
+                          No match in your directory. Press <span className="font-mono text-[0.75rem] text-ink-700 bg-canvas border border-canvas-border rounded px-1 py-0.5">Enter</span> to invite{' '}
+                          <span className="font-medium text-ink-800 break-all">{query.trim()}</span> by email.
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              <Button
+                variant="primary"
+                size="md"
+                shape="md"
+                onClick={handleInvite}
+                disabled={!canInvite}
+                // Platform convention: disabled primary stays brand, faded —
+                // not the shared Button's default grey.
+                className="!text-[0.75rem] disabled:!bg-primary disabled:!text-white disabled:!opacity-50 disabled:!shadow-none"
+              >
+                Share
+              </Button>
             </div>
           </div>
 
+          {/* People with access — label pinned; the rows scroll on their own
+              (capped at ~4) so a long list never stretches the modal. */}
+          <div className="shrink-0 px-4 pt-0 pb-0 text-[0.75rem] font-medium text-ink-500">People with access</div>
+          <div className="overflow-y-auto px-2 max-h-[220px]" aria-busy={loading}>
+            {loading ? (
+              <div className="pt-1">
+                <MemberRowSkeleton pulse={!reduce} widths={['8rem', '11rem']} />
+                <MemberRowSkeleton pulse={!reduce} widths={['6.5rem', '9.5rem']} />
+                <MemberRowSkeleton pulse={!reduce} widths={['7.25rem', '10.5rem']} />
+              </div>
+            ) : (
+              // initial={false}: members present on open appear instantly (no
+              // load cascade); only invited/removed rows animate.
+              <AnimatePresence initial={false}>
+                {members.map((m) => (
+                  <motion.div
+                    key={m.email}
+                    layout="position"
+                    initial={reduce ? false : { opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduce ? { opacity: 0 } : { opacity: 0, x: 12 }}
+                    transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+                    className={`relative flex items-center gap-3 px-2 py-2 rounded-lg transition-colors ${
+                      openMenu === m.email ? 'z-30' : ''
+                    } ${justAdded === m.email ? 'bg-brand-50' : ''}`}
+                  >
+                    <Avatar initials={m.initials} you={m.you} email={m.email} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[0.75rem] font-medium text-ink-900 truncate">{m.name}</span>
+                        {m.you && <span className="text-[0.75rem] text-ink-500 shrink-0">(You)</span>}
+                        {m.pending && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-mitigated-50 text-[0.75rem] font-medium text-mitigated-700 shrink-0">Pending</span>}
+                      </div>
+                      <div className="text-[0.75rem] text-ink-500 truncate">{m.email}</div>
+                    </div>
+                    {m.owner ? (
+                      // The owner's access is fixed — it can't be changed or
+                      // revoked, so it reads as quiet text, not a control.
+                      <span className="text-[0.75rem] text-ink-500 shrink-0 pr-1.5">Owner</span>
+                    ) : (
+                      <RoleControl
+                        value={m.permission}
+                        options={ACCESS_OPTIONS}
+                        open={openMenu === m.email}
+                        onToggle={() => setOpenMenu(openMenu === m.email ? null : m.email)}
+                        onSelect={(v) => setPermission(m.email, v)}
+                        onRemove={() => removeMember(m.email)}
+                      />
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+
+          {/* General access — pinned below the scrolling member list */}
+          <div className="shrink-0 px-2">
+            <div className="px-2 pt-0 pb-0 text-[0.75rem] font-medium text-ink-500">General access</div>
+            {loading ? (
+              <MemberRowSkeleton pulse={!reduce} widths={['9rem', '12rem']} />
+            ) : (
+            <div className="relative flex items-center gap-3 px-2 py-2 rounded-lg">
+              <div className="w-8 h-8 rounded-lg bg-canvas border border-canvas-border text-ink-600 flex items-center justify-center shrink-0">
+                <AudienceIcon size={16} aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0 relative">
+                <button
+                  ref={audienceRef}
+                  onClick={() => setOpenMenu(openMenu === 'audience' ? null : 'audience')}
+                  aria-haspopup="menu"
+                  aria-expanded={openMenu === 'audience'}
+                  className={`flex items-center gap-1 -ml-1 px-1 py-0.5 rounded-md text-[0.75rem] font-medium text-ink-900 hover:text-brand-700 hover:bg-brand-50 cursor-pointer ${FOCUS}`}
+                >
+                  {audience}
+                  <ChevronDown size={15} className={`text-ink-400 transition-transform ${openMenu === 'audience' ? 'rotate-180' : ''}`} aria-hidden="true" />
+                </button>
+                <div className="text-[0.75rem] text-ink-500 truncate">
+                  {restricted ? 'Only people invited can open.' : audience === 'Everyone at Irame' ? 'Anyone in your workspace can open.' : 'Anyone with the link can open.'}
+                </div>
+                <Menu triggerRef={audienceRef} open={openMenu === 'audience'} align="left" width={256}>
+                  {AUDIENCES.map(opt => {
+                    const Icon = opt === 'Anyone with the link' ? Globe : opt === 'Everyone at Irame' ? Building2 : Lock;
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => { setAudience(opt); setOpenMenu(null); }}
+                        className="w-full flex items-center gap-2.5 text-left px-3 py-2 hover:bg-canvas focus-visible:bg-canvas focus-visible:outline-none cursor-pointer"
+                      >
+                        <Icon size={16} className="text-ink-700 shrink-0" aria-hidden="true" />
+                        <span className="flex-1 text-[0.75rem] text-ink-800">{opt}</span>
+                        {opt === audience && <Check size={14} className="text-brand-600 shrink-0" aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </Menu>
+              </div>
+              <RoleControl
+                value={restricted ? '—' : generalPerm}
+                options={GENERAL_PERMS}
+                open={openMenu === 'genperm'}
+                onToggle={() => setOpenMenu(openMenu === 'genperm' ? null : 'genperm')}
+                onSelect={(v) => { setGeneralPerm(v); setOpenMenu(null); }}
+                disabled={restricted}
+              />
+            </div>
+            )}
+          </div>
+
           {/* Footer */}
-          <footer className="shrink-0 px-6 py-3 border-t border-canvas-border flex items-center justify-between">
-            <span className="text-[0.8125rem] text-ink-500 truncate">join.irame.ai</span>
-            <button
+          <footer className="shrink-0 px-3 pt-2 pb-4 border-t border-canvas-border flex items-center justify-end gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              shape="md"
+              leftIcon={copied ? <Check size={14} aria-hidden="true" /> : <Link2 size={14} aria-hidden="true" />}
               onClick={handleCopyLink}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 -mr-1 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer shrink-0"
+              className={`!text-[0.75rem] ${copied ? '!bg-compliant-50 !text-compliant-700 !border-compliant-50 hover:!bg-compliant-50' : ''}`}
             >
-              <Link2 size={15} />
-              Copy link
-            </button>
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
           </footer>
         </div>
       </motion.div>

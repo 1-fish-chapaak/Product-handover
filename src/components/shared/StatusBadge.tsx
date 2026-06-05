@@ -3,7 +3,7 @@
  * Severity labels are always spelled out (Critical / High / Medium / Low).
  */
 
-type Tone = 'risk' | 'high' | 'mitigated' | 'compliant' | 'evidence' | 'info' | 'draft';
+export type Tone = 'risk' | 'high' | 'mitigated' | 'compliant' | 'evidence' | 'info' | 'draft';
 
 const TONE_CLASS: Record<Tone, string> = {
   risk:      'bg-risk-50 text-risk-700',
@@ -15,7 +15,12 @@ const TONE_CLASS: Record<Tone, string> = {
   draft:     'bg-draft-50 text-draft-700',
 };
 
-function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+/**
+ * The canonical flat pill (DESIGN.md §7.10.4): no border, no icon, h-6 / 12px /
+ * medium. Exported so registries can render context-specific status/severity
+ * chips through the shared primitive instead of bespoke inline spans.
+ */
+export function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
     <span
       className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] font-medium whitespace-nowrap tabular-nums ${TONE_CLASS[tone]}`}
@@ -50,6 +55,16 @@ const STATUS_TONE: Record<string, { tone: Tone; label: string }> = {
   blocked:        { tone: 'risk',      label: 'Blocked' },
 };
 
+// Audit-trail action verbs. Color is redundant signal: green create, blue
+// update, red delete, brand login, neutral export.
+const ACTION_TONE: Record<string, { tone: Tone; label: string }> = {
+  Create: { tone: 'compliant', label: 'Create' },
+  Update: { tone: 'evidence',  label: 'Update' },
+  Delete: { tone: 'risk',      label: 'Delete' },
+  Login:  { tone: 'info',      label: 'Login' },
+  Export: { tone: 'draft',     label: 'Export' },
+};
+
 const SEVERITY_TONE: Record<string, { tone: Tone; label: string }> = {
   critical: { tone: 'risk',      label: 'Critical' },
   high:     { tone: 'high',      label: 'High' },
@@ -78,6 +93,15 @@ const TYPE_TONE: Record<string, Tone> = {
 export function StatusBadge({ status }: { status: string }) {
   const s = STATUS_TONE[status] || STATUS_TONE.draft;
   return <Pill tone={s.tone}>{s.label}</Pill>;
+}
+
+export function ActionBadge({ action }: { action: string }) {
+  const a = ACTION_TONE[action] || { tone: 'draft' as Tone, label: action };
+  return <Pill tone={a.tone}>{a.label}</Pill>;
+}
+
+export function ResultBadge({ result }: { result: string }) {
+  return <Pill tone={result === 'Success' ? 'compliant' : 'risk'}>{result}</Pill>;
 }
 
 export function SeverityBadge({ severity }: { severity: string }) {

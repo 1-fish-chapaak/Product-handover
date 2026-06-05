@@ -51,8 +51,8 @@ export type ModuleId =
   | 'admin';
 
 export type PermissionKey =
-  // Business Process (existing)
-  | 'bp_view' | 'bp_create' | 'bp_delete' | 'bp_share'
+  // Business Process (existing + new edit/archive)
+  | 'bp_view' | 'bp_create' | 'bp_edit' | 'bp_delete' | 'bp_share' | 'sop_archive'
   // Workflows (existing)
   | 'wf_view' | 'wf_create' | 'wf_update_delete' | 'wf_output' | 'wf_run' | 'wf_upload'
   // Reports (existing)
@@ -65,8 +65,9 @@ export type PermissionKey =
   | 'eng_view' | 'eng_create' | 'eng_edit' | 'eng_delete' | 'eng_assign' | 'eng_close'
   // Controls (new)
   | 'ctrl_view' | 'ctrl_create' | 'ctrl_edit' | 'ctrl_delete' | 'ctrl_link' | 'ctrl_export'
-  // RACM (new)
+  // RACM (existing + new linking/unmap/archive)
   | 'racm_view' | 'racm_edit' | 'racm_generate'
+  | 'racm_link_risk' | 'racm_link_control' | 'racm_link_workflow' | 'racm_unmap' | 'racm_archive'
   // Risk register (new)
   | 'risk_view' | 'risk_create' | 'risk_edit' | 'risk_archive' | 'risk_delete'
   // Exceptions / findings (new)
@@ -82,8 +83,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
     { key: 'bp_view',   name: 'View',               desc: 'View business process and their details' },
     { key: 'bp_create', name: 'Create and Update',  desc: 'Build and updates business processes' },
+    { key: 'bp_edit',   name: 'Edit Details',       desc: 'Rename SOPs and edit linked risks & controls' },
     { key: 'bp_delete', name: 'Delete',             desc: 'Remove business processes permanently' },
     { key: 'bp_share',  name: 'Sharing Permission', desc: 'Share with specific users and team' },
+    { key: 'sop_archive', name: 'Archive SOP',      desc: 'Archive or restore SOPs' },
   ]},
   { group: 'Workflows', module: 'workflows', perms: [
     { key: 'wf_view',          name: 'View',            desc: 'View workflow & their details' },
@@ -132,8 +135,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   ]},
   { group: 'RACM', module: 'racm', perms: [
     { key: 'racm_view',     name: 'View',     desc: 'View RACM matrices' },
-    { key: 'racm_edit',     name: 'Edit',     desc: 'Edit RACM rows' },
+    { key: 'racm_edit',     name: 'Edit',     desc: 'Edit and rename RACM rows' },
     { key: 'racm_generate', name: 'Generate', desc: 'Generate a RACM' },
+    { key: 'racm_link_risk',     name: 'Link Risk',     desc: 'Map a risk to a RACM' },
+    { key: 'racm_link_control',  name: 'Link Control',  desc: 'Map a control to a risk in RACM' },
+    { key: 'racm_link_workflow', name: 'Link Workflow', desc: 'Map a workflow to a control in RACM' },
+    { key: 'racm_unmap',         name: 'Unmap',         desc: 'Remove a risk–control mapping' },
+    { key: 'racm_archive',       name: 'Archive',       desc: 'Archive a RACM or remove a risk from it' },
   ]},
   { group: 'Risk Register', module: 'risk', perms: [
     { key: 'risk_view',   name: 'View',   desc: 'View the risk register' },
@@ -206,7 +214,8 @@ const AUDITOR_KEYS: PermissionKey[] = [
   'wf_run', 'wf_output', 'wf_create',
   'eng_create', 'eng_edit', 'eng_assign',
   'ctrl_edit', 'ctrl_link', 'ctrl_export',
-  'racm_edit',
+  'racm_edit', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
+  'bp_edit', 'sop_archive',
   'exc_classify', 'exc_triage',
   'rp_edit', 'rp_comment',
   'db_add', 'db_comment',
@@ -230,14 +239,14 @@ const REVIEWER_KEYS: PermissionKey[] = [
 const ENABLER_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
   // a broad creator/operator, minus org admin
-  'bp_create', 'bp_share',
+  'bp_create', 'bp_edit', 'bp_share', 'sop_archive',
   'wf_create', 'wf_update_delete', 'wf_output', 'wf_run', 'wf_upload',
   'rp_edit', 'rp_comment', 'rp_share',
   'db_add', 'db_share', 'db_comment',
   'ds_upload', 'ds_connect', 'ds_rename',
   'eng_create', 'eng_edit', 'eng_assign',
   'ctrl_create', 'ctrl_edit', 'ctrl_link', 'ctrl_export',
-  'racm_edit', 'racm_generate',
+  'racm_edit', 'racm_generate', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
   'risk_create', 'risk_edit', 'risk_archive',
   'exc_classify', 'exc_triage', 'exc_resolve',
   'plan_edit',

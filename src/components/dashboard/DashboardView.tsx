@@ -19,6 +19,7 @@ import {
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
 import { AddDataModal } from './AddDataModal';
@@ -4296,8 +4297,9 @@ function ConnectTablesModal({ open, onClose, addToast, links, setLinks, sources 
   );
 }
 
-export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI, onShare }: DashboardProps = {}) {
+export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI }: DashboardProps = {}) {
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const { can } = useCan();
   const [loading, setLoading] = useState(true);
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
@@ -4717,7 +4719,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   {/* Share */}
                   {can('db_share') && (
                   <button
-                    onClick={() => onShare ? onShare() : addToast({ message: 'Share dialog opening.', type: 'info' })}
+                    onClick={(e) => { e.stopPropagation(); openShare({ type: 'dashboard', id: activeId, anchor: rectFromEvent(e) }); }}
                     className="flex items-center gap-1.5 px-2.5 h-9 border border-canvas-border bg-canvas-elevated rounded-lg text-ink-500 hover:text-brand-600 hover:border-brand-200 transition-colors cursor-pointer text-[0.75rem] font-medium"
                     title="Share"
                   >

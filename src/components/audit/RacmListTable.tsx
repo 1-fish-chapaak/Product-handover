@@ -8,9 +8,12 @@ import {
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
 import SopDetailDrawer from './SopDetailDrawer';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
+import { Pill, type Tone } from '../shared/StatusBadge';
 import { SEED_RISKS, RiskDrawer } from './RiskRegister';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
 import { BUSINESS_PROCESSES, RISKS, CONTROLS, WORKFLOWS, SOPS } from '../../data/mockData';
@@ -217,8 +220,8 @@ function RacmDetailHeader({ racm, action }: { racm: RacmEntry; action: React.Rea
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_BADGE[rawStatus]}`}>{rawStatus}</span>
-            <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
+            <Pill tone={STATUS_TONE[rawStatus]}>{rawStatus}</Pill>
+            <Pill tone={READINESS_TONE[readiness]}>{readiness}</Pill>
             <span className="font-mono text-[11px] text-ink-500">{racm.id}</span>
           </div>
           <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{racm.name}</h1>
@@ -1282,11 +1285,11 @@ function getRacmTableStatus(racm: RacmEntry): RacmTableStatus {
   return 'Draft';
 }
 
-const STATUS_BADGE: Record<RacmTableStatus, string> = {
-  'Draft':       'bg-paper-100 text-ink-600 border-paper-200/50',
-  'In Progress': 'bg-evidence-50 text-evidence-700 border-evidence-200/50',
-  'Active':      'bg-compliant-50 text-compliant-700 border-compliant-700/20',
-  'Locked':      'bg-mitigated-50 text-mitigated-700 border-mitigated-700/20',
+const STATUS_TONE: Record<RacmTableStatus, Tone> = {
+  'Draft':       'draft',
+  'In Progress': 'evidence',
+  'Active':      'compliant',
+  'Locked':      'mitigated',
 };
 
 // ─── RACM Readiness (computed, never stored) ────────────────────────────────
@@ -1300,11 +1303,11 @@ function getRacmTableReadiness(racm: RacmEntry): RacmTableReadiness {
   return 'Ready';
 }
 
-const READINESS_BADGE: Record<RacmTableReadiness, string> = {
-  'Mapping Incomplete':     'bg-high-50 text-high-700',
-  'Workflow Missing':       'bg-mitigated-50 text-mitigated-700',
-  'Configuration Pending':  'bg-evidence-50 text-evidence-700',
-  'Ready':                  'bg-compliant-50 text-compliant-700',
+const READINESS_TONE: Record<RacmTableReadiness, Tone> = {
+  'Mapping Incomplete':     'high',
+  'Workflow Missing':       'mitigated',
+  'Configuration Pending':  'evidence',
+  'Ready':                  'compliant',
 };
 
 // ─── Seed Data ──────────────────────────────────────────────────────────────
@@ -1603,6 +1606,8 @@ interface Props {
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const logEvent = useAuditLog();
   // Inline RACM rename (pencil action) — renamed names overlay the source data.
   const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
   const [editingRacmName, setEditingRacmName] = useState('');
@@ -1810,12 +1815,15 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   };
   const unmapPair = (riskId: string, controlId: string) => {
     setUnmappedPairs(prev => new Set(prev).add(`${riskId}:${controlId}`));
+    logEvent({ action: 'Update', description: `Unmapped control ${controlId} from risk ${riskId}`, module: 'Governance', entity: 'RACM' });
   };
   const deleteRow = (racmId: string, riskId: string) => {
     setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
+    logEvent({ action: 'Delete', description: `Removed risk ${riskId} from RACM ${racmId}`, module: 'Governance', entity: 'RACM' });
   };
   const handleBulkArchive = () => {
     setArchivedIds(prev => [...prev, ...selectedIds]);
+    logEvent({ action: 'Update', description: `Archived ${selectedIds.length} RACM${selectedIds.length === 1 ? '' : 's'}`, module: 'Governance', entity: 'RACM' });
     setSelectedIds([]);
   };
   const handleReopen = (racmId: string) => {
@@ -1876,6 +1884,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const handleArchiveOne = (id: string) => {
     setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedIds(prev => prev.filter(s => s !== id));
+    logEvent({ action: 'Update', description: `Archived RACM ${id}`, module: 'Governance', entity: 'RACM' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedIds(prev => prev.filter(s => s !== id));
@@ -2114,10 +2123,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         {displayName}
                       </button>
                     )}
-                    <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold border ${STATUS_BADGE[status]}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-                      {status}
-                    </span>
+                    <Pill tone={STATUS_TONE[status]}>{status}</Pill>
                   </div>
                   <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
                     {descLine}
@@ -2165,6 +2171,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                   {isSelected ? (
                     <>
+                      {can('racm_archive') && (
                       <div className="relative group/archive">
                         <button
                           type="button"
@@ -2176,6 +2183,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
                       </div>
+                      )}
                       <div className="relative group/cancel">
                         <button
                           type="button"
@@ -2232,6 +2240,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/vsop:opacity-100 pointer-events-none transition-opacity z-50">View SOP</span>
                         </div>
                       )}
+                      {can('racm_link_risk') && (
                       <div className="relative group/lrisk">
                         <button
                           type="button"
@@ -2243,6 +2252,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
                       </div>
+                      )}
+                      {can('racm_edit') && (
                       <div className="relative group/edit">
                         <button
                           type="button"
@@ -2254,6 +2265,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Rename</span>
                       </div>
+                      )}
+                      {can('racm_archive') && (
                       <div className="relative group/archive">
                         <button
                           type="button"
@@ -2265,6 +2278,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
                       </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2311,9 +2325,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                                   <span key={ctl.id} title={ctl.isKey ? `${ctl.name} · Key control` : ctl.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[0.6875rem] font-semibold text-brand-700">
                                     <Star size={10} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
                                     <span className="font-mono">{ctl.id}</span>
+                                    {can('racm_unmap') && (
                                     <button type="button" onClick={() => setConfirmUnmap({ riskId: risk.id, ctlId: ctl.id })} className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors" aria-label={`Remove ${ctl.id}`}>
                                       <X size={10} />
                                     </button>
+                                    )}
                                   </span>
                                 ))}
                               </div>
@@ -2330,12 +2346,14 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                                   Link Risk lives on the RACM card's action row (it maps risks to the
                                   whole RACM), not per risk. */}
                               <div className="shrink-0 flex items-center gap-0.5">
+                                {can('racm_link_control') && (
                                 <div className="relative group/lctrl">
                                   <button type="button" aria-label="Link Control" onClick={() => setLinkControlTarget({ riskId: risk.id, riskName: risk.name, bpAbbr: racm.process })} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
                                     <Shield size={13} />
                                   </button>
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lctrl:opacity-100 pointer-events-none transition-opacity z-50">Link Control</span>
                                 </div>
+                                )}
                                 {/* Link Workflow moved to the Control Library (one per control row).
                                     Commented out here per request — restore this block to bring it back.
                                 <div className="relative group/lwf">
@@ -2345,12 +2363,14 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lwf:opacity-100 pointer-events-none transition-opacity z-50">Link Workflow</span>
                                 </div>
                                 */}
+                                {can('racm_archive') && (
                                 <div className="relative group/del">
                                   <button type="button" aria-label="Delete" onClick={() => setConfirmDeleteRisk({ racmId: racm.id, riskId: risk.id, riskName: risk.name })} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
                                     <Trash2 size={13} />
                                   </button>
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
                                 </div>
+                                )}
                               </div>
                             </div>
                             );

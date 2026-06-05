@@ -13,11 +13,14 @@ import { getSopRelationships, getControlRelationships, getWorkflowRelationships,
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan } from '../../context/CurrentUserContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
+import { Pill, type Tone } from '../shared/StatusBadge';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import ControlExpandedPanel from './ControlExpandedPanel';
 import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
@@ -65,6 +68,17 @@ const SOP_STATUS_STYLES: Record<SOPStatus, string> = {
   'Processed': 'bg-compliant-50 text-compliant-700',
   'Linked': 'bg-brand-50 text-brand-700',
   'Archived': 'bg-paper-50 text-ink-400',
+};
+
+// Tone equivalents of SOP_STATUS_STYLES, for rendering through the shared Pill
+// primitive (DESIGN.md §7.10.4). The class map above is retained only for the
+// compact h-4 inline tag in the "SOP already exists" modal.
+const SOP_STATUS_TONE: Record<SOPStatus, Tone> = {
+  'Draft': 'draft',
+  'Processing': 'evidence',
+  'Processed': 'compliant',
+  'Linked': 'info',
+  'Archived': 'draft',
 };
 
 interface SOPAction {
@@ -368,7 +382,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-text">{sop.name}</h2>
                 <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-[4px]">{sop.version}</span>
-                <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+                <Pill tone={SOP_STATUS_TONE[sop.status]}>{sop.status}</Pill>
               </div>
               <div className="flex items-center gap-4 mt-1.5 text-[11px] text-ink-500">
                 <span>Uploaded by {sop.uploadedBy} · {sop.uploadedAt}</span>
@@ -1170,7 +1184,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+              <Pill tone={SOP_STATUS_TONE[sop.status]}>{sop.status}</Pill>
               <span className="font-mono text-[11px] text-ink-500">{sop.id}</span>
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
@@ -1198,7 +1212,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
             <div key={f.label}>
               <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
               {f.pill ? (
-                <span className={`mt-0.5 px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
+                <Pill tone={SOP_STATUS_TONE[sop.status]}>{sop.status}</Pill>
               ) : (
                 <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : 'text-text'}`}>{f.value}</span>
               )}
@@ -1302,6 +1316,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   onViewRacm?: (racmId: string) => void;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const logEvent = useAuditLog();
 
   // Local SOP state (seed from mock + allow new uploads)
   const [localSops, setLocalSops] = useState<LocalSOP[]>(() =>
@@ -1341,6 +1357,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     if (name && current && name !== current.name) {
       setLocalSops(prev => prev.map(s => s.id === id ? { ...s, name } : s));
       addToast({ message: `SOP renamed to "${name}".`, type: 'success' });
+      logEvent({ action: 'Update', description: `Renamed SOP "${current.name}" to "${name}"`, module: 'Process Hub', entity: 'SOP' });
     }
     setEditingSopNameId(null);
   };
@@ -1641,7 +1658,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     const target = localSops.find(s => s.id === id);
     setLocalSops(prev => prev.map(s => s.id === id ? { ...s, status: 'Archived' as SOPStatus } : s));
     setSelectedIds(prev => prev.filter(x => x !== id));
-    if (target) addToast({ message: `"${target.name}" archived`, type: 'info' });
+    if (target) {
+      addToast({ message: `"${target.name}" archived`, type: 'info' });
+      logEvent({ action: 'Update', description: `Archived SOP "${target.name}"`, module: 'Process Hub', entity: 'SOP' });
+    }
   };
 
   const hasAnyFilter =
@@ -1780,9 +1800,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
+          {can('bp_create') && (
           <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadDrawer(true)}>
             Upload SOP
           </Button>
+          )}
         </div>
       ) : (
         <>
@@ -1812,9 +1834,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              {can('bp_create') && (
               <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadDrawer(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
+              )}
             </div>
           </div>
 
@@ -1881,11 +1905,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                 //   failed generation → "Generation Failed" (red)
                 //   SOP with a RACM   → "RACM Ready" (green)
                 const statusLabel = sop.failureReason ? 'Generation Failed' : sop.racmId ? 'RACM Ready' : sop.status;
-                const statusCls = sop.failureReason
-                  ? 'bg-risk-50 text-risk-700'
+                const statusTone: Tone = sop.failureReason
+                  ? 'risk'
                   : sop.racmId
-                    ? 'bg-compliant-50 text-compliant-700'
-                    : SOP_STATUS_STYLES[sop.status];
+                    ? 'compliant'
+                    : SOP_STATUS_TONE[sop.status];
                 // RACM Ready = has a RACM and generation didn't fail. Only these
                 // open their RACM on card-body click; everything else is inert.
                 const isRacmReady = !sop.failureReason && !!sop.racmId;
@@ -1927,9 +1951,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         ) : (
                           <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
                         )}
-                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>
-                          {statusLabel}
-                        </span>
+                        <Pill tone={statusTone}>{statusLabel}</Pill>
                       </div>
                       {sop.failureReason && (
                         <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
@@ -1976,7 +1998,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                             </span>
                           </div>
                         </>
-                      ) : (
+                      ) : can('bp_edit') ? (
                       <div className="relative group/edit">
                         <button
                           type="button"
@@ -1990,7 +2012,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           Edit SOP
                         </span>
                       </div>
-                      )}
+                      ) : null}
                       <div className="relative group/view">
                         <button
                           type="button"
@@ -2004,6 +2026,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           View
                         </span>
                       </div>
+                      {can('sop_archive') && (
                       <div className="relative group/delete">
                         <button
                           type="button"
@@ -2017,6 +2040,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           Delete
                         </span>
                       </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -2301,6 +2325,8 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   // public tab signature ("Map in RACM" was removed from the cards intentionally).
   void bpAbbr;
   const { addToast } = useToast();
+  const { can } = useCan();
+  const logEvent = useAuditLog();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
   const [searchQuery, setSearchQuery] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string[]>([]);
@@ -2398,6 +2424,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setControls(prev => prev.filter(c => c.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control archived`, type: 'success' });
+    logEvent({ action: 'Update', description: `Archived control ${id}`, module: 'Control Library', entity: 'Control' });
   };
   // Delete-control confirmation (the trash action on a control card).
   const [confirmDeleteCtrl, setConfirmDeleteCtrl] = useState<{ id: string; name: string } | null>(null);
@@ -2408,6 +2435,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setControls(prev => prev.filter(c => c.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control deleted`, type: 'success' });
+    logEvent({ action: 'Delete', description: `Deleted control ${id}`, module: 'Control Library', entity: 'Control' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedIds(prev => prev.filter(s => s !== id));
@@ -2501,6 +2529,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
           <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
+          {can('ctrl_create') && (
           <button
             type="button"
             onClick={() => setShowCreateControl(true)}
@@ -2508,6 +2537,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           >
             <Plus size={14} /> Create Control
           </button>
+          )}
         </div>
       </div>
 
@@ -2652,6 +2682,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                 {isChecked ? (
                   <>
+                    {can('ctrl_edit') && (
                     <button
                       type="button"
                       onClick={() => handleArchiveOne(ctrl.id)}
@@ -2660,6 +2691,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                     >
                       <Archive size={14} />
                     </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleCancelOne(ctrl.id)}
@@ -2671,6 +2703,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   </>
                 ) : (
                   <>
+                    {can('ctrl_delete') && (
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteCtrl({ id: ctrl.id, name: ctrl.name })}
@@ -2679,6 +2712,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                     >
                       <Trash2 size={14} />
                     </button>
+                    )}
                   </>
                 )}
               </div>
@@ -2734,6 +2768,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               }, ...prev]);
               setShowCreateControl(false);
               addToast({ message: `Control "${data.name}" created`, type: 'success' });
+              logEvent({ action: 'Create', description: `Created control "${data.name}" (${newId})`, module: 'Control Library', entity: 'Control' });
             }}
           />
         )}
@@ -2874,6 +2909,8 @@ const SEED_BP_WF: BPWorkflow[] = [
 
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void }) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const logEvent = useAuditLog();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -2942,6 +2979,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     const wf = workflows[idx];
     setWorkflows(prev => prev.filter(w => w.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
+    logEvent({ action: 'Delete', description: `Deleted workflow "${wf.name}" (${wf.id})`, module: 'Workflow Library', entity: 'Workflow' });
     addToast({
       message: `Workflow "${wf.name}" deleted.`,
       type: 'info',
@@ -2960,6 +2998,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [] }, ...prev]);
     setShowCreateDrawer(false);
     addToast({ message: `Workflow "${data.name}" created.`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created workflow "${data.name}"`, module: 'Workflow Library', entity: 'Workflow' });
   };
 
   // Bulk-select helpers — mirrors RiskRegister pattern.
@@ -2989,6 +3028,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'Archived' as const } : w));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
+    logEvent({ action: 'Update', description: `Archived workflow "${wf.name}" (${wf.id})`, module: 'Workflow Library', entity: 'Workflow' });
   };
 
   if (!isLoading && loadError) {
@@ -3003,9 +3043,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No workflows yet</h3>
         <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Connect approval steps and evidence collection.</p>
+        {can('wf_create') && (
         <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()}>
           Create Workflow
         </Button>
+        )}
       </div>
     );
   }
@@ -3107,9 +3149,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
           <FilterPill filterKey="status" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
+          {can('wf_create') && (
           <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
+          )}
         </div>
       </div>
 
@@ -3238,11 +3282,13 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
                   {isSelected ? (
                     <>
+                      {can('wf_update_delete') && (
                       <button type="button" aria-label="Archive" title="Archive"
                         onClick={() => handleArchiveOne(wf.id)}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
                         <Archive size={14} />
                       </button>
+                      )}
                       <button type="button" aria-label="Cancel selection" title="Cancel selection"
                         onClick={() => toggleSelect(wf.id)}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
@@ -3251,16 +3297,20 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                     </>
                   ) : (
                     <>
+                      {can('wf_run') && (
                       <button type="button" aria-label="Run workflow" title="Run workflow"
                         onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
                         <Play size={14} />
                       </button>
+                      )}
+                      {can('wf_update_delete') && (
                       <button type="button" aria-label="Delete" title="Delete"
                         onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
                         <Trash2 size={14} />
                       </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -4192,6 +4242,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   onRunWorkflow?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const { can } = useCan();
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
@@ -4996,7 +5047,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                 <div className="flex items-center gap-2 shrink-0">
                   {can('bp_share') && (
                     <button
-                      onClick={() => addToast({ message: `Share "${bp.name}" with users and teams.`, type: 'info' })}
+                      onClick={(e) => { e.stopPropagation(); openShare({ type: 'process', id: bp.abbr, anchor: rectFromEvent(e) }); }}
                       className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
                     >
                       <Share2 size={14} /> Share

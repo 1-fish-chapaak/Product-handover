@@ -1,29 +1,32 @@
-import DatePicker from '../shared/DatePicker';
+import { DateFilterPicker, dateInFilter, isDateFilterActive, DEFAULT_DATE_FILTER, type DateFilter } from '../shared/DateFilterPicker';
 import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Users, Shield, ScrollText,
-  UserPlus, Plus, Download, Filter,
-  Eye, ChevronDown, Search, Pencil, CopyPlus, Info, Trash2,
+  Users, User, Shield, ScrollText,
+  UserPlus, Plus, Download,
+  Eye, ChevronDown, Search, Pencil, CopyPlus, Info, Trash2, X, Check,
 } from 'lucide-react';
 import { PERMISSION_GROUPS, ALL_PERMISSION_KEYS, PERSON_ROLES, type PermissionKey, type Role } from '../../data/rbac';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useAdminData, useAuditLog, type AuditLog, type AdminTeam } from '../../context/AdminDataContext';
 import SmartTable, { type Column } from '../shared/SmartTable';
-import { StatusBadge } from '../shared/StatusBadge';
+import ColumnFilter from '../shared/ColumnFilter';
+import { StatusBadge, ActionBadge, ResultBadge } from '../shared/StatusBadge';
 import FloatingLines from '../shared/FloatingLines';
 import Modal from '../shared/Modal';
 import Toggle from '../shared/Toggle';
 import Checkbox from '../shared/Checkbox';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import EmptyState from '../shared/EmptyState';
+import { KpiTile } from '../shared/KpiTile';
 import { useToast } from '../shared/Toast';
 
 interface Props {
   activeTab?: string;
 }
 
-type TabId = 'users' | 'teams' | 'roles' | 'logs';
+type TabId = 'access' | 'logs';
+type AccessSeg = 'users' | 'teams' | 'roles';
 
 interface Tab {
   id: TabId;
@@ -32,8 +35,7 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'users', label: 'Users & Teams', icon: Users },
-  { id: 'roles', label: 'Roles & Permissions', icon: Shield },
+  { id: 'access', label: 'Access', icon: Users },
   { id: 'logs', label: 'Audit Logs', icon: ScrollText },
 ];
 
@@ -43,7 +45,7 @@ interface MockUser {
   name: string;
   initials: string;
   email: string;
-  role: string;
+  roleId: string;
   team: string;
   status: UserStatus;
   lastLogin: string;
@@ -75,8 +77,6 @@ const BTN_CTA_PRIMARY =
   'flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer';
 const BTN_CTA_OUTLINE =
   'flex items-center gap-2 px-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[0.8125rem] font-semibold hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer';
-const BTN_ROW =
-  'inline-flex items-center gap-1 px-2 h-7 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer';
 
 /**
  * Brand-tinted initials avatar — matches the platform people convention
@@ -105,16 +105,104 @@ function DetailField({ label, children }: { label: string; children: React.React
   );
 }
 
-function MemberSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+function MemberSearch({ value, onChange, placeholder, className = '' }: { value: string; onChange: (v: string) => void; placeholder: string; className?: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 transition-colors">
+    <div className={`flex items-center gap-2 px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 transition-colors ${className}`}>
       <Search size={14} className="text-ink-400 shrink-0" />
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-transparent outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
+        className="flex-1 min-w-0 bg-transparent outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
       />
+      {value && (
+        <button onClick={() => onChange('')} className="text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Clear search">
+          <X size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Row action — labelled pill button (icon + word). Hairline border + white
+      surface so it reads clearly as a button; soft brand-tint on hover keeps
+      it light and modern, not a chunky default button. ── */
+const BTN_ROW =
+  'inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:border-brand-200 hover:bg-brand-50/60 transition-colors cursor-pointer';
+
+function RowActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {children}
+    </div>
+  );
+}
+
+/* ── KPI summary row — canonical KpiTile cascade. Tiles become click-to-filter
+      chips when `onSelect` is wired (active tile gets a brand border). ── */
+interface KpiStat { key: string; label: string; value: number; }
+function KpiRow({ stats, active, onSelect }: { stats: KpiStat[]; active?: string; onSelect?: (key: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5" role="list">
+      {stats.map((s, i) => {
+        const isActive = active === s.key;
+        return (
+          <KpiTile
+            key={s.key}
+            index={i}
+            label={s.label}
+            value={String(s.value)}
+            onClick={onSelect ? () => onSelect(s.key) : undefined}
+            className={isActive ? '!border-brand-500 ring-1 ring-brand-200 bg-brand-50/30' : ''}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+interface RoleSeed { name: string; description: string; permissions: PermissionKey[]; }
+
+/* ── Access sub-nav — 3-way segmented control (Users / Teams / Roles), the
+      single sub-navigation for the merged Access tab. Sliding white pill. ── */
+function AccessNav({ seg, setSeg, counts, action }: { seg: AccessSeg; setSeg: (s: AccessSeg) => void; counts: Record<AccessSeg, number>; action?: React.ReactNode }) {
+  const prefersReduced = useReducedMotion();
+  const items: { key: AccessSeg; label: string; icon: typeof Users }[] = [
+    { key: 'users', label: 'Users', icon: User },
+    { key: 'teams', label: 'Teams', icon: Users },
+    { key: 'roles', label: 'Roles', icon: Shield },
+  ];
+  return (
+    <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+      <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit">
+      {items.map(t => {
+        const isActive = seg === t.key;
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.key}
+            onClick={() => setSeg(t.key)}
+            className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] transition-colors cursor-pointer ${
+              isActive ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
+            }`}
+          >
+            {isActive && (
+              <motion.div
+                layoutId="admin-access-seg"
+                className="absolute inset-0 bg-canvas-elevated rounded-md shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1.5">
+              <Icon size={14} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
+              {t.label}
+              <span className={`tabular-nums font-bold ${isActive ? 'text-brand-700' : 'text-ink-400'}`}>{counts[t.key]}</span>
+            </span>
+          </button>
+        );
+      })}
+      </div>
+      {action}
     </div>
   );
 }
@@ -125,7 +213,7 @@ const TOTAL_PERMS = ALL_PERMISSION_KEYS.length;
 
 const userColumns: Column<MockUser & Record<string, unknown>>[] = [
   { key: 'name', label: 'Name', sortable: true },
-  { key: 'role', label: 'Role', sortable: true },
+  { key: 'roleName', label: 'Role', sortable: true },
   { key: 'team', label: 'Team', sortable: true },
   {
     key: 'status',
@@ -159,6 +247,8 @@ const TEAM_MEMBERS = [
 
 /* ── User detail drawer (read-only) ── */
 function UserDetailDrawer({ user, onClose }: { user: MockUser; onClose: () => void }) {
+  const { roles } = useCurrentUser();
+  const roleLabel = roles.find(r => r.id === user.roleId)?.name ?? '—';
   const recentActivity = [
     { action: 'Logged in', time: user.lastLogin },
     { action: 'Updated risk register', time: 'Apr 18' },
@@ -169,38 +259,40 @@ function UserDetailDrawer({ user, onClose }: { user: MockUser; onClose: () => vo
   return (
     <Modal
       title="User Details"
-      subtitle={<span className="font-mono">{user.email}</span>}
       onClose={onClose}
       footer={<button className={BTN_CANCEL} onClick={onClose}>Close</button>}
     >
-      <div className="space-y-7">
-        <div className="flex items-center gap-4">
+      <div className="space-y-6">
+        {/* Identity — avatar + name/email, status pinned right. */}
+        <div className="flex items-center gap-3.5">
           <InitialsAvatar name={user.name} size={48} />
           <div className="min-w-0">
             <div className="text-[0.9375rem] font-semibold text-ink-900 truncate">{user.name}</div>
             <div className="text-[0.8125rem] text-ink-500 mt-0.5 truncate">{user.email}</div>
-            <div className="mt-2"><StatusBadge status={STATUS_MAP[user.status] || 'draft'} /></div>
           </div>
+          <div className="ml-auto shrink-0"><StatusBadge status={STATUS_MAP[user.status] || 'draft'} /></div>
         </div>
 
-        <section className="grid grid-cols-2 gap-x-8 gap-y-5">
+        {/* Details — grouped in a quiet panel for structure. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-canvas-border bg-canvas p-4">
           {[
-            { label: 'Role', value: user.role },
+            { label: 'Role', value: roleLabel },
             { label: 'Team', value: user.team },
             { label: 'Last Login', value: user.lastLogin },
             { label: 'Account Created', value: 'Jan 15, 2026' },
           ].map(d => (
             <DetailField key={d.label} label={d.label}>
-              <span className="text-[0.8125rem] text-ink-800">{d.value}</span>
+              <span className="text-[0.8125rem] font-medium text-ink-800">{d.value}</span>
             </DetailField>
           ))}
-        </section>
+        </div>
 
+        {/* Recent activity — bordered list with hairline row dividers. */}
         <section>
-          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">Recent Activity</h3>
-          <div className="-mx-2">
+          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recent Activity</h3>
+          <div className="rounded-xl border border-canvas-border overflow-hidden">
             {recentActivity.map((a, i) => (
-              <div key={i} className="flex items-center justify-between px-2 py-2.5 rounded-md hover:bg-canvas transition-colors">
+              <div key={i} className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-canvas transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''}`}>
                 <span className="text-[0.8125rem] text-ink-700">{a.action}</span>
                 <span className="text-[0.75rem] text-ink-500 tabular-nums">{a.time}</span>
               </div>
@@ -217,15 +309,16 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { updateUser, removeUser } = useAdminData();
+  const { roles } = useCurrentUser();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
-  const [role, setRole] = useState(user.role);
+  const [roleId, setRoleId] = useState(user.roleId);
   const [team, setTeam] = useState(user.team);
   const [status, setStatus] = useState<UserStatus>(user.status);
 
   const save = () => {
-    updateUser(user.email, { name, email, role, team, status });
+    updateUser(user.email, { name, email, roleId, team, status });
     logEvent({ action: 'Update', description: `Updated user "${name}" (status: ${status})`, module: 'Admin', entity: 'User' });
     onClose();
     addToast({ message: 'User updated', type: 'success' });
@@ -242,7 +335,6 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
     <>
       <Modal
         title="Edit User"
-        subtitle={user.email}
         onClose={onClose}
         footer={
           <>
@@ -258,14 +350,6 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
         }
       >
         <div className="space-y-5">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-canvas border border-canvas-border">
-            <InitialsAvatar name={user.name} size={36} />
-            <div className="min-w-0">
-              <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{user.name}</div>
-              <div className="text-[0.75rem] text-ink-500 truncate">{user.email}</div>
-            </div>
-          </div>
-
           <div>
             <label className={FIELD_LABEL}>Full Name</label>
             <input value={name} onChange={e => setName(e.target.value)} className={FIELD_INPUT} />
@@ -277,8 +361,8 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
           <div>
             <label className={FIELD_LABEL}>Role</label>
             <div className="relative">
-              <select value={role} onChange={e => setRole(e.target.value)} className={FIELD_SELECT}>
-                {[role, 'Enabler', 'Auditor', 'Risk Owner', 'Reviewer', 'Viewer'].filter((v, i, a) => a.indexOf(v) === i).map(r => <option key={r}>{r}</option>)}
+              <select value={roleId} onChange={e => setRoleId(e.target.value)} className={FIELD_SELECT}>
+                {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
             </div>
@@ -334,16 +418,17 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [team, setTeam] = useState('');
   // Pre-select the org's configured default role.
-  const [selectedRole, setSelectedRole] = useState(
-    () => roles.find(r => r.id === defaultRoleId)?.name ?? roles[0]?.name ?? '',
+  const [selectedRoleId, setSelectedRoleId] = useState(
+    () => roles.find(r => r.id === defaultRoleId)?.id ?? roles[0]?.id ?? '',
   );
   const [previewRole, setPreviewRole] = useState<string | null>(null);
 
   const invite = () => {
     if (!fullName.trim() || !email.trim()) { addToast({ message: 'Name and email are required', type: 'error' }); return; }
     const initials = fullName.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase();
-    inviteUser({ name: fullName.trim(), initials, email: email.trim(), role: selectedRole, team: team || '—', status: 'Invited', lastLogin: 'Never' });
-    logEvent({ action: 'Create', description: `Invited user "${fullName.trim()}" with role "${selectedRole}"`, module: 'Admin', entity: 'User' });
+    const roleLabel = roles.find(r => r.id === selectedRoleId)?.name ?? selectedRoleId;
+    inviteUser({ name: fullName.trim(), initials, email: email.trim(), roleId: selectedRoleId, team: team || '—', status: 'Invited', lastLogin: 'Never' });
+    logEvent({ action: 'Create', description: `Invited user "${fullName.trim()}" with role "${roleLabel}"`, module: 'Admin', entity: 'User' });
     onClose();
     addToast({ message: 'Invitation sent', type: 'success' });
   };
@@ -392,14 +477,14 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-2.5">
             {roles.map(role => {
-              const isSelected = selectedRole === role.name;
+              const isSelected = selectedRoleId === role.id;
               const isPreview = previewRole === role.name;
               const isDefault = role.id === defaultRoleId;
               const enabled = new Set(role.permissions);
               return (
                 <div
                   key={role.id}
-                  onClick={() => setSelectedRole(role.name)}
+                  onClick={() => setSelectedRoleId(role.id)}
                   className={`rounded-lg border cursor-pointer transition-colors ${
                     isSelected ? 'border-brand-600 bg-brand-50/40' : 'border-canvas-border hover:bg-canvas'
                   }`}
@@ -585,7 +670,6 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
     <>
       <Modal
         title="Edit Team"
-        subtitle={team.name}
         onClose={onClose}
         footer={
           <>
@@ -665,7 +749,7 @@ function RoleDetailDrawer({ role, userCount, onClose }: { role: Role; userCount:
   const [enabled, setEnabled] = useState<Set<string>>(() => new Set(role.permissions));
 
   const toggle = (key: string) =>
-    setEnabled(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+    setEnabled(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
     if (preset === 'none') { setEnabled(new Set()); return; }
@@ -764,13 +848,13 @@ function RoleDetailDrawer({ role, userCount, onClose }: { role: Role; userCount:
 }
 
 /* ── Create role drawer ── */
-function CreateRoleDrawer({ onClose }: { onClose: () => void }) {
+function CreateRoleDrawer({ onClose, seed }: { onClose: () => void; seed?: RoleSeed | null }) {
   const { addToast } = useToast();
   const { addRole } = useCurrentUser();
   const logEvent = useAuditLog();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [enabled, setEnabled] = useState<Set<string>>(new Set());
+  const [name, setName] = useState(seed?.name ?? '');
+  const [description, setDescription] = useState(seed?.description ?? '');
+  const [enabled, setEnabled] = useState<Set<string>>(() => new Set<string>(seed?.permissions ?? []));
   const totalPerms = TOTAL_PERMS;
 
   const togglePerm = (key: string) => {
@@ -811,7 +895,7 @@ function CreateRoleDrawer({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       title="Create Role"
-      subtitle="Define a role and choose its permissions."
+      subtitle={seed ? 'Duplicated from an existing role. Adjust and save as new.' : 'Define a role and choose its permissions.'}
       width="max-w-[620px]"
       onClose={onClose}
       footer={
@@ -941,9 +1025,22 @@ const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
   { key: 'action', label: '', sortable: false, align: 'right' as const, width: '150px' },
 ];
 
-function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
+function RolesTab({ onCreateRole }: { onCreateRole: (seed?: RoleSeed) => void }) {
+  const prefersReduced = useReducedMotion();
   const { roles } = useCurrentUser();
+  const { defaultRoleId, setDefaultRoleId } = useAdminData();
+  const { addToast } = useToast();
   const [viewRole, setViewRole] = useState<Role | null>(null);
+  const [search, setSearch] = useState('');
+  const [defaultOpen, setDefaultOpen] = useState(false);
+  const defaultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!defaultOpen) return;
+    const close = (e: MouseEvent) => { if (defaultRef.current && !defaultRef.current.contains(e.target as Node)) setDefaultOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [defaultOpen]);
 
   // User counts per role, derived from the people→role mapping.
   const userCounts = Object.values(PERSON_ROLES).reduce<Record<string, number>>((acc, rid) => {
@@ -985,36 +1082,112 @@ function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
     if (col.key === 'action') {
       return {
         ...col,
-        render: (item: RoleRow) => (
-          <div className="flex items-center justify-end gap-1">
-            <button className={BTN_ROW} onClick={() => setViewRole(roleById[item.id as string])}><Pencil size={12} />Edit</button>
-            <button className={BTN_ROW} onClick={onCreateRole}><CopyPlus size={12} />Duplicate</button>
-          </div>
-        ),
+        render: (item: RoleRow) => {
+          const role = roleById[item.id as string];
+          return (
+            <RowActions>
+              <button className={BTN_ROW} onClick={() => setViewRole(role)}><Pencil size={12} />Edit</button>
+              <button
+                className={BTN_ROW}
+                onClick={() => onCreateRole({ name: `${role.name} (copy)`, description: role.description ?? '', permissions: [...role.permissions] })}
+              ><CopyPlus size={12} />Duplicate</button>
+            </RowActions>
+          );
+        },
       };
     }
     return col;
   });
 
+  // KPI summary + external search (unified toolbar across all admin tabs).
+  const systemCount = roles.filter(r => r.type === 'System').length;
+  const customCount = roles.filter(r => r.type === 'Custom').length;
+  const avgPerms = roles.length ? Math.round(roles.reduce((s, r) => s + r.permissions.length, 0) / roles.length) : 0;
+  const kpiStats: KpiStat[] = [
+    { key: 'total', label: 'Total Roles', value: roles.length },
+    { key: 'system', label: 'System', value: systemCount },
+    { key: 'custom', label: 'Custom', value: customCount },
+    { key: 'avg', label: 'Avg Permissions', value: avgPerms },
+  ];
+
+  const q = search.trim().toLowerCase();
+  const visibleData = q
+    ? tableData.filter(r => [r.name, r.createdBy, r.description].some(v => String(v ?? '').toLowerCase().includes(q)))
+    : tableData;
+
   const viewRoleUsers = viewRole ? (userCounts[viewRole.id] ?? 0) : 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={prefersReduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
     >
+      {roles.length > 0 && <KpiRow stats={kpiStats} />}
+
+      {/* Unified toolbar: search left, default-role selector right. */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <MemberSearch value={search} onChange={setSearch} placeholder="Search roles..." className="w-full sm:w-[300px]" />
+        <div className="flex items-center gap-2 text-[0.8125rem] text-ink-600 shrink-0">
+          <span className="font-medium text-ink-700 whitespace-nowrap">Default role for new users</span>
+          {/* Custom select popover — matches the inline team dropdown. */}
+          <div className="relative" ref={defaultRef}>
+            <button
+              onClick={() => setDefaultOpen(o => !o)}
+              className={`no-focus-ring inline-flex items-center gap-2 h-9 pl-3 pr-2.5 rounded-lg border bg-canvas-elevated text-[0.8125rem] cursor-pointer transition-colors ${
+                defaultOpen ? 'border-brand-600 text-brand-700' : 'border-canvas-border text-ink-700 hover:border-brand-200'
+              }`}
+            >
+              <span className="whitespace-nowrap">{roles.find(r => r.id === defaultRoleId)?.name ?? 'Select role'}</span>
+              <ChevronDown size={13} className={`text-ink-400 transition-transform ${defaultOpen ? 'rotate-180 text-brand-600' : ''}`} />
+            </button>
+            {defaultOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.13, ease: [0.2, 0, 0, 1] }}
+                className="absolute right-0 top-full mt-1.5 w-56 max-h-[280px] overflow-y-auto origin-top-right bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] p-1 z-30"
+              >
+                {roles.map(r => {
+                  const selected = r.id === defaultRoleId;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => { setDefaultRoleId(r.id); setDefaultOpen(false); addToast({ message: `Default role set to ${r.name}`, type: 'success' }); }}
+                      className={`no-focus-ring flex w-full items-center justify-between gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-left cursor-pointer transition-colors ${
+                        selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'
+                      }`}
+                    >
+                      <span className="truncate">{r.name}</span>
+                      {selected && <Check size={14} className="shrink-0 text-brand-600" />}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <SmartTable
         columns={columnsWithAction}
-        data={tableData}
+        data={visibleData}
         keyField="id"
-        searchable
-        searchPlaceholder="Search roles..."
-        searchKeys={['name', 'createdBy']}
+        searchable={false}
         paginated
         pageSize={10}
-        emptyMessage="No roles found."
+        emptyContent={
+          <EmptyState
+            icon={Shield}
+            size="compact"
+            title={search ? 'No roles match your search' : 'No roles yet'}
+            body={search ? 'Try a different name or clear the search.' : 'Create a role to define what members can see and do.'}
+            action={search
+              ? <button className={BTN_CTA_OUTLINE} onClick={() => setSearch('')}>Clear search</button>
+              : <button className={BTN_CTA_PRIMARY} onClick={() => onCreateRole()}><Plus size={14} />Create Role</button>}
+          />
+        }
       />
       <AnimatePresence>
         {viewRole && <RoleDetailDrawer key="role-detail" role={viewRole} userCount={viewRoleUsers} onClose={() => setViewRole(null)} />}
@@ -1023,14 +1196,18 @@ function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
   );
 }
 
-function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTeam: () => void }) {
+function UsersTab({ subTab, onCreateTeam }: { subTab: 'users' | 'teams'; onCreateTeam: () => void }) {
+  const prefersReduced = useReducedMotion();
   const { users, teams, updateUser } = useAdminData();
-  const tableData = users.map(u => ({ ...u } as MockUser & Record<string, unknown>));
+  const { roles } = useCurrentUser();
+  const roleName = (roleId: string) => roles.find(r => r.id === roleId)?.name ?? '—';
+  const tableData = users.map(u => ({ ...u, roleName: roleName(u.roleId) } as MockUser & Record<string, unknown>));
   const [viewUser, setViewUser] = useState<MockUser | null>(null);
   const [editUser, setEditUser] = useState<MockUser | null>(null);
   const [teamDropdown, setTeamDropdown] = useState<string | null>(null);
-  const [subTab, setSubTab] = useState<'users' | 'teams'>('users');
   const [editTeam, setEditTeam] = useState<AdminTeam | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const teamDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1066,12 +1243,12 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
         ),
       };
     }
-    if (col.key === 'role') {
+    if (col.key === 'roleName') {
       return {
         ...col,
         render: (item: UserRow) => (
           <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[0.8125rem] text-ink-600 hover:text-brand-700 cursor-pointer group">
-            {item.role as string}
+            {item.roleName as string}
             <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
         ),
@@ -1089,38 +1266,51 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
 
           return (
             <div className="relative" ref={isOpen ? teamDropdownRef : undefined}>
+              {/* Trigger reads as an editable select chip; focus shown via the
+                  open-state tint (no harsh global ring → .no-focus-ring). */}
               <button
                 onClick={() => setTeamDropdown(isOpen ? null : rowId)}
-                className={`inline-flex items-center gap-1 text-[0.8125rem] cursor-pointer transition-colors ${isUnassigned ? 'text-ink-400 hover:text-brand-700' : 'text-ink-600 hover:text-brand-700'}`}
+                className={`no-focus-ring inline-flex items-center gap-1 px-2 h-7 -ml-2 rounded-md text-[0.8125rem] cursor-pointer transition-colors ${
+                  isOpen ? 'bg-canvas text-brand-700' : isUnassigned ? 'text-ink-400 hover:bg-canvas hover:text-brand-700' : 'text-ink-700 hover:bg-canvas hover:text-brand-700'
+                }`}
               >
                 {isUnassigned ? 'Assign team' : teamName}
-                <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180 text-brand-700' : ''}`} />
+                <ChevronDown size={12} className={`text-ink-400 transition-transform ${isOpen ? 'rotate-180 text-brand-600' : ''}`} />
               </button>
               {isOpen && (
-                <div className="absolute left-0 top-full mt-1 w-44 bg-canvas-elevated border border-canvas-border rounded-lg shadow-sm py-1 z-30">
-                  {teamNames.map(t => (
-                    <button
-                      key={t}
-                      onClick={() => { updateUser(rowId, { team: t }); setTeamDropdown(null); }}
-                      className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors ${
-                        t === teamName ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.13, ease: [0.2, 0, 0, 1] }}
+                  className="absolute left-0 top-full mt-1.5 w-48 origin-top-left bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] p-1 z-30"
+                >
+                  {teamNames.map(t => {
+                    const selected = t === teamName;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => { updateUser(rowId, { team: t }); setTeamDropdown(null); }}
+                        className={`no-focus-ring flex w-full items-center justify-between gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-left cursor-pointer transition-colors ${
+                          selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'
+                        }`}
+                      >
+                        <span className="truncate">{t}</span>
+                        {selected && <Check size={14} className="shrink-0 text-brand-600" />}
+                      </button>
+                    );
+                  })}
                   {!isUnassigned && (
                     <>
-                      <div className="h-px bg-canvas-border my-1" />
+                      <div className="h-px bg-canvas-border my-1 mx-1.5" />
                       <button
                         onClick={() => { updateUser(rowId, { team: '—' }); setTeamDropdown(null); }}
-                        className="w-full text-left px-3 py-1.5 text-[0.8125rem] text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
+                        className="no-focus-ring flex w-full items-center gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
                       >
-                        Remove from team
+                        <X size={13} className="shrink-0" /> Remove from team
                       </button>
                     </>
                   )}
-                </div>
+                </motion.div>
               )}
             </div>
           );
@@ -1131,129 +1321,150 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
       return {
         ...col,
         render: (item: UserRow) => (
-          <div className="flex items-center justify-end gap-1">
+          <RowActions>
             <button className={BTN_ROW} onClick={() => setViewUser(item as unknown as MockUser)}><Eye size={12} />View</button>
             <button className={BTN_ROW} onClick={() => setEditUser(item as unknown as MockUser)}><Pencil size={12} />Edit</button>
-          </div>
+          </RowActions>
         ),
       };
     }
     return col;
   });
 
+  // KPI status tiles double as filters; external search keeps the toolbar
+  // identical across all admin tabs.
+  const STATUS_FILTER_MAP: Record<string, string | null> = { total: null, active: 'Active', invited: 'Invited', suspended: 'Suspended' };
+  const kpiStats: KpiStat[] = [
+    { key: 'total', label: 'Total Users', value: users.length },
+    { key: 'active', label: 'Active', value: counts.active },
+    { key: 'invited', label: 'Invited', value: counts.invited },
+    { key: 'suspended', label: 'Suspended', value: counts.suspended },
+  ];
+  const activeKpi = statusFilter === null ? 'total' : (Object.keys(STATUS_FILTER_MAP).find(k => STATUS_FILTER_MAP[k] === statusFilter) ?? 'total');
+  const q = search.trim().toLowerCase();
+  const visibleUsers = tableData.filter(u => {
+    if (statusFilter && u.status !== statusFilter) return false;
+    if (q && ![u.name, u.email, u.roleName, u.team].some(v => String(v ?? '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  // Teams KPI row (display only) — mirrors the Users/Roles summary.
+  const totalMembers = teamsData.reduce((s, t) => s + t.members.length, 0);
+  const avgTeamSize = teamsData.length ? Math.round(totalMembers / teamsData.length) : 0;
+  const unassignedCount = users.filter(u => u.team === '—').length;
+  const teamKpiStats: KpiStat[] = [
+    { key: 'total', label: 'Total Teams', value: teamsData.length },
+    { key: 'members', label: 'Members Assigned', value: totalMembers },
+    { key: 'avg', label: 'Avg Team Size', value: avgTeamSize },
+    { key: 'unassigned', label: 'Unassigned', value: unassignedCount },
+  ];
+
+  // Teams render as a table (consistent with Users & Roles) rather than a
+  // sparse card grid.
+  type TeamRow = { id: string; name: string; count: number; members: string[]; team: AdminTeam } & Record<string, unknown>;
+  const teamTableData: TeamRow[] = teamsData.map(t => ({ id: t.id, name: t.name, count: t.members.length, members: t.members, team: t }));
+  const teamColumns: Column<TeamRow>[] = [
+    {
+      key: 'name', label: 'Team', sortable: true,
+      render: (t) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+            <Users size={14} className="text-brand-700" />
+          </div>
+          <span className="truncate text-[0.8125rem] font-semibold text-ink-800">{t.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'count', label: 'Members', sortable: true, width: '14%',
+      render: (t) => <span className={`text-[0.8125rem] tabular-nums ${t.count === 0 ? 'text-ink-400' : 'font-medium text-ink-800'}`}>{t.count}</span>,
+    },
+    {
+      key: 'avatars', label: '', sortable: false,
+      render: (t) => (
+        t.members.length === 0
+          ? <span className="text-[0.75rem] text-ink-400">No members yet</span>
+          : (
+            <div className="flex items-center gap-1.5">
+              {t.members.slice(0, 6).map((m, i) => <InitialsAvatar key={i} name={m} size={24} />)}
+              {t.members.length > 6 && (
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[0.625rem] font-semibold text-ink-500 bg-canvas border border-canvas-border tabular-nums">+{t.members.length - 6}</div>
+              )}
+            </div>
+          )
+      ),
+    },
+    {
+      key: 'action', label: '', sortable: false, align: 'right' as const, width: '120px',
+      render: (t) => (
+        <RowActions>
+          <button className={BTN_ROW} onClick={(e) => { e.stopPropagation(); setEditTeam(t.team); }}><Pencil size={12} />Manage</button>
+        </RowActions>
+      ),
+    },
+  ];
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={prefersReduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
     >
-      {/* Toolbar: sub-tab toggle + stats + CTAs */}
-      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-        <div className="flex items-center gap-5">
-          {/* Segmented control — sliding white pill, matches the Knowledge Hub
-              filter tabs (motion layoutId + subtle shadow). */}
-          <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit">
-            {([
-              { key: 'users' as const, label: 'Users', count: users.length },
-              { key: 'teams' as const, label: 'Teams', count: teamsData.length },
-            ]).map(t => {
-              const isActive = subTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setSubTab(t.key)}
-                  className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] transition-colors cursor-pointer ${
-                    isActive ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="admin-subtab-pill"
-                      className="absolute inset-0 bg-canvas-elevated rounded-md shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center gap-1.5">
-                    {t.label}
-                    <span className={`tabular-nums font-bold ${isActive ? 'text-brand-700' : 'text-ink-400'}`}>{t.count}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      {/* KPI summary — hidden when the segment is truly empty (no records).
+          Users tiles double as status filters; Teams is display only. */}
+      {subTab === 'users' && users.length > 0 && (
+        <KpiRow stats={kpiStats} active={activeKpi} onSelect={(k) => setStatusFilter(STATUS_FILTER_MAP[k] ?? null)} />
+      )}
+      {subTab === 'teams' && teamsData.length > 0 && (
+        <KpiRow stats={teamKpiStats} />
+      )}
 
-          {/* Status breakdown — semantic dot + count, only on the Users view. */}
-          {subTab === 'users' && (
-            <div className="hidden md:flex items-center gap-4 text-[0.75rem] tabular-nums">
-              {([
-                { label: 'Active',    n: counts.active,    dot: 'bg-compliant' },
-                { label: 'Invited',   n: counts.invited,   dot: 'bg-brand-400' },
-                { label: 'Suspended', n: counts.suspended, dot: 'bg-mitigated' },
-                { label: 'Inactive',  n: counts.inactive,  dot: 'bg-ink-300' },
-              ]).map(s => (
-                <span key={s.label} className="inline-flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                  <span className="font-semibold text-ink-800">{s.n}</span>
-                  <span className="text-ink-500">{s.label}</span>
-                </span>
-              ))}
-            </div>
-          )}
+      {/* Search — Users view only. The segmented nav + Create Team both live on
+          the AccessNav row above, so Teams goes straight to its cards. */}
+      {subTab === 'users' && (
+        <div className="mb-4">
+          <MemberSearch value={search} onChange={setSearch} placeholder="Search by name or email..." className="w-full sm:w-[300px]" />
         </div>
-
-        <div className="flex items-center gap-2">
-          <button className={BTN_CTA_OUTLINE} onClick={onCreateTeam}><Plus size={14} />Create Team</button>
-          <button className={BTN_CTA_PRIMARY} onClick={onInvite}><UserPlus size={14} />Invite User</button>
-        </div>
-      </div>
+      )}
 
       {subTab === 'users' ? (
         <SmartTable
           columns={columnsWithAction}
-          data={tableData}
+          data={visibleUsers}
           keyField="email"
-          searchable
-          searchPlaceholder="Search by name or email..."
-          searchKeys={['name', 'email', 'role', 'team']}
+          searchable={false}
           paginated
           pageSize={10}
-          emptyMessage="No users match your search."
+          emptyContent={
+            <EmptyState
+              icon={Users}
+              size="compact"
+              title={(statusFilter || search) ? 'No users match your filters' : 'No users yet'}
+              body={(statusFilter || search) ? 'Try a different search, or clear the active filter.' : 'Invite a member to get started.'}
+              action={(statusFilter || search)
+                ? <button className={BTN_CTA_OUTLINE} onClick={() => { setStatusFilter(null); setSearch(''); }}>Clear filters</button>
+                : undefined}
+            />
+          }
+        />
+      ) : teamsData.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No teams yet"
+          body="Group members for shared access and assignments."
+          action={<button className={BTN_CTA_PRIMARY} onClick={onCreateTeam}><Plus size={14} />Create Team</button>}
         />
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {teamsData.map(team => (
-            <div
-              key={team.name}
-              className="bg-canvas-elevated rounded-lg border border-canvas-border p-5 hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer"
-              onClick={() => setEditTeam(team)}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[0.875rem] font-semibold text-ink-900">{team.name}</h3>
-                <button
-                  onClick={e => { e.stopPropagation(); setEditTeam(team); }}
-                  className="p-1 rounded hover:bg-canvas-border/60 transition-colors cursor-pointer text-ink-400 hover:text-brand-700"
-                  title="Edit team"
-                >
-                  <Pencil size={13} />
-                </button>
-              </div>
-              <div className="text-[0.75rem] text-ink-500 mb-3 tabular-nums">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</div>
-              <div className="flex items-center -space-x-2">
-                {team.members.slice(0, 5).map((m, i) => (
-                  <div key={i} className="ring-2 ring-canvas-elevated rounded-full">
-                    <InitialsAvatar name={m} size={28} />
-                  </div>
-                ))}
-                {team.members.length > 5 && (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums">
-                    +{team.members.length - 5}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <SmartTable
+          columns={teamColumns}
+          data={teamTableData}
+          keyField="id"
+          searchable={false}
+          paginated
+          pageSize={10}
+          onRowClick={(t) => setEditTeam(t.team)}
+        />
       )}
 
       <AnimatePresence>
@@ -1265,47 +1476,60 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
   );
 }
 
+// Anchor for the date-range presets (Last 7/30/90 days). Midnight today.
+const AUDIT_TODAY = new Date(new Date().toISOString().slice(0, 10));
+
 const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
   {
     key: 'timestamp',
     label: 'Timestamp',
     sortable: true,
     width: '15%',
-    render: (item) => <span className="font-mono text-[0.75rem] text-ink-500 tabular-nums">{item.timestamp as string}</span>,
+    render: (item) => {
+      const [date, time] = (item.timestamp as string).split(' ');
+      return (
+        <div className="font-mono tabular-nums leading-tight">
+          <div className="text-[0.75rem] text-ink-700">{date}</div>
+          <div className="text-[0.6875rem] text-ink-400 mt-1">{time}</div>
+        </div>
+      );
+    },
   },
   {
     key: 'user',
     label: 'Performed By',
     sortable: true,
-    width: '13%',
-    render: (item) => (
-      <span className={`text-[0.8125rem] ${item.user === 'Unknown' ? 'text-risk-700 italic' : 'font-medium text-ink-800'}`}>{item.user as string}</span>
-    ),
+    width: '17%',
+    render: (item) => {
+      const name = item.user as string;
+      const unknown = name === 'Unknown';
+      return (
+        <div className="flex items-center gap-3 min-w-0">
+          <InitialsAvatar name={unknown ? 'U' : name} size={32} />
+          <span className={`text-[0.8125rem] truncate ${unknown ? 'italic text-ink-400' : 'font-medium text-ink-800'}`}>{name}</span>
+        </div>
+      );
+    },
   },
   {
     key: 'action',
     label: 'Action',
     sortable: true,
-    width: '8%',
-    render: (item) => (
-      <StatusBadge status={
-        item.action === 'Create' ? 'active' :
-        item.action === 'Update' ? 'in-progress' :
-        item.action === 'Delete' ? 'open' :
-        item.action === 'Login' ? 'invited' :
-        'draft'
-      } />
-    ),
+    width: '9%',
+    render: (item) => <ActionBadge action={item.action as string} />,
   },
   {
+    // No fixed width — Activity is the flex column that fills the row, so the
+    // Result pill anchors cleanly to the right edge with no dead gap.
     key: 'description',
     label: 'Activity',
     sortable: false,
-    width: '36%',
     render: (item) => (
-      <div>
-        <div className="text-[0.8125rem] text-ink-800">{item.description as string}</div>
-        <div className="text-[0.75rem] text-ink-500 mt-0.5">{item.module as string} / {item.entity as string}</div>
+      <div className="min-w-0">
+        <div className="text-[0.8125rem] text-ink-800 leading-snug truncate">{item.description as string}</div>
+        <div className="text-[0.6875rem] text-ink-400 mt-1 font-medium uppercase tracking-[0.04em] truncate">
+          {item.module as string} · {item.entity as string}
+        </div>
       </div>
     ),
   },
@@ -1313,117 +1537,185 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     key: 'status',
     label: 'Result',
     sortable: true,
-    width: '8%',
-    render: (item) => <StatusBadge status={item.status === 'Success' ? 'active' : 'open'} />,
+    width: '10%',
+    align: 'right',
+    render: (item) => <ResultBadge result={item.status as string} />,
   },
 ];
 
 function AuditLogsTab() {
+  const prefersReduced = useReducedMotion();
   const { logs } = useAdminData();
   const tableData = logs.map(l => ({ ...l } as AuditLog & Record<string, unknown>));
-  const [actionFilter, setActionFilter] = useState('all');
-  const [resultFilter, setResultFilter] = useState('all');
-  const [userFilter, setUserFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actionFilter, setActionFilter] = useState<string[]>([]);
+  const [resultFilter, setResultFilter] = useState<string[]>([]);
+  const [userFilter, setUserFilter] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
+  const [dateOpen, setDateOpen] = useState(false);
 
   const uniqueUsers = [...new Set(logs.map(l => l.user))];
+  const hasAnyFilter =
+    searchQuery.length > 0 || actionFilter.length > 0 || resultFilter.length > 0 ||
+    userFilter.length > 0 || isDateFilterActive(dateFilter);
+
+  const clearAll = () => {
+    setSearchQuery('');
+    setActionFilter([]);
+    setResultFilter([]);
+    setUserFilter([]);
+    setDateFilter(DEFAULT_DATE_FILTER);
+  };
 
   const filtered = tableData.filter(l => {
-    if (actionFilter !== 'all' && l.action !== actionFilter) return false;
-    if (resultFilter !== 'all' && l.status !== resultFilter) return false;
-    if (userFilter !== 'all' && l.user !== userFilter) return false;
+    if (actionFilter.length && !actionFilter.includes(l.action as string)) return false;
+    if (resultFilter.length && !resultFilter.includes(l.status as string)) return false;
+    if (userFilter.length && !userFilter.includes(l.user as string)) return false;
+    if (!dateInFilter(l.timestamp as string, dateFilter, AUDIT_TODAY)) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const hit = ['user', 'description', 'module', 'entity'].some(
+        k => String(l[k] ?? '').toLowerCase().includes(q)
+      );
+      if (!hit) return false;
+    }
     return true;
   });
 
-  const selectClass =
-    'h-9 pl-3 pr-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none appearance-none cursor-pointer focus:border-brand-600 transition-colors';
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={prefersReduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
     >
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 text-[0.8125rem] text-ink-500">
-          <Filter size={13} />
-          Filters
+      {/* One cohesive panel: filter header + table share a single card, so the
+          top reads anchored instead of a toolbar floating over empty space. */}
+      <div className="bg-canvas-elevated border border-canvas-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <MemberSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search logs..." className="w-full sm:w-[260px]" />
+          </div>
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {hasAnyFilter && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="mr-0.5 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+              >
+                Clear all
+              </button>
+            )}
+            <ColumnFilter
+              variant="button"
+              label="User"
+              options={uniqueUsers}
+              value={userFilter}
+              onChange={setUserFilter}
+              align="end"
+              renderOption={(name) => (
+                <>
+                  <InitialsAvatar name={name === 'Unknown' ? 'U' : name} size={20} />
+                  <span className="truncate">{name}</span>
+                </>
+              )}
+            />
+            <ColumnFilter variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end" />
+            <ColumnFilter variant="button" label="Result" options={['Success', 'Failed']} value={resultFilter} onChange={setResultFilter} align="end" />
+            {/* Reused platform date dropdown — presets + custom range, matching the filter pills. */}
+            <DateFilterPicker
+              filter={dateFilter}
+              open={dateOpen}
+              onToggle={() => setDateOpen(o => !o)}
+              onClose={() => setDateOpen(false)}
+              onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
+              today={AUDIT_TODAY}
+              triggerHeight="h-8"
+            />
+          </div>
         </div>
-        <div className="relative">
-          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={selectClass}>
-            <option value="all">All Users</option>
-            {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-        </div>
-        <div className="relative">
-          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className={selectClass}>
-            <option value="all">All Actions</option>
-            <option value="Create">Create</option>
-            <option value="Update">Update</option>
-            <option value="Delete">Delete</option>
-            <option value="Login">Login</option>
-            <option value="Export">Export</option>
-          </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-        </div>
-        <div className="relative">
-          <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} className={selectClass}>
-            <option value="all">All Results</option>
-            <option value="Success">Success</option>
-            <option value="Failed">Failed</option>
-          </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-        </div>
-        <DatePicker className="h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none cursor-pointer focus:border-brand-600 transition-colors" />
-        <span className="text-[0.75rem] text-ink-400">to</span>
-        <DatePicker className="h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none cursor-pointer focus:border-brand-600 transition-colors" />
+
+        <SmartTable
+          columns={logColumns}
+          data={filtered}
+          keyField="timestamp"
+          variant="modern"
+          searchable={false}
+          paginated
+          pageSize={10}
+          emptyContent={
+            <EmptyState
+              icon={ScrollText}
+              size="compact"
+              title={hasAnyFilter ? 'No audit logs match your filters' : 'No audit activity yet'}
+              body={hasAnyFilter ? 'Try a different search, or clear the active filters.' : 'Activity across the platform will appear here.'}
+              action={hasAnyFilter ? <button className={BTN_CTA_OUTLINE} onClick={clearAll}>Clear filters</button> : undefined}
+            />
+          }
+        />
       </div>
-
-      <SmartTable
-        columns={logColumns}
-        data={filtered}
-        keyField="timestamp"
-        searchable
-        searchPlaceholder="Search logs..."
-        searchKeys={['user', 'description', 'module', 'entity']}
-        paginated
-        pageSize={10}
-        emptyMessage="No audit logs match your filters."
-      />
-    </motion.div>
-  );
-}
-
-function ComingSoonTab({ tab }: { tab: Tab }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-    >
-      <EmptyState icon={tab.icon} title={tab.label} body="This section is under development and will be available soon." />
     </motion.div>
   );
 }
 
 export default function AdminView({ activeTab }: Props) {
-  const resolveInitialTab = (): TabId => {
-    const valid: TabId[] = ['users', 'roles', 'logs'];
-    return (valid.includes(activeTab as TabId) ? activeTab : 'users') as TabId;
-  };
+  // The sidebar still passes legacy view ids (users/roles/logs); map them onto
+  // the merged Access tab + its segment.
+  const initialTab: TabId = activeTab === 'logs' ? 'logs' : 'access';
+  const initialSeg: AccessSeg = activeTab === 'roles' ? 'roles' : 'users';
 
+  const prefersReduced = useReducedMotion();
   const { addToast } = useToast();
   const { can, roles } = useCurrentUser();
   const logEvent = useAuditLog();
-  const { defaultRoleId, setDefaultRoleId } = useAdminData();
-  const [currentTab, setCurrentTab] = useState<TabId>(resolveInitialTab);
+  const { logs, users, teams } = useAdminData();
+  const [currentTab, setCurrentTab] = useState<TabId>(initialTab);
+  const [accessSeg, setAccessSeg] = useState<AccessSeg>(initialSeg);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
-  const activeTabObj = tabs.find((t) => t.id === currentTab) ?? tabs[0];
+  const [createRoleSeed, setCreateRoleSeed] = useState<RoleSeed | null>(null);
+  const accessCounts: Record<AccessSeg, number> = { users: users.length, teams: teams.length, roles: roles.length };
+
+  const openCreateRole = (seed?: RoleSeed) => { setCreateRoleSeed(seed ?? null); setCreateRoleOpen(true); };
+  const exportLogs = () => {
+    // The relevant audit fields only — no IP. Quote every cell and escape any
+    // embedded quotes so descriptions with commas stay in one column.
+    const headers = ['Timestamp', 'Performed By', 'Action', 'Activity', 'Module', 'Entity', 'Result'];
+    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const rows = logs.map(l => [l.timestamp, l.user, l.action, l.description, l.module, l.entity, l.status].map(esc).join(','));
+    const csv = [headers.map(esc).join(','), ...rows].join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    logEvent({ action: 'Export', description: `Exported audit log as CSV (${logs.length} events)`, module: 'Admin', entity: 'Audit Log' });
+    addToast({ message: `Exported ${logs.length} audit events as CSV.`, type: 'success' });
+  };
+
+  // Access primary action sits on the AccessNav row (right side), right above
+  // the content — contextual to the active segment. Audit Logs keeps Export in
+  // the header (it has no sub-nav row).
+  const accessAction =
+    accessSeg === 'roles' ? (
+      <button className={BTN_CTA_PRIMARY} onClick={() => openCreateRole()}><Plus size={14} />Create Role</button>
+    ) : accessSeg === 'teams' ? (
+      <button className={BTN_CTA_PRIMARY} onClick={() => setCreateTeamOpen(true)}><Plus size={14} />Create Team</button>
+    ) : (
+      <button className={BTN_CTA_PRIMARY} onClick={() => setInviteOpen(true)}><UserPlus size={14} />Invite User</button>
+    );
+
+  const headerCta =
+    currentTab === 'logs' && can('ad_logs_export')
+      ? <button className={BTN_CTA_OUTLINE} onClick={exportLogs}><Download size={14} />Export CSV</button>
+      : null;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
@@ -1449,9 +1741,12 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6"
           >
-            <div className="min-w-0">
-              <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
-              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Manage users, teams, roles, and audit logs.</p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
+                <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Manage users, teams, roles, and audit logs.</p>
+              </div>
+              {headerCta && <div className="shrink-0 pt-1">{headerCta}</div>}
             </div>
           </motion.div>
 
@@ -1481,7 +1776,7 @@ export default function AdminView({ activeTab }: Props) {
                       <motion.div
                         layoutId="admin-tab-underline"
                         className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
-                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                        transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32 }}
                       />
                     )}
                   </button>
@@ -1494,41 +1789,19 @@ export default function AdminView({ activeTab }: Props) {
 
       {/* Content — header strip is fixed above; this region scrolls. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-5 pb-8 flex-1 min-h-0 overflow-y-auto">
-        {/* Contextual action bar */}
-        {currentTab === 'roles' ? (
-          <div className="flex items-center justify-between gap-3 mb-5">
-            <label className="flex items-center gap-2 text-[0.8125rem] text-ink-600">
-              <span className="font-medium text-ink-700">Default role for new users</span>
-              <div className="relative">
-                <select
-                  value={defaultRoleId}
-                  onChange={e => { setDefaultRoleId(e.target.value); addToast({ message: `Default role set to ${roles.find(r => r.id === e.target.value)?.name ?? ''}`, type: 'success' }); }}
-                  className="h-9 pl-3 pr-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none appearance-none cursor-pointer focus:border-brand-600 transition-colors"
-                >
-                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-              </div>
-            </label>
-            <button className={BTN_CTA_PRIMARY} onClick={() => setCreateRoleOpen(true)}><Plus size={14} />Create Role</button>
-          </div>
-        ) : currentTab === 'logs' ? (
-          <div className="flex items-center justify-end gap-2 mb-5">
-            {can('ad_logs_export') && (
-              <button className={BTN_CTA_OUTLINE} onClick={() => { logEvent({ action: 'Export', description: 'Exported audit log as CSV', module: 'Admin', entity: 'Audit Log' }); addToast({ message: 'Audit log exported as CSV', type: 'success' }); }}><Download size={14} />Export CSV</button>
-            )}
-          </div>
-        ) : null}
-
         <AnimatePresence mode="wait">
-          {currentTab === 'users' ? (
-            <UsersTab key="users" onInvite={() => setInviteOpen(true)} onCreateTeam={() => setCreateTeamOpen(true)} />
-          ) : currentTab === 'roles' ? (
-            <RolesTab key="roles" onCreateRole={() => setCreateRoleOpen(true)} />
-          ) : currentTab === 'logs' ? (
-            <AuditLogsTab key="logs" />
+          {currentTab === 'access' ? (
+            <div key="access">
+              <AccessNav seg={accessSeg} setSeg={setAccessSeg} counts={accessCounts} action={accessAction} />
+              {/* Segment switch: the new content mounts (per-segment key) and
+                  plays its own enter motion. No AnimatePresence/exit, so the old
+                  is replaced instantly — a snappy fade-in with no empty gap. */}
+              {accessSeg === 'roles'
+                ? <RolesTab key="roles" onCreateRole={openCreateRole} />
+                : <UsersTab key={accessSeg} subTab={accessSeg} onCreateTeam={() => setCreateTeamOpen(true)} />}
+            </div>
           ) : (
-            <ComingSoonTab key={currentTab} tab={activeTabObj} />
+            <AuditLogsTab key="logs" />
           )}
         </AnimatePresence>
       </div>
@@ -1536,7 +1809,7 @@ export default function AdminView({ activeTab }: Props) {
       <AnimatePresence>
         {inviteOpen && <InviteUserDrawer key="invite" onClose={() => setInviteOpen(false)} />}
         {createTeamOpen && <CreateTeamDrawer key="createteam" onClose={() => setCreateTeamOpen(false)} />}
-        {createRoleOpen && <CreateRoleDrawer key="createrole" onClose={() => setCreateRoleOpen(false)} />}
+        {createRoleOpen && <CreateRoleDrawer key="createrole" seed={createRoleSeed} onClose={() => { setCreateRoleOpen(false); setCreateRoleSeed(null); }} />}
       </AnimatePresence>
     </div>
   );

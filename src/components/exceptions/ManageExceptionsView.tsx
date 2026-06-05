@@ -19,6 +19,7 @@ import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
   ReviewCaseDrawer,
@@ -282,6 +283,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [activeSheetId, setActiveSheetId] = useState<string>('all');
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   /** When set, opens the BulkAssignDrawer scoped to just this one case
@@ -627,8 +629,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-1.5">
-                  {/* Risk owner role: Bulk Classify only. */}
-                  {role === 'risk-owner' && can('exc_classify') && selected.size > 0 && (
+                  {/* Bulk Classify — permission-gated. */}
+                  {can('exc_classify') && selected.size > 0 && (
                     <button
                       onClick={() => setBulkClassifyOpen(true)}
                       title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
@@ -641,8 +643,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       </span>
                     </button>
                   )}
-                  {/* Auditor role: Bulk Assign only. */}
-                  {role !== 'risk-owner' && can('exc_assign') && selected.size > 0 && (
+                  {/* Bulk Assign — permission-gated. */}
+                  {can('exc_assign') && selected.size > 0 && (
                     <button
                       onClick={() => setBulkAssignOpen(true)}
                       title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
@@ -658,7 +660,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   {/* Triage — permission-gated, available to any reviewing role. */}
                   {can('exc_triage') && selected.size > 0 && (
                     <button
-                      onClick={() => addToast({ message: `Triaged ${selected.size} case${selected.size === 1 ? '' : 's'}.`, type: 'success' })}
+                      onClick={() => { logEvent({ action: 'Update', description: `Triaged ${selected.size} exception${selected.size === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' }); addToast({ message: `Triaged ${selected.size} case${selected.size === 1 ? '' : 's'}.`, type: 'success' }); }}
                       title={`Triage ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
                       className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-ink-700 bg-white border-border hover:bg-surface-2 cursor-pointer transition-colors"
                     >
@@ -778,6 +780,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setNextActionableNum(n => n + 1);
               setSelected(new Set());
               setBulkClassifyOpen(false);
+              logEvent({ action: 'Update', description: `Classified ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} as ${payload.classification}`, module: 'Exceptions', entity: 'Exception' });
             }}
           />
         )}
@@ -827,6 +830,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 type: 'success',
                 message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
               });
+              logEvent({ action: 'Update', description: `Assigned ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} to ${assigneeNames}`, module: 'Exceptions', entity: 'Exception' });
               // Only clear the selection set when the bulk drawer was the one
               // that opened — single-row assigns don't touch the selection.
               if (!singleAssignCase) setSelected(new Set());

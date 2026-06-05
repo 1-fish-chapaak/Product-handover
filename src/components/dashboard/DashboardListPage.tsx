@@ -6,6 +6,7 @@ import {
   Star, Layers, FileText, GripVertical, BarChart3
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
@@ -798,6 +799,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
 export default function DashboardListPage({ onDashboardClick, onImportPowerBI, createdDashboards = [], onCreateDashboard, onDeleteDashboard, onUpdateDashboardSource, onOpenChat, focusedDashboardId }: DashboardListPageProps) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const [activeTab, setActiveTab] = useState<'my' | 'shared'>('my');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recently');
@@ -951,7 +953,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                       <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setOpenMenuId(null); }} />
                       <div className="absolute right-0 top-full mt-1 bg-canvas-elevated border border-canvas-border rounded-lg shadow-sm py-1 z-20 min-w-[140px]">
                         <button
-                          onClick={e => { e.stopPropagation(); addToast({ message: 'Share modal opening.', type: 'info' }); setOpenMenuId(null); }}
+                          onClick={e => { e.stopPropagation(); openShare({ type: 'dashboard', id: dashboard.id, anchor: rectFromEvent(e) }); setOpenMenuId(null); }}
                           className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
                         >
                           <Share2 size={14} /> Share

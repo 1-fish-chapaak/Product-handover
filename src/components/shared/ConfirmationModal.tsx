@@ -2,7 +2,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 // Reusable destructive/primary confirmation modal. Uses the design-system
-// tokens (paper-0 surface, ink-900/40 backdrop, risk vs brand). Currently
+// tokens (canvas-elevated surface, ink-900/40 backdrop, risk vs brand) so it
+// matches the standard white Modal shell it usually stacks over. Currently
 // adopted by Knowledge Hub's source-card Remove/Disconnect flow only —
 // existing inline confirms in ControlDetailDrawer / DashboardListPage /
 // Sidebar are NOT migrated. Future PRs can move them over;
@@ -51,7 +52,7 @@ export default function ConfirmationModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-            className="relative bg-paper-0 rounded-2xl shadow-xl border border-paper-200 w-full max-w-sm p-5 space-y-4"
+            className="relative bg-canvas-elevated rounded-2xl shadow-xl border border-canvas-border w-full max-w-sm p-5 space-y-4"
           >
             <div className="flex items-start gap-3">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
@@ -71,7 +72,7 @@ export default function ConfirmationModal({
                 type="button"
                 onClick={onClose}
                 disabled={pending}
-                className="px-4 h-9 rounded-md border border-paper-200 bg-paper-0 text-[0.75rem] font-semibold text-ink-800 hover:border-paper-300 hover:bg-paper-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="px-4 h-9 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-800 hover:border-brand-200 hover:bg-canvas disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {cancelLabel}
               </button>

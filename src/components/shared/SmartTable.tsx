@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type ReactNode } from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { ChevronUp, ChevronDown, ChevronsUpDown, Search, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 /* ─── Types ─── */
@@ -86,6 +86,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
   const stripeOn = striped && !isModern;
+  // Honor prefers-reduced-motion: skip the row-reveal stagger entirely.
+  const prefersReduced = useReducedMotion();
+  const animate = animateRows && !prefersReduced;
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -241,8 +244,8 @@ export default function SmartTable<T extends Record<string, unknown>>({
               const isExpanded = expandedId === id;
               const totalCols = columns.length + (expandable ? 1 : 0);
 
-              const Wrapper = animateRows ? motion.tbody : 'tbody';
-              const wrapperProps = animateRows ? {
+              const Wrapper = animate ? motion.tbody : 'tbody';
+              const wrapperProps = animate ? {
                 initial: { opacity: 0 },
                 animate: { opacity: 1 },
                 transition: { delay: i * 0.02 },
