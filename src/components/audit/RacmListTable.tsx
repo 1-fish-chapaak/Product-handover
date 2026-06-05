@@ -159,27 +159,14 @@ function RacmDetailHeader({ racm, action }: { racm: RacmEntry; action: React.Rea
 }
 
 // ─── Detail Page (Step 4) ──────────────────────────────────────────────────
-function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () => void; onOpenMapping: () => void }) {
-  // The AR RACM is wired to a real RACM extract (123 risk/control rows) loaded from
-  // `arRacm.ts`. The remaining seed RACMs derive a slimmer view from mockData by
-  // matching `racm.process` against BUSINESS_PROCESSES — both paths feed the same
-  // section layout below.
-  const isRichRacm = racm.id === AR_RACM_ID;
-  const arEntries: ArRacmEntry[] = isRichRacm ? AR_RACM_ENTRIES : [];
-
+// Synthesise full-schema RACM rows for a SEED racm — deterministic per risk/control,
+// matching AR_RACM_COLUMNS. Shared by the RACM detail summary and the read-only
+// mapping view so both render the same rows.
+function synthSeedEntries(racm: RacmEntry): Record<string, string>[] {
   const bp = BUSINESS_PROCESSES.find(b => b.abbr === racm.process) ?? null;
-  const sop = isRichRacm ? null : (SOPS.find(s => s.bpId === bp?.id) ?? null);
-  const scopedRisks = isRichRacm ? [] : (bp ? RISKS.filter(r => r.bpId === bp.id) : []);
+  const scopedRisks = bp ? RISKS.filter(r => r.bpId === bp.id) : [];
   const scopedRiskIds = new Set(scopedRisks.map(r => r.id));
-  const scopedControls = isRichRacm ? [] : CONTROLS.filter(c => scopedRiskIds.has(c.riskId));
-  const scopedWorkflows = isRichRacm ? [] : (bp ? WORKFLOWS.filter(w => w.bpId === bp.id) : []);
-  const rels = { sop, risks: scopedRisks, controls: scopedControls, workflows: scopedWorkflows };
-
-  // Synthetic full-schema rows for the SEED entries table. The seed mockData only
-  // carries a handful of the AR_RACM_COLUMNS fields, so every column starts as the
-  // literal "[NA]" and we fill in the few we genuinely have. Typed as
-  // Record<string,string> (not ArRacmEntry) so the union-typed fields
-  // (riskRating / controlType / extractionConfidence) accept the "[NA]" sentinel.
+  const scopedControls = CONTROLS.filter(c => scopedRiskIds.has(c.riskId));
   const SUB_PROCESS_POOL: Record<string, string[]> = {
     P2P: ['Vendor Management', 'Purchase Orders', 'Invoice Processing', 'Payment Execution', 'Goods Receipt'],
     O2C: ['Order Entry', 'Credit Management', 'Billing & Invoicing', 'Revenue Recognition', 'Collections'],
@@ -193,9 +180,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   const FS_POOL = ['Accounts Payable', 'Revenue', 'Cash & Bank', 'Inventory', 'Accruals'];
   const APP_POOL = ['SAP', 'Oracle ERP', 'NetSuite', 'Manual'];
   const hashStr = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
-  // Seed RACMs lack the rich per-row audit fields, so synthesise realistic values
-  // (deterministic per risk/control) to match the AR RACM's full-detail table.
-  const seedEntryRows: Record<string, string>[] = scopedControls.map(c => {
+  return scopedControls.map(c => {
     const risk = scopedRisks.find(r => r.id === c.riskId);
     const h = hashStr(c.id + ':' + c.riskId);
     const subs = SUB_PROCESS_POOL[racm.process] ?? ['General Operations'];
@@ -226,7 +211,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       financialStatementLineItem: FS_POOL[h % FS_POOL.length],
       regulatoryReference: 'SOX 404 / IFC',
       segregationOfDuties: h % 3 === 0 ? 'Enforced' : 'Partial',
-      extractionConfidence: 'EXTRACTED',
+      extractionConfidence: (h % 10) < 7 ? 'EXTRACTED' : (h % 10) < 9 ? 'INFERRED' : 'RECOMMENDED',
       sopSectionReference: `Section ${(h % 6) + 1}`,
       gapsIdentified: exception ? 'Approval evidence not consistently retained.' : 'No gaps identified.',
       itApplication: APP_POOL[h % APP_POOL.length],
@@ -240,6 +225,27 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       reviewerApprover: reviewer,
     };
   });
+}
+
+function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () => void; onOpenMapping: () => void }) {
+  // The AR RACM is wired to a real RACM extract (123 risk/control rows) loaded from
+  // `arRacm.ts`. The remaining seed RACMs derive a slimmer view from mockData by
+  // matching `racm.process` against BUSINESS_PROCESSES — both paths feed the same
+  // section layout below.
+  const isRichRacm = racm.id === AR_RACM_ID;
+  const arEntries: ArRacmEntry[] = isRichRacm ? AR_RACM_ENTRIES : [];
+
+  const bp = BUSINESS_PROCESSES.find(b => b.abbr === racm.process) ?? null;
+  const sop = isRichRacm ? null : (SOPS.find(s => s.bpId === bp?.id) ?? null);
+  const scopedRisks = isRichRacm ? [] : (bp ? RISKS.filter(r => r.bpId === bp.id) : []);
+  const scopedRiskIds = new Set(scopedRisks.map(r => r.id));
+  const scopedControls = isRichRacm ? [] : CONTROLS.filter(c => scopedRiskIds.has(c.riskId));
+  const scopedWorkflows = isRichRacm ? [] : (bp ? WORKFLOWS.filter(w => w.bpId === bp.id) : []);
+  const rels = { sop, risks: scopedRisks, controls: scopedControls, workflows: scopedWorkflows };
+
+  // Full-schema rows for the SEED entries table — synthesised to match AR's columns
+  // (see synthSeedEntries above). Empty for the rich AR RACM, which uses arEntries.
+  const seedEntryRows: Record<string, string>[] = isRichRacm ? [] : synthSeedEntries(racm);
   // Gap-analysis aggregates derived from the synthesised seed entries.
   const seedSodEnforced = seedEntryRows.filter(r => r.segregationOfDuties === 'Enforced').length;
   const seedGapCount = seedEntryRows.filter(r => r.gapsIdentified !== 'No gaps identified.').length;
@@ -291,6 +297,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   const controlTypeCounts: Record<string, number> = { Preventive: 0, Detective: 0 };
   if (isRichRacm) {
     arEntries.forEach(e => { controlTypeCounts[e.controlType] = (controlTypeCounts[e.controlType] ?? 0) + 1; });
+  } else {
+    seedEntryRows.forEach(r => { controlTypeCounts[r.controlNature] = (controlTypeCounts[r.controlNature] ?? 0) + 1; });
   }
 
   // Extraction confidence — also rich-only. EXTRACTED dominates; INFERRED and
@@ -303,7 +311,10 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   const confidenceCounts: Record<string, number> = { EXTRACTED: 0, INFERRED: 0, RECOMMENDED: 0 };
   if (isRichRacm) {
     arEntries.forEach(e => { confidenceCounts[e.extractionConfidence] = (confidenceCounts[e.extractionConfidence] ?? 0) + 1; });
+  } else {
+    seedEntryRows.forEach(r => { confidenceCounts[r.extractionConfidence] = (confidenceCounts[r.extractionConfidence] ?? 0) + 1; });
   }
+  const confidenceTotal = confidenceRows.reduce((sum, c) => sum + (confidenceCounts[c.label] ?? 0), 0);
 
   // Gap analysis — three fixed checks matching the Irame screenshot layout.
   const sodCoverage = isRichRacm
@@ -326,9 +337,15 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   const execTopArea = isRichRacm
     ? (Array.from(processAreaSet).sort((a, b) => arEntries.filter(e => e.processArea === b).length - arEntries.filter(e => e.processArea === a).length)[0] ?? '')
     : '';
+  // Seed executive-summary inputs — derived from the synthesised seed entries.
+  const seedHiPct = !isRichRacm && totalRisks > 0 ? Math.round(((severityCounts.High + severityCounts.Critical) / totalRisks) * 100) : 0;
+  const seedLean = execPreventive >= execDetective ? 'preventive' : 'detective';
+  const seedGapClause = seedGapCount === 0
+    ? 'No remediation gaps were flagged across the mapped controls.'
+    : `${seedGapCount} ${seedGapCount === 1 ? 'entry has' : 'entries have'} documented gaps requiring remediation.`;
   const executiveSummary = isRichRacm
     ? `The recent RACM analysis, encompassing ${uniqueControlIds.size} unique controls predominantly within the ${execTopArea} process, indicates that most identified risks are medium (${execPctMedium}%), with a notable ${execPctHigh}% classified as high. Control coverage leans slightly towards ${execDetective > execPreventive ? 'detective' : 'preventive'} measures, with ${execDetective} detective controls compared to ${execPreventive} preventive. While Segregation of Duties and Delegation of Authority are ${sodCoverage === 'Complete' ? 'adequately addressed' : 'partially addressed'}, a significant gap was identified in Key Performance Indicator (KPI) coverage, as ${hasKpiSignal ? 'few' : 'no'} controls for KPI reporting were present.`
-    : '';
+    : `This RACM maps ${totalRisks} risk${totalRisks !== 1 ? 's' : ''} to ${uniqueControlIds.size} control${uniqueControlIds.size !== 1 ? 's' : ''} across the ${bp?.name ?? racm.process} process. ${seedHiPct}% of risks are rated high or critical, and control coverage leans ${seedLean} (${execPreventive} preventive, ${execDetective} detective). Segregation of duties is enforced on ${seedSodEnforced} of ${seedTotal} control${seedTotal !== 1 ? 's' : ''}, with ${seedKeyCount} key control${seedKeyCount !== 1 ? 's' : ''} identified. ${seedGapClause}`;
 
   // Header controls — collapse the long SOP summary, and a Download menu.
   const [showSummary, setShowSummary] = useState(true);
@@ -345,7 +362,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   }, [downloadOpen]);
 
   // Trigger a real browser download from the on-screen rows. Rich RACMs export the
-  // full AR entries; seed RACMs export the synthetic "[NA]"-padded rows. XLSX is a
+  // full AR entries; seed RACMs export the synthesised full-schema rows. XLSX is a
   // pragmatic CSV-with-.xlsx-extension stub (opens cleanly in Excel) — enough to be
   // functional without pulling in a spreadsheet library.
   const triggerDownload = (format: 'xlsx' | 'csv' | 'json') => {
@@ -816,9 +833,9 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         </div>
       </div>
 
-      {/* ─── SOP Analysis Summary — same structure as rich; "[NA]" where the seed
-          mock data has no equivalent (exec summary, confidence, control-type,
-          gap analysis, notes). Overview / rating / process-area tables are real. ─── */}
+      {/* ─── SOP Analysis Summary — same structure as rich. Every section is now
+          derived from the synthesised seed entries (exec summary, confidence,
+          control-type, gap analysis, notes). ─── */}
       {showSummary && (
       <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
         <div>
@@ -828,7 +845,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
 
         <section>
           <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
-          <p className="text-[13px] leading-relaxed max-w-[80ch] text-ink-400">[NA]</p>
+          <p className="text-[13px] leading-relaxed max-w-[80ch] text-ink-700">{executiveSummary}</p>
         </section>
 
         <section>
@@ -851,13 +868,17 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               </tr>
             </thead>
             <tbody>
-              {confidenceRows.map(c => (
-                <tr key={c.label} className="border-b border-canvas-border/40 last:border-0">
-                  <td className={`py-2.5 font-semibold ${c.tone}`}>{c.label}</td>
-                  <td className="py-2.5 text-ink-400">[NA]</td>
-                  <td className="py-2.5 text-ink-400">[NA]</td>
-                </tr>
-              ))}
+              {confidenceRows.map(c => {
+                const count = confidenceCounts[c.label] ?? 0;
+                const pct = confidenceTotal > 0 ? (count / confidenceTotal) * 100 : 0;
+                return (
+                  <tr key={c.label} className="border-b border-canvas-border/40 last:border-0">
+                    <td className={`py-2.5 font-semibold ${c.tone}`}>{c.label}</td>
+                    <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
+                    <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>
@@ -901,7 +922,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               {(['Preventive', 'Detective'] as const).map(type => (
                 <tr key={type} className="border-b border-canvas-border/40 last:border-0">
                   <td className="py-2.5 text-ink-800">{type}</td>
-                  <td className="py-2.5 text-ink-400">[NA]</td>
+                  <td className="py-2.5 tabular-nums text-ink-800">{controlTypeCounts[type] ?? 0}</td>
                 </tr>
               ))}
             </tbody>
@@ -950,8 +971,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       </div>
       )}
 
-      {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); "[NA]" for
-          fields the seed mock data lacks. ─── */}
+      {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); every field
+          is synthesised for seed RACMs. ─── */}
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-[13px] font-bold text-ink-900">Entries</h2>
@@ -1188,14 +1209,13 @@ export const RACM_SEED_DATA: RacmEntry[] = [
   { id: 'racm-005', name: 'FY26 ITGC — Access & Change', version: 'v2.1', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
 ];
 
-// ─── AR RACM mapping view ────────────────────────────────────────────────────
-// "Open mapping" for the rich RACM: the full detail matrix (AR_RACM_COLUMNS) with
-// the mapping-status columns (Control / Workflow / Mapping) appended on the right,
+// ─── RACM mapping view ───────────────────────────────────────────────────────
+// "Open mapping" for any RACM: the full detail matrix (AR_RACM_COLUMNS) with the
+// mapping-status columns (Control / Workflow / Mapping) appended on the right,
 // wrapped in the mapping chrome (mapped progress, search, filters, readiness).
-// Read-only — every AR risk is already paired with its control in the extract, so
-// there's nothing to link. Seed RACMs keep the interactive RacmMappingWorkspace.
-function ArRacmMappingView({ racm, onBack }: { racm: RacmEntry; onBack: () => void }) {
-  const entries = AR_RACM_ENTRIES;
+// Read-only — every risk is shown paired with its control. The rich AR RACM passes
+// AR_RACM_ENTRIES; seed RACMs pass their synthesised rows (see synthSeedEntries).
+function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries: ArRacmEntry[]; onBack: () => void }) {
   const isMapped = (e: ArRacmEntry) => Boolean(e.controlId && e.controlId.trim());
   const mappedCount = entries.filter(isMapped).length;
   const pct = entries.length ? Math.round((mappedCount / entries.length) * 100) : 0;
@@ -1621,21 +1641,27 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
   // Full workspace redirect (for "Open Full RACM")
   if (showMappingWorkspace && mappingRacm) {
-    // The rich (AR) RACM opens the full matrix + mapping columns; seed RACMs keep the
-    // interactive mapping grid. Back returns to the RACM detail it was opened from.
-    if (mappingRacm.id === AR_RACM_ID) {
-      const arRacm = mappingRacm;
+    // Both the rich (AR) RACM and seed RACMs open the same read-only matrix + mapping
+    // columns, in full RACM detail. Seed rows are synthesised to match AR's columns.
+    // Back returns to the RACM detail it was opened from. Only a genuinely empty RACM
+    // (no risk/control pairs) falls back to the interactive start-mapping grid.
+    const mr = mappingRacm;
+    const mappingEntries: ArRacmEntry[] = mr.id === AR_RACM_ID
+      ? AR_RACM_ENTRIES
+      : (synthSeedEntries(mr) as unknown as ArRacmEntry[]);
+    if (mappingEntries.length > 0) {
       return (
         <ArRacmMappingView
-          racm={arRacm}
-          onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); setDetailRacmId(arRacm.id); }}
+          racm={mr}
+          entries={mappingEntries}
+          onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); setDetailRacmId(mr.id); }}
         />
       );
     }
     return (
       <RacmMappingWorkspace
-        racmId={mappingRacm.id} racmName={mappingRacm.name} racmProcess={mappingRacm.process}
-        isEmpty={mappingRacm.risks === 0}
+        racmId={mr.id} racmName={mr.name} racmProcess={mr.process}
+        isEmpty={mr.risks === 0}
         onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); }}
       />
     );

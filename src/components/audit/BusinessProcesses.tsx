@@ -5073,7 +5073,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           }) : (() => {
           const SETUP_STEPS = [
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
-            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: Grid3x3 },
+            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: FileText },
             { key: 'risks' as const,     title: 'Create Risks',    desc: 'Identify and document risks relevant to this business process.',                      cta: 'Create Risk',            icon: AlertTriangle },
             { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
             { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
@@ -5187,7 +5187,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                 : key === 'racm'
                   ? 'Available after the first SOP is uploaded.'
                   : 'Available after the first RACM is created.';
-              const SECTION_ICON = { sop: FileText, racm: Grid3x3, risks: AlertTriangle, controls: ShieldCheck, workflows: Workflow } as const;
+              const SECTION_ICON = { sop: Upload, racm: FileText, risks: AlertTriangle, controls: Shield, workflows: Workflow } as const;
               const SECTION_ICON_CLS = {
                 sop: 'bg-brand-50 text-brand-700',
                 racm: 'bg-brand-50 text-brand-700',
