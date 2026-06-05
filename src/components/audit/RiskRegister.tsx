@@ -10,6 +10,9 @@ import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { useCan } from '../../context/CurrentUserContext';
+import { Button } from '../shared/Button';
+import ListLoadError from '../shared/ListLoadError';
+import { LinkControlPickerDrawer } from './RacmListTable';
 import { getRiskRelationships } from '../../data/processHubJoins';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -184,7 +187,7 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
             <h2 className="font-display text-[18px] font-semibold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         {/* Discard confirm strip — appears at top of body when user tries to close with unsaved changes */}
@@ -263,11 +266,10 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => { if (isValid) onSave(buildRisk(risk?.status ?? 'Active')); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Button variant="outline" size="md" onClick={requestClose}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk(risk?.status ?? 'Active')); }} disabled={!isValid}>
             Save
-          </button>
+          </Button>
         </div>
       </motion.aside>
     </>
@@ -307,7 +309,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
             </div>
             <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -333,7 +335,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button type="button" onClick={onClose} className="w-full px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
+          <Button variant="outline" size="md" onClick={onClose} className="w-full">Close</Button>
         </footer>
 
         {/* Edit drawer (nested) */}
@@ -375,13 +377,16 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          {can('risk_edit') && <button
-            type="button"
+          {can('risk_edit') && <Button
+            variant="primary"
+            size="sm"
+            shape="lg"
             onClick={onEdit}
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            leftIcon={<Edit3 size={13} />}
+            className="shrink-0"
           >
-            <Edit3 size={13} />Edit risk
-          </button>}
+            Edit risk
+          </Button>}
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
@@ -415,8 +420,8 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
                       </div>
                       <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
                     </div>
@@ -442,7 +447,7 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
               {rels.workflows.map(w => (
                 <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
@@ -467,7 +472,7 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
               {rels.racms.map(r => (
                 <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
@@ -532,7 +537,15 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  // Inline card expansion — chevron opens a Description / Sub-process / Owner / Created panel.
+  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null);
+  const [editingRiskCard, setEditingRiskCard] = useState<RiskEntry | null>(null);
+  const [linkControlRisk, setLinkControlRisk] = useState<RiskEntry | null>(null);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
@@ -541,8 +554,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   // Listen for header-level "Create new Risk" trigger from Process Hub.
@@ -654,6 +668,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setPendingDeleteId(null);
     addToast({ message: `Risk permanently deleted`, type: 'success' });
   };
+  // Delete-risk confirmation (the trash action on a risk card).
+  const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ id: string; name: string } | null>(null);
+  const handleDeleteOne = (id: string) => {
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk deleted`, type: 'success' });
+  };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
   };
@@ -712,6 +733,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     );
   }
 
+  // List load-failure guard — dormant with local data (sits after the detail-page
+  // takeover so it only governs the list view). Mirrors the empty-state guard below.
+  if (!isLoading && loadError) {
+    return <ListLoadError label="risks" onRetry={() => setLoadError(false)} />;
+  }
+
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
@@ -724,10 +751,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
             {can('risk_create') && (
-              <button type="button" onClick={() => setShowCreateDrawer(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />New Risk
-              </button>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
+                leftIcon={<Plus size={13} />} className="shrink-0">
+                Create Risk
+              </Button>
             )}
           </div>
         )}
@@ -750,7 +777,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
             <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
             <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
-            {can('risk_create') && <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>}
+            {can('risk_create') && <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>Create Risk</Button>}
           </div>
         ) : (
         <>
@@ -799,12 +826,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             {embedded && (
-              <button
-                type="button"
-                onClick={() => setShowCreateDrawer(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />Create new Risk
-              </button>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
+                leftIcon={<Plus size={13} />} className="shrink-0">
+                Create Risk
+              </Button>
             )}
           </div>
         </div>
@@ -835,7 +860,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
         {/* Risk Cards — engagement-style list, one card per risk. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
-          {isLoading ? (
+          {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
               <div key={`skel-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
                 <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3 mb-2.5" />
@@ -857,6 +882,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
+            const isExpanded = expandedRiskId === risk.id;
             const rels = getRiskRelationships(risk.id, risk.businessProcess);
             const controlCount = rels.controls.length;
             const keyControlCount = rels.controls.filter(c => c.isKey).length;
@@ -866,48 +892,43 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                onClick={() => setDetailRiskId(risk.id)}
-                className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                className={`rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
                   isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Select column */}
-                <div onClick={e => e.stopPropagation()} className="pt-0.5">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${risk.id}`}
-                    checked={isChecked}
-                    onChange={() => toggleSelectRisk(risk.id)}
-                    className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
-                  />
+                <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 items-start">
+                {/* Open column — chevron toggles the detail panel (matches the RACM card). */}
+                <div className="flex items-center pt-0.5">
+                  <button
+                    type="button"
+                    aria-label={isExpanded ? `Collapse ${risk.id}` : `Expand ${risk.id}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedRiskId(prev => prev === risk.id ? null : risk.id)}
+                    className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
+                  >
+                    <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                  </button>
                 </div>
 
-                {/* Risk column — title + status pill + description + meta + tag pills */}
+                {/* Risk column — title + status pill + id + tag pills.
+                    Description / sub-process / owner / created intentionally live
+                    only in the expanded panel to avoid duplicating them here. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[14.5px] font-semibold text-text leading-snug">{risk.name}</h3>
+                    <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
+                      <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
+                      {risk.name}
+                    </h3>
                     <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_STYLES[risk.status]}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
                       {risk.status}
                     </span>
                   </div>
-                  <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
-                    {risk.description}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
-                    <span className="font-mono tracking-tight">{risk.id}</span>
-                    <span className="text-border">·</span>
-                    <span>{risk.subProcess || '—'}</span>
-                    <span className="text-border">·</span>
-                    <span>{risk.owner || 'Unassigned'}</span>
-                    <span className="text-border">·</span>
-                    <span className="tabular-nums">Created {risk.createdAt}</span>
-                  </div>
                   <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                       {risk.businessProcess}
                     </span>
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
                       {risk.category}
                     </span>
                   </div>
@@ -959,11 +980,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     <>
                       <button
                         type="button"
-                        onClick={() => setDetailRiskId(risk.id)}
-                        title="Open risk"
+                        onClick={() => setEditingRiskCard(risk)}
+                        title="Edit risk"
                         className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                       >
-                        <Play size={14} />
+                        <Edit3 size={14} />
                       </button>
                       {can('risk_archive') && (
                         <button
@@ -987,7 +1008,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       )}
                     </>
                   ) : (
-                    // Active row — open, or archive (soft retire).
+                    // Active row — open, link control, archive (soft retire), or delete.
                     <>
                       <button
                         type="button"
@@ -996,6 +1017,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                       >
                         <Play size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLinkControlRisk(risk)}
+                        title="Link control"
+                        className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                      >
+                        <Shield size={14} />
                       </button>
                       {can('risk_archive') && (
                         <button
@@ -1007,9 +1036,55 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                           <Archive size={14} />
                         </button>
                       )}
+                      {can('risk_delete') && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })}
+                          title="Delete risk"
+                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
+                </div>
+
+                {/* Expanded detail panel — Description + Sub-process / Owner / Created */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden border-t border-canvas-border bg-canvas/40"
+                    >
+                      <div className="px-6 py-5 pl-[68px]">
+                        <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Description</span>
+                        <p className="text-[13px] text-text leading-relaxed max-w-3xl">{risk.description || '—'}</p>
+
+                        <div className="flex items-start justify-between gap-6 mt-5">
+                          <div>
+                            <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Sub-process</span>
+                            <span className="text-[13px] text-text block">{risk.subProcess || '—'}</span>
+                          </div>
+                          <div className="flex items-start gap-12">
+                            <div>
+                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Owner</span>
+                              <span className="text-[13px] text-text block">{risk.owner || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Created</span>
+                              <span className="text-[13px] text-text block tabular-nums">{risk.createdAt}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             );
           })}
@@ -1032,6 +1107,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         )}
       </AnimatePresence>
 
+      {/* Permanent-delete confirmation (archived rows) */}
       <ConfirmationModal
         open={pendingDeleteId !== null}
         title="Delete this risk permanently?"
@@ -1048,6 +1124,46 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         tone="destructive"
         onConfirm={() => { if (pendingDeleteId) handleDeleteOne(pendingDeleteId); }}
         onClose={() => setPendingDeleteId(null)}
+      />
+
+      {/* Edit Risk side sheet (opened from a card's edit button) */}
+      <AnimatePresence>
+        {editingRiskCard && (
+          <RiskDrawer
+            risk={editingRiskCard}
+            onClose={() => setEditingRiskCard(null)}
+            onSave={(updated) => { handleUpdateRisk(updated); setEditingRiskCard(null); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Link Control sidesheet (opened from a card's Link Control action) */}
+      <AnimatePresence>
+        {linkControlRisk && (
+          <LinkControlPickerDrawer
+            riskName={linkControlRisk.name}
+            alreadyLinkedIds={[]}
+            onClose={() => setLinkControlRisk(null)}
+            onCreateControl={() => addToast({ message: 'Open the Control Library to create a new control.', type: 'info' })}
+            onApply={(controls) => {
+              addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+              setLinkControlRisk(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete-risk confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteRisk}
+        title="Delete this risk?"
+        description={confirmDeleteRisk
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteRisk.name}</span> (<span className="font-mono">{confirmDeleteRisk.id}</span>) from the register. You can't undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteRisk) handleDeleteOne(confirmDeleteRisk.id); setConfirmDeleteRisk(null); }}
+        onClose={() => setConfirmDeleteRisk(null)}
       />
     </div>
   );

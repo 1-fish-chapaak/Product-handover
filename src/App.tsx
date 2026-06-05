@@ -558,6 +558,12 @@ function AppInner() {
             workflowId={state.selectedWorkflowId!}
             onBack={() => {
               if (fromProcessHub) {
+                // Return to the Process Hub Workflows tab. BusinessProcesses reads
+                // ?section= on mount, so restore it before navigating back (it gets
+                // stripped when BusinessProcesses unmounts for the detail page).
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
+                }
                 setSelectedWorkflow(null);
                 setView('business-processes' as any);
                 setWorkflowBackView(null);
@@ -644,6 +650,8 @@ function AppInner() {
               setWorkflowBackView('business-processes');
               setSelectedWorkflow(wfId);
             }}
+            onCreateWorkflow={() => enterWorkflowMode()}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
           />
         );
 
