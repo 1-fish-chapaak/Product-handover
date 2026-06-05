@@ -6,12 +6,13 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive, Share2,
 } from 'lucide-react';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -4164,6 +4165,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   onOpenWorkflowDetail?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
   /** Tracks which RACM is open in the Excel review editor. Stores the racmId. */
@@ -4729,12 +4731,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 })}
                 </div>
                 {/* Section-specific create button — text changes per drilled section. */}
-                <button
-                  type="button"
-                  onClick={() => triggerSectionCreate(drilledSection)}
-                  className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                  <Plus size={13} />{sectionCreateLabel[drilledSection]}
-                </button>
+                {can('bp_create') && (
+                  <button
+                    type="button"
+                    onClick={() => triggerSectionCreate(drilledSection)}
+                    className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                    <Plus size={13} />{sectionCreateLabel[drilledSection]}
+                  </button>
+                )}
               </div>
             )}
 
@@ -4838,8 +4842,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             <span className="text-ink-700 truncate">{bp.name}</span>
           </div>
 
-          <div className="mb-2">
+          <div className="mb-2 flex items-start justify-between gap-4">
             <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+            <div className="flex items-center gap-2 shrink-0 pt-2">
+              {can('bp_share') && (
+                <button
+                  onClick={() => addToast({ message: `Share "${bp.name}" with users and teams.`, type: 'info' })}
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+                >
+                  <Share2 size={14} /> Share
+                </button>
+              )}
+              {can('bp_delete') && (
+                <button
+                  onClick={() => addToast({ message: `"${bp.name}" deleted.`, type: 'success' })}
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+            </div>
           </div>
 
           <p className="text-[13px] text-text-secondary mb-5 max-w-2xl leading-relaxed">

@@ -17,6 +17,7 @@ import {
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 
 interface Props {
   /* no external props needed */
@@ -226,6 +227,7 @@ function RiskHierarchy() {
 
 export default function RACMView({}: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filtered = MOCK_RACMS.filter(r => {
@@ -250,20 +252,24 @@ export default function RACMView({}: Props) {
             <p className="text-sm text-text-secondary mt-1">Manage RACMs across all business processes.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => addToast({ message: 'New RACM template created', type: 'info' })}
-              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
-            >
-              <Plus size={14} />
-              Create RACM
-            </button>
-            <button
-              onClick={() => addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' })}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer"
-            >
-              <Sparkles size={14} />
-              Generate with AI
-            </button>
+            {can('racm_edit') && (
+              <button
+                onClick={() => addToast({ message: 'New RACM template created', type: 'info' })}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                Create RACM
+              </button>
+            )}
+            {can('racm_generate') && (
+              <button
+                onClick={() => addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' })}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer"
+              >
+                <Sparkles size={14} />
+                Generate with AI
+              </button>
+            )}
           </div>
         </div>
 

@@ -34,7 +34,6 @@ export type View =
   | 'engagement-case-management'
   | 'my-queue'
   | 'closed-case-sampling'
-  | 'vendor-360'
   | 'engagement-compare'
   // Execution
   | 'audit-execution'
@@ -51,15 +50,12 @@ export type View =
   | 'ai-concierge-forensics'
   | 'ai-concierge-table-extractor'
   | 'ai-concierge-workflow-builder'
-  | 'findings'
   // System
   | 'configuration'
   | 'data-sources'
   | 'knowledge-hub'
   | 'admin-users'
   | 'admin-roles'
-  | 'admin-settings'
-  | 'admin-integrations'
   | 'admin-logs'
   // One-Click Audit
   | 'one-click-audit'
@@ -72,7 +68,6 @@ export type View =
   // Dev-only preview routes
   | 'dev-configurable-engagement-v3'
   // Platform
-  | 'platform-usage'
   | 'racm-full-editor'
   // Engagement Config (under Programs)
   | 'engagement-config';
@@ -124,7 +119,7 @@ export interface AppState {
   showEmailPreviewModal: boolean;
   showShareModal: boolean;
   showPowerBIWizard: boolean;
-  shareContext: { type: 'report' | 'dashboard' | 'workflow-output'; id: string } | null;
+  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace'; id: string } | null;
   emailPreviewRecipient: string | null;
   // Report builder
   reportBuilderContext: 'new' | 'action-report' | 'from-template' | null;

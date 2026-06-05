@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 // tokens (paper-0 surface, ink-900/40 backdrop, risk vs brand). Currently
 // adopted by Knowledge Hub's source-card Remove/Disconnect flow only —
 // existing inline confirms in ControlDetailDrawer / DashboardListPage /
-// Sidebar / FindingsView are NOT migrated. Future PRs can move them over;
+// Sidebar are NOT migrated. Future PRs can move them over;
 // this component is the target.
 
 interface Props {

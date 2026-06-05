@@ -4,10 +4,12 @@ import {
   Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye, ArrowLeft,
   ArrowRight, FileText, HelpCircle, Shield, Workflow as WorkflowIcon, Grid3x3,
-  Play, Trash2,
+  Play, Trash2, ArchiveRestore,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
+import ConfirmationModal from '../shared/ConfirmationModal';
+import { useCan } from '../../context/CurrentUserContext';
 import { getRiskRelationships } from '../../data/processHubJoins';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -262,7 +264,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
           <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}
+          <button type="button" onClick={() => { if (isValid) onSave(buildRisk(risk?.status ?? 'Active')); }} disabled={!isValid}
             className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             Save
           </button>
@@ -275,31 +277,7 @@ function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
 // ─── Risk Detail Drawer ─────────────────────────────────────────────────────
 
 function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClose: () => void; onUpdate: (r: RiskEntry) => void }) {
-  const { addToast } = useToast();
   const [editing, setEditing] = useState(false);
-
-  const handleStatusChange = (newStatus: RiskLifecycleStatus) => {
-    onUpdate({ ...risk, status: newStatus, lastReviewed: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) });
-    addToast({ message: `Risk status changed to ${newStatus}`, type: 'success' });
-  };
-
-  const transitions: Partial<Record<RiskLifecycleStatus, { label: string; status: RiskLifecycleStatus; cls: string }[]>> = {
-    Draft: [
-      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    Active: [
-      { label: 'Mark Under Review', status: 'Under Review', cls: 'bg-high-50 text-high-700 hover:bg-high-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    'Under Review': [
-      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    Archived: [],
-  };
-
-  const availableActions = transitions[risk.status] || [];
 
   const fields = [
     { label: 'Risk ID', value: risk.id },
@@ -371,6 +349,7 @@ function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClos
 
 // ─── Detail Page (spike C) ──────────────────────────────────────────────────
 function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void; onEdit: () => void }) {
+  const { can } = useCan();
   const rels = getRiskRelationships(risk.id, risk.businessProcess);
   const fields = [
     { label: 'Risk ID', value: risk.id, mono: true },
@@ -396,13 +375,13 @@ function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void;
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          <button
+          {can('risk_edit') && <button
             type="button"
             onClick={onEdit}
             className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
           >
             <Edit3 size={13} />Edit risk
-          </button>
+          </button>}
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
@@ -513,6 +492,7 @@ interface Props {
 
 export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -554,7 +534,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
-  const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
@@ -577,14 +557,21 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Apply process filter first (for embedded mode)
   const embedded = !!processFilter;
-  const baseRisks = (processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks)
-    .filter(r => !archivedRiskIds.includes(r.id));
+  const baseRisks = processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks;
+  const archivedCount = baseRisks.filter(r => r.status === 'Archived').length;
+  const viewingArchived = statusFilter.includes('Archived');
 
   // Derived KPIs
   const totalRisks = baseRisks.length;
   const activeCount = baseRisks.filter(r => r.status === 'Active').length;
   const filteredRisks = useMemo(() => {
     let result = baseRisks;
+
+    // Archived risks are retired from the active list — only surface them when the
+    // user explicitly filters to "Archived" (via the Status filter or the chip).
+    if (!statusFilter.includes('Archived')) {
+      result = result.filter(r => r.status !== 'Archived');
+    }
 
     // Status filter — multi-select; a risk matches if ANY selected status applies.
     if (statusFilter.length > 0) {
@@ -645,11 +632,27 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setDetailRisk(updated);
   };
 
-  // Single-row archive replaces the old sticky bulk bar.
+  // Archive = soft retire. The risk keeps its record and moves to the Archived
+  // view (Status → Archived), where it can be restored or permanently deleted.
   const handleArchiveOne = (id: string) => {
-    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setRisks(prev => prev.map(r => r.id === id ? { ...r, status: 'Archived' } : r));
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
-    addToast({ message: `Risk archived`, type: 'success' });
+    addToast({ message: `Risk archived — find it under Status → Archived`, type: 'success' });
+  };
+  // Restore brings an archived risk back to the active list.
+  const handleRestoreOne = (id: string) => {
+    setRisks(prev => prev.map(r => r.id === id ? { ...r, status: 'Active' } : r));
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk restored to Active`, type: 'success' });
+  };
+  // Permanent delete — only reachable from the Archived view, admin-gated,
+  // and confirmed via the destructive ConfirmationModal.
+  const handleDeleteOne = (id: string) => {
+    setRisks(prev => prev.filter(r => r.id !== id));
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    if (detailRiskId === id) setDetailRiskId(null);
+    setPendingDeleteId(null);
+    addToast({ message: `Risk permanently deleted`, type: 'success' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
@@ -720,10 +723,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               <h1 className="font-display text-[18px] font-semibold text-ink-900">Risk Register</h1>
               <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
-            <button type="button" onClick={() => setShowCreateDrawer(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-              <Plus size={13} />New Risk
-            </button>
+            {can('risk_create') && (
+              <button type="button" onClick={() => setShowCreateDrawer(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />New Risk
+              </button>
+            )}
           </div>
         )}
 
@@ -745,7 +750,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
             <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
             <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
-            <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>
+            {can('risk_create') && <button type="button" onClick={() => setShowCreateDrawer(true)} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New Risk</button>}
           </div>
         ) : (
         <>
@@ -772,6 +777,21 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 className="mr-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
               >
                 Clear all
+              </button>
+            )}
+            {archivedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter(viewingArchived ? [] : ['Archived'])}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-[12px] font-medium border transition-colors cursor-pointer ${
+                  viewingArchived
+                    ? 'bg-ink-800 text-white border-ink-800'
+                    : 'bg-white text-ink-600 border-border hover:bg-paper-50'
+                }`}
+                title={viewingArchived ? 'Back to active risks' : 'View archived risks'}
+              >
+                <Archive size={12} />
+                {viewingArchived ? 'Viewing archived' : `Archived (${archivedCount})`}
               </button>
             )}
             <ColumnFilter variant="button" label="Status" options={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={setStatusFilter} align="end" />
@@ -920,19 +940,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                   {isChecked ? (
                     <>
                       <button type="button"
-                        onClick={() => handleArchiveOne(risk.id)}
-                        title="Archive"
-                        className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
-                        <Archive size={14} />
-                      </button>
-                      <button type="button"
                         onClick={() => handleCancelOne(risk.id)}
                         title="Cancel selection"
                         className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
                         <X size={14} />
                       </button>
                     </>
-                  ) : (
+                  ) : risk.status === 'Archived' ? (
+                    // Archived row — restore, or permanently delete (admin-gated).
                     <>
                       <button
                         type="button"
@@ -942,14 +957,48 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       >
                         <Play size={14} />
                       </button>
+                      {can('risk_archive') && (
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreOne(risk.id)}
+                          title="Restore to active"
+                          className="p-1.5 rounded-md text-text-muted hover:text-compliant-700 hover:bg-compliant-50 transition-colors cursor-pointer"
+                        >
+                          <ArchiveRestore size={14} />
+                        </button>
+                      )}
+                      {can('risk_delete') && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteId(risk.id)}
+                          title="Delete permanently"
+                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    // Active row — open, or archive (soft retire).
+                    <>
                       <button
                         type="button"
-                        onClick={() => handleArchiveOne(risk.id)}
-                        title="Archive"
-                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        onClick={() => setDetailRiskId(risk.id)}
+                        title="Open risk"
+                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                       >
-                        <Trash2 size={14} />
+                        <Play size={14} />
                       </button>
+                      {can('risk_archive') && (
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveOne(risk.id)}
+                          title="Archive"
+                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                        >
+                          <Archive size={14} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -974,6 +1023,24 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           <RiskDetailDrawer risk={detailRisk} onClose={() => setDetailRisk(null)} onUpdate={handleUpdateRisk} />
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        open={pendingDeleteId !== null}
+        title="Delete this risk permanently?"
+        description={
+          <>
+            {risks.find(r => r.id === pendingDeleteId)?.name
+              ? <><span className="font-semibold text-ink-700">{risks.find(r => r.id === pendingDeleteId)?.name}</span> will be removed for good. </>
+              : null}
+            This can't be undone. Archived risks are normally kept for the audit trail — only delete if it was created in error.
+          </>
+        }
+        confirmLabel="Delete permanently"
+        cancelLabel="Cancel"
+        tone="destructive"
+        onConfirm={() => { if (pendingDeleteId) handleDeleteOne(pendingDeleteId); }}
+        onClose={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

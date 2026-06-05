@@ -2,19 +2,28 @@ import DatePicker from '../shared/DatePicker';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Users, Shield, Settings, ScrollText,
+  Users, Shield, ScrollText,
   UserPlus, Plus, Download, Filter,
-  Construction, X, Eye, ChevronDown, Search, Pencil, Copy, CopyPlus, Info, Trash2,
+  Eye, ChevronDown, Search, Pencil, CopyPlus, Info, Trash2,
 } from 'lucide-react';
+import { PERMISSION_GROUPS, ALL_PERMISSION_KEYS, PERSON_ROLES, type PermissionKey, type Role } from '../../data/rbac';
+import { useCurrentUser } from '../../context/CurrentUserContext';
+import { useAdminData, useAuditLog, type AuditLog, type AdminTeam } from '../../context/AdminDataContext';
 import SmartTable, { type Column } from '../shared/SmartTable';
 import { StatusBadge } from '../shared/StatusBadge';
 import FloatingLines from '../shared/FloatingLines';
+import Modal from '../shared/Modal';
+import Toggle from '../shared/Toggle';
+import Checkbox from '../shared/Checkbox';
+import ConfirmationModal from '../shared/ConfirmationModal';
+import EmptyState from '../shared/EmptyState';
+import { useToast } from '../shared/Toast';
 
 interface Props {
   activeTab?: string;
 }
 
-type TabId = 'users' | 'teams' | 'roles' | 'settings' | 'integrations' | 'logs';
+type TabId = 'users' | 'teams' | 'roles' | 'logs';
 
 interface Tab {
   id: TabId;
@@ -48,403 +57,91 @@ const STATUS_MAP: Record<UserStatus, string> = {
   Locked: 'locked',
 };
 
-const AVATAR_COLORS = ['#6A12CD', '#0369A1', '#15803D', '#B45309', '#B42318', '#3B0B72', '#0891B2', '#9333EA', '#C2410C', '#1D4ED8', '#059669', '#7C3AED'];
+/* ── Shared form-field + footer button tokens (match canonical drawer) ── */
+const FIELD_LABEL = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
+const FIELD_INPUT =
+  'w-full px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors';
+const FIELD_SELECT = `${FIELD_INPUT} appearance-none cursor-pointer pr-9`;
+const FIELD_TEXTAREA =
+  'w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 outline-none placeholder:text-ink-400 resize-none focus:border-brand-600 transition-colors';
+const BTN_CANCEL =
+  'h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-lg hover:bg-canvas transition-colors cursor-pointer';
+const BTN_PRIMARY =
+  'h-9 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer';
 
-/* RowActionMenu removed — user actions are now inline icons */
+/* ── Page CTAs — match the Dashboard list page exactly (flat, h-10, rounded-md,
+      no shadow). Not the shared <Button> (rounded-lg + shadow). ── */
+const BTN_CTA_PRIMARY =
+  'flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer';
+const BTN_CTA_OUTLINE =
+  'flex items-center gap-2 px-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[0.8125rem] font-semibold hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer';
+const BTN_ROW =
+  'inline-flex items-center gap-1 px-2 h-7 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer';
 
-/* ── View User Modal ── */
-function ViewUserModal({ user, onClose }: { user: MockUser; onClose: () => void }) {
-  const color = AVATAR_COLORS[user.name.charCodeAt(0) % AVATAR_COLORS.length];
-  const recentActivity = [
-    { action: 'Logged in', time: user.lastLogin },
-    { action: 'Updated risk register', time: 'Apr 18' },
-    { action: 'Ran duplicate invoice workflow', time: 'Apr 16' },
-    { action: 'Exported SOX report', time: 'Apr 14' },
-  ];
-
+/**
+ * Brand-tinted initials avatar — matches the platform people convention
+ * (ShareModal: `bg-primary/15 text-primary`). Monochrome on purpose: the
+ * design system keeps brand as the only chromatic anchor, so people lists stay
+ * calm instead of rainbow-coloured.
+ */
+function InitialsAvatar({ name, size = 32 }: { name: string; size?: number }) {
+  const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-8" onClick={onClose}
-      >
-      <div className="w-[440px] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[0.875rem] font-semibold text-text">User Details</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 flex items-center gap-4 border-b border-border-light">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center text-[1rem] font-bold text-white shrink-0" style={{ background: color }}>
-            {user.initials}
-          </div>
-          <div>
-            <div className="text-[0.9375rem] font-semibold text-text">{user.name}</div>
-            <div className="text-[0.8125rem] text-text-muted mt-0.5">{user.email}</div>
-            <div className="mt-2">
-              <StatusBadge status={STATUS_MAP[user.status] || 'draft'} />
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 grid grid-cols-2 gap-4 border-b border-border-light">
-          {[
-            { label: 'Role', value: user.role },
-            { label: 'Team', value: user.team },
-            { label: 'Last Login', value: user.lastLogin },
-            { label: 'Account Created', value: 'Jan 15, 2026' },
-          ].map(d => (
-            <div key={d.label}>
-              <div className="text-[0.75rem] text-text-muted mb-0.5">{d.label}</div>
-              <div className="text-[0.8125rem] text-text">{d.value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="px-6 py-4">
-          <div className="text-[0.8125rem] font-semibold text-text mb-2">Recent Activity</div>
-          {recentActivity.map((a, i) => (
-            <div key={i} className={`flex items-center justify-between py-2 ${i > 0 ? 'border-t border-border-light/60' : ''}`}>
-              <span className="text-[0.8125rem] text-text-secondary">{a.action}</span>
-              <span className="text-[0.75rem] text-text-muted tabular-nums">{a.time}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="px-6 py-3 border-t border-border-light flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-            Close
-          </button>
-        </div>
-      </div>
-      </motion.div>
-    </>
+    <div
+      className="rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
+    >
+      {initials}
+    </div>
   );
 }
 
-/* ── Edit User Modal ── */
-function EditUserModal({ user, onClose }: { user: MockUser; onClose: () => void }) {
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const color = AVATAR_COLORS[user.name.charCodeAt(0) % AVATAR_COLORS.length];
-
+function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-8" onClick={onClose}
-      >
-      <div className="w-[440px] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[0.875rem] font-semibold text-text">Edit User</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="px-6 py-3 flex items-center gap-3 border-b border-border-light bg-surface-2/30">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
-            {user.initials}
-          </div>
-          <div>
-            <div className="text-[0.8125rem] font-semibold text-text">{user.name}</div>
-            <div className="text-[0.75rem] text-text-muted">{user.email}</div>
-          </div>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Full Name</label>
-            <input defaultValue={user.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
-          </div>
-          <div>
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Email</label>
-            <input defaultValue={user.email} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
-          </div>
-          <div>
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Role</label>
-            <div className="relative">
-              <select defaultValue={user.role} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
-                <option>test role per final</option>
-                <option>test invite permission</option>
-                <option>Enabler</option>
-                <option>system clone/all permissions</option>
-                <option>Viewer</option>
-                <option>Nitin Test</option>
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            </div>
-          </div>
-          <div>
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Team</label>
-            <div className="relative">
-              <select defaultValue={user.team} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
-                <option>SOX Audit</option>
-                <option>IFC Team</option>
-                <option>Engineering</option>
-                <option>Management</option>
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            </div>
-          </div>
-          <div>
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Status</label>
-            <div className="flex items-center gap-2">
-              {(['Active', 'Suspended', 'Locked', 'Inactive'] as UserStatus[]).map(s => (
-                <label key={s} className={`px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-[0.75rem] font-medium ${
-                  user.status === s ? 'border-primary bg-primary-light text-primary font-semibold' : 'border-border text-text-secondary hover:bg-gray-50'
-                }`}>
-                  <input type="radio" name="status" defaultChecked={user.status === s} className="sr-only" />
-                  {s}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-t border-border-light shrink-0">
-          {deleteConfirm ? (
-            <div>
-              <p className="text-[0.8125rem] text-text mb-3">Are you sure you want to remove <span className="font-semibold">{user.name}</span>? This action cannot be undone.</p>
-              <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-                  <Trash2 size={13} />
-                  Remove User
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[0.8125rem] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
-                <Trash2 size={13} />
-                Remove User
-              </button>
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      </motion.div>
-    </>
+    <div>
+      <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">{label}</div>
+      {children}
+    </div>
   );
 }
 
-const mockUsers: MockUser[] = [
-  { name: 'Abhinav Sharma', initials: 'AS', email: 'abhinav@irame.ai', role: 'test role per final', team: 'SOX Audit', status: 'Active', lastLogin: 'Today, 09:14' },
-  { name: 'Aditya Thakur', initials: 'AT', email: 'aditya.thakur@irame.ai', role: 'test invite permission', team: 'SOX Audit', status: 'Active', lastLogin: 'Today, 08:30' },
-  { name: 'AI', initials: 'AI', email: 'ai@irame.ai', role: 'Test wf for case', team: 'Engineering', status: 'Active', lastLogin: 'Yesterday' },
-  { name: 'Ajay 14110008', initials: 'AJ', email: 'ajay.aj@btech2014.iitgn.ac.in', role: 'Enabler', team: 'IFC Team', status: 'Invited', lastLogin: 'Never' },
-  { name: 'ajay mudhai', initials: 'AM', email: 'ajay@irame.ai', role: 'Enabler', team: 'IFC Team', status: 'Active', lastLogin: 'Apr 20' },
-  { name: 'Ajay Mudhai', initials: 'AM', email: 'ajay@irame.ai', role: 'system clone/all permissions', team: 'Management', status: 'Active', lastLogin: 'Apr 19' },
-  { name: 'Ayushi Narang', initials: 'AN', email: 'ayushi.narang@irame.ai', role: 'Enabler', team: 'SOX Audit', status: 'Active', lastLogin: 'Apr 21' },
-  { name: 'Chulbul Pandey', initials: 'CP', email: 'kuldeep.msvm@gmail.com', role: 'Enabler', team: 'Management', status: 'Suspended', lastLogin: 'Mar 28' },
-  { name: 'CS', initials: 'CS', email: 'cs@irame.ai', role: 'Enabler', team: 'Engineering', status: 'Active', lastLogin: 'Today, 10:02' },
-  { name: 'Kuldeep Pandey', initials: 'KP', email: 'kuldeep.msvm@gmail.com', role: 'Nitin Test', team: '\u2014', status: 'Inactive', lastLogin: 'Feb 14' },
-  { name: 'Rahul Verma', initials: 'RV', email: 'rahul@irame.ai', role: 'Viewer', team: 'IFC Team', status: 'Locked', lastLogin: 'Mar 05' },
-  { name: 'Priya Singh', initials: 'PS', email: 'priya@irame.ai', role: 'Enabler', team: 'SOX Audit', status: 'Invited', lastLogin: 'Never' },
-];
+function MemberSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 transition-colors">
+      <Search size={14} className="text-ink-400 shrink-0" />
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 bg-transparent outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
+      />
+    </div>
+  );
+}
+
+// Permission matrix + total now come from the single RBAC source of truth.
+const DETAILED_PERMISSIONS = PERMISSION_GROUPS;
+const TOTAL_PERMS = ALL_PERMISSION_KEYS.length;
 
 const userColumns: Column<MockUser & Record<string, unknown>>[] = [
-  {
-    key: 'name',
-    label: 'Name',
-    sortable: true,
-    render: (item, i) => {
-      const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-      return (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
-            {item.initials as string}
-          </div>
-          <div>
-            <div className="text-[0.8125rem] font-semibold text-text">{item.name as string}</div>
-            <div className="text-[0.75rem] text-text-muted mt-0.5">{item.email as string}</div>
-          </div>
-        </div>
-      );
-    },
-  },
+  { key: 'name', label: 'Name', sortable: true },
   { key: 'role', label: 'Role', sortable: true },
   { key: 'team', label: 'Team', sortable: true },
   {
     key: 'status',
     label: 'Status',
     sortable: true,
-    render: (item) => (
-      <StatusBadge status={STATUS_MAP[item.status as UserStatus] || 'draft'} />
-    ),
+    render: (item) => <StatusBadge status={STATUS_MAP[item.status as UserStatus] || 'draft'} />,
   },
   {
     key: 'lastLogin',
     label: 'Last Login',
     sortable: true,
-    render: (item) => (
-      <span className="text-[0.75rem] text-text-muted tabular-nums">{item.lastLogin as string}</span>
-    ),
+    render: (item) => <span className="text-[0.75rem] text-ink-500 tabular-nums">{item.lastLogin as string}</span>,
   },
-  {
-    key: 'action',
-    label: '',
-    sortable: false,
-    align: 'right' as const,
-    width: '48px',
-  },
+  { key: 'action', label: '', sortable: false, align: 'right' as const, width: '140px' },
 ];
 
-const AVAILABLE_ROLES = [
-  { name: 'test manik role', desc: 'report not share', perms: 8, access: ['View', 'Create', 'Edit'] },
-  { name: 'report', desc: 'dsg', perms: 6, access: ['View', 'Export'] },
-  { name: 'last role', desc: 'nmmm', perms: 3, access: ['View'] },
-  { name: 'Team Edit UI Test', desc: 'TEUT', perms: 5, access: ['View', 'Edit'] },
-  { name: 'Test invite user final', desc: 'tests', perms: 4, access: ['View', 'Create'] },
-  { name: '2test role per final', desc: 'final test', perms: 2, access: ['View'] },
-  { name: 'test role per final67', desc: 'final tests', perms: 10, access: ['View', 'Create', 'Edit', 'Delete'] },
-];
-
-function InviteUserModal({ onClose }: { onClose: () => void }) {
-  const [selectedRole, setSelectedRole] = useState(AVAILABLE_ROLES[0].name);
-  const [previewRole, setPreviewRole] = useState<string | null>(null);
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-ink-900/40 z-40" onClick={onClose} style={{ backdropFilter: 'blur(4px)' }} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-8"
-        onClick={onClose}
-      >
-      <div className="w-[520px] max-h-[85vh] bg-paper-0 rounded-xl border border-paper-200 flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 h-14 border-b border-paper-200 shrink-0">
-          <h2 className="text-[0.9375rem] font-semibold text-ink-900" style={{ fontWeight: 600 }}>Invite User</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-paper-100 transition-colors cursor-pointer text-ink-500">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-6 space-y-5">
-            <div>
-              <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Full Name <span className="text-risk-700">*</span></label>
-              <input placeholder="Enter full name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Email <span className="text-risk-700">*</span></label>
-                <input placeholder="Enter email address" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
-              </div>
-              <div>
-                <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team <span className="text-risk-700">*</span></label>
-                <div className="relative">
-                  <select className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
-                    <option>Select teams</option>
-                    <option>SOX Audit Team</option>
-                    <option>IFC Team</option>
-                    <option>Management</option>
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-px bg-paper-200" />
-
-          {/* Role selection */}
-          <div className="px-6 py-5">
-            <h3 className="text-[0.875rem] text-text mb-1" style={{ fontWeight: 600 }}>Initial Role</h3>
-            <p className="text-[0.8125rem] text-text-muted mb-4">You can assign only one role to a user.</p>
-
-            <div className="space-y-2.5">
-              {AVAILABLE_ROLES.map(role => {
-                const isSelected = selectedRole === role.name;
-                return (
-                  <div
-                    key={role.name}
-                    onClick={() => setSelectedRole(role.name)}
-                    className={`rounded-lg border cursor-pointer transition-colors ${
-                      isSelected ? 'border-border bg-white' : 'border-border hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        isSelected ? 'border-brand-400' : 'border-gray-300'
-                      }`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-brand-400" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[0.8125rem] text-text" style={{ fontWeight: 600 }}>{role.name}</div>
-                        <div className="text-[0.75rem] text-text-muted">{role.desc}</div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-[0.75rem] text-text-muted tabular-nums">{role.perms} permissions</span>
-                        <button
-                          onClick={e => { e.stopPropagation(); setPreviewRole(previewRole === role.name ? null : role.name); }}
-                          className="text-[0.75rem] font-medium text-text-secondary hover:text-text cursor-pointer"
-                        >
-                          {previewRole === role.name ? 'Hide' : 'Details'}
-                        </button>
-                      </div>
-                    </div>
-                    {previewRole === role.name && (
-                      <div className="px-4 pb-3 border-t border-border/50 mt-2 pt-2 max-h-[200px] overflow-y-auto">
-                        {DETAILED_PERMISSIONS.map((group, gi) => (
-                          <div key={group.group}>
-                            <div className={`py-2 ${gi > 0 ? 'border-t border-border mt-1' : ''}`}>
-                              <span className="text-[0.8125rem] font-semibold text-text">{group.group}</span>
-                            </div>
-                            {group.perms.map(p => (
-                              <div key={p.key} className="flex items-center justify-between py-2 pl-3 border-t border-border/30">
-                                <div>
-                                  <div className="text-[0.75rem] font-medium text-text">{p.name}</div>
-                                  <div className="text-[0.75rem] text-text-muted">{p.desc}</div>
-                                </div>
-                                <div className="w-9 h-[20px] rounded-full shrink-0 bg-brand-400 ml-3 relative">
-                                  <div className="absolute top-[2px] left-[18px] w-4 h-4 rounded-full bg-white" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-paper-200 flex justify-end shrink-0">
-          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
-            Invite User
-          </button>
-        </div>
-      </div>
-      </motion.div>
-    </>
-  );
-}
 
 const TEAM_MEMBERS = [
   { name: 'Abhinav Sharma', email: 'abhinav@irame.ai' },
@@ -460,7 +157,312 @@ const TEAM_MEMBERS = [
   { name: 'Lee cheng', email: 'lecade7207@7novels.com' },
 ];
 
-function CreateTeamModal({ onClose }: { onClose: () => void }) {
+/* ── User detail drawer (read-only) ── */
+function UserDetailDrawer({ user, onClose }: { user: MockUser; onClose: () => void }) {
+  const recentActivity = [
+    { action: 'Logged in', time: user.lastLogin },
+    { action: 'Updated risk register', time: 'Apr 18' },
+    { action: 'Ran duplicate invoice workflow', time: 'Apr 16' },
+    { action: 'Exported SOX report', time: 'Apr 14' },
+  ];
+
+  return (
+    <Modal
+      title="User Details"
+      subtitle={<span className="font-mono">{user.email}</span>}
+      onClose={onClose}
+      footer={<button className={BTN_CANCEL} onClick={onClose}>Close</button>}
+    >
+      <div className="space-y-7">
+        <div className="flex items-center gap-4">
+          <InitialsAvatar name={user.name} size={48} />
+          <div className="min-w-0">
+            <div className="text-[0.9375rem] font-semibold text-ink-900 truncate">{user.name}</div>
+            <div className="text-[0.8125rem] text-ink-500 mt-0.5 truncate">{user.email}</div>
+            <div className="mt-2"><StatusBadge status={STATUS_MAP[user.status] || 'draft'} /></div>
+          </div>
+        </div>
+
+        <section className="grid grid-cols-2 gap-x-8 gap-y-5">
+          {[
+            { label: 'Role', value: user.role },
+            { label: 'Team', value: user.team },
+            { label: 'Last Login', value: user.lastLogin },
+            { label: 'Account Created', value: 'Jan 15, 2026' },
+          ].map(d => (
+            <DetailField key={d.label} label={d.label}>
+              <span className="text-[0.8125rem] text-ink-800">{d.value}</span>
+            </DetailField>
+          ))}
+        </section>
+
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">Recent Activity</h3>
+          <div className="-mx-2">
+            {recentActivity.map((a, i) => (
+              <div key={i} className="flex items-center justify-between px-2 py-2.5 rounded-md hover:bg-canvas transition-colors">
+                <span className="text-[0.8125rem] text-ink-700">{a.action}</span>
+                <span className="text-[0.75rem] text-ink-500 tabular-nums">{a.time}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── User edit drawer ── */
+function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void }) {
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  const { updateUser, removeUser } = useAdminData();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
+  const [role, setRole] = useState(user.role);
+  const [team, setTeam] = useState(user.team);
+  const [status, setStatus] = useState<UserStatus>(user.status);
+
+  const save = () => {
+    updateUser(user.email, { name, email, role, team, status });
+    logEvent({ action: 'Update', description: `Updated user "${name}" (status: ${status})`, module: 'Admin', entity: 'User' });
+    onClose();
+    addToast({ message: 'User updated', type: 'success' });
+  };
+  const remove = () => {
+    removeUser(user.email);
+    logEvent({ action: 'Delete', description: `Removed user "${user.name}"`, module: 'Admin', entity: 'User' });
+    setConfirmDelete(false);
+    onClose();
+    addToast({ message: `${user.name} removed`, type: 'success' });
+  };
+
+  return (
+    <>
+      <Modal
+        title="Edit User"
+        subtitle={user.email}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            >
+              <Trash2 size={14} /> Remove User
+            </button>
+            <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+            <button className={BTN_PRIMARY} onClick={save}>Save Changes</button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-canvas border border-canvas-border">
+            <InitialsAvatar name={user.name} size={36} />
+            <div className="min-w-0">
+              <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{user.name}</div>
+              <div className="text-[0.75rem] text-ink-500 truncate">{user.email}</div>
+            </div>
+          </div>
+
+          <div>
+            <label className={FIELD_LABEL}>Full Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} className={FIELD_INPUT} />
+          </div>
+          <div>
+            <label className={FIELD_LABEL}>Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} className={FIELD_INPUT} />
+          </div>
+          <div>
+            <label className={FIELD_LABEL}>Role</label>
+            <div className="relative">
+              <select value={role} onChange={e => setRole(e.target.value)} className={FIELD_SELECT}>
+                {[role, 'Enabler', 'Auditor', 'Risk Owner', 'Reviewer', 'Viewer'].filter((v, i, a) => a.indexOf(v) === i).map(r => <option key={r}>{r}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            </div>
+          </div>
+          <div>
+            <label className={FIELD_LABEL}>Team</label>
+            <div className="relative">
+              <select value={team} onChange={e => setTeam(e.target.value)} className={FIELD_SELECT}>
+                {['SOX Audit', 'IFC Team', 'Engineering', 'Management', '—'].filter((v, i, a) => a.indexOf(v) === i).map(t => <option key={t}>{t}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            </div>
+          </div>
+          <div>
+            <label className={FIELD_LABEL}>Status</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {(['Active', 'Suspended', 'Locked', 'Inactive'] as UserStatus[]).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setStatus(s)}
+                  className={`px-3 h-8 rounded-lg border text-[0.75rem] font-medium transition-colors cursor-pointer ${
+                    status === s ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-canvas'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmationModal
+        open={confirmDelete}
+        title="Remove user?"
+        description={<>This will remove <span className="font-semibold">{user.name}</span>. This action cannot be undone.</>}
+        confirmLabel="Remove User"
+        tone="destructive"
+        onConfirm={remove}
+        onClose={() => setConfirmDelete(false)}
+      />
+    </>
+  );
+}
+
+/* ── Invite user drawer ── */
+function InviteUserDrawer({ onClose }: { onClose: () => void }) {
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  const { inviteUser, defaultRoleId } = useAdminData();
+  const { roles } = useCurrentUser();
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [team, setTeam] = useState('');
+  // Pre-select the org's configured default role.
+  const [selectedRole, setSelectedRole] = useState(
+    () => roles.find(r => r.id === defaultRoleId)?.name ?? roles[0]?.name ?? '',
+  );
+  const [previewRole, setPreviewRole] = useState<string | null>(null);
+
+  const invite = () => {
+    if (!fullName.trim() || !email.trim()) { addToast({ message: 'Name and email are required', type: 'error' }); return; }
+    const initials = fullName.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase();
+    inviteUser({ name: fullName.trim(), initials, email: email.trim(), role: selectedRole, team: team || '—', status: 'Invited', lastLogin: 'Never' });
+    logEvent({ action: 'Create', description: `Invited user "${fullName.trim()}" with role "${selectedRole}"`, module: 'Admin', entity: 'User' });
+    onClose();
+    addToast({ message: 'Invitation sent', type: 'success' });
+  };
+
+  return (
+    <Modal
+      title="Invite User"
+      subtitle="Add a new member and assign their initial role."
+      onClose={onClose}
+      footer={
+        <>
+          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+          <button className={BTN_PRIMARY} onClick={invite}>Send Invite</button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="space-y-5">
+          <div>
+            <label className={FIELD_LABEL}>Full Name <span className="text-risk-700">*</span></label>
+            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter full name" className={FIELD_INPUT} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={FIELD_LABEL}>Email <span className="text-risk-700">*</span></label>
+              <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter email address" className={FIELD_INPUT} />
+            </div>
+            <div>
+              <label className={FIELD_LABEL}>Team <span className="text-risk-700">*</span></label>
+              <div className="relative">
+                <select className={FIELD_SELECT} value={team} onChange={e => setTeam(e.target.value)}>
+                  <option value="" disabled>Select team</option>
+                  <option>SOX Audit</option>
+                  <option>IFC Team</option>
+                  <option>Management</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-canvas-border pt-5">
+          <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1">Initial Role</h3>
+          <p className="text-[0.8125rem] text-ink-500 mb-4">You can assign only one role to a user.</p>
+
+          <div className="space-y-2.5">
+            {roles.map(role => {
+              const isSelected = selectedRole === role.name;
+              const isPreview = previewRole === role.name;
+              const isDefault = role.id === defaultRoleId;
+              const enabled = new Set(role.permissions);
+              return (
+                <div
+                  key={role.id}
+                  onClick={() => setSelectedRole(role.name)}
+                  className={`rounded-lg border cursor-pointer transition-colors ${
+                    isSelected ? 'border-brand-600 bg-brand-50/40' : 'border-canvas-border hover:bg-canvas'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <span className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? 'border-brand-600' : 'border-canvas-border'
+                    }`}>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-brand-600" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[0.8125rem] font-semibold text-ink-800 flex items-center gap-2">
+                        {role.name}
+                        {isDefault && <span className="px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold">Default</span>}
+                      </div>
+                      <div className="text-[0.75rem] text-ink-500">{role.description ?? `${role.type} role`}</div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[0.75rem] text-ink-500 tabular-nums">{role.permissions.length} permissions</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setPreviewRole(isPreview ? null : role.name); }}
+                        className="text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 cursor-pointer"
+                      >
+                        {isPreview ? 'Hide' : 'Details'}
+                      </button>
+                    </div>
+                  </div>
+                  {isPreview && (
+                    <div className="px-4 pb-3 border-t border-canvas-border mt-1 pt-2 max-h-[220px] overflow-y-auto">
+                      {DETAILED_PERMISSIONS.map((group, gi) => (
+                        <div key={group.group}>
+                          <div className={`py-2 ${gi > 0 ? 'border-t border-canvas-border mt-1' : ''}`}>
+                            <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
+                          </div>
+                          {group.perms.map(p => (
+                            <div key={p.key} className="flex items-center justify-between py-2 pl-3 border-t border-canvas-border/60">
+                              <div>
+                                <div className="text-[0.75rem] font-medium text-ink-800">{p.name}</div>
+                                <div className="text-[0.75rem] text-ink-500">{p.desc}</div>
+                              </div>
+                              <Toggle checked={enabled.has(p.key)} disabled />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Create team drawer ── */
+function CreateTeamDrawer({ onClose }: { onClose: () => void }) {
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  const { addTeam } = useAdminData();
+  const [teamName, setTeamName] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -476,109 +478,559 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
     });
   };
 
+  const create = () => {
+    if (!teamName.trim()) { addToast({ message: 'Team name is required', type: 'error' }); return; }
+    const members = TEAM_MEMBERS.filter(m => selected.has(m.email + m.name)).map(m => m.name);
+    addTeam(teamName.trim(), members);
+    logEvent({ action: 'Create', description: `Created team "${teamName.trim()}" with ${members.length} member${members.length !== 1 ? 's' : ''}`, module: 'Admin', entity: 'Team' });
+    onClose();
+    addToast({ message: 'Team created', type: 'success' });
+  };
+
   return (
-    <>
-      <div className="fixed inset-0 bg-ink-900/40 z-40" onClick={onClose} style={{ backdropFilter: 'blur(4px)' }} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-8"
-        onClick={onClose}
-      >
-      <div className="w-[480px] max-h-[85vh] bg-paper-0 rounded-xl border border-paper-200 flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 h-14 border-b border-paper-200 shrink-0">
-          <h2 className="text-[0.9375rem] text-ink-900" style={{ fontWeight: 600 }}>Create New Team</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-paper-100 transition-colors cursor-pointer text-ink-500">
-            <X size={16} />
-          </button>
+    <Modal
+      title="Create Team"
+      subtitle="Group members for shared access and assignments."
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto text-[0.75rem] text-ink-500 tabular-nums">{selected.size} member{selected.size !== 1 ? 's' : ''} selected</span>
+          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+          <button className={BTN_PRIMARY} onClick={create}>Create Team</button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div>
+          <label className={FIELD_LABEL}>Team Name <span className="text-risk-700">*</span></label>
+          <input value={teamName} onChange={e => setTeamName(e.target.value)} placeholder="Enter a unique team name" className={FIELD_INPUT} />
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Team name */}
-          <div className="px-6 py-5">
-            <label className="text-[0.8125rem] text-ink-700 mb-2 block" style={{ fontWeight: 560 }}>Team Name <span className="text-risk-700">*</span></label>
-            <input placeholder="Enter unique team name" className="w-full h-10 px-3 rounded-md border border-paper-200 bg-paper-0 text-[0.8125rem] text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors" style={{ boxShadow: 'none' }} />
+        <div className="border-t border-canvas-border pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-[0.875rem] font-semibold text-ink-900">Add Members</h3>
+            {selected.size > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.75rem] font-semibold text-brand-700 tabular-nums">{selected.size} selected</span>
+            )}
+          </div>
+          <p className="text-[0.8125rem] text-ink-500 mb-4">Select users to add now. You can add more later.</p>
+
+          <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search by name or email" />
+
+          <div className="mt-3 border border-canvas-border rounded-lg overflow-hidden">
+            {filtered.map((m, i) => {
+              const key = m.email + m.name;
+              const isChecked = selected.has(key);
+              return (
+                <div
+                  key={key}
+                  onClick={() => toggle(key)}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''} ${isChecked ? 'bg-brand-50/40' : 'hover:bg-canvas'}`}
+                >
+                  <Checkbox checked={isChecked} />
+                  <InitialsAvatar name={m.name} size={28} />
+                  <div className="min-w-0">
+                    <div className="text-[0.8125rem] font-medium text-ink-800 truncate">{m.name}</div>
+                    <div className="text-[0.75rem] text-ink-500 truncate">{m.email}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-400">No users match your search.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Edit team drawer ── */
+function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => void }) {
+  const { addToast } = useToast();
+  const logEvent = useAuditLog();
+  const { users, updateTeam, removeTeam } = useAdminData();
+  const [teamName, setTeamName] = useState(team.name);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [members, setMembers] = useState<Set<string>>(new Set(team.members));
+
+  const allUsers = users.map(u => u.name);
+  const filtered = allUsers.filter(name => !memberSearch || name.toLowerCase().includes(memberSearch.toLowerCase()));
+
+  const toggle = (name: string) => {
+    setMembers(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const save = () => {
+    updateTeam(team.id, { name: teamName.trim() || team.name, members: [...members] });
+    logEvent({ action: 'Update', description: `Updated team "${teamName.trim() || team.name}" (${members.size} members)`, module: 'Admin', entity: 'Team' });
+    onClose();
+    addToast({ message: 'Team updated', type: 'success' });
+  };
+  const remove = () => {
+    removeTeam(team.id);
+    logEvent({ action: 'Delete', description: `Deleted team "${team.name}"`, module: 'Admin', entity: 'Team' });
+    setConfirmDelete(false);
+    onClose();
+    addToast({ message: `Team ${team.name} deleted`, type: 'success' });
+  };
+
+  return (
+    <>
+      <Modal
+        title="Edit Team"
+        subtitle={team.name}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            >
+              <Trash2 size={14} /> Delete Team
+            </button>
+            <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+            <button className={BTN_PRIMARY} onClick={save}>Save Changes</button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <div>
+            <label className={FIELD_LABEL}>Team Name</label>
+            <input value={teamName} onChange={e => setTeamName(e.target.value)} className={FIELD_INPUT} />
           </div>
 
-          <div className="h-px bg-paper-200" />
-
-          {/* Members */}
-          <div className="px-6 py-5">
+          <div className="border-t border-canvas-border pt-5">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[0.875rem] text-ink-900" style={{ fontWeight: 600 }}>Add Team Members</h3>
-              {selected.size > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.75rem] font-semibold text-brand-700 tabular-nums">{selected.size} selected</span>
-              )}
+              <h3 className="text-[0.875rem] font-semibold text-ink-900">Members</h3>
+              <span className="text-[0.75rem] text-ink-500 tabular-nums">{members.size} selected</span>
             </div>
-            <p className="text-[0.8125rem] text-ink-500 mb-4">Select users to add to this team. You can add more members later.</p>
+            <p className="text-[0.8125rem] text-ink-500 mb-4">Add or remove members from this team.</p>
 
-            {/* Search */}
-            <div className="flex items-center gap-2 px-3 h-10 rounded-md border border-paper-200 bg-paper-50 mb-3 focus-within:border-brand-600 transition-colors">
-              <Search size={14} className="text-ink-400 shrink-0" />
-              <input
-                placeholder="Search by name or email"
-                value={memberSearch}
-                onChange={e => setMemberSearch(e.target.value)}
-                className="flex-1 bg-transparent outline-none text-[0.8125rem] text-ink-900 placeholder:text-ink-400"
-                style={{ boxShadow: 'none' }}
-              />
-            </div>
+            <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search members" />
 
-            {/* Member list */}
-            <div className="border border-paper-200 rounded-lg overflow-hidden">
-              {filtered.map((m, i) => {
-                const key = m.email + m.name;
-                const isChecked = selected.has(key);
-                const initials = m.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-                const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+            <div className="mt-3 border border-canvas-border rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
+              {filtered.map((name, i) => {
+                const isIn = members.has(name);
                 return (
                   <div
-                    key={key}
-                    onClick={() => toggle(key)}
-                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-paper-100' : ''} ${isChecked ? 'bg-brand-50' : 'hover:bg-paper-50'}`}
+                    key={name + i}
+                    onClick={() => toggle(name)}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''} ${isIn ? 'bg-brand-50/40' : 'hover:bg-canvas'}`}
                   >
-                    <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-brand-600' : 'border border-ink-300'}`}>
-                      {isChecked && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
-                      {initials}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[0.8125rem] text-ink-800 truncate" style={{ fontWeight: 520 }}>{m.name}</div>
-                      <div className="text-[0.75rem] text-ink-500 truncate">{m.email}</div>
-                    </div>
+                    <Checkbox checked={isIn} />
+                    <InitialsAvatar name={name} size={26} />
+                    <span className="text-[0.8125rem] text-ink-800">{name}</span>
                   </div>
                 );
               })}
-              {filtered.length === 0 && (
-                <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-400">No users match your search.</div>
-              )}
             </div>
           </div>
         </div>
+      </Modal>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-paper-200 flex items-center justify-between shrink-0">
-          <span className="text-[0.75rem] text-ink-500 tabular-nums">{selected.size} member{selected.size !== 1 ? 's' : ''} selected</span>
-          <button onClick={onClose} className="px-6 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] transition-colors cursor-pointer" style={{ fontWeight: 600 }}>
-            Create Team
-          </button>
-        </div>
-      </div>
-      </motion.div>
+      <ConfirmationModal
+        open={confirmDelete}
+        title="Delete team?"
+        description={<>This will delete <span className="font-semibold">{team.name}</span> and unassign its members.</>}
+        confirmLabel="Delete Team"
+        tone="destructive"
+        onConfirm={remove}
+        onClose={() => setConfirmDelete(false)}
+      />
     </>
   );
 }
 
+interface MockRole {
+  name: string;
+  users: number;
+  createdBy: string;
+  type: 'System' | 'Custom';
+  permissions: number;
+  lastModified: string;
+}
+
+/* ── Role detail drawer (editable — writes back to the live permission model) ── */
+function RoleDetailDrawer({ role, userCount, onClose }: { role: Role; userCount: number; onClose: () => void }) {
+  const { addToast } = useToast();
+  const { updateRolePermissions } = useCurrentUser();
+  const logEvent = useAuditLog();
+  const [enabled, setEnabled] = useState<Set<string>>(() => new Set(role.permissions));
+
+  const toggle = (key: string) =>
+    setEnabled(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
+    if (preset === 'none') { setEnabled(new Set()); return; }
+    const n = new Set<string>();
+    DETAILED_PERMISSIONS.forEach(g => {
+      if (preset === 'full') g.perms.forEach(p => n.add(p.key));
+      else if (g.perms[0]) n.add(g.perms[0].key);
+    });
+    setEnabled(n);
+  };
+
+  const save = () => {
+    updateRolePermissions(role.id, [...enabled] as PermissionKey[]);
+    logEvent({ action: 'Update', description: `Updated permissions for role "${role.name}" (${enabled.size} enabled)`, module: 'Admin', entity: 'Role' });
+    addToast({ message: `${role.name} permissions updated`, type: 'success' });
+    onClose();
+  };
+
+  const presetChip = (active: boolean) =>
+    `px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${
+      active ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-canvas'
+    }`;
+
+  return (
+    <Modal
+      title={role.name}
+      subtitle={`${role.type} role · ${userCount} ${userCount === 1 ? 'user' : 'users'}`}
+      width="max-w-[620px]"
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+            <Info size={13} /> Changes apply to everyone with this role.
+          </span>
+          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+          <button className={BTN_PRIMARY} onClick={save}>Save Changes</button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <section className="grid grid-cols-2 gap-x-8 gap-y-5">
+          <DetailField label="Type">
+            <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] font-medium ${
+              role.type === 'System' ? 'bg-evidence-50 text-evidence-700' : 'bg-draft-50 text-draft-700'
+            }`}>{role.type}</span>
+          </DetailField>
+          <DetailField label="Created By"><span className="text-[0.8125rem] text-ink-800">{role.createdBy}</span></DetailField>
+        </section>
+
+        <div className="border-t border-canvas-border pt-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[0.875rem] font-semibold text-ink-900">Permissions</h3>
+            <div className="flex items-center gap-1">
+              <button onClick={() => applyPreset('none')} className={presetChip(enabled.size === 0)}>None</button>
+              <button onClick={() => applyPreset('readonly')} className={presetChip(false)}>View Only</button>
+              <button onClick={() => applyPreset('full')} className={presetChip(enabled.size === TOTAL_PERMS)}>Full Access</button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-1.5 rounded-full bg-canvas-border overflow-hidden">
+              <div className="h-full rounded-full bg-brand-600 transition-all duration-200" style={{ width: `${(enabled.size / TOTAL_PERMS) * 100}%` }} />
+            </div>
+            <span className="text-[0.75rem] text-ink-500 tabular-nums shrink-0">{enabled.size}/{TOTAL_PERMS}</span>
+          </div>
+
+          <div className="border border-canvas-border rounded-lg overflow-hidden">
+            {DETAILED_PERMISSIONS.map((group, gi) => (
+              <div key={group.group}>
+                <div className={`px-4 py-2.5 bg-canvas ${gi > 0 ? 'border-t border-canvas-border' : ''}`}>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
+                </div>
+                {group.perms.map(perm => {
+                  const isOn = enabled.has(perm.key);
+                  return (
+                    <div
+                      key={perm.key}
+                      onClick={() => toggle(perm.key)}
+                      className="flex items-center justify-between px-4 py-2.5 border-t border-canvas-border/60 cursor-pointer hover:bg-canvas transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[0.8125rem] font-medium text-ink-800">{perm.name}</div>
+                        <div className="text-[0.75rem] text-ink-500">{perm.desc}</div>
+                      </div>
+                      <Toggle checked={isOn} />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Create role drawer ── */
+function CreateRoleDrawer({ onClose }: { onClose: () => void }) {
+  const { addToast } = useToast();
+  const { addRole } = useCurrentUser();
+  const logEvent = useAuditLog();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [enabled, setEnabled] = useState<Set<string>>(new Set());
+  const totalPerms = TOTAL_PERMS;
+
+  const togglePerm = (key: string) => {
+    setEnabled(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  };
+
+  const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
+    if (preset === 'none') { setEnabled(new Set()); return; }
+    const n = new Set<string>();
+    DETAILED_PERMISSIONS.forEach(g => {
+      if (preset === 'full') g.perms.forEach(p => n.add(p.key));
+      else if (g.perms[0]) n.add(g.perms[0].key);
+    });
+    setEnabled(n);
+  };
+
+  const create = () => {
+    if (!name.trim()) { addToast({ message: 'Role name is required', type: 'error' }); return; }
+    addRole({
+      id: `role-${Date.now()}`,
+      name: name.trim(),
+      type: 'Custom',
+      description: description.trim(),
+      createdBy: 'You',
+      lastModified: 'Just now',
+      permissions: [...enabled] as PermissionKey[],
+    });
+    logEvent({ action: 'Create', description: `Created role "${name.trim()}" with ${enabled.size} permissions`, module: 'Admin', entity: 'Role' });
+    onClose();
+    addToast({ message: `Role "${name.trim()}" created`, type: 'success' });
+  };
+
+  const presetChip = (active: boolean) =>
+    `px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${
+      active ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-canvas'
+    }`;
+
+  return (
+    <Modal
+      title="Create Role"
+      subtitle="Define a role and choose its permissions."
+      width="max-w-[620px]"
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+            <Info size={13} /> Editable later from role settings.
+          </span>
+          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
+          <button className={BTN_PRIMARY} onClick={create}>Create Role</button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div>
+          <label className={FIELD_LABEL}>Role Name <span className="text-risk-700">*</span></label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter role name" className={FIELD_INPUT} />
+        </div>
+        <div>
+          <label className={FIELD_LABEL}>Description <span className="text-risk-700">*</span></label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Enter a description..." className={FIELD_TEXTAREA} />
+        </div>
+
+        <div className="border-t border-canvas-border pt-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[0.875rem] font-semibold text-ink-900">Permissions</h3>
+            <div className="flex items-center gap-1">
+              <button onClick={() => applyPreset('none')} className={presetChip(enabled.size === 0)}>None</button>
+              <button onClick={() => applyPreset('readonly')} className={presetChip(false)}>View Only</button>
+              <button onClick={() => applyPreset('full')} className={presetChip(enabled.size === totalPerms)}>Full Access</button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-1.5 rounded-full bg-canvas-border overflow-hidden">
+              <div className="h-full rounded-full bg-brand-600 transition-all duration-200" style={{ width: `${(enabled.size / totalPerms) * 100}%` }} />
+            </div>
+            <span className="text-[0.75rem] text-ink-500 tabular-nums shrink-0">{enabled.size}/{totalPerms}</span>
+          </div>
+
+          <div className="border border-canvas-border rounded-lg overflow-hidden">
+            {DETAILED_PERMISSIONS.map((group, gi) => (
+              <div key={group.group}>
+                <div className={`px-4 py-2.5 bg-canvas ${gi > 0 ? 'border-t border-canvas-border' : ''}`}>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
+                </div>
+                {group.perms.map(perm => {
+                  const isOn = enabled.has(perm.key);
+                  return (
+                    <div
+                      key={perm.key}
+                      onClick={() => togglePerm(perm.key)}
+                      className="flex items-center justify-between px-4 py-2.5 border-t border-canvas-border/60 cursor-pointer hover:bg-canvas transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[0.8125rem] font-medium text-ink-800">{perm.name}</div>
+                        <div className="text-[0.75rem] text-ink-500">{perm.desc}</div>
+                      </div>
+                      <Toggle checked={isOn} />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
+  { key: 'name', label: 'Role', sortable: true, width: '32%' },
+  {
+    key: 'type',
+    label: 'Type',
+    sortable: true,
+    width: '11%',
+    render: (item) => (
+      <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] font-medium ${
+        item.type === 'System' ? 'bg-evidence-50 text-evidence-700' : 'bg-draft-50 text-draft-700'
+      }`}>{item.type as string}</span>
+    ),
+  },
+  {
+    key: 'users',
+    label: 'Users',
+    sortable: true,
+    width: '9%',
+    render: (item) => {
+      const n = item.users as number;
+      return <span className={`text-[0.8125rem] tabular-nums ${n === 0 ? 'text-ink-400' : 'font-medium text-ink-800'}`}>{n}</span>;
+    },
+  },
+  {
+    key: 'permissions',
+    label: 'Permissions',
+    sortable: true,
+    width: '17%',
+    render: (item) => {
+      const n = item.permissions as number;
+      const pct = Math.min(100, (n / TOTAL_PERMS) * 100);
+      const full = n >= TOTAL_PERMS;
+      return (
+        <div className="flex items-center gap-2.5">
+          <div className="flex-1 h-1.5 rounded-full bg-canvas-border max-w-[84px] overflow-hidden">
+            <div className={`h-full rounded-full ${full ? 'bg-brand-600' : 'bg-brand-500'}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-[0.75rem] tabular-nums whitespace-nowrap"><span className="font-semibold text-ink-800">{n}</span><span className="text-ink-400">/{TOTAL_PERMS}</span></span>
+        </div>
+      );
+    },
+  },
+  {
+    key: 'createdBy',
+    label: 'Created by',
+    sortable: true,
+    width: '13%',
+    render: (item) => <span className="text-[0.8125rem] text-ink-600 whitespace-nowrap">{item.createdBy as string}</span>,
+  },
+  {
+    key: 'lastModified',
+    label: 'Updated',
+    sortable: true,
+    width: '12%',
+    render: (item) => <span className="text-[0.75rem] text-ink-500 tabular-nums whitespace-nowrap">{item.lastModified as string}</span>,
+  },
+  { key: 'action', label: '', sortable: false, align: 'right' as const, width: '150px' },
+];
+
+function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
+  const { roles } = useCurrentUser();
+  const [viewRole, setViewRole] = useState<Role | null>(null);
+
+  // User counts per role, derived from the people→role mapping.
+  const userCounts = Object.values(PERSON_ROLES).reduce<Record<string, number>>((acc, rid) => {
+    acc[rid] = (acc[rid] ?? 0) + 1; return acc;
+  }, {});
+  const roleById = Object.fromEntries(roles.map(r => [r.id, r] as const));
+
+  type RoleRow = MockRole & Record<string, unknown>;
+  const tableData: RoleRow[] = roles.map(r => ({
+    id: r.id,
+    name: r.name,
+    description: r.description ?? '',
+    type: r.type,
+    users: userCounts[r.id] ?? 0,
+    permissions: r.permissions.length,
+    createdBy: r.createdBy,
+    lastModified: r.lastModified,
+  }));
+
+  const columnsWithAction = roleColumns.map(col => {
+    if (col.key === 'name') {
+      return {
+        ...col,
+        render: (item: RoleRow) => (
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-brand-50' : 'bg-canvas'}`}>
+              <Shield size={14} className={item.type === 'System' ? 'text-brand-700' : 'text-ink-400'} />
+            </div>
+            <div className="min-w-0">
+              <button onClick={() => setViewRole(roleById[item.id as string])} className="block truncate text-[0.8125rem] font-semibold text-ink-800 hover:text-brand-700 cursor-pointer text-left">{item.name as string}</button>
+              {(item.description as string) ? (
+                <div className="text-[0.75rem] text-ink-500 truncate">{item.description as string}</div>
+              ) : null}
+            </div>
+          </div>
+        ),
+      };
+    }
+    if (col.key === 'action') {
+      return {
+        ...col,
+        render: (item: RoleRow) => (
+          <div className="flex items-center justify-end gap-1">
+            <button className={BTN_ROW} onClick={() => setViewRole(roleById[item.id as string])}><Pencil size={12} />Edit</button>
+            <button className={BTN_ROW} onClick={onCreateRole}><CopyPlus size={12} />Duplicate</button>
+          </div>
+        ),
+      };
+    }
+    return col;
+  });
+
+  const viewRoleUsers = viewRole ? (userCounts[viewRole.id] ?? 0) : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+    >
+      <SmartTable
+        columns={columnsWithAction}
+        data={tableData}
+        keyField="id"
+        searchable
+        searchPlaceholder="Search roles..."
+        searchKeys={['name', 'createdBy']}
+        paginated
+        pageSize={10}
+        emptyMessage="No roles found."
+      />
+      <AnimatePresence>
+        {viewRole && <RoleDetailDrawer key="role-detail" role={viewRole} userCount={viewRoleUsers} onClose={() => setViewRole(null)} />}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTeam: () => void }) {
-  const tableData = mockUsers.map(u => ({ ...u } as MockUser & Record<string, unknown>));
+  const { users, teams, updateUser } = useAdminData();
+  const tableData = users.map(u => ({ ...u } as MockUser & Record<string, unknown>));
   const [viewUser, setViewUser] = useState<MockUser | null>(null);
   const [editUser, setEditUser] = useState<MockUser | null>(null);
   const [teamDropdown, setTeamDropdown] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<'users' | 'teams'>('users');
+  const [editTeam, setEditTeam] = useState<AdminTeam | null>(null);
   const teamDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -590,31 +1042,35 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
 
   type UserRow = MockUser & Record<string, unknown>;
 
+  const teamsData = teams;
+
+  const counts = {
+    active: users.filter(u => u.status === 'Active').length,
+    invited: users.filter(u => u.status === 'Invited').length,
+    suspended: users.filter(u => u.status === 'Suspended').length,
+    inactive: users.filter(u => u.status === 'Inactive' || u.status === 'Locked').length,
+  };
+
   const columnsWithAction: Column<UserRow>[] = userColumns.map(col => {
     if (col.key === 'name') {
       return {
         ...col,
-        render: (item: UserRow, i: number) => {
-          const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-          return (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: color }}>
-                {item.initials as string}
-              </div>
-              <div>
-                <button onClick={() => setViewUser(item as unknown as MockUser)} className="text-[0.8125rem] font-semibold text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
-                <div className="text-[0.75rem] text-text-muted mt-0.5">{item.email as string}</div>
-              </div>
+        render: (item: UserRow) => (
+          <div className="flex items-center gap-3">
+            <InitialsAvatar name={item.name as string} size={32} />
+            <div className="min-w-0">
+              <button onClick={() => setViewUser(item as unknown as MockUser)} className="text-[0.8125rem] font-semibold text-ink-800 hover:text-brand-700 cursor-pointer text-left">{item.name as string}</button>
+              <div className="text-[0.75rem] text-ink-500 mt-0.5">{item.email as string}</div>
             </div>
-          );
-        },
+          </div>
+        ),
       };
     }
     if (col.key === 'role') {
       return {
         ...col,
         render: (item: UserRow) => (
-          <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[0.8125rem] text-text-secondary hover:text-primary cursor-pointer group">
+          <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[0.8125rem] text-ink-600 hover:text-brand-700 cursor-pointer group">
             {item.role as string}
             <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
@@ -628,38 +1084,37 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
           const teamName = item.team as string;
           const rowId = item.email as string;
           const isOpen = teamDropdown === rowId;
-          const teams = ['SOX Audit', 'IFC Team', 'Engineering', 'Management'];
+          const teamNames = teams.map(t => t.name);
+          const isUnassigned = teamName === '—';
 
           return (
             <div className="relative" ref={isOpen ? teamDropdownRef : undefined}>
               <button
                 onClick={() => setTeamDropdown(isOpen ? null : rowId)}
-                className={`inline-flex items-center gap-1 text-[0.8125rem] cursor-pointer transition-colors ${
-                  teamName === '\u2014' ? 'text-text-muted hover:text-primary' : 'text-text-secondary hover:text-primary'
-                }`}
+                className={`inline-flex items-center gap-1 text-[0.8125rem] cursor-pointer transition-colors ${isUnassigned ? 'text-ink-400 hover:text-brand-700' : 'text-ink-600 hover:text-brand-700'}`}
               >
-                {teamName === '\u2014' ? 'Assign team' : teamName}
-                <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180 text-primary' : 'opacity-0 group-hover:opacity-100'}`} />
+                {isUnassigned ? 'Assign team' : teamName}
+                <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180 text-brand-700' : ''}`} />
               </button>
               {isOpen && (
-                <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-md py-1 z-30" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05)' }}>
-                  {teams.map(t => (
+                <div className="absolute left-0 top-full mt-1 w-44 bg-canvas-elevated border border-canvas-border rounded-lg shadow-sm py-1 z-30">
+                  {teamNames.map(t => (
                     <button
                       key={t}
-                      onClick={() => setTeamDropdown(null)}
+                      onClick={() => { updateUser(rowId, { team: t }); setTeamDropdown(null); }}
                       className={`w-full text-left px-3 py-1.5 text-[0.8125rem] cursor-pointer transition-colors ${
-                        t === teamName ? 'text-primary font-semibold bg-primary-light' : 'text-text hover:bg-gray-50'
+                        t === teamName ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas'
                       }`}
                     >
                       {t}
                     </button>
                   ))}
-                  {teamName !== '\u2014' && (
+                  {!isUnassigned && (
                     <>
-                      <div className="h-px bg-border-light my-1" />
+                      <div className="h-px bg-canvas-border my-1" />
                       <button
-                        onClick={() => setTeamDropdown(null)}
-                        className="w-full text-left px-3 py-1.5 text-[0.8125rem] text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+                        onClick={() => { updateUser(rowId, { team: '—' }); setTeamDropdown(null); }}
+                        className="w-full text-left px-3 py-1.5 text-[0.8125rem] text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
                       >
                         Remove from team
                       </button>
@@ -675,34 +1130,16 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
     if (col.key === 'action') {
       return {
         ...col,
-        width: '130px',
-        label: '',
         render: (item: UserRow) => (
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setViewUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
-              <Eye size={12} />
-              View
-            </button>
-            <button onClick={() => setEditUser(item as unknown as MockUser)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
-              <Pencil size={12} />
-              Edit
-            </button>
+          <div className="flex items-center justify-end gap-1">
+            <button className={BTN_ROW} onClick={() => setViewUser(item as unknown as MockUser)}><Eye size={12} />View</button>
+            <button className={BTN_ROW} onClick={() => setEditUser(item as unknown as MockUser)}><Pencil size={12} />Edit</button>
           </div>
         ),
       };
     }
     return col;
   });
-
-  const [subTab, setSubTab] = useState<'users' | 'teams'>('users');
-  const [editTeam, setEditTeam] = useState<{ name: string; members: string[] } | null>(null);
-
-  // Build teams from user data
-  const teamsData = (() => {
-    const map: Record<string, string[]> = {};
-    mockUsers.forEach(u => { if (u.team !== '\u2014') { if (!map[u.team]) map[u.team] = []; map[u.team].push(u.name); } });
-    return Object.entries(map).map(([name, members]) => ({ name, members }));
-  })();
 
   return (
     <motion.div
@@ -711,686 +1148,122 @@ function UsersTab({ onInvite, onCreateTeam }: { onInvite: () => void; onCreateTe
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
     >
-      {/* Toolbar: sub-tabs + stats + CTAs */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          {/* Sub-tab toggle */}
-          <div className="flex items-center gap-0.5 bg-surface-2/50 rounded-lg p-0.5 border border-border-light">
+      {/* Toolbar: sub-tab toggle + stats + CTAs */}
+      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+        <div className="flex items-center gap-5">
+          {/* Segmented control — sliding white pill, matches the Knowledge Hub
+              filter tabs (motion layoutId + subtle shadow). */}
+          <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit">
             {([
-              { key: 'users' as const, label: 'Users', count: mockUsers.length },
+              { key: 'users' as const, label: 'Users', count: users.length },
               { key: 'teams' as const, label: 'Teams', count: teamsData.length },
-            ]).map(t => (
-              <button
-                key={t.key}
-                onClick={() => setSubTab(t.key)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
-                  subTab === t.key ? 'bg-white text-primary border border-border-light' : 'text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                {t.label}
-                <span className={`text-[0.75rem] tabular-nums px-1.5 rounded-full ${
-                  subTab === t.key ? 'bg-primary-light text-primary font-semibold' : 'bg-gray-100 text-text-muted'
-                }`}>{t.count}</span>
-              </button>
-            ))}
+            ]).map(t => {
+              const isActive = subTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setSubTab(t.key)}
+                  className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] transition-colors cursor-pointer ${
+                    isActive ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="admin-subtab-pill"
+                      className="absolute inset-0 bg-canvas-elevated rounded-md shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {t.label}
+                    <span className={`tabular-nums font-bold ${isActive ? 'text-brand-700' : 'text-ink-400'}`}>{t.count}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <span className="w-px h-5 bg-border" />
-
-          {/* Stats */}
-          {[
-            { label: 'Active', count: mockUsers.filter(u => u.status === 'Active').length, text: 'text-emerald-700' },
-            { label: 'Invited', count: mockUsers.filter(u => u.status === 'Invited').length, text: 'text-blue-700' },
-            { label: 'Suspended', count: mockUsers.filter(u => u.status === 'Suspended').length, text: 'text-orange-700' },
-            { label: 'Inactive', count: mockUsers.filter(u => u.status === 'Inactive' || u.status === 'Locked').length, text: 'text-gray-500' },
-          ].filter(s => s.count > 0).map(s => (
-            <span key={s.label} className={`text-[0.75rem] font-medium ${s.text} tabular-nums`}>
-              {s.label}: {s.count}
-            </span>
-          ))}
+          {/* Status breakdown — semantic dot + count, only on the Users view. */}
+          {subTab === 'users' && (
+            <div className="hidden md:flex items-center gap-4 text-[0.75rem] tabular-nums">
+              {([
+                { label: 'Active',    n: counts.active,    dot: 'bg-compliant' },
+                { label: 'Invited',   n: counts.invited,   dot: 'bg-brand-400' },
+                { label: 'Suspended', n: counts.suspended, dot: 'bg-mitigated' },
+                { label: 'Inactive',  n: counts.inactive,  dot: 'bg-ink-300' },
+              ]).map(s => (
+                <span key={s.label} className="inline-flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                  <span className="font-semibold text-ink-800">{s.n}</span>
+                  <span className="text-ink-500">{s.label}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* CTAs */}
         <div className="flex items-center gap-2">
-          <button onClick={onCreateTeam} className="flex items-center gap-2 px-4 h-8 rounded-md border border-border bg-white text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-            <Plus size={13} />
-            Create Team
-          </button>
-          <button onClick={onInvite} className="flex items-center gap-2 px-4 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-            <UserPlus size={13} />
-            Invite User
-          </button>
+          <button className={BTN_CTA_OUTLINE} onClick={onCreateTeam}><Plus size={14} />Create Team</button>
+          <button className={BTN_CTA_PRIMARY} onClick={onInvite}><UserPlus size={14} />Invite User</button>
         </div>
       </div>
 
       {subTab === 'users' ? (
-        <>
-          <SmartTable
-            columns={columnsWithAction}
-            data={tableData}
-            keyField="email"
-            searchable
-            searchPlaceholder="Search by name or email..."
-            searchKeys={['name', 'email', 'role', 'team']}
-            paginated
-            pageSize={10}
-            emptyMessage="No users match your search."
-          />
-          {viewUser && <ViewUserModal user={viewUser} onClose={() => setViewUser(null)} />}
-          {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} />}
-        </>
+        <SmartTable
+          columns={columnsWithAction}
+          data={tableData}
+          keyField="email"
+          searchable
+          searchPlaceholder="Search by name or email..."
+          searchKeys={['name', 'email', 'role', 'team']}
+          paginated
+          pageSize={10}
+          emptyMessage="No users match your search."
+        />
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            {teamsData.map(team => (
-              <div
-                key={team.name}
-                className="bg-white rounded-lg border border-border-light p-5 hover:border-primary/30 transition-colors cursor-pointer"
-                onClick={() => setEditTeam(team)}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[0.875rem] font-semibold text-text">{team.name}</h3>
-                  <button
-                    onClick={e => { e.stopPropagation(); setEditTeam(team); }}
-                    className="p-1 rounded hover:bg-gray-100 transition-colors cursor-pointer text-text-muted hover:text-primary"
-                    title="Edit team"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                </div>
-                <div className="text-[0.75rem] text-text-muted mb-3 tabular-nums">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</div>
-                <div className="flex items-center -space-x-2">
-                  {team.members.slice(0, 5).map((m, i) => {
-                    const initials = m.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-                    return (
-                      <div key={i} className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white border-2 border-white" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
-                        {initials}
-                      </div>
-                    );
-                  })}
-                  {team.members.length > 5 && (
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold text-text-muted bg-gray-100 border-2 border-white tabular-nums">
-                      +{team.members.length - 5}
-                    </div>
-                  )}
-                </div>
+        <div className="grid grid-cols-3 gap-4">
+          {teamsData.map(team => (
+            <div
+              key={team.name}
+              className="bg-canvas-elevated rounded-lg border border-canvas-border p-5 hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer"
+              onClick={() => setEditTeam(team)}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[0.875rem] font-semibold text-ink-900">{team.name}</h3>
+                <button
+                  onClick={e => { e.stopPropagation(); setEditTeam(team); }}
+                  className="p-1 rounded hover:bg-canvas-border/60 transition-colors cursor-pointer text-ink-400 hover:text-brand-700"
+                  title="Edit team"
+                >
+                  <Pencil size={13} />
+                </button>
               </div>
-            ))}
-          </div>
-
-          {/* Edit Team Modal */}
-          {editTeam && (
-            <EditTeamModal team={editTeam} onClose={() => setEditTeam(null)} />
-          )}
-        </>
+              <div className="text-[0.75rem] text-ink-500 mb-3 tabular-nums">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</div>
+              <div className="flex items-center -space-x-2">
+                {team.members.slice(0, 5).map((m, i) => (
+                  <div key={i} className="ring-2 ring-canvas-elevated rounded-full">
+                    <InitialsAvatar name={m} size={28} />
+                  </div>
+                ))}
+                {team.members.length > 5 && (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums">
+                    +{team.members.length - 5}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+
+      <AnimatePresence>
+        {viewUser && <UserDetailDrawer key="user-detail" user={viewUser} onClose={() => setViewUser(null)} />}
+        {editUser && <UserEditDrawer key="user-edit" user={editUser} onClose={() => setEditUser(null)} />}
+        {editTeam && <EditTeamDrawer key="team-edit" team={editTeam} onClose={() => setEditTeam(null)} />}
+      </AnimatePresence>
     </motion.div>
   );
 }
-
-function EditTeamModal({ team, onClose }: { team: { name: string; members: string[] }; onClose: () => void }) {
-  const [memberSearch, setMemberSearch] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
-
-  const allUsers = mockUsers.map(u => u.name);
-  const [members, setMembers] = useState<Set<string>>(new Set(team.members));
-
-  const filtered = allUsers.filter(name =>
-    !memberSearch || name.toLowerCase().includes(memberSearch.toLowerCase())
-  );
-
-  const toggle = (name: string) => {
-    setMembers(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      return next;
-    });
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-8" onClick={onClose}
-      >
-      <div className="w-[460px] max-h-[80vh] bg-white rounded-lg border border-border-light flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 h-12 border-b border-border-light shrink-0">
-          <h2 className="text-[0.875rem] font-semibold text-text">Edit Team</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-5">
-            <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Team Name</label>
-            <input defaultValue={team.name} className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
-          </div>
-
-          <div className="h-px bg-border-light" />
-
-          <div className="px-6 py-5">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[0.8125rem] font-medium text-text">Members</label>
-              <span className="text-[0.75rem] text-text-muted tabular-nums">{members.size} selected</span>
-            </div>
-            <p className="text-[0.75rem] text-text-muted mb-3">Add or remove members from this team.</p>
-
-            <div className="flex items-center gap-2 px-3 h-9 rounded-md border border-border bg-surface-2/30 mb-3 focus-within:border-primary/50 transition-colors">
-              <Search size={13} className="text-text-muted shrink-0" />
-              <input
-                placeholder="Search members"
-                value={memberSearch}
-                onChange={e => setMemberSearch(e.target.value)}
-                className="flex-1 bg-transparent outline-none text-[0.8125rem] text-text placeholder:text-text-muted"
-              />
-            </div>
-
-            <div className="border border-border-light rounded-md overflow-hidden max-h-[240px] overflow-y-auto">
-              {filtered.map((name, i) => {
-                const isIn = members.has(name);
-                const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-                return (
-                  <div
-                    key={name + i}
-                    onClick={() => toggle(name)}
-                    className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${i > 0 ? 'border-t border-border-light/60' : ''} ${isIn ? 'bg-primary-light/50' : 'hover:bg-gray-50'}`}
-                  >
-                    <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${isIn ? 'bg-primary' : 'border border-gray-300'}`}>
-                      {isIn && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[0.75rem] font-bold text-white shrink-0" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
-                      {initials}
-                    </div>
-                    <span className="text-[0.8125rem] text-text">{name}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-t border-border-light shrink-0">
-          {deleteConfirm ? (
-            <div>
-              <p className="text-[0.8125rem] text-text mb-3">Are you sure you want to delete team <span className="font-semibold">{team.name}</span>? Members will be unassigned.</p>
-              <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setDeleteConfirm(false)} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button onClick={onClose} className="flex items-center gap-1.5 px-4 h-8 rounded-md bg-red-600 hover:bg-red-700 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-                  <Trash2 size={13} />
-                  Delete Team
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[0.8125rem] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
-                <Trash2 size={13} />
-                Delete Team
-              </button>
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      </motion.div>
-    </>
-  );
-}
-
-interface MockRole {
-  name: string;
-  users: number;
-  createdBy: string;
-  type: 'System' | 'Custom';
-  permissions: number;
-  lastModified: string;
-}
-
-/* ── View Role Modal ── */
-function ViewRoleModal({ role, onClose }: { role: MockRole; onClose: () => void }) {
-  // Simulate enabled permissions based on role
-  const allKeys = DETAILED_PERMISSIONS.flatMap(g => g.perms.map(p => p.key));
-  const viewKeys = DETAILED_PERMISSIONS.flatMap(g => g.perms.length > 0 ? [g.perms[0].key] : []);
-  const rolePerms = role.name === 'System Admin'
-    ? allKeys
-    : role.name === 'Enabler'
-    ? allKeys.filter((_, i) => i % 2 === 0 || i < 10) // ~half permissions
-    : viewKeys; // view-only for others
-
-  const enabledSet = new Set(rolePerms);
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}
-      >
-      <div className="w-[580px] max-h-[85vh] bg-white rounded-lg border border-border flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 h-12 border-b border-border shrink-0">
-          <h2 className="text-[0.875rem] font-semibold text-text">Role Details</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {/* Role info */}
-          <div className="px-6 py-5 border-b border-border">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[1rem] font-semibold text-text">{role.name}</h3>
-              <span className="px-2.5 py-1 rounded-full bg-primary-light text-[0.75rem] font-semibold text-primary tabular-nums">{role.users} users</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-[0.75rem] text-text-muted mb-0.5">Created By</div>
-                <div className="text-[0.8125rem] text-text">{role.createdBy}</div>
-              </div>
-              <div>
-                <div className="text-[0.75rem] text-text-muted mb-0.5">Permissions</div>
-                <div className="text-[0.8125rem] text-text tabular-nums">{enabledSet.size} enabled</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Permissions (read-only) */}
-          <div className="px-6 py-5">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[0.8125rem] font-semibold text-text">Permissions</h4>
-              <span className="text-[0.75rem] text-text-muted tabular-nums">{enabledSet.size} enabled</span>
-            </div>
-            <div>
-              {DETAILED_PERMISSIONS.map((group, gi) => (
-                <div key={group.group}>
-                  <div className={`py-2.5 ${gi > 0 ? 'border-t border-border mt-1' : ''}`}>
-                    <span className="text-[0.8125rem] font-semibold text-text">{group.group}</span>
-                  </div>
-                  {group.perms.map(perm => {
-                    const isOn = enabledSet.has(perm.key);
-                    return (
-                      <div key={perm.key} className="flex items-center justify-between py-2.5 pl-3 border-t border-border/30">
-                        <div>
-                          <div className="text-[0.8125rem] font-medium text-text">{perm.name}</div>
-                          <div className="text-[0.75rem] text-text-muted">{perm.desc}</div>
-                        </div>
-                        <div className={`w-10 h-[22px] rounded-full shrink-0 ml-4 relative ${isOn ? 'bg-brand-400' : 'bg-gray-200'}`}>
-                          <div className={`absolute top-[3px] w-4 h-4 rounded-full bg-white ${isOn ? 'left-[22px]' : 'left-[3px]'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-t border-border flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 h-8 rounded-md border border-border text-[0.8125rem] font-medium text-text-secondary hover:bg-gray-50 transition-colors cursor-pointer">
-            Close
-          </button>
-        </div>
-      </div>
-      </motion.div>
-    </>
-  );
-}
-
-const mockRoles: MockRole[] = [
-  { name: 'System Admin', users: 2, createdBy: 'System', type: 'System', permissions: 48, lastModified: 'Jan 10, 2026' },
-  { name: 'Enabler', users: 14, createdBy: 'System', type: 'System', permissions: 30, lastModified: 'Feb 05, 2026' },
-  { name: 'Auditor', users: 0, createdBy: 'System', type: 'System', permissions: 22, lastModified: 'Jan 10, 2026' },
-  { name: 'Risk Owner', users: 0, createdBy: 'System', type: 'System', permissions: 15, lastModified: 'Jan 10, 2026' },
-  { name: 'test manik role', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 8, lastModified: 'Apr 18, 2026' },
-  { name: 'report', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 6, lastModified: 'Apr 15, 2026' },
-  { name: 'last role', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 3, lastModified: 'Apr 12, 2026' },
-  { name: 'Team Edit UI Test', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 5, lastModified: 'Apr 10, 2026' },
-  { name: 'Test invite user final', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 4, lastModified: 'Apr 08, 2026' },
-  { name: '2test role per final', users: 0, createdBy: 'Tushar Goel', type: 'Custom', permissions: 2, lastModified: 'Apr 05, 2026' },
-];
-
-const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
-  {
-    key: 'name',
-    label: 'Role Name',
-    sortable: true,
-    width: '25%',
-    render: (item) => (
-      <div className="flex items-center gap-2.5">
-        <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-primary-light' : 'bg-gray-100'}`}>
-          <Shield size={13} className={item.type === 'System' ? 'text-primary' : 'text-text-muted'} />
-        </div>
-        <span className="text-[0.8125rem] font-medium text-text">{item.name as string}</span>
-      </div>
-    ),
-  },
-  {
-    key: 'type',
-    label: 'Type',
-    sortable: true,
-    width: '12%',
-    render: (item) => (
-      <span className={`inline-flex px-2 py-0.5 rounded-full text-[0.75rem] font-medium ${
-        item.type === 'System' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-text-secondary'
-      }`}>{item.type as string}</span>
-    ),
-  },
-  {
-    key: 'users',
-    label: 'Users',
-    sortable: true,
-    width: '10%',
-    render: (item) => (
-      <span className="text-[0.8125rem] tabular-nums text-text">{item.users as number}</span>
-    ),
-  },
-  {
-    key: 'permissions',
-    label: 'Permissions',
-    sortable: true,
-    width: '14%',
-    render: (item) => (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 rounded-full bg-gray-100 max-w-[60px]">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, ((item.permissions as number) / 48) * 100)}%` }} />
-        </div>
-        <span className="text-[0.75rem] tabular-nums text-text-muted">{item.permissions as number}</span>
-      </div>
-    ),
-  },
-  {
-    key: 'createdBy',
-    label: 'Created By',
-    sortable: true,
-    width: '18%',
-  },
-  {
-    key: 'lastModified',
-    label: 'Last Modified',
-    sortable: true,
-    width: '14%',
-    render: (item) => (
-      <span className="text-[0.75rem] text-text-muted tabular-nums">{item.lastModified as string}</span>
-    ),
-  },
-  {
-    key: 'action',
-    label: 'Quick Actions',
-    sortable: false,
-    align: 'right' as const,
-    width: '140px',
-  },
-];
-
-function RolesTab({ onCreateRole }: { onCreateRole: () => void }) {
-  const tableData = mockRoles.map(r => ({ ...r } as MockRole & Record<string, unknown>));
-  const [viewRole, setViewRole] = useState<MockRole | null>(null);
-  const [duplicateRole, setDuplicateRole] = useState(false);
-
-  type RoleRow = MockRole & Record<string, unknown>;
-
-  const columnsWithAction = roleColumns.map(col => {
-    if (col.key === 'name') {
-      return {
-        ...col,
-        render: (item: RoleRow) => (
-          <div className="flex items-center gap-2.5">
-            <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-primary-light' : 'bg-gray-100'}`}>
-              <Shield size={13} className={item.type === 'System' ? 'text-primary' : 'text-text-muted'} />
-            </div>
-            <button onClick={() => setViewRole(item as unknown as MockRole)} className="text-[0.8125rem] font-medium text-text hover:text-primary cursor-pointer text-left">{item.name as string}</button>
-          </div>
-        ),
-      };
-    }
-    if (col.key === 'action') {
-      return {
-        ...col,
-        width: '190px',
-        render: (item: RoleRow) => (
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setViewRole(item as unknown as MockRole)} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
-              <Eye size={12} />
-              View
-            </button>
-            <button onClick={() => { setDuplicateRole(true); onCreateRole(); }} className="flex items-center gap-1 px-2.5 h-7 rounded-md border border-border text-[0.75rem] font-medium text-text-secondary bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
-              <CopyPlus size={12} />
-              Duplicate
-            </button>
-            <button onClick={() => navigator.clipboard.writeText(item.name as string)} title="Copy Role ID" className="flex items-center justify-center w-7 h-7 rounded-md border border-border text-text-muted bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer">
-              <Copy size={12} />
-            </button>
-          </div>
-        ),
-      };
-    }
-    return col;
-  });
-
-  void duplicateRole;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-    >
-      <SmartTable
-        columns={columnsWithAction}
-        data={tableData}
-        keyField="name"
-        searchable
-        searchPlaceholder="Search..."
-        searchKeys={['name', 'createdBy']}
-        paginated
-        pageSize={10}
-        emptyMessage="No roles found."
-      />
-      {viewRole && <ViewRoleModal role={viewRole} onClose={() => setViewRole(null)} />}
-    </motion.div>
-  );
-}
-
-// Using DETAILED_PERMISSIONS for all permission UI
-
-// Detailed permission structure matching the real platform
-const DETAILED_PERMISSIONS = [
-  { group: 'Business Process', perms: [
-    { key: 'bp_view', name: 'View', desc: 'View business process and their details' },
-    { key: 'bp_create', name: 'Create and Update', desc: 'Build and updates business processes' },
-    { key: 'bp_delete', name: 'Delete', desc: 'Remove workflows permanently' },
-    { key: 'bp_share', name: 'Sharing Permission', desc: 'Share with specific users and team' },
-  ]},
-  { group: 'Workflows', perms: [
-    { key: 'wf_view', name: 'View', desc: 'View workflow & their details' },
-    { key: 'wf_create', name: 'Create', desc: 'Create a copy of the workflow' },
-    { key: 'wf_update_delete', name: 'Update & Delete', desc: 'Modify the existing workflows' },
-    { key: 'wf_output', name: 'View Output', desc: 'Preview and download generated outputs' },
-    { key: 'wf_run', name: 'Run', desc: 'Distribute the workflows with team members' },
-    { key: 'wf_upload', name: 'Upload Data', desc: 'Add workflows from external sources' },
-  ]},
-  { group: 'Reports', perms: [
-    { key: 'rp_view', name: 'View', desc: 'Create new queries to streamline data retrieval' },
-    { key: 'rp_edit', name: 'Edit/Update', desc: 'Update report structure and content' },
-    { key: 'rp_comment', name: 'Comment on Queries', desc: 'Add comments and attach proofs to queries' },
-    { key: 'rp_share', name: 'Share', desc: 'Share reports for review and collaboration' },
-    { key: 'rp_delete', name: 'Delete Queries', desc: 'Remove existing queries' },
-  ]},
-  { group: 'Dashboard', perms: [
-    { key: 'db_view', name: 'View', desc: 'View dashboards and insights' },
-    { key: 'db_add', name: 'Add Queries', desc: 'Add queries to dashboards' },
-    { key: 'db_share', name: 'Share Queries', desc: 'Share queries for team access and collaboration' },
-    { key: 'db_delete', name: 'Delete Queries', desc: 'Delete dashboard permanently' },
-    { key: 'db_comment', name: 'Comment on Queries', desc: 'Comment on dashboard outputs and insights' },
-  ]},
-  { group: 'Datasource', perms: [
-    { key: 'ds_upload', name: 'Manually Upload', desc: 'Upload data files manually' },
-    { key: 'ds_live', name: 'Live Datasource List', desc: 'View active data sources' },
-  ]},
-  { group: 'Admin', perms: [
-    { key: 'ad_logs', name: 'Compliance Logs', desc: 'Viewing compliance-related logs and audit trails' },
-    { key: 'ad_tech', name: 'Tech Specialist', desc: 'Supports system troubleshooting and optimization' },
-  ]},
-];
-
-function CreateRoleModal({ onClose }: { onClose: () => void }) {
-  const [enabled, setEnabled] = useState<Set<string>>(new Set());
-  const totalPerms = DETAILED_PERMISSIONS.reduce((s, g) => s + g.perms.length, 0);
-
-  const togglePerm = (key: string) => {
-    setEnabled(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  };
-
-  void 0; // toggleGroup removed — individual toggles only
-
-  const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
-    if (preset === 'none') { setEnabled(new Set()); return; }
-    const n = new Set<string>();
-    DETAILED_PERMISSIONS.forEach(g => {
-      if (preset === 'full') g.perms.forEach(p => n.add(p.key));
-      else if (g.perms[0]) n.add(g.perms[0].key); // first perm is usually "View"
-    });
-    setEnabled(n);
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}
-      >
-      <div className="w-[520px] max-h-[90vh] bg-white rounded-lg border border-border flex flex-col" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 h-12 border-b border-border shrink-0">
-          <h2 className="text-[0.875rem] font-semibold text-text">Create New Role</h2>
-          <button onClick={onClose} className="w-7 h-7 rounded flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer text-text-muted">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-5 space-y-4">
-            <div>
-              <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Role Name <span className="text-red-500">*</span></label>
-              <input placeholder="Enter role name" className="w-full h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none focus:border-primary/40 transition-colors" />
-            </div>
-            <div>
-              <label className="text-[0.8125rem] font-medium text-text mb-1.5 block">Description <span className="text-red-500">*</span></label>
-              <textarea placeholder="Enter a description..." rows={2} className="w-full px-3 py-2 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none resize-none focus:border-primary/40 transition-colors" />
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          <div className="px-6 py-5">
-            {/* Header with progress */}
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[0.875rem] font-semibold text-text">Set permissions for this role</h3>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => applyPreset('none')} className={`px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${enabled.size === 0 ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>None</button>
-                <button onClick={() => applyPreset('readonly')} className="px-2.5 py-1 rounded-full text-[0.75rem] font-medium text-text-muted hover:bg-gray-50 transition-colors cursor-pointer">View Only</button>
-                <button onClick={() => applyPreset('full')} className={`px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${enabled.size === totalPerms ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-gray-50'}`}>Full Access</button>
-              </div>
-            </div>
-
-            {/* Progress bar */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${(enabled.size / totalPerms) * 100}%` }} />
-              </div>
-              <span className="text-[0.75rem] text-text-muted tabular-nums shrink-0">{enabled.size}/{totalPerms}</span>
-            </div>
-
-            {/* Permission groups */}
-            <div>
-              {DETAILED_PERMISSIONS.map((group, gi) => (
-                <div key={group.group}>
-                  {/* Group header */}
-                  <div className={`flex items-center justify-between py-3 ${gi > 0 ? 'border-t border-border mt-2' : ''}`}>
-                    <span className="text-[0.875rem] font-semibold text-text">{group.group}</span>
-                  </div>
-                  {/* Permissions */}
-                  {group.perms.map(perm => {
-                    const isOn = enabled.has(perm.key);
-                    return (
-                      <div
-                        key={perm.key}
-                        onClick={() => togglePerm(perm.key)}
-                        className="flex items-center justify-between py-3 pl-3 border-t border-border/50 cursor-pointer"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-[0.8125rem] font-medium text-text">{perm.name}</div>
-                          <div className="text-[0.75rem] text-text-muted">{perm.desc}</div>
-                        </div>
-                        <div className={`w-10 h-[22px] rounded-full transition-colors shrink-0 ml-4 relative ${isOn ? 'bg-brand-400' : 'bg-gray-200'}`}>
-                          <div className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-transform ${isOn ? 'left-[22px]' : 'left-[3px]'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-3 border-t border-border shrink-0">
-          <div className="flex items-center gap-2 mb-3 text-[0.75rem] text-text-muted">
-            <Info size={13} className="shrink-0" />
-            These permissions can be modified later from the role edit page.
-          </div>
-          <div className="flex items-center justify-end">
-            <button onClick={onClose} className="px-5 h-8 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-              Create Role
-            </button>
-          </div>
-        </div>
-      </div>
-      </motion.div>
-    </>
-  );
-}
-
-interface AuditLog {
-  timestamp: string;
-  user: string;
-  action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export';
-  description: string;
-  module: string;
-  entity: string;
-  status: 'Success' | 'Failed';
-  ip: string;
-}
-
-const mockLogs: AuditLog[] = [
-  { timestamp: '2026-04-19 10:30:50', user: 'Abhinav Sharma', action: 'Update', description: 'Updated business process "Procure to Pay" status to Active', module: 'Process Hub', entity: 'Business Process', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-19 09:14:22', user: 'Abhinav Sharma', action: 'Login', description: 'User logged in via SSO', module: 'Admin', entity: 'Session', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-18 14:22:11', user: 'Tushar Goel', action: 'Create', description: 'Created new role "test manik role" with 8 permissions', module: 'Admin', entity: 'Role', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-18 09:15:33', user: 'Aditya Thakur', action: 'Delete', description: 'Deleted workflow "Legacy Invoice Check" from P2P', module: 'Workflow Library', entity: 'Workflow', status: 'Success', ip: '10.0.0.42' },
-  { timestamp: '2026-04-17 16:45:02', user: 'Tushar Goel', action: 'Update', description: 'Updated control "SOD Violation Detector" effectiveness to 92%', module: 'Control Library', entity: 'Control', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-17 11:08:19', user: 'Aditya Thakur', action: 'Create', description: 'Created risk "Vendor master unauthorized change" in P2P register', module: 'Risk Register', entity: 'Risk', status: 'Success', ip: '10.0.0.42' },
-  { timestamp: '2026-04-17 08:30:00', user: 'Ayushi Narang', action: 'Export', description: 'Exported SOX Compliance Report as PDF', module: 'Report', entity: 'Report', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-16 15:20:41', user: 'Tushar Goel', action: 'Update', description: 'Changed user "Chulbul Pandey" status from Active to Suspended', module: 'Admin', entity: 'User', status: 'Success', ip: '172.18.0.1' },
-  { timestamp: '2026-04-16 10:05:33', user: 'Unknown', action: 'Login', description: 'Failed login attempt with email admin@irame.ai', module: 'Admin', entity: 'Session', status: 'Failed', ip: '185.42.12.8' },
-  { timestamp: '2026-04-15 14:12:09', user: 'Ajay Mudhai', action: 'Create', description: 'Connected new data source "SAP ERP Production"', module: 'Knowledge Hub', entity: 'Data Source', status: 'Success', ip: '172.18.0.1' },
-];
-
-// Action styles handled by StatusBadge
 
 const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
   {
@@ -1398,9 +1271,7 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     label: 'Timestamp',
     sortable: true,
     width: '15%',
-    render: (item) => (
-      <span className="font-mono text-[0.75rem] text-text-secondary tabular-nums">{item.timestamp as string}</span>
-    ),
+    render: (item) => <span className="font-mono text-[0.75rem] text-ink-500 tabular-nums">{item.timestamp as string}</span>,
   },
   {
     key: 'user',
@@ -1408,7 +1279,7 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     sortable: true,
     width: '13%',
     render: (item) => (
-      <span className={`text-[0.8125rem] ${item.user === 'Unknown' ? 'text-red-500 italic' : 'font-medium text-text'}`}>{item.user as string}</span>
+      <span className={`text-[0.8125rem] ${item.user === 'Unknown' ? 'text-risk-700 italic' : 'font-medium text-ink-800'}`}>{item.user as string}</span>
     ),
   },
   {
@@ -1433,8 +1304,8 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     width: '36%',
     render: (item) => (
       <div>
-        <div className="text-[0.8125rem] text-text">{item.description as string}</div>
-        <div className="text-[0.75rem] text-text-muted mt-0.5">{item.module as string} / {item.entity as string}</div>
+        <div className="text-[0.8125rem] text-ink-800">{item.description as string}</div>
+        <div className="text-[0.75rem] text-ink-500 mt-0.5">{item.module as string} / {item.entity as string}</div>
       </div>
     ),
   },
@@ -1443,19 +1314,18 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     label: 'Result',
     sortable: true,
     width: '8%',
-    render: (item) => (
-      <StatusBadge status={item.status === 'Success' ? 'active' : 'open'} />
-    ),
+    render: (item) => <StatusBadge status={item.status === 'Success' ? 'active' : 'open'} />,
   },
 ];
 
 function AuditLogsTab() {
-  const tableData = mockLogs.map(l => ({ ...l } as AuditLog & Record<string, unknown>));
+  const { logs } = useAdminData();
+  const tableData = logs.map(l => ({ ...l } as AuditLog & Record<string, unknown>));
   const [actionFilter, setActionFilter] = useState('all');
   const [resultFilter, setResultFilter] = useState('all');
   const [userFilter, setUserFilter] = useState('all');
 
-  const uniqueUsers = [...new Set(mockLogs.map(l => l.user))];
+  const uniqueUsers = [...new Set(logs.map(l => l.user))];
 
   const filtered = tableData.filter(l => {
     if (actionFilter !== 'all' && l.action !== actionFilter) return false;
@@ -1463,6 +1333,9 @@ function AuditLogsTab() {
     if (userFilter !== 'all' && l.user !== userFilter) return false;
     return true;
   });
+
+  const selectClass =
+    'h-9 pl-3 pr-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none appearance-none cursor-pointer focus:border-brand-600 transition-colors';
 
   return (
     <motion.div
@@ -1472,20 +1345,20 @@ function AuditLogsTab() {
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
     >
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center gap-2 text-[0.8125rem] text-text-muted">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2 text-[0.8125rem] text-ink-500">
           <Filter size={13} />
           Filters
         </div>
         <div className="relative">
-          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className={selectClass}>
             <option value="all">All Users</option>
             {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
         </div>
         <div className="relative">
-          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className={selectClass}>
             <option value="all">All Actions</option>
             <option value="Create">Create</option>
             <option value="Update">Update</option>
@@ -1493,19 +1366,19 @@ function AuditLogsTab() {
             <option value="Login">Login</option>
             <option value="Export">Export</option>
           </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
         </div>
         <div className="relative">
-          <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} className="h-9 pl-3 pr-8 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none appearance-none cursor-pointer focus:border-primary/40 transition-colors">
+          <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} className={selectClass}>
             <option value="all">All Results</option>
             <option value="Success">Success</option>
             <option value="Failed">Failed</option>
           </select>
-          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
         </div>
-        <DatePicker className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
-        <span className="text-[0.75rem] text-text-muted">to</span>
-        <DatePicker className="h-9 px-3 rounded-md border border-border bg-white text-[0.8125rem] text-text outline-none cursor-pointer focus:border-primary/40 transition-colors" />
+        <DatePicker className="h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none cursor-pointer focus:border-brand-600 transition-colors" />
+        <span className="text-[0.75rem] text-ink-400">to</span>
+        <DatePicker className="h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none cursor-pointer focus:border-brand-600 transition-colors" />
       </div>
 
       <SmartTable
@@ -1524,141 +1397,129 @@ function AuditLogsTab() {
 }
 
 function ComingSoonTab({ tab }: { tab: Tab }) {
-  const Icon = tab.icon;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="flex flex-col items-center justify-center py-24"
     >
-      <div className="w-14 h-14 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center mb-4">
-        <Icon size={24} className="text-brand-500" />
-      </div>
-      <h3 className="text-[1.125rem] font-semibold text-ink-800 mb-2">{tab.label}</h3>
-      <p className="text-[0.8125rem] text-ink-500 mb-4">This section is under development.</p>
-      <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-50 border border-brand-100">
-        <Construction size={14} className="text-brand-500" />
-        <span className="text-[0.75rem] font-semibold text-brand-700">Coming soon</span>
-      </div>
+      <EmptyState icon={tab.icon} title={tab.label} body="This section is under development and will be available soon." />
     </motion.div>
   );
 }
 
 export default function AdminView({ activeTab }: Props) {
   const resolveInitialTab = (): TabId => {
-    if (activeTab === 'roles') return 'roles';
-    if (activeTab === 'settings') return 'settings';
-    if (activeTab === 'integrations') return 'integrations';
-    if (activeTab === 'logs') return 'logs';
-    return 'users';
+    const valid: TabId[] = ['users', 'roles', 'logs'];
+    return (valid.includes(activeTab as TabId) ? activeTab : 'users') as TabId;
   };
 
+  const { addToast } = useToast();
+  const { can, roles } = useCurrentUser();
+  const logEvent = useAuditLog();
+  const { defaultRoleId, setDefaultRoleId } = useAdminData();
   const [currentTab, setCurrentTab] = useState<TabId>(resolveInitialTab);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
-  const activeTabObj = tabs.find((t) => t.id === currentTab)!;
+  const activeTabObj = tabs.find((t) => t.id === currentTab) ?? tabs[0];
 
   return (
-    <div className="h-full overflow-y-auto relative" style={{ background: 'linear-gradient(180deg, #f8f5ff 0%, #fafafa 300px)' }}>
-      {/* Hero header */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#f3ecff] via-[#faf8ff] to-[#eee8f9]" />
-        <FloatingLines enabledWaves={['top', 'middle']} lineCount={4} lineDistance={6} bendRadius={4} bendStrength={-0.3} interactive={true} parallax={true} color="#6a12cd" opacity={0.04} />
-
-        <div className="relative px-10 pt-10 pb-6">
+    <div className="h-full flex flex-col overflow-hidden bg-canvas">
+      {/* Header strip — full-bleed bg-canvas-elevated with ambient FloatingLines,
+          serif title + subhead, and underline tabs sitting on the strip border.
+          Mirrors the Knowledge Hub chrome. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+          <FloatingLines
+            enabledWaves={['top', 'bottom']}
+            lineCount={3}
+            lineDistance={10}
+            bendRadius={5}
+            bendStrength={-0.3}
+            interactive
+            parallax
+            color="#6a12cd"
+            opacity={0.05}
+          />
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-6"
           >
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
-                <Settings size={20} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-[1.75rem] font-extrabold">
-                  <span className="ai-gradient-text">Administration</span>
-                </h1>
-                <p className="text-[0.875rem] text-text-secondary leading-relaxed">
-                  Manage users, teams, roles, and platform settings.
-                </p>
-              </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
+              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Manage users, teams, roles, and audit logs.</p>
             </div>
           </motion.div>
 
-          {/* Pill tabs + stats */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-6 flex items-center justify-between"
+            transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+            className="-mb-px"
           >
-          <div
-            className="flex items-center gap-1 bg-white/60 backdrop-blur-xl rounded-xl border border-white/70 p-1 shadow-sm w-fit"
-            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02)' }}
-          >
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = currentTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setCurrentTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-[0.75rem] font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? 'text-violet-700'
-                      : 'text-text-muted hover:text-text-secondary hover:bg-white/60'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="admin-tab-bg"
-                      className="absolute inset-0 bg-white rounded-lg shadow-sm border border-violet-100/60"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Icon size={14} />
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
+            <div className="flex gap-6">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = currentTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCurrentTab(tab.id)}
+                    className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
+                      isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon size={14} />
+                      {tab.label}
+                    </span>
+                    {isActive && (
+                      <motion.div
+                        layoutId="admin-tab-underline"
+                        className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </motion.div>
         </div>
       </div>
 
-      {/* Contextual action bar */}
-      <div className="px-10 pt-4 pb-2">
-        {currentTab === 'users' ? (
-          <div />
-        ) : currentTab === 'roles' ? (
-          <div className="flex items-center justify-between">
-            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[0.75rem] font-semibold text-violet-700 tabular-nums">Total Roles: {mockRoles.length}</span>
-            <button onClick={() => setCreateRoleOpen(true)} className="flex items-center gap-2 px-5 h-9 rounded-lg bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-              <Plus size={14} />
-              Create Role
-            </button>
+      {/* Content — header strip is fixed above; this region scrolls. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-5 pb-8 flex-1 min-h-0 overflow-y-auto">
+        {/* Contextual action bar */}
+        {currentTab === 'roles' ? (
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <label className="flex items-center gap-2 text-[0.8125rem] text-ink-600">
+              <span className="font-medium text-ink-700">Default role for new users</span>
+              <div className="relative">
+                <select
+                  value={defaultRoleId}
+                  onChange={e => { setDefaultRoleId(e.target.value); addToast({ message: `Default role set to ${roles.find(r => r.id === e.target.value)?.name ?? ''}`, type: 'success' }); }}
+                  className="h-9 pl-3 pr-8 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 outline-none appearance-none cursor-pointer focus:border-brand-600 transition-colors"
+                >
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+              </div>
+            </label>
+            <button className={BTN_CTA_PRIMARY} onClick={() => setCreateRoleOpen(true)}><Plus size={14} />Create Role</button>
           </div>
         ) : currentTab === 'logs' ? (
-          <div className="flex items-center justify-between">
-            <span className="px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-[0.75rem] font-semibold text-violet-700 tabular-nums">Total Entries: {mockLogs.length}</span>
-            <button className="flex items-center gap-2 px-4 h-9 rounded-lg border border-paper-200 bg-paper-0 text-[0.8125rem] font-medium text-ink-700 hover:bg-paper-50 transition-colors cursor-pointer">
-              <Download size={14} />
-              Export CSV
-            </button>
+          <div className="flex items-center justify-end gap-2 mb-5">
+            {can('ad_logs_export') && (
+              <button className={BTN_CTA_OUTLINE} onClick={() => { logEvent({ action: 'Export', description: 'Exported audit log as CSV', module: 'Admin', entity: 'Audit Log' }); addToast({ message: 'Audit log exported as CSV', type: 'success' }); }}><Download size={14} />Export CSV</button>
+            )}
           </div>
-        ) : <div />}
-      </div>
+        ) : null}
 
-      {/* Content */}
-      <div className="px-10 pb-12 pt-4">
         <AnimatePresence mode="wait">
           {currentTab === 'users' ? (
             <UsersTab key="users" onInvite={() => setInviteOpen(true)} onCreateTeam={() => setCreateTeamOpen(true)} />
@@ -1672,9 +1533,11 @@ export default function AdminView({ activeTab }: Props) {
         </AnimatePresence>
       </div>
 
-      {inviteOpen && <InviteUserModal onClose={() => setInviteOpen(false)} />}
-      {createTeamOpen && <CreateTeamModal onClose={() => setCreateTeamOpen(false)} />}
-      {createRoleOpen && <CreateRoleModal onClose={() => setCreateRoleOpen(false)} />}
+      <AnimatePresence>
+        {inviteOpen && <InviteUserDrawer key="invite" onClose={() => setInviteOpen(false)} />}
+        {createTeamOpen && <CreateTeamDrawer key="createteam" onClose={() => setCreateTeamOpen(false)} />}
+        {createRoleOpen && <CreateRoleDrawer key="createrole" onClose={() => setCreateRoleOpen(false)} />}
+      </AnimatePresence>
     </div>
   );
 }

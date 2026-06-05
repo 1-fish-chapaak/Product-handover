@@ -6,6 +6,7 @@ import {
   Star, Layers, FileText, GripVertical, BarChart3
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
@@ -795,6 +796,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DashboardListPage({ onDashboardClick, onImportPowerBI, createdDashboards = [], onCreateDashboard, onDeleteDashboard, onUpdateDashboardSource, onOpenChat, focusedDashboardId }: DashboardListPageProps) {
+  const { can } = useCan();
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<'my' | 'shared'>('my');
   const [searchQuery, setSearchQuery] = useState('');
@@ -850,13 +852,15 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
               <p className="text-[0.8125rem] text-ink-500 mt-1">Manage and access all analytics dashboards</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-              >
-                <Plus size={14} />
-                Create Dashboard
-              </button>
+              {can('db_add') && (
+                <button
+                  onClick={() => setCreateModalOpen(true)}
+                  className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus size={14} />
+                  Create Dashboard
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1075,7 +1079,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                   ? 'Try a different search term or create a new dashboard.'
                   : 'Create your first dashboard to start visualizing your data.'}
             </p>
-            {activeTab === 'my' && (
+            {activeTab === 'my' && can('db_add') && (
               <button
                 onClick={() => setCreateModalOpen(true)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
