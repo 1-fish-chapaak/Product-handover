@@ -14,8 +14,14 @@ import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
+import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
+import ConfirmationModal from '../shared/ConfirmationModal';
+import ControlExpandedPanel from './ControlExpandedPanel';
+import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
+import { Button } from '../shared/Button';
+import ListLoadError from '../shared/ListLoadError';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
@@ -41,6 +47,8 @@ interface Props {
   onOpenRacmEditor?: (racm: import('./RacmListTable').RacmEntry) => void;
   /** Opens the canonical workflow detail page (shared with Workflow Library). */
   onOpenWorkflowDetail?: (workflowId: string) => void;
+  onCreateWorkflow?: () => void;
+  onRunWorkflow?: (workflowId: string) => void;
 }
 
 
@@ -71,7 +79,7 @@ function getSOPAction(status: SOPStatus, hasRacm: boolean, racmFrozen?: boolean)
   switch (status) {
     case 'Draft':      return { label: 'Start Processing',  cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Processing': return { label: 'View Progress',     cls: 'bg-paper-100 text-ink-500 hover:bg-paper-50' };
-    case 'Processed':  return { label: 'New RACM',          cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
+    case 'Processed':  return { label: 'Create RACM',       cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Linked':     return { label: 'Edit RACM Draft',   cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
     case 'Archived':   return { label: 'View SOP',          cls: 'bg-paper-50 text-ink-400 hover:bg-paper-100' };
   }
@@ -119,10 +127,10 @@ interface LocalSOP {
 }
 
 const FAILURE_REASONS = [
-  'Unsupported file format — only PDF, DOCX, and XLSX are supported.',
-  'File is unreadable — the document may be corrupted or password-protected.',
-  'Processing timeout — the document is too large or complex. Try splitting into smaller sections.',
-  'No process content detected — the document does not appear to contain standard operating procedures.',
+  'Unsupported file format: only PDF, DOCX, and XLSX are supported.',
+  'File is unreadable: the document may be corrupted or password-protected.',
+  'Processing timeout: the document is too large or complex. Try splitting into smaller sections.',
+  'No process content detected: the document does not appear to contain standard operating procedures.',
 ] as const;
 
 // Determine if extraction is partial (incomplete)
@@ -374,7 +382,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
               <div className="flex items-start gap-2.5">
                 <AlertTriangle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <div className="text-[12px] font-semibold text-mitigated-700">Incomplete extraction — review required</div>
+                  <div className="text-[12px] font-semibold text-mitigated-700">Incomplete extraction: review required</div>
                   <p className="text-[11px] text-mitigated-700/80 mt-0.5">Some information could not be extracted confidently. Review and complete missing items before creating RACM.</p>
                   <ul className="mt-2 space-y-0.5">
                     {partialWarnings.map((w, i) => (
@@ -393,10 +401,9 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
             </div>
           )}
           <div className="flex justify-end mt-3">
-            <button type="button" onClick={() => setShowConfirmModal(true)} disabled={activeRisks.length === 0 || (isPartial && !partialConfirmed)}
-              className="px-4 py-2 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
-              <FileText size={13} />New RACM
-            </button>
+            <Button variant="primary" size="sm" shape="lg" onClick={() => setShowConfirmModal(true)} disabled={activeRisks.length === 0 || (isPartial && !partialConfirmed)} leftIcon={<FileText size={13} />}>
+              Create RACM
+            </Button>
           </div>
 
           {/* Summary cards */}
@@ -526,11 +533,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                     <td className="px-4 py-2 align-top"><input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} placeholder="Description" className={fieldCls} /></td>
                     <td className="px-4 py-2 align-top"><span className="text-[10px] text-ink-400">{sop.businessProcess}</span></td>
                     <td className="px-4 py-2 align-top"><input value={newRiskSection} onChange={e => setNewRiskSection(e.target.value)} placeholder="Section" className={fieldCls} /></td>
-                    <td className="px-4 py-2 align-top"><span className="text-[9px] text-ink-400">Manual</span></td>
+                    <td className="px-4 py-2 align-top"><span className="text-[0.625rem] text-ink-400">Manual</span></td>
                     <td className="px-4 py-2 align-top">
                       <div className="flex items-center gap-1">
-                        <button type="button" aria-label="Add risk" onClick={handleAddRisk} disabled={!newRiskName.trim()} className="p-1 rounded-[4px] bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
-                        <button type="button" aria-label="Cancel" onClick={() => { setShowAddRisk(false); setNewRiskName(''); setNewRiskDesc(''); }} className="p-1 rounded-[4px] hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
+                        <button type="button" aria-label="Add risk" title="Add risk" onClick={handleAddRisk} disabled={!newRiskName.trim()} className="p-1 rounded-[4px] bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
+                        <button type="button" aria-label="Cancel" title="Cancel" onClick={() => { setShowAddRisk(false); setNewRiskName(''); setNewRiskDesc(''); }} className="p-1 rounded-[4px] hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -545,7 +552,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
         <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="text-[13px] font-semibold text-text">Extracted Control References ({controls.length})</h3>
-            <p className="text-[10px] text-ink-400 mt-0.5">References only — actual controls will be created in the Control Library after RACM review.</p>
+            <p className="text-[10px] text-ink-400 mt-0.5">References only. Actual controls will be created in the Control Library after RACM review.</p>
           </div>
           <button type="button" onClick={() => setShowAddCtrl(true)} className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
             <Plus size={11} />New Control reference
@@ -621,11 +628,11 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                         <option value="Corrective">Corrective</option>
                       </select>
                     </td>
-                    <td className="px-4 py-2 align-top"><span className="text-[9px] text-ink-400">Manual</span></td>
+                    <td className="px-4 py-2 align-top"><span className="text-[0.625rem] text-ink-400">Manual</span></td>
                     <td className="px-4 py-2 align-top">
                       <div className="flex items-center gap-1">
-                        <button type="button" aria-label="Add control reference" onClick={handleAddControl} disabled={!newCtrlName.trim()} className="p-1 rounded-[4px] bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
-                        <button type="button" aria-label="Cancel" onClick={() => { setShowAddCtrl(false); setNewCtrlName(''); setNewCtrlDesc(''); }} className="p-1 rounded-[4px] hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
+                        <button type="button" aria-label="Add control reference" title="Add control reference" onClick={handleAddControl} disabled={!newCtrlName.trim()} className="p-1 rounded-[4px] bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer disabled:opacity-40"><CheckCircle2 size={11} /></button>
+                        <button type="button" aria-label="Cancel" title="Cancel" onClick={() => { setShowAddCtrl(false); setNewCtrlName(''); setNewCtrlDesc(''); }} className="p-1 rounded-[4px] hover:bg-paper-100 text-ink-400 cursor-pointer"><X size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -650,7 +657,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                     <h2 className="text-[16px] font-bold text-text">Create Draft RACM from SOP</h2>
                     <p className="text-[12px] text-text-muted mt-0.5">Review the summary below before creating the draft RACM.</p>
                   </div>
-                  <button type="button" aria-label="Close" onClick={() => setShowConfirmModal(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+                  <button type="button" aria-label="Close" title="Close" onClick={() => setShowConfirmModal(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
 
                 {/* Summary */}
@@ -720,12 +727,10 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
-                  <button type="button" onClick={() => setShowConfirmModal(false)}
-                    className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-                  <button type="button" onClick={() => { setShowConfirmModal(false); onAccept(racmName); }} disabled={!racmName.trim()}
-                    className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
-                    <FileText size={13} />Create Draft RACM
-                  </button>
+                  <Button variant="outline" size="md" shape="lg" onClick={() => setShowConfirmModal(false)}>Cancel</Button>
+                  <Button variant="primary" size="md" shape="lg" onClick={() => { setShowConfirmModal(false); onAccept(racmName); }} disabled={!racmName.trim()} leftIcon={<FileText size={13} />}>
+                    Create Draft RACM
+                  </Button>
                 </div>
               </motion.div>
             </motion.div>
@@ -804,7 +809,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
             <h2 className="font-display text-[18px] font-semibold text-ink-900">Upload SOP</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -830,7 +835,7 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
                 <div className="flex items-center justify-center gap-2">
                   <FileText size={16} className="text-compliant-700" />
                   <span className="text-[12px] font-medium text-compliant-700">{fileName}</span>
-                  <button type="button" aria-label="Remove file" onClick={e => { e.stopPropagation(); setFileName(''); }} className="text-ink-400 hover:text-risk-700"><X size={12} /></button>
+                  <button type="button" aria-label="Remove file" title="Remove file" onClick={e => { e.stopPropagation(); setFileName(''); }} className="text-ink-400 hover:text-risk-700"><X size={12} /></button>
                 </div>
               ) : (
                 <>
@@ -865,11 +870,10 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
         </div>
 
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-          <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => { if (isValid) onUploadAndProcess(buildData()); }} disabled={!isValid}
-            className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Button variant="outline" size="md" shape="lg" onClick={requestClose}>Cancel</Button>
+          <Button variant="primary" size="md" shape="lg" onClick={() => { if (isValid) onUploadAndProcess(buildData()); }} disabled={!isValid}>
             Upload & Process
-          </button>
+          </Button>
         </div>
       </motion.aside>
     </>
@@ -878,87 +882,25 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
 // ─── SOP Preview Drawer ──────────────────────────────────────────────────
 
-function SOPPreviewDrawer({ sop, onClose, onGoToRacm }: { sop: LocalSOP; onClose: () => void; onGoToRacm?: () => void }) {
+function SOPPreviewDrawer({ sop, onClose }: { sop: LocalSOP; onClose: () => void; onGoToRacm?: () => void }) {
+  const { addToast } = useToast();
   return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
-        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
-          <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">{sop.name}</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">SOP Preview</p>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Metadata */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <div><span className="text-[10px] text-ink-400 uppercase block">Uploaded By</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedBy}</span></div>
-            <div><span className="text-[10px] text-ink-400 uppercase block">Upload Date</span><span className="text-[13px] text-text mt-0.5 block">{sop.uploadedAt}</span></div>
-            <div><span className="text-[10px] text-ink-400 uppercase block">Business Process</span><span className="text-[13px] text-text mt-0.5 block">{sop.businessProcess}</span></div>
-            <div><span className="text-[10px] text-ink-400 uppercase block">Version</span><span className="text-[13px] text-text mt-0.5 font-mono block">{sop.version}</span></div>
-            <div><span className="text-[10px] text-ink-400 uppercase block">Status</span><span className={`mt-0.5 px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span></div>
-            <div><span className="text-[10px] text-ink-400 uppercase block">File</span><span className="text-[13px] text-text mt-0.5 block">{sop.fileName}</span></div>
-          </div>
-          {/* Description */}
-          {sop.description && (
-            <div>
-              <span className="text-[10px] text-ink-400 uppercase block mb-1">Description</span>
-              <p className="text-[13px] text-text-secondary leading-relaxed">{sop.description}</p>
-            </div>
-          )}
-          {/* Source file placeholder */}
-          <div>
-            <span className="text-[10px] text-ink-400 uppercase block mb-2">Document Preview</span>
-            <div className="rounded-[8px] border border-border bg-paper-50 p-10 text-center">
-              <FileText size={24} className="mx-auto text-ink-300 mb-2" />
-              <div className="text-[12px] text-ink-400">Document preview not available in prototype</div>
-              <div className="text-[10px] text-ink-300 mt-1">{sop.fileName}</div>
-            </div>
-          </div>
-          {/* Extraction summary */}
-          {(sop.risks > 0 || sop.controls > 0) && (
-            <div>
-              <span className="text-[10px] text-ink-400 uppercase block mb-2">Extraction Summary</span>
-              <div className="flex gap-4">
-                <div className="text-center p-3 rounded-[8px] bg-paper-50 border border-canvas-border flex-1">
-                  <div className="text-lg font-bold text-text">{sop.risks}</div>
-                  <div className="text-[10px] text-text-muted">Risks Extracted</div>
-                </div>
-                <div className="text-center p-3 rounded-[8px] bg-paper-50 border border-canvas-border flex-1">
-                  <div className="text-lg font-bold text-text">{sop.controls}</div>
-                  <div className="text-[10px] text-text-muted">Control References</div>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* Linked RACM */}
-          {sop.racmId && (
-            <div>
-              <span className="text-[10px] text-ink-400 uppercase block mb-2">Linked RACM</span>
-              <div className="rounded-[8px] border border-border p-3 flex items-center justify-between">
-                <div>
-                  <span className="text-[12px] font-medium text-text">{sop.racmName || sop.racmId}</span>
-                  <span className="text-[10px] text-ink-400 block mt-0.5">{sop.risks} risks · {sop.controls} control references</span>
-                </div>
-                {onGoToRacm && (
-                  <button type="button" onClick={() => { onClose(); onGoToRacm(); }}
-                    className="px-2.5 py-1 rounded-[8px] text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors">
-                    View RACM
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <button type="button" onClick={onClose} className="w-full px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Close</button>
-        </footer>
-      </motion.aside>
-    </>
+    <SopDetailDrawer
+      subProcess={sop.businessProcess}
+      title={sop.name}
+      version={sop.version}
+      uploadedAgo={sop.uploadedAt}
+      summary={sop.racmId ? {
+        controls: sop.controls,
+        risks: sop.risks,
+        attributes: sop.controls * 3,
+        racmName: sop.racmName || sop.racmId,
+      } : undefined}
+      sections={DEFAULT_SOP_SECTIONS}
+      controls={sop.extractedControls.map(c => ({ id: c.id, description: c.description }))}
+      onDownload={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
+      onClose={onClose}
+    />
   );
 }
 
@@ -1021,7 +963,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
       setUploadParsing(false);
       setUploadParsed(true);
       setExtractedStats({ risks: 5, controls: 7, rows: 7 });
-      addToast({ message: `"${fileName}" parsed — 5 risks, 7 controls extracted.`, type: 'success' });
+      addToast({ message: `"${fileName}" parsed: 5 risks, 7 controls extracted.`, type: 'success' });
     }, 1200);
   };
 
@@ -1061,7 +1003,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
             <h2 className="font-display text-[18px] font-semibold text-ink-900">Create RACM</h2>
             <p className="text-[12px] text-ink-500 mt-0.5">Define a new Risk &amp; Control Matrix for audit governance.</p>
           </div>
-          <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -1106,7 +1048,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
               {([
                 { id: 'blank' as const, label: 'Start Blank', desc: 'Add risks & controls manually', icon: Plus, disabled: false },
                 { id: 'upload' as const, label: 'Upload RACM File', desc: 'Import from Excel, CSV, PDF', icon: Upload, disabled: false },
-                { id: 'sop' as const, label: 'Generate from SOP', desc: hasSopSource ? 'Extract from uploaded SOP' : 'Coming soon', icon: Sparkles, disabled: !hasSopSource },
+                { id: 'sop' as const, label: 'Generate from SOP', desc: hasSopSource ? 'Extract from uploaded SOP' : 'Upload a SOP first', icon: Sparkles, disabled: !hasSopSource },
               ] as const).map(opt => (
                 <button type="button" key={opt.id} onClick={() => { if (!opt.disabled) setSource(opt.id); }}
                   disabled={opt.disabled}
@@ -1177,8 +1119,12 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
         {/* Footer — shown once a source type is selected */}
         {source && (
           <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
-            <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-            <button type="button" onClick={() => {
+            <Button variant="outline" size="md" shape="lg" onClick={requestClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="md"
+              shape="lg"
+              onClick={() => {
                 if (!isFormValid) return;
                 if (isUploadReview && onStartReview) {
                   onStartReview(name.trim(), uploadedFile!);
@@ -1186,11 +1132,12 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
                 } else {
                   onCreate(name.trim(), framework || 'Internal Policy');
                 }
-              }} disabled={ctaDisabled}
-              className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
-              {isUploadReview && <Eye size={14} />}
+              }}
+              disabled={ctaDisabled}
+              leftIcon={isUploadReview ? <Eye size={14} /> : undefined}
+            >
               {ctaLabel}
-            </button>
+            </Button>
           </div>
         )}
       </motion.aside>
@@ -1228,13 +1175,16 @@ function SOPDetailPage({ sop, onGoToRacm }: {
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
           </div>
           {rels.racm && onGoToRacm && (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
+              shape="lg"
               onClick={onGoToRacm}
-              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+              className="shrink-0"
+              rightIcon={<ArrowRight size={13} />}
             >
-              Go to RACM<ArrowRight size={13} />
-            </button>
+              Go to RACM
+            </Button>
           )}
         </div>
 
@@ -1260,7 +1210,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
         <div className="bg-white border border-canvas-border rounded-[12px] p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Grid3x3 size={13} className="text-ink-500" />
+              <FileText size={13} className="text-ink-500" />
               Linked RACM
             </h2>
             <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racm ? 1 : 0}</span>
@@ -1270,7 +1220,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
           ) : (
             <div className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{rels.racm.name}</span>
+                <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{rels.racm.name}</span>
                 <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{rels.racm.fw}</span>
               </div>
               <span className="text-[11px] text-ink-500 leading-snug">Owner: {rels.racm.owner} · Last run: {rels.racm.lastRun}</span>
@@ -1295,7 +1245,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
                   <div className="flex items-start gap-2.5">
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
                       <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
                     </div>
                   </div>
@@ -1323,8 +1273,8 @@ function SOPDetailPage({ sop, onGoToRacm }: {
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
+                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
+                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
                       </div>
                       <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
                     </div>
@@ -1361,7 +1311,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       status: (s.racmId ? 'Linked' : idx % 3 === 0 ? 'Processed' : 'Draft') as SOPStatus,
       progress: s.racmId ? 100 : 0, processingStep: s.racmId ? 6 : 0,
       risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null,
-      failureReason: s.status === 'failed' ? 'RACM generation timed out — no progress for over 15 minutes. Please re-upload the SOP to retry.' : null,
+      failureReason: s.status === 'failed' ? 'RACM generation timed out. No progress for over 15 minutes. Please re-upload the SOP to retry.' : null,
       extractedRisks: s.racmId ? [] : buildMockExtractions().risks,
       extractedControls: s.racmId ? [] : buildMockExtractions().controls,
     }))
@@ -1428,11 +1378,15 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     return m ? m[1].toUpperCase() : 'FILE';
   }, []);
 
-  // Skeleton state — short 400ms placeholder so SOP list never paints into a flash of "empty" / "no SOPs".
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   // Listen for header-level "Create new SOP" trigger.
@@ -1534,7 +1488,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         const partial = isPartialExtraction(updated);
         return { ...updated, status: 'Processed' as SOPStatus };
       }));
-      addToast({ message: `"${data.name}" processed — ${risks.length} risks and ${controls.length} controls extracted. Review to create draft RACM.`, type: 'success' });
+      addToast({ message: `"${data.name}" processed: ${risks.length} risks and ${controls.length} controls extracted. Review to create draft RACM.`, type: 'success' });
     }, 4500);
   }, [addToast, bpAbbr]);
 
@@ -1568,7 +1522,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         const partial = isPartialExtraction(updated);
         return { ...updated, status: 'Processed' as SOPStatus };
       }));
-      addToast({ message: `"${sop.name}" processed — ${risks.length} risks and ${controls.length} controls extracted.`, type: 'success' });
+      addToast({ message: `"${sop.name}" processed: ${risks.length} risks and ${controls.length} controls extracted.`, type: 'success' });
     }, 4500);
   }, [addToast, localSops]);
 
@@ -1601,7 +1555,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     switch (action.label) {
       case 'Start Processing':  handleStartProcessing(sop.id); break;
       case 'View Progress':     addToast({ message: `"${sop.name}" is currently being processed...`, type: 'info' }); break;
-      case 'New RACM':          setShowCreateRacmForSopId(sop.id); break;
+      case 'Create RACM':       setShowCreateRacmForSopId(sop.id); break;
       case 'Edit RACM Draft':   if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'Configure RACM':    if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'View SOP':          setPreviewingSopId(sop.id); break;
@@ -1784,7 +1738,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       onClick={() => toggle(opt)}
                       className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
                     >
-                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[4px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
                         {checked && <Check size={9} className="text-white" strokeWidth={3} />}
                       </span>
                       <span className="truncate">{opt}</span>
@@ -1811,6 +1765,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     );
   }
 
+  if (!isLoading && loadError) {
+    return <ListLoadError label="SOPs" onRetry={() => setLoadError(false)} />;
+  }
+
   return (
     <div>
       {/* Empty state — only after loading settles so we don't flash it. */}
@@ -1821,10 +1779,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
-          <button type="button" onClick={() => setShowUploadDrawer(true)}
-            className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
-            New SOP
-          </button>
+          <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadDrawer(true)}>
+            Upload SOP
+          </Button>
         </div>
       ) : (
         <>
@@ -1854,12 +1811,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
-              <button
-                type="button"
-                onClick={() => setShowUploadDrawer(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                <Plus size={13} />Create new SOP
-              </button>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadDrawer(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
+                Create new SOP
+              </Button>
             </div>
           </div>
 
@@ -1891,7 +1845,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
           {/* SOP cards */}
           <div className="min-h-[calc(100vh-280px)] pb-4 space-y-2">
-            {isLoading ? (
+            {isLoading && showSkeleton ? (
               [...Array(5)].map((_, i) => (
                 <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
                   <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 items-start">
@@ -1950,8 +1904,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    onClick={isRacmReady && sop.racmId && onViewRacm ? () => onViewRacm(sop.racmId!) : undefined}
-                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all ${isRacmReady ? 'cursor-pointer hover:border-primary/50 hover:shadow-sm' : 'cursor-default'} ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
+                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all cursor-default ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
                   >
                     {/* Main — name + status badge inline, failure message, uploader · date.
                         Card layout per the Risk-card reference (image #21); same data as the table. */}
@@ -1978,7 +1931,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         </span>
                       </div>
                       {sop.failureReason && (
-                        <p className="text-[12.5px] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
+                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
                       )}
                       <div className="text-[12px] text-ink-400">
                         {sop.uploadedBy}
@@ -2154,7 +2107,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       <button type="button" onClick={() => handleVersionConflictResolve('new-version')}
                         className="w-full text-left px-4 py-3 rounded-[8px] border border-canvas-border hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer">
                         <div className="text-[12px] font-semibold text-text">Upload as new version</div>
-                        <div className="text-[11px] text-ink-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))} — keeps existing SOP and linked RACM intact.</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5">Creates {existing.version.replace(/\d+$/, m => String(Number(m) + 1))}. Keeps existing SOP and linked RACM intact.</div>
                       </button>
 
                       {canReplace ? (
@@ -2166,7 +2119,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       ) : (
                         <div className="px-4 py-3 rounded-[8px] border border-canvas-border bg-paper-50 opacity-60">
                           <div className="text-[12px] font-medium text-ink-400">Replace existing</div>
-                          <div className="text-[11px] text-ink-400 mt-0.5">Cannot replace — SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
+                          <div className="text-[11px] text-ink-400 mt-0.5">Cannot replace: SOP is {existing.status.toLowerCase()}{isLinked ? ' and linked to a RACM' : ''}.</div>
                         </div>
                       )}
 
@@ -2278,7 +2231,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
                   <div className="flex items-start gap-2.5">
                     <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[12.5px] text-ink-800 font-medium leading-snug">{r.name}</span>
+                      <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
                       <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
                     </div>
                   </div>
@@ -2303,7 +2256,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
               {ctrl.workflows.map((w, i) => (
                 <li key={i} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">Type: {w.type} · Status: {w.status} · Last run: {w.lastRun}</span>
@@ -2316,7 +2269,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
         <div className="bg-white border border-canvas-border rounded-[12px] p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Grid3x3 size={13} className="text-ink-500" />
+              <FileText size={13} className="text-ink-500" />
               Found in RACMs
             </h2>
             <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.usedInRACMs}</span>
@@ -2328,7 +2281,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
               {racms.map(r => (
                 <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[12.5px] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
                     <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
                   </div>
                   <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
@@ -2343,9 +2296,9 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
 }
 
 function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
-  // `onGoToRacm` and `bpAbbr` are part of the public tab signature but are no
-  // longer consumed inside the cards — "Map in RACM" was removed intentionally.
-  void onGoToRacm; void bpAbbr;
+  // `onGoToRacm` powers the empty-state "Open RACM" CTA; `bpAbbr` is part of the
+  // public tab signature ("Map in RACM" was removed from the cards intentionally).
+  void bpAbbr;
   const { addToast } = useToast();
   const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2384,11 +2337,15 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  // Skeleton state — 400ms placeholder before first paint of the controls list.
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   const matchesSearch = (c: DesignControl) => {
@@ -2441,6 +2398,16 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control archived`, type: 'success' });
   };
+  // Delete-control confirmation (the trash action on a control card).
+  const [confirmDeleteCtrl, setConfirmDeleteCtrl] = useState<{ id: string; name: string } | null>(null);
+  // Inline card expansion + Create-control drawer.
+  const [expandedCtrlId, setExpandedCtrlId] = useState<string | null>(null);
+  const [showCreateControl, setShowCreateControl] = useState(false);
+  const handleDeleteOne = (id: string) => {
+    setControls(prev => prev.filter(c => c.id !== id));
+    setSelectedIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Control deleted`, type: 'success' });
+  };
   const handleCancelOne = (id: string) => {
     setSelectedIds(prev => prev.filter(s => s !== id));
   };
@@ -2472,6 +2439,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     return 'bg-paper-100 text-ink-600 border-canvas-border';
   };
 
+  if (!isLoading && loadError) {
+    return <ListLoadError label="controls" onRetry={() => setLoadError(false)} />;
+  }
+
   if (!isLoading && controls.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
@@ -2479,7 +2450,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           <Shield className="w-6 h-6 text-ink-500" />
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No controls yet</h3>
-        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Controls live inside a RACM. Open RACM to map risks to controls — they'll appear here.</p>
+        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Controls live inside a RACM. Open RACM to map risks to controls, and they'll appear here.</p>
+        <Button variant="primary" size="md" shape="lg" onClick={() => onGoToRacm?.()}>
+          Open RACM
+        </Button>
       </div>
     );
   }
@@ -2526,6 +2500,13 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
           <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
+          <button
+            type="button"
+            onClick={() => setShowCreateControl(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-brand-600 text-paper-0 text-[12px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+          >
+            <Plus size={14} /> Create Control
+          </button>
         </div>
       </div>
 
@@ -2555,7 +2536,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           card opens the Control detail (URL syncs `?control=<id>`). Checkbox +
           action buttons stopPropagation so they don't fire the card click. */}
       <div className="space-y-2 min-h-[calc(100vh-280px)]">
-        {isLoading ? (
+        {isLoading && showSkeleton ? (
           [...Array(5)].map((_, i) => (
             <div key={`skel-ctrl-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
               <div className="h-3 bg-paper-100 rounded-[4px] animate-pulse w-2/3 mb-2.5" />
@@ -2577,6 +2558,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           </div>
         ) : filteredControls.map((ctrl, i) => {
           const isChecked = selectedIds.includes(ctrl.id);
+          const isExpanded = expandedCtrlId === ctrl.id;
           const isKey = ctrl.classification === 'Key';
           const riskCount = ctrl.mappedRisks.length;
           const wfCount = ctrl.workflows.length;
@@ -2587,53 +2569,50 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.02 }}
-              onClick={() => handleOpenDetail(ctrl.id)}
-              className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+              className={`rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
                 isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
               }`}
             >
-              {/* Col 1 — select checkbox */}
-              <div onClick={e => e.stopPropagation()} className="pt-0.5">
-                <input
-                  type="checkbox"
-                  aria-label={`Select ${ctrl.id}`}
-                  checked={isChecked}
-                  onChange={() => toggleSelectOne(ctrl.id)}
-                  className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
-                />
+              <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 items-start">
+              {/* Col 1 — chevron toggles the inline expanded panel. */}
+              <div className="flex items-center pt-0.5">
+                <button
+                  type="button"
+                  aria-label={isExpanded ? `Collapse ${ctrl.id}` : `Expand ${ctrl.id}`}
+                  aria-expanded={isExpanded}
+                  onClick={() => setExpandedCtrlId(prev => prev === ctrl.id ? null : ctrl.id)}
+                  className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
+                >
+                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
               </div>
 
-              {/* Col 2 — title + classification pill, description, meta, tags */}
+              {/* Col 2 — title + classification pill, id, tags.
+                  Description / automation / frequency intentionally live only in
+                  the expanded panel to avoid duplicating them here. */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{ctrl.name}</h3>
+                  <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
+                    <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{ctrl.id}</span>
+                    {ctrl.name}
+                  </h3>
                   <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${
                     isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
                   }`}>
                     {isKey ? 'Key' : 'Standard'}
                   </span>
                 </div>
-                <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
-                  {ctrl.description}
-                </p>
-                <div className="flex items-center gap-2 mt-2 text-[11px] text-text-muted flex-wrap">
-                  <span className="font-mono tracking-tight">{ctrl.id}</span>
-                  <span className="text-border">·</span>
-                  <span>{ctrl.classification}</span>
-                  <span className="text-border">·</span>
-                  <span>{ctrl.automation}</span>
-                  <span className="text-border">·</span>
-                  <span>{ctrl.frequency}</span>
-                </div>
+                {/* Classification is already shown by the Key/Standard chip above, so no
+                    redundant text line here. */}
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${naturePillCls(ctrl.nature)}`}>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold border ${naturePillCls(ctrl.nature)}`}>
                     {ctrl.nature}
                   </span>
-                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-white text-text-muted border border-border-light">
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
                     {ctrl.assertions[0] || 'No assertions'}
                   </span>
                   {extraAssertions > 0 && (
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-medium bg-paper-100 text-ink-500 border border-border-light">
+                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-paper-100 text-ink-500 border border-border-light">
                       +{extraAssertions} more
                     </span>
                   )}
@@ -2693,16 +2672,8 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   <>
                     <button
                       type="button"
-                      onClick={() => handleOpenDetail(ctrl.id)}
-                      title="Open control"
-                      className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                    >
-                      <Play size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleArchiveOne(ctrl.id)}
-                      title="Delete"
+                      onClick={() => setConfirmDeleteCtrl({ id: ctrl.id, name: ctrl.name })}
+                      title="Delete control"
                       className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                     >
                       <Trash2 size={14} />
@@ -2710,10 +2681,75 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   </>
                 )}
               </div>
+              </div>
+
+              {/* Inline expanded panel — Description / fields / Workflows */}
+              <AnimatePresence initial={false}>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                    className="overflow-hidden border-t border-canvas-border bg-canvas/40"
+                  >
+                    <ControlExpandedPanel
+                      description={ctrl.description}
+                      linkedRisks={ctrl.mappedRisks}
+                      usedInRACMs={ctrl.usedInRACMs}
+                      automation={ctrl.automation}
+                      frequency={ctrl.frequency}
+                      workflows={ctrl.workflows}
+                      bpAbbr={bpAbbr}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           );
         })}
       </div>
+
+      {/* Create control button lives in the filter toolbar above; drawer renders here. */}
+      <AnimatePresence>
+        {showCreateControl && (
+          <CreateControlDrawer
+            onClose={() => setShowCreateControl(false)}
+            defaultProcess={bpAbbr}
+            onSave={(data: NewControlData) => {
+              const newId = `C-${String(controls.length + 1).padStart(3, '0')}`;
+              setControls(prev => [{
+                id: newId,
+                name: data.name,
+                description: data.description,
+                classification: data.classification,
+                nature: data.nature,
+                automation: data.automation,
+                frequency: data.frequency,
+                mappedRisks: data.mappedRisks,
+                workflows: [],
+                usedInRACMs: 0,
+                assertions: data.assertions,
+              }, ...prev]);
+              setShowCreateControl(false);
+              addToast({ message: `Control "${data.name}" created`, type: 'success' });
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete-control confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteCtrl}
+        title="Delete this control?"
+        description={confirmDeleteCtrl
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteCtrl.name}</span> (<span className="font-mono">{confirmDeleteCtrl.id}</span>) from the control library. You can't undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteCtrl) handleDeleteOne(confirmDeleteCtrl.id); setConfirmDeleteCtrl(null); }}
+        onClose={() => setConfirmDeleteCtrl(null)}
+      />
     </div>
   );
 }
@@ -2798,7 +2834,7 @@ function ControlFilterPill({ label, options, value, onChange }: {
                     onClick={() => toggle(opt)}
                     className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
                   >
-                    <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                    <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[4px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
                       {checked && <Check size={10} className="text-white" strokeWidth={3} />}
                     </span>
                     <span className="truncate">{opt}</span>
@@ -2835,32 +2871,36 @@ const SEED_BP_WF: BPWorkflow[] = [
   { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [] },
 ];
 
-function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void }) {
+function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void }) {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+  const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
   const [usageFilter2, setUsageFilter2] = useState<string[]>([]);
-  const [showLinkedControls, setShowLinkedControls] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Per-row filter dropdown state (which filter button is open, if any).
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
 
-  // Skeleton state — 400ms placeholder so workflow list doesn't flash empty.
+  // Local data is ready immediately; only reveal a skeleton if loading genuinely
+  // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(t);
+    const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
+    setIsLoading(false); // synchronous local data — ready right away
+    return () => clearTimeout(armSkeleton);
   }, []);
 
   // Listen for header-level "Create new Workflow" trigger.
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ section?: string }>;
-      if (ce.detail?.section === 'workflows') setShowCreateDrawer(true);
+      if (ce.detail?.section === 'workflows') onCreateWorkflow?.();
     };
     window.addEventListener('process-hub-create', handler);
     return () => window.removeEventListener('process-hub-create', handler);
@@ -2950,6 +2990,10 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
     addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
   };
 
+  if (!isLoading && loadError) {
+    return <ListLoadError label="workflows" onRetry={() => setLoadError(false)} />;
+  }
+
   if (!isLoading && workflows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
@@ -2958,10 +3002,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No workflows yet</h3>
         <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Connect approval steps and evidence collection.</p>
-        <button type="button" onClick={() => setShowCreateDrawer(true)}
-          className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">
-          New Workflow
-        </button>
+        <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()}>
+          Create Workflow
+        </Button>
       </div>
     );
   }
@@ -3027,7 +3070,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                   <li key={opt}>
                     <button type="button" onClick={() => toggle(opt)}
                       className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer">
-                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
+                      <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[4px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
                         {checked && <CheckCircle2 size={10} className="text-white" strokeWidth={3} />}
                       </span>
                       <span className="truncate">{opt}</span>
@@ -3062,20 +3105,16 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
           )}
           <FilterPill filterKey="status" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
-          <FilterPill filterKey="nature" label="Trigger" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
-          <button
-            type="button"
-            onClick={() => setShowCreateDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-            <Plus size={13} />Create new Workflow
-          </button>
+          <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
+            Create Workflow
+          </Button>
         </div>
       </div>
 
       {/* Bulk-select strip — only when ≥1 card is ticked */}
       {selectedIds.length > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-[10px] bg-brand-50 border border-brand-100">
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-[12px] bg-brand-50 border border-brand-100">
           <input
             ref={selectAllRef}
             type="checkbox"
@@ -3095,7 +3134,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
       )}
 
       {/* Card stack */}
-      {isLoading ? (
+      {isLoading && showSkeleton ? (
         <div className="space-y-2.5">
           {[...Array(5)].map((_, i) => (
             <div key={`skel-wf-${i}`} className="rounded-xl border border-border-light bg-white px-6 py-5">
@@ -3153,26 +3192,25 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                onClick={openDetail}
-                className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                className={`group grid grid-cols-[28px_2.6fr_1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Col 1 — select checkbox */}
+                {/* Col 1 — select checkbox (fades in on hover, stays while selected) */}
                 <div onClick={e => e.stopPropagation()} className="pt-0.5">
                   <input
                     type="checkbox"
                     aria-label={`Select ${wf.name}`}
                     checked={isSelected}
                     onChange={() => toggleSelect(wf.id)}
-                    className="w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                    className={`w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                   />
                 </div>
 
                 {/* Col 2 — title + status, description, meta, tag pills */}
                 <div className="min-w-0">
                   <div className="flex items-start gap-2">
-                    <h3 className="text-[14px] font-semibold text-text leading-snug truncate">{wf.name}</h3>
+                    <button type="button" onClick={openDetail} className="text-[14px] font-semibold text-text leading-snug truncate text-left hover:text-brand-700 hover:underline cursor-pointer">{wf.name}</button>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 mt-0.5 ${statusStyle}`}>
                       {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-compliant" />}
                       {wf.status}
@@ -3186,44 +3224,16 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                     <span className="mx-1.5">·</span>
                     <span>linked to {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[10px] font-medium">{wf.nature}</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-paper-50 border border-canvas-border text-ink-700 text-[10px] font-medium">{wf.type}</span>
-                  </div>
                 </div>
 
-                {/* Col 3 — workflow nature badge */}
+                {/* Col 3 — workflow type (automation · nature) */}
                 <div className="pt-0.5">
                   <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${natureStyle}`}>
-                    {wf.nature}
+                    {wf.type} · {wf.nature}
                   </span>
                 </div>
 
-                {/* Col 4 — usage / linked-controls metric */}
-                <div className="pt-0.5">
-                  {wf.linkedControls.length > 0 ? (
-                    <>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-[15px] font-bold tabular-nums leading-none text-text">{wf.linkedControls.length}</span>
-                        <span className="text-[11px] text-text-muted">control{wf.linkedControls.length !== 1 ? 's' : ''}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setShowLinkedControls(showLinkedControls === wf.id ? null : wf.id); }}
-                        className="mt-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
-                      >
-                        View linked controls
-                      </button>
-                    </>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] italic text-mitigated-700">
-                      <AlertTriangle size={11} className="text-mitigated-700" />
-                      Not yet linked
-                    </span>
-                  )}
-                </div>
-
-                {/* Col 5 — actions (80px) */}
+                {/* Col 4 — actions (80px) */}
                 <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
                   {isSelected ? (
                     <>
@@ -3240,13 +3250,13 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                     </>
                   ) : (
                     <>
-                      <button type="button" aria-label="Open workflow" title="Open workflow"
-                        onClick={openDetail}
+                      <button type="button" aria-label="Run workflow" title="Run workflow"
+                        onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
                         <Play size={14} />
                       </button>
                       <button type="button" aria-label="Delete" title="Delete"
-                        onClick={() => handleDelete(wf.id)}
+                        onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
                         <Trash2 size={14} />
                       </button>
@@ -3259,38 +3269,18 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
         </div>
       )}
 
-      {/* Linked Controls Modal */}
-      <AnimatePresence>
-        {showLinkedControls && (() => {
-          const wf = workflows.find(w => w.id === showLinkedControls);
-          if (!wf || wf.linkedControls.length === 0) return null;
-          return (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px]"
-              onClick={() => setShowLinkedControls(null)}>
-              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-[16px] shadow-2xl border border-border-light w-[360px] overflow-hidden"
-                onClick={e => e.stopPropagation()}>
-                <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-                  <div>
-                    <h3 className="text-[13px] font-bold text-text">Linked Controls</h3>
-                    <p className="text-[11px] text-text-muted mt-0.5">{wf.name}</p>
-                  </div>
-                  <button type="button" aria-label="Close" onClick={() => setShowLinkedControls(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={14} /></button>
-                </div>
-                <div className="px-5 py-3 space-y-2">
-                  {wf.linkedControls.map(cId => (
-                    <div key={cId} className="flex items-center gap-2 p-2.5 rounded-[8px] bg-surface-2/40 border border-border-light">
-                      <span className="text-[11px] font-mono text-ink-500">{cId}</span>
-                      <span className="text-[12px] text-text">{CONTROLS.find(c => c.id === cId)?.name || `Control ${cId}`}</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
+      {/* Delete-workflow confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteWf}
+        title="Delete this workflow?"
+        description={confirmDeleteWf
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteWf.name}</span> (<span className="font-mono">{confirmDeleteWf.id.toUpperCase()}</span>). You can't undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteWf) handleDelete(confirmDeleteWf.id); setConfirmDeleteWf(null); }}
+        onClose={() => setConfirmDeleteWf(null)}
+      />
 
       {/* Create Workflow Drawer */}
       <AnimatePresence>
@@ -3319,7 +3309,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                 )}
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
                   <div><h2 className="font-display text-[18px] font-semibold text-ink-900">Create Workflow</h2><p className="text-[12px] text-ink-500 mt-0.5">Define a new workflow for this business process.</p></div>
-                  <button type="button" aria-label="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+                  <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Name <span className="text-risk">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
@@ -3335,8 +3325,8 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
                   <div><label className="text-[12px] font-semibold text-text-muted block mb-1.5">Description</label><textarea value={d} onChange={e => setD(e.target.value)} rows={3} placeholder="Describe what this workflow does..." className={fCls + ' resize-none'} /></div>
                 </div>
                 <div className="px-6 py-4 border-t border-canvas-border flex justify-end gap-3 shrink-0">
-                  <button type="button" onClick={requestClose} className="px-4 py-2.5 rounded-[8px] border border-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
-                  <button type="button" onClick={() => { if (n.trim()) handleCreate({ name: n.trim(), type: t, nature: nat, desc: d }); }} disabled={!n.trim()} className="px-5 py-2.5 rounded-[8px] bg-primary hover:bg-primary/90 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Create</button>
+                  <Button variant="outline" size="md" shape="lg" onClick={requestClose}>Cancel</Button>
+                  <Button variant="primary" size="md" shape="lg" onClick={() => { if (n.trim()) handleCreate({ name: n.trim(), type: t, nature: nat, desc: d }); }} disabled={!n.trim()}>Create</Button>
                 </div>
               </motion.aside>
             </>);
@@ -3429,7 +3419,7 @@ const GRID_COLUMNS: GridColumn[] = [
 
 // Tooltip copy for jargon-y column headers in the RACM import grid.
 const GRID_HEADER_TIPS: Record<string, string> = {
-  keyControl: 'Marked as a key control — required for SOX or regulatory reporting.',
+  keyControl: 'Marked as a key control: required for SOX or regulatory reporting.',
   assertion: 'The financial assertion this control supports (e.g. Accuracy, Completeness, Authorization).',
   attribute: 'The specific attribute or test step evidenced when this control runs.',
   riskRating: 'Inherent likelihood and impact of this risk before controls are applied.',
@@ -3598,7 +3588,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-text">{racmName}</h2>
-                <span className="px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center bg-mitigated-50 text-mitigated-700">Draft Review</span>
+                <span className="px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center bg-mitigated-50 text-mitigated-700">Draft Review</span>
               </div>
               <div className="flex items-center gap-3 mt-1 text-[11px] text-ink-500">
                 <span>{bpAbbr}</span>
@@ -3616,12 +3606,16 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => addToast({ message: 'Draft saved.', type: 'success' })}
-                  className="px-3 py-2 rounded-[8px] border border-border text-[12px] font-medium text-text-secondary hover:bg-paper-50 cursor-pointer">Save Draft</button>
-                <button type="button" onClick={() => { setFreezeConfirmed(false); setShowFreezeModal(true); }}
+                <Button variant="outline" size="sm" shape="lg" onClick={() => addToast({ message: 'Draft saved.', type: 'success' })}>Save Draft</Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  shape="lg"
+                  onClick={() => { setFreezeConfirmed(false); setShowFreezeModal(true); }}
                   disabled={reviewedCount < rows.length}
                   title={reviewedCount < rows.length ? `Review all rows before freezing (${reviewedCount}/${rows.length} reviewed)` : ''}
-                  className="px-4 py-2 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"><Lock size={12} />Freeze RACM</button>
+                  leftIcon={<Lock size={12} />}
+                >Freeze RACM</Button>
               </div>
             </div>
           </div>
@@ -3654,7 +3648,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                   {GRID_COLUMNS.map(c => {
                     const tip = GRID_HEADER_TIPS[c.key as string];
                     return (
-                      <th key={c.key} className="px-1.5 py-2 text-left text-[9px] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap"
+                      <th key={c.key} className="px-1.5 py-2 text-left text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wide whitespace-nowrap"
                         style={{ minWidth: c.minW }}>
                         {tip ? (
                           <span className="inline-flex items-center gap-1 group/tip relative">
@@ -3743,7 +3737,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                             style={{ minWidth: col.minW }}
                             onClick={e => { e.stopPropagation(); setSelectedRowId(row.id); startEdit(row.id, col.key, val === 'undefined' ? '' : val); }}>
                             {col.key === 'riskRating' && val && val !== 'undefined' ? (
-                              <span className={`px-1.5 h-4 rounded-[4px] text-[9px] font-bold inline-flex items-center ${ratingColor(val)}`}>{val}</span>
+                              <span className={`px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center ${ratingColor(val)}`}>{val}</span>
                             ) : (
                               <span className={`text-[11px] ${hasIssue && isEmpty ? 'text-mitigated-700' : isEmpty ? 'text-ink-300' : 'text-text'} truncate block`}>
                                 {hasIssue && isEmpty ? (
@@ -3812,23 +3806,23 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
           <div className="w-[280px] shrink-0 bg-white rounded-[12px] border border-canvas-border p-6 space-y-3.5 overflow-y-auto" style={{ maxHeight: 560 }}>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-text-muted uppercase">Row {selectedRow.sourceRow}</span>
-              <button type="button" aria-label="Close" onClick={() => setSelectedRowId(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={12} /></button>
+              <button type="button" aria-label="Close" title="Close" onClick={() => setSelectedRowId(null)} className="text-ink-400 hover:text-ink-600 cursor-pointer"><X size={12} /></button>
             </div>
 
             {/* Process */}
             <div>
-              <span className="text-[9px] text-ink-400 uppercase block">Process</span>
+              <span className="text-[0.625rem] text-ink-400 uppercase block">Process</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.process || '—'}</p>
               {selectedRow.subProcess && <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.subProcess}</p>}
             </div>
 
             {/* Risk */}
             <div>
-              <span className="text-[9px] text-ink-400 uppercase block">Risk</span>
+              <span className="text-[0.625rem] text-ink-400 uppercase block">Risk</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.riskName || '—'}</p>
               <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.riskDesc || '—'}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-[9px] font-mono text-ink-400">{selectedRow.riskId || '—'}</span>
+                <span className="text-[0.625rem] font-mono text-ink-400">{selectedRow.riskId || '—'}</span>
                 {selectedRow.riskRating && (
                   <span className={`px-1.5 h-4 rounded-[4px] text-[10px] font-bold inline-flex items-center ${ratingColor(selectedRow.riskRating)}`}>{selectedRow.riskRating}</span>
                 )}
@@ -3837,7 +3831,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             {/* Control */}
             <div>
-              <span className="text-[9px] text-ink-400 uppercase block">Control</span>
+              <span className="text-[0.625rem] text-ink-400 uppercase block">Control</span>
               <p className="text-[12px] font-medium text-text">{selectedRow.controlName || '—'}</p>
               <p className="text-[10px] text-ink-500 mt-0.5">{selectedRow.controlDesc || '—'}</p>
               <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px]">
@@ -3851,20 +3845,20 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
             {/* Assertion / Attribute */}
             <div>
-              <span className="text-[9px] text-ink-400 uppercase block">Assertion / Attribute</span>
+              <span className="text-[0.625rem] text-ink-400 uppercase block">Assertion / Attribute</span>
               <p className="text-[11px] text-text">{selectedRow.assertion || '—'} / {selectedRow.attribute || '—'}</p>
             </div>
 
             {/* Source */}
             <div>
-              <span className="text-[9px] text-ink-400 uppercase block">Source</span>
+              <span className="text-[0.625rem] text-ink-400 uppercase block">Source</span>
               <p className="text-[10px] text-ink-500">Row {selectedRow.sourceRow} · {selectedRow.framework || '—'}</p>
             </div>
 
             {/* Validation Issues */}
             {selectedRow.validationIssues.length > 0 && (
               <div className="bg-mitigated-50/60 rounded-[8px] p-2.5 space-y-1">
-                <span className="text-[9px] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
+                <span className="text-[0.625rem] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Validation Issues ({selectedRow.validationIssues.length})</span>
                 {selectedRow.validationIssues.map((issue, i) => (
                   <p key={i} className="text-[10px] text-mitigated-700 flex items-center gap-1.5">
                     <span className="w-1 h-1 rounded-full bg-mitigated shrink-0" />{issue}
@@ -3914,7 +3908,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
 
                 {/* Stats Grid */}
                 <div className="bg-surface-2/60 rounded-[12px] p-4 mb-4">
-                  <span className="text-[9px] font-bold text-text-muted uppercase tracking-wide block mb-3">Import Summary</span>
+                  <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wide block mb-3">Import Summary</span>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { label: 'Total Rows', value: stats.totalRows, color: 'text-text' },
@@ -3926,7 +3920,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                     ].map(s => (
                       <div key={s.label} className="bg-white rounded-[8px] px-3 py-2 border border-border-light">
                         <span className={`text-[18px] font-bold ${s.color} block`}>{s.value}</span>
-                        <span className="text-[9px] text-ink-400 font-medium">{s.label}</span>
+                        <span className="text-[0.625rem] text-ink-400 font-medium">{s.label}</span>
                       </div>
                     ))}
                   </div>
@@ -3935,7 +3929,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 {/* Validation warnings detail */}
                 {stats.validationWarnings > 0 && (
                   <div className="bg-mitigated-50/60 rounded-[8px] p-3 mb-4 space-y-1">
-                    <span className="text-[9px] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
+                    <span className="text-[0.625rem] font-bold text-mitigated-700 uppercase flex items-center gap-1"><AlertTriangle size={10} />Rows with issues</span>
                     {rows.filter(r => r.validationIssues.length > 0).slice(0, 3).map(r => (
                       <div key={r.id} className="flex items-start gap-2 text-[10px]">
                         <span className="text-mitigated-700 font-semibold shrink-0">Row {r.sourceRow}:</span>
@@ -3952,7 +3946,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 {/* Needs review warning */}
                 {stats.needsReview > 0 && (
                   <div className="bg-evidence-50/60 rounded-[8px] p-3 mb-4">
-                    <p className="text-[10px] text-evidence-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze — unreviewed rows will be imported.</p>
+                    <p className="text-[10px] text-evidence-700">{stats.needsReview} row{stats.needsReview !== 1 ? 's' : ''} not yet marked as reviewed. You can still freeze: unreviewed rows will be imported.</p>
                   </div>
                 )}
 
@@ -4044,7 +4038,7 @@ function SectionEntryCard({ data }: { data: EntryData }) {
       onKeyDown={interactive ? (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); data.onOpen?.(); }
       } : undefined}
-      className={`w-full bg-white border border-canvas-border rounded-[10px] px-4 py-3 transition-colors ${
+      className={`w-full bg-white border border-canvas-border rounded-[12px] px-4 py-3 transition-colors ${
         interactive ? 'cursor-pointer hover:border-brand-300 hover:bg-paper-50/30' : ''
       }`}
     >
@@ -4189,10 +4183,12 @@ const OVERVIEW_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 // day; a first-impression stagger is a moment, not something to replay every navigation.
 let overviewHasAnimated = false;
 
-function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
+function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: {
   bp: UserProcess; onBack: () => void;
   onOpenRacmEditor?: (racm: import('./RacmListTable').RacmEntry) => void;
   onOpenWorkflowDetail?: (workflowId: string) => void;
+  onCreateWorkflow?: () => void;
+  onRunWorkflow?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
@@ -4257,7 +4253,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   const openDetailSop = openDetailSopId ? SOPS.find(s => s.id === openDetailSopId) : null;
   // RacmListTable manages RACM detail/mapping takeovers internally; mirror that state
   // up so the section-pills row can hide while a RACM owns the screen.
-  const [racmTakeover, setRacmTakeover] = useState(false);
+  const [racmTakeover, setRacmTakeover] = useState<'detail' | 'mapping' | null>(null);
   const detailIsOpen = !!(openDetailRisk || openDetailControl || openDetailRacm || openDetailSop);
 
   // Listen for browser back/forward so closing the drilled section via browser back works.
@@ -4462,7 +4458,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
 
     return {
       sop: {
-        icon: FileText,
+        icon: Upload,
         health: bpSops.length === 0 ? 'empty' : (staleSops > 0 ? 'stale' : 'healthy'),
         breakdown: bpSops.length === 0
           ? 'No SOPs uploaded yet'
@@ -4472,12 +4468,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         ratio: bpSops.length === 0 ? null : (bpSops.length - staleSops) / bpSops.length,
         openCount: staleSops,
         openLabel: 'stale',
-        description: 'Standard operating procedures — the source of truth for how each step in this process runs.',
+        description: 'Standard operating procedures: the source of truth for how each step in this process runs.',
         healthRatioText: bpSops.length === 0 ? '' : `${bpSops.length - staleSops}/${bpSops.length} fresh`,
         entries: sopEntries,
       },
       racm: {
-        icon: Grid3x3,
+        icon: FileText,
         health: totalRacms === 0 ? 'empty' : (draftRacms > 0 ? 'attention' : 'healthy'),
         breakdown: totalRacms === 0
           ? 'Build your first matrix'
@@ -4485,7 +4481,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         lastActivity: bpRacms[0]?.lastRun
           ? (bpRacms[0].lastRun === 'Never' ? 'Never run' : `Last run: ${bpRacms[0].lastRun}`)
           : 'No activity yet',
-        ctaLabel: totalRacms === 0 ? 'New RACM' : 'Open',
+        ctaLabel: totalRacms === 0 ? 'Create RACM' : 'Open',
         ratio: totalRacms === 0 ? null : activeRacms / totalRacms,
         openCount: draftRacms,
         openLabel: 'draft',
@@ -4502,7 +4498,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         lastActivity: bpRisks.length === 0
           ? 'No activity yet'
           : (bpRisks.find(r => r.lastUpdated)?.lastUpdated ? `Latest: ${bpRisks.find(r => r.lastUpdated)!.lastUpdated}` : 'No activity yet'),
-        ctaLabel: bpRisks.length === 0 ? 'New Risk' : 'Open',
+        ctaLabel: bpRisks.length === 0 ? 'Create Risk' : 'Open',
         ratio: bpRisks.length === 0 ? null : mappedRisks / bpRisks.length,
         openCount: unmappedRisks,
         openLabel: 'unmapped',
@@ -4517,7 +4513,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? 'Mapped via RACM'
           : `${keyCtls} key${ineffectiveCtls > 0 ? ` · ${ineffectiveCtls} ineffective` : ''}`,
         lastActivity: bpControls.length === 0 ? 'No activity yet' : 'Mapped via RACM',
-        ctaLabel: bpControls.length === 0 ? 'Go to RACM' : 'Open',
+        ctaLabel: bpControls.length === 0 ? 'Open RACM' : 'Open',
         ratio: bpControls.length === 0 ? null : (bpControls.length - ineffectiveCtls) / bpControls.length,
         openCount: ineffectiveCtls,
         openLabel: 'ineffective',
@@ -4532,11 +4528,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           ? 'No workflows linked'
           : `${activeWfs} active${idleWfs > 0 ? ` · ${idleWfs} idle` : ''}`,
         lastActivity: bpWfs[0]?.lastRun ? `Last run: ${bpWfs[0].lastRun}` : 'No activity yet',
-        ctaLabel: bpWfs.length === 0 ? 'New Workflow' : 'Open',
+        ctaLabel: bpWfs.length === 0 ? 'Create Workflow' : 'Open',
         ratio: bpWfs.length === 0 ? null : activeWfs / bpWfs.length,
         openCount: idleWfs,
         openLabel: 'idle',
-        description: 'Operational workflows that fire when a control triggers — approvals, monitors, escalations.',
+        description: 'Operational workflows that fire when a control triggers: approvals, monitors, escalations.',
         healthRatioText: bpWfs.length === 0 ? '' : `${activeWfs}/${bpWfs.length} active`,
         entries: workflowEntries,
       },
@@ -4550,7 +4546,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     const draftRacms = bpRacms.filter(r => r.status === 'draft').length
                      + createdRacms.filter(r => r.isFrozen === false).length;
     if (draftRacms > 0) {
-      items.push({ text: `${draftRacms} RACM${draftRacms !== 1 ? 's' : ''} in draft — finish setup before audit can run`, section: 'racm' });
+      items.push({ text: `${draftRacms} RACM${draftRacms !== 1 ? 's' : ''} in draft: finish setup before audit can run`, section: 'racm' });
     }
     const unmappedRisks = bpRisks.filter(r => r.ctls === 0).length;
     if (unmappedRisks > 0) {
@@ -4621,6 +4617,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     controls: 'Controls',
     workflows: 'Workflows',
   };
+
+  // Native tooltips only for the two acronym tabs; the rest read fine on their own.
+  const sectionTabTooltip: Partial<Record<SectionKey, string>> = {
+    sop: 'Standard Operating Procedure',
+    racm: 'Risk & Control Matrix',
+  };
   // Tab icons — SOP upload, RACM document, risk triangle, control shield, workflow nodes.
   const sectionTabIcon: Record<SectionKey, React.ComponentType<{ size?: number; className?: string }>> = {
     sop: Upload,
@@ -4658,7 +4660,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     racm: 'Create new RACM',
     risks: 'Create new Risk',
     controls: 'Create new Control',
-    workflows: 'Create new Workflow',
+    workflows: 'Create Workflow',
   };
 
   // Trigger the create flow for a given section. RACM lives in this component;
@@ -4763,7 +4765,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               } : r));
               setReviewingRacmId(null);
               addToast({
-                message: `RACM "${reviewingRacm.name}" frozen — ${uniqueRisks.size} risks, ${uniqueControls.size} controls, ${mappings.size} mappings created.`,
+                message: `RACM "${reviewingRacm.name}" frozen: ${uniqueRisks.size} risks, ${uniqueControls.size} controls, ${mappings.size} mappings created.`,
                 type: 'success',
               });
             }}
@@ -4781,22 +4783,32 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
         <div className="px-[124px] py-8">
           <div className={`bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 ${(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? '' : 'border-b border-border'}`}>
             <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
-              <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-                <ArrowLeft size={12} />Process Hub
-              </button>
-              <span className="text-ink-300">/</span>
-              <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
-              <span className="text-ink-300">/</span>
-              {detailIsOpen ? (
-                <>
-                  <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
-                  <span className="text-ink-300">/</span>
-                  <span className="text-ink-700 truncate">
-                    {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
-                  </span>
-                </>
+              {drilledSection === 'racm' && racmTakeover === 'detail' ? (
+                /* On the RACM detail page, the full trail collapses to a single back
+                   button that returns to the RACM list (the RACM tab). */
+                <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                  <ArrowLeft size={12} />Back to RACMs
+                </button>
               ) : (
-                <span className="text-ink-700 truncate">{info.title}</span>
+                <>
+                  <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                    <ArrowLeft size={12} />Process Hub
+                  </button>
+                  <span className="text-ink-300">/</span>
+                  <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
+                  <span className="text-ink-300">/</span>
+                  {detailIsOpen ? (
+                    <>
+                      <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
+                      <span className="text-ink-300">/</span>
+                      <span className="text-ink-700 truncate">
+                        {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-ink-700 truncate">{info.title}</span>
+                  )}
+                </>
               )}
             </div>
 
@@ -4813,6 +4825,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                     <button
                       type="button"
                       key={key}
+                      title={sectionTabTooltip[key]}
                       aria-label={`Switch to ${m.title}`}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => switchDrilledSection(key)}
@@ -4927,7 +4940,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           )}
           {drilledSection === 'risks' && <div className="-mt-4 pt-5"><RiskRegister processFilter={bp.abbr} /></div>}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
-          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />}
+          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} />}
         </div>
       </div>
     );
@@ -4980,15 +4993,17 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 {/* Quick add dropdown — shortcut to any of the five section create flows. */}
                 <div className="shrink-0">
                   <div className="relative">
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    shape="lg"
                     onClick={() => setCreateMenuOpen(v => !v)}
                     aria-haspopup="menu"
                     aria-expanded={createMenuOpen}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
+                    rightIcon={<ChevronDown size={13} />}
+                  >
                     Quick add
-                    <ChevronDown size={13} />
-                  </button>
+                  </Button>
                   {createMenuOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
@@ -5033,13 +5048,16 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 Upload your first SOP and we&apos;ll extract risks and controls automatically. The other sections unlock once you have a RACM.
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
+              shape="lg"
               onClick={() => switchDrilledSection('sop')}
-              className="shrink-0 px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700 transition-colors inline-flex items-center gap-1.5"
+              className="shrink-0"
+              leftIcon={<Upload size={13} />}
             >
-              <Upload size={13} />Upload SOP
-            </button>
+              Upload SOP
+            </Button>
           </div>
         )}
 
@@ -5105,7 +5123,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           }) : (() => {
           const SETUP_STEPS = [
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
-            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: Grid3x3 },
+            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: FileText },
             { key: 'risks' as const,     title: 'Create Risks',    desc: 'Identify and document risks relevant to this business process.',                      cta: 'Create Risk',            icon: AlertTriangle },
             { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
             { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
@@ -5150,7 +5168,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                   const done = isStepDone(step.key);
                   const Icon = step.icon;
                   return (
-                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant/25 bg-compliant-50/40' : 'border-canvas-border/40 bg-white'}`}>
+                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[12px] border transition-colors ${done ? 'border-compliant/25 bg-compliant-50/40' : 'border-canvas-border/40 bg-white'}`}>
                       {done ? (
                         <span className="w-6 h-6 rounded-full bg-compliant grid place-items-center shrink-0">
                           <CheckCircle2 size={16} className="text-paper-0" strokeWidth={2.5} />
@@ -5160,16 +5178,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                       )}
                       <div className="min-w-0 flex-1">
                         <h4 className={`text-[14px] font-semibold leading-tight ${done ? 'text-compliant-700' : 'text-ink-900'}`}>{step.title}</h4>
-                        <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">{step.desc}</p>
+                        <p className="text-[0.8125rem] text-ink-500 mt-0.5 leading-snug">{step.desc}</p>
                       </div>
                       {!done && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          shape="lg"
                           onClick={() => handleDropdownPick(step.key)}
-                          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-brand-50 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer"
+                          className="shrink-0"
+                          leftIcon={<Icon size={13} />}
                         >
-                          <Icon size={13} />{step.cta}
-                        </button>
+                          {step.cta}
+                        </Button>
                       )}
                     </div>
                   );
@@ -5219,7 +5240,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                 : key === 'racm'
                   ? 'Available after the first SOP is uploaded.'
                   : 'Available after the first RACM is created.';
-              const SECTION_ICON = { sop: FileText, racm: Grid3x3, risks: AlertTriangle, controls: ShieldCheck, workflows: Workflow } as const;
+              const SECTION_ICON = { sop: Upload, racm: FileText, risks: AlertTriangle, controls: Shield, workflows: Workflow } as const;
               const SECTION_ICON_CLS = {
                 sop: 'bg-brand-50 text-brand-700',
                 racm: 'bg-brand-50 text-brand-700',
@@ -5255,10 +5276,10 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
 }
 
 /* ─── Process detail wrapper — landing now lives in ProgramsView ─── */
-export default function BusinessProcesses({ selectedBPId, onSelectBP, userProcesses, onOpenRacmEditor, onOpenWorkflowDetail }: Props) {
+export default function BusinessProcesses({ selectedBPId, onSelectBP, userProcesses, onOpenRacmEditor, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: Props) {
   if (selectedBPId) {
     const bp = [...BUSINESS_PROCESSES, ...userProcesses].find(b => b.id === selectedBPId);
-    if (bp) return <BPDetailView bp={bp} onBack={() => onSelectBP(null)} onOpenRacmEditor={onOpenRacmEditor} onOpenWorkflowDetail={onOpenWorkflowDetail} />;
+    if (bp) return <BPDetailView bp={bp} onBack={() => onSelectBP(null)} onOpenRacmEditor={onOpenRacmEditor} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} />;
   }
   return null;
 }
