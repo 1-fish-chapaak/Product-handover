@@ -2,10 +2,10 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search, Plus, Upload, Sparkles,
-  ChevronRight, ChevronLeft, ChevronDown, LayoutGrid,
+  ChevronRight, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
-  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download,
+  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
   HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
@@ -17,6 +17,7 @@ import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
+import BPOverviewDashboard from './BPOverviewDashboard';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
@@ -35,9 +36,9 @@ import ListLoadError from '../shared/ListLoadError';
 // deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
 // while Testing RACM is mapped but still Workflow Missing.
 const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
-  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
-  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
-  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', createdAt: 'May 28, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', createdAt: 'May 12, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
+  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', createdAt: 'Apr 30, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
 ];
 const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
 
@@ -838,7 +839,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
   );
 }
 
-// ─── Upload SOP Drawer ────────────────────────────────────────────────────
+// ─── Upload SOP Modal ────────────────────────────────────────────────────
 
 interface UploadSOPData {
   name: string;
@@ -847,13 +848,17 @@ interface UploadSOPData {
   fileName: string;
 }
 
-function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }: {
+function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onSaveAsDraft }: {
   bpAbbr: string;
+  // When set, the modal is retrying a failed SOP: the name is fixed to the
+  // original SOP (the new file does not rename it) and the copy reflects a retry.
+  retrySopName?: string;
   onClose: () => void;
   onUploadAndProcess: (data: UploadSOPData) => void;
   onSaveAsDraft: (data: UploadSOPData) => void;
 }) {
-  const [name, setName] = useState('');
+  const isRetry = !!retrySopName;
+  const [name, setName] = useState(retrySopName ?? '');
   const [description, setDescription] = useState('');
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -871,7 +876,11 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
   const isValid = name.trim() && fileName;
   // Drawer is dirty as soon as the user touches any field — close attempts go through confirm.
-  const isDirty = !!(name.trim() || description.trim() || fileName);
+  // Retry pre-fills the name; only flag dirty if the user changed it, picked a
+  // file, or typed a description.
+  const isDirty = isRetry
+    ? (name.trim() !== (retrySopName ?? '').trim() || !!fileName || !!description.trim())
+    : !!(name.trim() || description.trim() || fileName);
 
   const buildData = (): UploadSOPData => ({ name: name.trim(), version: 'v1.0', description: description.trim(), fileName });
 
@@ -884,12 +893,12 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
 
   return (
-    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
+      <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
         {showDiscardConfirm && (
@@ -903,8 +912,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">Upload SOP</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
+            <h2 className="font-display text-[18px] font-semibold text-ink-900">{isRetry ? 'Retry RACM generation' : 'Upload SOP'}</h2>
+            <p className="text-[12px] text-ink-500 mt-0.5">{isRetry ? 'Re-upload a document to retry. The SOP keeps its name.' : 'Upload a process document and define metadata.'}</p>
           </div>
           <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -944,10 +953,11 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
             </div>
           </div>
 
-          {/* SOP Name */}
+          {/* SOP Name — editable. On retry it's pre-filled with the SOP's current
+              name (so it isn't lost); for a fresh upload it auto-fills from the file. */}
           <div>
             <label className={labelCls}>SOP Name <span className="text-risk">*</span></label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Auto-filled from file name" className={fieldCls} />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder={isRetry ? 'SOP name' : 'Auto-filled from file name'} className={fieldCls} />
           </div>
 
           {/* Business Process (read-only) */}
@@ -972,8 +982,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
             Upload & Process
           </Button>
         </div>
-      </motion.aside>
-    </>
+      </motion.div>
+    </div>
   );
 }
 
@@ -1393,7 +1403,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [reviewingSopId, setReviewingSopId] = useState<string | null>(null);
   const [viewingSopId, setViewingSopId] = useState<string | null>(null);
   const [confirmDeleteSop, setConfirmDeleteSop] = useState<{ id: string; name: string } | null>(null);
-  const [showUploadDrawer, setShowUploadDrawer] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  // When set, the Upload SOP modal is in "retry" mode — the re-uploaded file
+  // replaces this failed SOP in place instead of creating a new SOP row.
+  const [retryingSopId, setRetryingSopId] = useState<string | null>(null);
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
   const [sopStatusFilter, setSopStatusFilter] = useState<string[]>([]);
@@ -1433,6 +1446,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   }, []);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
+  const retryingSop = retryingSopId ? localSops.find(s => s.id === retryingSopId) ?? null : null;
 
   // Derive a friendly file type label from the filename extension (e.g. "PDF").
   const getFileType = useCallback((sop: LocalSOP) => {
@@ -1455,7 +1469,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ section?: string }>;
-      if (ce.detail?.section === 'sop') setShowUploadDrawer(true);
+      if (ce.detail?.section === 'sop') setShowUploadModal(true);
     };
     window.addEventListener('process-hub-create', handler);
     return () => window.removeEventListener('process-hub-create', handler);
@@ -1518,7 +1532,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     };
 
     setLocalSops(prev => [newSop, ...prev]);
-    setShowUploadDrawer(false);
+    setShowUploadModal(false);
 
     if (!startProcessing) {
       addToast({ message: `"${data.name}" saved as draft. Start processing when ready.`, type: 'success' });
@@ -1553,6 +1567,65 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       addToast({ message: `"${data.name}" processed: ${risks.length} risks and ${controls.length} controls extracted. Review to create draft RACM.`, type: 'success' });
     }, 4500);
   }, [addToast, bpAbbr]);
+
+  // Retry a failed SOP — replace the failed record in place with the re-uploaded
+  // document and re-run RACM generation, instead of adding a new SOP row.
+  const handleRetrySOP = useCallback((data: UploadSOPData) => {
+    const sopId = retryingSopId;
+    if (!sopId) return;
+    setShowUploadModal(false);
+    setRetryingSopId(null);
+
+    const { risks, controls } = buildMockExtractions();
+    const uploadDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Swap in the new file + metadata, clear the failure, and restart processing.
+    // racmId is cleared for now so the card reads "Processing", not "RACM Ready".
+    setLocalSops(prev => prev.map(s => s.id === sopId ? {
+      ...s,
+      name: data.name || s.name,  // retry saves the (editable) name from the modal
+      fileName: data.fileName,
+      version: s.version,  // and its original version
+      description: data.description,
+      uploadedBy: 'Current User',
+      uploadedAt: uploadDate,
+      status: 'Processing' as SOPStatus,
+      progress: 0, processingStep: 0,
+      failureReason: null,
+      racmId: null, racmName: null,
+      risks: 0, controls: 0,
+      extractedRisks: risks, extractedControls: controls,
+    } : s));
+
+    addToast({ message: `Retrying "${data.name}"…`, type: 'info' });
+
+    const stepDelays = [500, 1000, 1800, 2500, 3200, 3800, 4200];
+    stepDelays.forEach((delay, stepIdx) => {
+      setTimeout(() => {
+        setLocalSops(prev => prev.map(s => s.id === sopId
+          ? { ...s, processingStep: stepIdx, progress: Math.round((stepIdx / 6) * 100) }
+          : s));
+      }, delay);
+    });
+
+    // Success — RACM generated: attach a RACM so the card flips to "RACM Ready".
+    setTimeout(() => {
+      setLocalSops(prev => prev.map(s => {
+        if (s.id !== sopId) return s;
+        return {
+          ...s,
+          progress: 100, processingStep: 6,
+          risks: risks.filter(r => r.accepted).length,
+          controls: controls.filter(c => c.accepted).length,
+          racmId: `RACM-${Date.now()}`,
+          racmName: `FY26 ${bpAbbr} — ${(data.name || s.name).replace(/\s*SOP\s*/i, '').trim()}`,
+          failureReason: null,
+          status: 'Linked' as SOPStatus,
+        };
+      }));
+      addToast({ message: `"${data.name}" retried — RACM generated with ${risks.length} risks and ${controls.length} controls.`, type: 'success' });
+    }, 4500);
+  }, [retryingSopId, bpAbbr, addToast]);
 
   // Start processing for a draft SOP
   const handleStartProcessing = useCallback((sopId: string) => {
@@ -1636,11 +1709,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           onUpdateControls={(controls) => handleUpdateControls(reviewingSop.id, controls)}
         />
 
-        {/* Upload SOP Drawer (keep available even in review) */}
+        {/* Upload SOP Modal (keep available even in review) */}
         <AnimatePresence>
-          {showUploadDrawer && (
-            <UploadSOPDrawer bpAbbr={bpAbbr} onClose={() => setShowUploadDrawer(false)}
-              onUploadAndProcess={(data) => handleUploadIntent(data, true)} onSaveAsDraft={(data) => handleUploadIntent(data, false)} />
+          {showUploadModal && (
+            <UploadSOPModal bpAbbr={bpAbbr} retrySopName={retryingSop?.name} onClose={() => { setShowUploadModal(false); setRetryingSopId(null); }}
+              onUploadAndProcess={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, true)} onSaveAsDraft={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, false)} />
           )}
         </AnimatePresence>
       </div>
@@ -1841,7 +1914,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
-          <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadDrawer(true)}>
+          <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)}>
             Upload SOP
           </Button>
         </div>
@@ -1873,7 +1946,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
-              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadDrawer(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadModal(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
             </div>
@@ -1980,7 +2053,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-[4px]">{sop.version}</span>
                       </div>
                       {sop.failureReason && (
-                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
+                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">
+                          {sop.failureReason}
+                          <button
+                            type="button"
+                            onClick={() => { setRetryingSopId(sop.id); setShowUploadModal(true); }}
+                            aria-label={`Retry RACM generation for ${sop.name}`}
+                            title="Retry"
+                            className="inline-flex items-center align-middle ml-1.5 text-risk-700 hover:text-risk-800 cursor-pointer"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        </p>
                       )}
                       <div className="text-[12px] text-ink-400">
                         {sop.uploadedBy}
@@ -1989,7 +2073,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       </div>
                     </div>
 
-                    {/* Actions — view + download + delete. */}
+                    {/* Actions — view + download + delete (retry is the inline icon at the end of the error message). */}
                     <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
                       <div className="relative group/view">
                         <button
@@ -2040,14 +2124,15 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </>
       )}
 
-      {/* Upload SOP Drawer */}
+      {/* Upload SOP Modal */}
       <AnimatePresence>
-        {showUploadDrawer && (
-          <UploadSOPDrawer
+        {showUploadModal && (
+          <UploadSOPModal
             bpAbbr={bpAbbr}
-            onClose={() => setShowUploadDrawer(false)}
-            onUploadAndProcess={(data) => handleUploadIntent(data, true)}
-            onSaveAsDraft={(data) => handleUploadIntent(data, false)}
+            retrySopName={retryingSop?.name}
+            onClose={() => { setShowUploadModal(false); setRetryingSopId(null); }}
+            onUploadAndProcess={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, true)}
+            onSaveAsDraft={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, false)}
           />
         )}
       </AnimatePresence>
@@ -4122,97 +4207,7 @@ function SectionEntryCard({ data }: { data: EntryData }) {
   );
 }
 
-// Section row in the engagement-table format:
-//   [chevron] [title + meta + (expanded: entries list)]    [health text]
-// When expanded, the data panel below lists every entry in this section as
-// an engagement-style sub-card. Clicking the centre area drills into the section.
-function SectionCard({
-  title, count, locked, lockedReason, onClick,
-  ratio, healthRatioText, icon: Icon, iconCls, attention, fixLabel,
-}: {
-  title: string;
-  count: number;
-  locked?: boolean;
-  lockedReason?: string;
-  onClick: () => void;
-  ratio?: number | null;
-  openCount?: number;
-  openLabel?: string;
-  healthRatioText?: string;
-  entries?: EntryData[];
-  emptyEntriesLabel?: string;
-  icon?: React.ElementType;
-  iconCls?: string;
-  attention?: boolean;
-  fixLabel?: string | null;
-}) {
-  if (locked) {
-    return (
-      <div className="flex items-center gap-3 py-2.5 px-2 -mx-2 opacity-60">
-        <span className="w-8 h-8 rounded-lg bg-paper-100 grid place-items-center text-ink-300 shrink-0">
-          {Icon ? <Icon size={15} /> : <Lock size={15} />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="text-[13px] font-semibold text-ink-400">{title}</span>
-          <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 mt-0.5"><Lock size={9} aria-hidden />{lockedReason ?? 'Locked'}</div>
-        </div>
-      </div>
-    );
-  }
-
-  const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
-  const pct = hasHealth ? Math.round((ratio as number) * 100) : 0;
-  // The numeric token ("5/6") wears JetBrains Mono, the word ("mapped") stays in the body face.
-  const ratioNum = healthRatioText ? healthRatioText.split(' ')[0] : '';
-  const ratioWord = healthRatioText ? healthRatioText.split(' ').slice(1).join(' ') : '';
-
-  // Health-tier colour, matching the Engagements overview (compliant / mitigated / risk).
-  const tier = pct >= 85
-    ? { bar: 'bg-compliant', text: 'text-compliant-700' }
-    : pct >= 65
-      ? { bar: 'bg-mitigated', text: 'text-mitigated-700' }
-      : { bar: 'bg-risk', text: 'text-risk-700' };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`Open ${title}`}
-      className="group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer text-left"
-    >
-      {/* identity icon chip — coloured by the section's GRC semantic, in the Engagements
-          event-icon style (bg-{sem}-50 / text-{sem}-700) */}
-      <span className={`w-8 h-8 rounded-md grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
-        {Icon ? <Icon size={20} /> : null}
-      </span>
-
-      {/* name + the count fraction */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[13px] font-semibold text-ink-800 truncate group-hover:text-brand-700 transition-colors">{title}</span>
-          <span className="text-[11px] text-ink-400 tabular-nums shrink-0">· {count}</span>
-        </div>
-        {hasHealth && (
-          <div className="text-[11px] text-ink-400 mt-0.5">
-            <span className="font-mono tabular-nums">{ratioNum}</span> {ratioWord}
-          </div>
-        )}
-      </div>
-
-      {/* health bar + tier percentage */}
-      {hasHealth && (
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:block w-24 h-1.5 bg-paper-100 rounded-full overflow-hidden" role="img" aria-label={`${pct}% coverage`}>
-            <div className={`h-full rounded-full ${tier.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className={`text-[13px] font-bold tabular-nums w-10 text-right ${tier.text}`}>{pct}%</span>
-        </div>
-      )}
-
-      <ChevronRight size={15} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
-    </button>
-  );
-}
+// (SectionCard removed — the BP-detail landing is now the BPOverviewDashboard.)
 
 // Exponential ease-out (≈ expo) for the overview's first-paint reveal. Typed as a
 // bezier tuple so it satisfies motion's Easing type without casts.
@@ -4293,8 +4288,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
-  // 2-column side-by-side experiment is P2P-only for now.
-  const isP2P = bp.id === 'p2p';
 
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
@@ -4675,22 +4668,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
   const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
 
-  // Section render order on the index view: rows with open work float to the top,
-  // locked rows sink to the bottom. Within each bucket, canonical order is preserved.
-  const lockedFor = (key: SectionKey) =>
-    isFreshBP && key !== 'sop'
-      ? true
-      : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
-  const sortedIndexSections = [...sectionOrder].sort((a, b) => {
-    const aLocked = lockedFor(a);
-    const bLocked = lockedFor(b);
-    if (aLocked !== bLocked) return aLocked ? 1 : -1;
-    const aOpen = (sectionInsights[a].openCount ?? 0) > 0;
-    const bOpen = (sectionInsights[b].openCount ?? 0) > 0;
-    if (aOpen !== bOpen) return aOpen ? -1 : 1;
-    return 0;
-  });
-
   // Section switcher pill labels (shorter than full section titles where useful).
   const sectionPillLabel: Record<SectionKey, string> = {
     sop: 'SOP',
@@ -4763,14 +4740,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     }
   };
 
-  // Dropdown menu — used in the BP detail INDEX header. Picks a section,
-  // navigates to it, then fires triggerSectionCreate.
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  // Horizontal expand/collapse for the P2P 2-column experiment: the setup
-  // checklist and the coverage panel sit side-by-side and each folds to a slim
-  // rail on its own (both can be open, or either one closed).
-  const [setupOpen, setSetupOpen] = useState(true);
-  const [coverageOpen, setCoverageOpen] = useState(true);
   // When a create/upload flow is requested for a section we aren't viewing yet,
   // we navigate there first and remember the intent. The effect below fires the
   // trigger once that section is mounted — child effects (which register the
@@ -4778,7 +4747,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // reliably instead of racing a fixed timeout.
   const [pendingCreate, setPendingCreate] = useState<SectionKey | null>(null);
   const handleDropdownPick = (section: SectionKey) => {
-    setCreateMenuOpen(false);
     if (section === drilledSection) {
       // Already viewing the section — open its flow immediately.
       triggerSectionCreate(section);
@@ -4795,31 +4763,91 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drilledSection, pendingCreate]);
 
-  // Slim folded rail shown when a side-by-side panel is collapsed (P2P layout).
-  // Clicking anywhere on the rail re-opens the panel.
-  const renderCollapsedStrip = ({ title, icon: Icon, gradient, expandDir, onExpand }: {
-    title: string;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
-    gradient?: boolean;
-    expandDir: 'right' | 'left';
-    onExpand: () => void;
-  }) => (
-    <motion.section
-      {...revealProps(0)}
-      role="button"
-      tabIndex={0}
-      onClick={onExpand}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(); } }}
-      aria-label={`Expand ${title}`}
-      className="self-stretch shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-start gap-2 cursor-pointer hover:border-brand-200 transition-colors"
-    >
-      <span className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${gradient ? 'bg-gradient-to-r from-brand-400 to-brand-600 text-paper-0' : 'bg-brand-50 text-brand-700'}`}>
-        <Icon size={16} />
-      </span>
-      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
-        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </span>
-    </motion.section>
+
+  // Top tab bar — Overview + the five sections. Shown on the index (Overview active)
+  // and on every drilled section, so navigation is identical everywhere.
+  const renderTabBar = (active: 'overview' | SectionKey) => (
+    <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
+      {(['overview', ...sectionOrder] as ('overview' | SectionKey)[]).map((key) => {
+        const isActive = active === key;
+        const isOverview = key === 'overview';
+        const TabIcon = isOverview ? LayoutGrid : sectionTabIcon[key as SectionKey];
+        const label = isOverview ? 'Overview' : sectionPillLabel[key as SectionKey];
+        const count = isOverview ? 0 : sectionMeta[key as SectionKey].count;
+        return (
+          <button
+            type="button"
+            key={key}
+            title={isOverview ? undefined : sectionTabTooltip[key as SectionKey]}
+            aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
+            aria-current={isActive ? 'page' : undefined}
+            onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
+            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
+              isActive
+                ? 'border-brand-600 text-brand-700 font-semibold'
+                : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
+            }`}
+          >
+            <TabIcon size={15} className={isActive ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
+            <span>{label}</span>
+            {!isOverview && count > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
+                isActive ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
+              }`}>{count}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // The process masthead — breadcrumb, title, tab bar, and the process-meta row —
+  // rendered identically on the Overview index and on every drilled section tab, so
+  // the header stays constant as you move between tabs. (Deep detail / RACM-takeover
+  // pages swap this for a collapsed back-trail header so the detail owns the screen.)
+  const renderProcessHeader = (active: 'overview' | SectionKey) => (
+    <>
+      <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border">
+        <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
+          <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+            <ArrowLeft size={12} />Process Hub
+          </button>
+          <span className="text-ink-300">/</span>
+          <span className="text-ink-700 truncate">{bp.name}</span>
+        </div>
+        <div className="pb-5">
+          <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+        </div>
+        <div className="pt-1">{renderTabBar(active)}</div>
+      </div>
+      {/* Process-meta row (code · owner · status) — Overview only; the section
+          tabs hide it so their content sits directly under the tabs. */}
+      {active === 'overview' && (
+        <div className="flex items-center gap-4 text-[12px] flex-wrap mb-5">
+          <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
+          <span className="w-px h-3 bg-canvas-border" aria-hidden />
+          <span className="flex items-center gap-1.5">
+            <span className="text-ink-400">Owner</span>
+            <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
+          </span>
+          <span className="w-px h-3 bg-canvas-border" aria-hidden />
+          {(() => {
+            const s = bp.status ?? 'Active';
+            const tone =
+              s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+              s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+              s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                 { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+            return (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                {s}
+              </span>
+            );
+          })()}
+        </div>
+      )}
+    </>
   );
 
   // RACM editor takeover — full-screen replaces all views while editing
@@ -4863,78 +4891,40 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className={`bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 ${(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? '' : 'border-b border-border'}`}>
-            <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
-              {drilledSection === 'racm' && racmTakeover === 'detail' ? (
-                /* On the RACM detail page, the full trail collapses to a single back
-                   button that returns to the RACM list (the RACM tab). */
-                <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-                  <ArrowLeft size={12} />Back to RACMs
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-                    <ArrowLeft size={12} />Process Hub
+          {(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? (
+            /* Detail / RACM-takeover pages own the screen — collapse to a back trail, no tabs. */
+            <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4">
+              <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0">
+                {drilledSection === 'racm' && racmTakeover === 'detail' ? (
+                  <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                    <ArrowLeft size={12} />Back to RACMs
                   </button>
-                  <span className="text-ink-300">/</span>
-                  <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
-                  <span className="text-ink-300">/</span>
-                  {detailIsOpen ? (
-                    <>
-                      <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
-                      <span className="text-ink-300">/</span>
-                      <span className="text-ink-700 truncate">
-                        {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-ink-700 truncate">{info.title}</span>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Section switcher pills + section-specific create button — share one row.
-                Hidden when a risk/control detail page is open so the detail owns the screen. */}
-            {!detailIsOpen && !(drilledSection === 'racm' && racmTakeover) && (
-              <div className="flex items-end justify-between gap-3 -mb-4">
-                <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
-                {sectionOrder.map(key => {
-                  const m = sectionMeta[key];
-                  const active = drilledSection === key;
-                  const TabIcon = sectionTabIcon[key];
-                  return (
-                    <button
-                      type="button"
-                      key={key}
-                      title={sectionTabTooltip[key]}
-                      aria-label={`Switch to ${m.title}`}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => switchDrilledSection(key)}
-                      className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
-                        active
-                          ? 'border-brand-600 text-brand-700 font-semibold'
-                          : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
-                      }`}
-                    >
-                      <TabIcon size={15} className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
-                      <span>{sectionPillLabel[key]}</span>
-                      {m.count > 0 && (
-                        <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
-                          active ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
-                        }`}>{m.count}</span>
-                      )}
+                ) : (
+                  <>
+                    <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                      <ArrowLeft size={12} />Process Hub
                     </button>
-                  );
-                })}
-                </div>
-                {/* Per-section create buttons now live in each section's own filter row
-                    (SOP / RACM / Risks / Workflows) or toolbar (Controls "New control"),
-                    not in this shared header. */}
+                    <span className="text-ink-300">/</span>
+                    <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
+                    <span className="text-ink-300">/</span>
+                    {detailIsOpen ? (
+                      <>
+                        <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
+                        <span className="text-ink-300">/</span>
+                        <span className="text-ink-700 truncate">
+                          {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-ink-700 truncate">{info.title}</span>
+                    )}
+                  </>
+                )}
               </div>
-            )}
-
-          </div>
+            </div>
+          ) : (
+            renderProcessHeader(drilledSection)
+          )}
 
           {drilledSection === 'sop' && (
             <SOPTabContent
@@ -4969,7 +4959,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             />
           )}
           {drilledSection === 'racm' && (
-            <div className="space-y-4 -mt-4 pt-5">
+            <div className="space-y-4">
               <RacmListTable
                 processFilter={bp.abbr}
                 extraRacms={
@@ -5004,7 +4994,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
               </AnimatePresence>
             </div>
           )}
-          {drilledSection === 'risks' && <div className="-mt-4 pt-5"><RiskRegister processFilter={bp.abbr} /></div>}
+          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
           {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} />}
         </div>
@@ -5016,91 +5006,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border">
-          {/* breadcrumb on its own line; Quick add now lives on the byline row below */}
-          <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
-            <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-              <ArrowLeft size={12} />Process Hub
-            </button>
-            <span className="text-ink-300">/</span>
-            <span className="text-ink-700 truncate">{bp.name}</span>
-          </div>
-
-          {/* Masthead body — the process title and byline set the page; the rolled-up
-              health now lives in the Process Health Score card just below. */}
-          <div className="flex items-start justify-between gap-10 pb-6">
-            <div className="min-w-0 flex-1">
-              <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15] mb-4">{bp.name}</h1>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-4 text-[12px] flex-wrap">
-                  <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
-                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-ink-400">Owner</span>
-                    <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
-                  </span>
-                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
-                  {(() => {
-                    const s = bp.status ?? 'Active';
-                    const tone =
-                      s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                      s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                      s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                         { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                    return (
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                        {s}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                {/* Quick add dropdown — shortcut to any of the five section create flows. */}
-                <div className="shrink-0">
-                  <div className="relative">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    shape="lg"
-                    onClick={() => setCreateMenuOpen(v => !v)}
-                    aria-haspopup="menu"
-                    aria-expanded={createMenuOpen}
-                    rightIcon={<ChevronDown size={13} />}
-                  >
-                    Quick add
-                  </Button>
-                  {createMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
-                      <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
-                        {([
-                          { key: 'sop' as const,        label: 'SOP' },
-                          { key: 'racm' as const,       label: 'RACM' },
-                          { key: 'risks' as const,      label: 'Risk' },
-                          { key: 'controls' as const,   label: 'Control' },
-                          { key: 'workflows' as const,  label: 'Workflow' },
-                        ]).map(item => (
-                          <button
-                            type="button"
-                            key={item.key}
-                            role="menuitem"
-                            onClick={() => handleDropdownPick(item.key)}
-                            className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
+        {renderProcessHeader('overview')}
 
         {/* Fresh-BP onboarding banner — only when nothing's set up yet. */}
         {isFreshBP && (
@@ -5174,19 +5080,24 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           );
         })()}
 
-        {/* Setup checklist + Coverage by section. On the P2P process these sit
-            side-by-side in a 2-column layout where each panel folds to a slim rail
-            independently; every other process keeps the stacked layout. */}
-        <div className={isP2P ? 'flex items-stretch gap-5 mb-5' : 'contents'}>
-
+        {/* Engagement-style overview widgets — risk/control health, coverage funnel,
+            workflows, and (placeholder) activity. Populated processes only. */}
         {!isFreshBP && (
-          isP2P && !setupOpen ? renderCollapsedStrip({
-            title: 'Set up this business process',
-            icon: Zap,
-            gradient: true,
-            expandDir: 'right',
-            onExpand: () => setSetupOpen(true),
-          }) : (() => {
+          <BPOverviewDashboard
+            bp={bp}
+            risks={bpRisks}
+            controls={bpControls}
+            workflows={bpWfs}
+            sops={bpSops}
+            racms={bpRacms}
+            attention={attentionItems}
+            onOpenSection={switchDrilledSection}
+          />
+        )}
+
+        {/* Setup checklist — onboarding for processes that aren't fully built out.
+            Hidden once every section has content (the dashboard above covers it). */}
+        {!sectionOrder.every(k => isSectionComplete(k)) && (() => {
           const SETUP_STEPS = [
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
             { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: FileText },
@@ -5200,7 +5111,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
           const pct = Math.round((completed / SETUP_STEPS.length) * 100);
           return (
-            <motion.section className={`rounded-xl border border-canvas-border bg-white p-5 ${isP2P ? 'flex-1 min-w-0' : 'mb-5'}`} {...revealProps(0)}>
+            <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 grid place-items-center shrink-0">
@@ -5217,16 +5128,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                   <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
-                  {isP2P && (
-                    <button
-                      type="button"
-                      onClick={() => setSetupOpen(false)}
-                      aria-label="Collapse setup checklist"
-                      className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -5264,78 +5165,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
               </div>
             </motion.section>
           );
-        })())}
-
-        {/* Coverage by section — a bordered panel with one clickable row per area, matching
-            the Engagements overview's SectionCard + Row pattern. Locked rows show on a fresh
-            process so the path ahead stays visible. */}
-        {isP2P && !coverageOpen ? renderCollapsedStrip({
-          title: 'Coverage by section',
-          icon: LayoutGrid,
-          gradient: false,
-          expandDir: 'left',
-          onExpand: () => setCoverageOpen(true),
-        }) : (
-        <motion.section className={`rounded-xl border border-canvas-border bg-white p-4 ${isP2P ? 'flex-1 min-w-0' : ''}`} {...revealProps(0)}>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[13px] font-semibold text-ink-800">Coverage by section</h3>
-            {isP2P && (
-              <button
-                type="button"
-                onClick={() => setCoverageOpen(false)}
-                aria-label="Collapse coverage by section"
-                className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
-              >
-                <ChevronRight size={18} />
-              </button>
-            )}
-          </div>
-          <div className="space-y-0.5">
-            {sortedIndexSections.map((key) => {
-              // Stay in sync with the setup checklist: a section that reads
-              // "not done" there must show its 0/empty state here too.
-              const incomplete = !isSectionComplete(key);
-              const m = incomplete ? { ...sectionMeta[key], count: 0 } : sectionMeta[key];
-              const ins = incomplete
-                ? { ...sectionInsights[key], ratio: null, healthRatioText: '', openCount: 0 }
-                : sectionInsights[key];
-              // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-              const locked = lockedFor(key);
-              const lockedReason = key === 'sop'
-                ? undefined
-                : key === 'racm'
-                  ? 'Available after the first SOP is uploaded.'
-                  : 'Available after the first RACM is created.';
-              const SECTION_ICON = { sop: Upload, racm: FileText, risks: AlertTriangle, controls: Shield, workflows: Workflow } as const;
-              const SECTION_ICON_CLS = {
-                sop: 'bg-brand-50 text-brand-700',
-                racm: 'bg-brand-50 text-brand-700',
-                risks: 'bg-brand-50 text-brand-700',
-                controls: 'bg-brand-50 text-brand-700',
-                workflows: 'bg-brand-50 text-brand-700',
-              } as const;
-              const attention = (ins.openCount ?? 0) > 0;
-              return (
-                <SectionCard
-                  key={key}
-                  title={m.title}
-                  count={m.count}
-                  ratio={ins.ratio}
-                  healthRatioText={ins.healthRatioText}
-                  locked={locked}
-                  lockedReason={lockedReason}
-                  icon={SECTION_ICON[key]}
-                  iconCls={SECTION_ICON_CLS[key]}
-                  attention={attention}
-                  onClick={() => switchDrilledSection(key)}
-                />
-              );
-            })}
-          </div>
-        </motion.section>
-        )}
-
-        </div>
+        })()}
       </div>
     </div>
   );

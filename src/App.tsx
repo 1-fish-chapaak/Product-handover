@@ -231,6 +231,21 @@ function AppInner() {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
+  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
+  // "Open in editor" new tab), restore the editor context and show it. Back goes
+  // to the Process Hub.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'racm-full-editor') {
+      setRacmEditorContext({
+        racmId: params.get('racmId') ?? '',
+        racmName: params.get('racmName') ?? 'RACM',
+        processLabel: params.get('processLabel') ?? '',
+        backView: 'business-processes',
+      });
+      setView('racm-full-editor');
+    }
+  }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
@@ -633,6 +648,15 @@ function AppInner() {
             }}
             onCreateWorkflow={() => enterWorkflowMode()}
             onRunWorkflow={(id) => openWorkflowExecutor(id)}
+            onOpenRacmEditor={(racm) => {
+              const params = new URLSearchParams({
+                view: 'racm-full-editor',
+                racmId: racm.id,
+                racmName: racm.name,
+                processLabel: racm.process,
+              });
+              window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+            }}
           />
         );
 
