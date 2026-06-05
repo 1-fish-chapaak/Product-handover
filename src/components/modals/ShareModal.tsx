@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { X, Link2, Globe, Lock, ChevronDown, Check, UserPlus, Users, Trash2 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 
@@ -26,7 +26,16 @@ type DirEntry =
 
 const ACCESS_OPTIONS = ['Full access', 'Can edit', 'Can view'] as const;
 
-/** Directory backing the "Email, Team & Users" typeahead. */
+/** Tasteful, on-brand avatar tints — varied so the list reads like a real
+ *  product (Notion/Slack) without using GRC semantic status colors. */
+const AVATAR_TINTS = [
+  'bg-brand-100 text-brand-700',
+  'bg-evidence-50 text-evidence-700',
+  'bg-draft-50 text-draft-700',
+];
+const tintFor = (s: string) =>
+  AVATAR_TINTS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
+
 const DIRECTORY: DirEntry[] = [
   { kind: 'user', name: 'Sarah Johnson', email: 'sarah.johnson@irame.ai', initials: 'SJ' },
   { kind: 'user', name: 'Michael Chen', email: 'michael.chen@irame.ai', initials: 'MC' },
@@ -46,8 +55,7 @@ const INITIAL_MEMBERS: Member[] = [
 const initialsOf = (s: string) =>
   s.replace(/^@/, '').split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?';
 
-/** Initials avatar — owner gets the solid brand fill; teams get a glyph. */
-function Avatar({ initials, owner, team }: { initials: string; owner?: boolean; team?: boolean }) {
+function Avatar({ initials, owner, team, email }: { initials: string; owner?: boolean; team?: boolean; email?: string }) {
   if (team) {
     return (
       <div className="w-8 h-8 rounded-full bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0">
@@ -55,16 +63,33 @@ function Avatar({ initials, owner, team }: { initials: string; owner?: boolean; 
       </div>
     );
   }
+  const tint = owner ? 'bg-brand-600 text-white' : tintFor(email ?? initials);
   return (
-    <div className={`w-8 h-8 rounded-full text-[0.6875rem] font-bold flex items-center justify-center shrink-0 ${
-      owner ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700'
-    }`}>
+    <div className={`w-8 h-8 rounded-full text-[0.6875rem] font-bold flex items-center justify-center shrink-0 ${tint}`}>
       {initials}
     </div>
   );
 }
 
-/** Inline access dropdown — Full access / Can edit / Can view (+ Remove). */
+/** Animated dropdown surface — spring-pops from its trigger. */
+function Menu({ open, children, className = '' }: { open: boolean; children: React.ReactNode; className?: string }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.97, y: -4 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
+          className={`absolute bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 z-30 origin-top ${className}`}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function AccessMenu({
   value, open, onToggle, onChange, onRemove,
 }: {
@@ -78,43 +103,44 @@ function AccessMenu({
     <div className="relative shrink-0">
       <button
         onClick={onToggle}
-        className="flex items-center gap-1.5 px-2 py-1 -mr-1 rounded-md text-[0.875rem] text-ink-700 hover:text-ink-900 hover:bg-canvas transition-colors cursor-pointer"
+        className={`flex items-center gap-1 px-2 py-1 -mr-1 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+          open ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-ink-900 hover:bg-canvas'
+        }`}
       >
         {value}
-        <ChevronDown size={15} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} />
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 w-44 z-20">
-          {ACCESS_OPTIONS.map(opt => (
+      <Menu open={open} className="right-0 top-full mt-1.5 w-44">
+        {ACCESS_OPTIONS.map(opt => (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className="w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-[0.8125rem] text-ink-800 hover:bg-canvas cursor-pointer"
+          >
+            {opt}
+            {opt === value && <Check size={14} className="text-brand-600" />}
+          </button>
+        ))}
+        {onRemove && (
+          <>
+            <div className="my-1 h-px bg-canvas-border" />
             <button
-              key={opt}
-              onClick={() => onChange(opt)}
-              className="w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-[0.8125rem] text-ink-800 hover:bg-canvas cursor-pointer"
+              onClick={onRemove}
+              className="w-full flex items-center gap-2 text-left px-3 py-2 text-[0.8125rem] text-risk hover:bg-risk-50 cursor-pointer"
             >
-              {opt}
-              {opt === value && <Check size={14} className="text-brand-600" />}
+              <Trash2 size={14} />
+              Remove
             </button>
-          ))}
-          {onRemove && (
-            <>
-              <div className="my-1 h-px bg-canvas-border" />
-              <button
-                onClick={onRemove}
-                className="w-full flex items-center gap-2 text-left px-3 py-2 text-[0.8125rem] text-risk hover:bg-risk-50 cursor-pointer"
-              >
-                <Trash2 size={14} />
-                Remove
-              </button>
-            </>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </Menu>
     </div>
   );
 }
 
 export default function ShareModal({ onClose, onShare, scope }: Props) {
   const { addToast } = useToast();
+  const reduce = useReducedMotion();
   const [query, setQuery] = useState('');
   const [chips, setChips] = useState<{ label: string; value: string }[]>([]);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
@@ -122,6 +148,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
   const [generalAccess, setGeneralAccess] = useState<'Only invited users' | 'Anyone with the link'>('Only invited users');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -184,12 +211,12 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
     const pending = [...chips];
     if (query.trim()) { query.split(',').map(s => s.trim()).filter(Boolean).forEach(v => pending.push({ label: v, value: v })); }
     if (pending.length === 0) return;
+    const fresh = pending.filter(p => !members.some(m => m.email === p.value));
     setMembers(prev => [
       ...prev,
-      ...pending
-        .filter(p => !prev.some(m => m.email === p.value))
-        .map(p => ({ name: p.label, email: p.value, initials: initialsOf(p.label), permission: inviteAccess })),
+      ...fresh.map(p => ({ name: p.label, email: p.value, initials: initialsOf(p.label), permission: inviteAccess })),
     ]);
+    if (fresh[0]) { setJustAdded(fresh[0].value); setTimeout(() => setJustAdded(null), 1200); }
     addToast({ type: 'success', message: `Invitation sent to ${pending.map(p => p.label).join(', ')}` });
     setChips([]);
     setQuery('');
@@ -210,6 +237,17 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
   const title = scope ? `Share this ${scope}` : 'Share';
   const showSuggestions = focused && suggestions.length > 0;
 
+  // Opacity-only cascade — NO transform, so settled rows don't create stacking
+  // contexts that would trap the access-menu dropdowns behind later rows.
+  const rowRise = (i: number) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { delay: 0.08 + i * 0.04, duration: 0.22 },
+        };
+
   return (
     <>
       <motion.div
@@ -221,24 +259,29 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
         onClick={onClose}
       />
       <motion.div
-        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 10, scale: 0.98 }}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        exit={{ opacity: 0, y: 12, scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.8 }}
         className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-none"
       >
         <div
           role="dialog"
           aria-modal="true"
           aria-label={title}
-          className="pointer-events-auto w-full max-w-[460px] max-h-[85vh] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl flex flex-col overflow-hidden"
+          className="pointer-events-auto w-full max-w-[460px] max-h-[85vh] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl shadow-brand-900/10 flex flex-col overflow-hidden"
           onClick={e => e.stopPropagation()}
         >
-          {/* Header — platform modal style: serif title + standard close */}
-          <header className="shrink-0 px-6 pt-5 pb-3.5 border-b border-canvas-border flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          {/* Header */}
+          <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center gap-3">
+            <motion.div
+              initial={reduce ? false : { scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 20, mass: 0.7, delay: 0.05 }}
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 text-brand-600 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60"
+            >
               <UserPlus size={17} />
-            </div>
+            </motion.div>
             <h2 className="flex-1 font-display text-[1.25rem] leading-[1.2] font-semibold tracking-tight text-ink-900 truncate">
               {title}
             </h2>
@@ -256,7 +299,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
             <div className="px-6 pt-4">
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <div className="flex items-center gap-1.5 flex-wrap px-2.5 py-1 min-h-[38px] rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-4 focus-within:ring-brand-600/15 transition-all">
+                  <div className="flex items-center gap-1.5 flex-wrap px-2.5 py-1 min-h-[38px] rounded-lg border border-canvas-border bg-canvas focus-within:bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-4 focus-within:ring-brand-600/15 transition-all">
                     {chips.map(chip => (
                       <span key={chip.value} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-brand-50 text-[0.8125rem] text-brand-700 font-medium">
                         {chip.label}
@@ -274,7 +317,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                       onFocus={() => setFocused(true)}
                       onBlur={() => setTimeout(() => setFocused(false), 120)}
                       placeholder={chips.length === 0 ? 'Email, Team & Users' : 'Add another…'}
-                      className="flex-1 min-w-[140px] bg-transparent px-1 py-0.5 text-[0.875rem] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+                      className="flex-1 min-w-[120px] bg-transparent px-1 py-0.5 text-[0.875rem] text-ink-900 placeholder:text-ink-400 focus:outline-none"
                     />
                     {chips.length > 0 && (
                       <AccessMenu
@@ -286,15 +329,15 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                     )}
                   </div>
 
-                  {/* Typeahead suggestions */}
+                  {/* Typeahead */}
                   <AnimatePresence>
                     {showSuggestions && (
                       <motion.div
-                        initial={{ opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.12 }}
-                        className="absolute left-0 right-0 top-full mt-1.5 bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1.5 z-30 overflow-hidden"
+                        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
+                        className="absolute left-0 right-0 top-full mt-1.5 bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1.5 z-30 overflow-hidden origin-top"
                       >
                         {suggestions.map(s => (
                           <button
@@ -306,7 +349,7 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                             }}
                             className="w-full flex items-center gap-3 px-3 py-2 hover:bg-canvas cursor-pointer text-left"
                           >
-                            <Avatar initials={s.kind === 'user' ? s.initials : ''} team={s.kind === 'team'} />
+                            <Avatar initials={s.kind === 'user' ? s.initials : ''} team={s.kind === 'team'} email={s.kind === 'user' ? s.email : ''} />
                             <div className="min-w-0 flex-1">
                               <div className="text-[0.875rem] font-medium text-ink-900 truncate">{s.name}</div>
                               <div className="text-[0.75rem] text-ink-400 truncate">
@@ -323,7 +366,11 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                 <button
                   onClick={handleInvite}
                   disabled={!canInvite}
-                  className="px-4 h-[38px] shrink-0 rounded-lg text-[0.875rem] font-medium transition-[background-color,box-shadow] cursor-pointer disabled:cursor-not-allowed bg-primary text-white shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md hover:shadow-brand-900/15 active:scale-[0.98] disabled:bg-canvas-border disabled:text-text-muted disabled:shadow-none"
+                  className={`px-4 h-[38px] shrink-0 rounded-lg text-[0.875rem] font-semibold transition-all cursor-pointer active:scale-[0.97] ${
+                    canInvite
+                      ? 'bg-primary text-white shadow-sm shadow-brand-900/15 hover:bg-primary-hover hover:shadow-md hover:shadow-brand-900/20'
+                      : 'bg-canvas border border-canvas-border text-ink-400 cursor-not-allowed'
+                  }`}
                 >
                   Invite
                 </button>
@@ -331,10 +378,19 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
             </div>
 
             {/* People with access */}
-            <div className="px-4 pt-3 pb-1">
-              {members.map(m => (
-                <div key={m.email} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-canvas transition-colors">
-                  <Avatar initials={m.initials} owner={m.owner} />
+            <div className="px-4 pt-4 pb-1">
+              <div className="px-2 mb-1 text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-ink-400">
+                People with access · {members.length}
+              </div>
+              {members.map((m, i) => (
+                <motion.div
+                  key={m.email}
+                  {...rowRise(i)}
+                  className={`relative flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors ${
+                    openMenu === m.email ? 'z-30' : ''
+                  } ${justAdded === m.email ? 'bg-brand-50' : 'hover:bg-canvas'}`}
+                >
+                  <Avatar initials={m.initials} owner={m.owner} email={m.email} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{m.name}</span>
@@ -353,19 +409,19 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                       onRemove={() => removeMember(m.email)}
                     />
                   )}
-                </div>
+                </motion.div>
               ))}
             </div>
 
             {/* General access */}
-            <div className="px-6 pb-5 pt-1">
-              <div className="text-[0.75rem] font-semibold text-ink-500 mb-1.5">General access</div>
+            <div className="px-6 pb-5 pt-2">
+              <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.05em] text-ink-400 mb-1.5">General access</div>
               <div className="relative">
                 <button
                   onClick={() => setOpenMenu(openMenu === 'general' ? null : 'general')}
                   className="w-full flex items-center gap-2.5 px-2 -mx-2 py-1.5 rounded-lg hover:bg-canvas transition-colors cursor-pointer"
                 >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                     generalAccess === 'Only invited users' ? 'bg-canvas border border-canvas-border text-ink-600' : 'bg-brand-50 text-brand-600'
                   }`}>
                     {generalAccess === 'Only invited users' ? <Lock size={15} /> : <Globe size={15} />}
@@ -376,35 +432,33 @@ export default function ShareModal({ onClose, onShare, scope }: Props) {
                       {generalAccess === 'Only invited users' ? 'Only people added can open' : 'Anyone with the link can view'}
                     </div>
                   </div>
-                  <ChevronDown size={18} className={`text-ink-500 shrink-0 transition-transform ${openMenu === 'general' ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={17} className={`text-ink-500 shrink-0 transition-transform ${openMenu === 'general' ? 'rotate-180' : ''}`} />
                 </button>
-                {openMenu === 'general' && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-canvas-elevated border border-canvas-border rounded-xl shadow-lg py-1 z-20">
-                    {(['Only invited users', 'Anyone with the link'] as const).map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => { setGeneralAccess(opt); setOpenMenu(null); }}
-                        className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 hover:bg-canvas cursor-pointer"
-                      >
-                        {opt === 'Only invited users'
-                          ? <Lock size={16} className="text-ink-700 shrink-0" />
-                          : <Globe size={16} className="text-brand-600 shrink-0" />}
-                        <span className="flex-1 text-[0.8125rem] text-ink-800">{opt}</span>
-                        {opt === generalAccess && <Check size={14} className="text-brand-600 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <Menu open={openMenu === 'general'} className="left-0 right-0 top-full mt-1.5">
+                  {(['Only invited users', 'Anyone with the link'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => { setGeneralAccess(opt); setOpenMenu(null); }}
+                      className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 hover:bg-canvas cursor-pointer"
+                    >
+                      {opt === 'Only invited users'
+                        ? <Lock size={16} className="text-ink-700 shrink-0" />
+                        : <Globe size={16} className="text-brand-600 shrink-0" />}
+                      <span className="flex-1 text-[0.8125rem] text-ink-800">{opt}</span>
+                      {opt === generalAccess && <Check size={14} className="text-brand-600 shrink-0" />}
+                    </button>
+                  ))}
+                </Menu>
               </div>
             </div>
           </div>
 
           {/* Footer */}
           <footer className="shrink-0 px-6 py-3 border-t border-canvas-border flex items-center justify-between">
-            <span className="text-[0.8125rem] text-ink-500">join.irame.ai</span>
+            <span className="text-[0.8125rem] text-ink-500 truncate">join.irame.ai</span>
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700 hover:text-brand-700 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 -mr-1 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer shrink-0"
             >
               <Link2 size={15} />
               Copy link

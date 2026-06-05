@@ -1,14 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Check, Grid3x3,
   Archive, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
-  Search, Play, Trash2, X,
+  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2,
 } from 'lucide-react';
-import RacmMappingWorkspace from './RacmMappingWorkspace';
+import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
 import ColumnFilter from '../shared/ColumnFilter';
+import { SEED_RISKS, RiskDrawer } from './RiskRegister';
+import CreateControlDrawer from '../governance/CreateControlDrawer';
 import { BUSINESS_PROCESSES, RISKS, CONTROLS, WORKFLOWS, SOPS } from '../../data/mockData';
 import { AR_RACM_ENTRIES, AR_RACM_ID, type ArRacmEntry } from '../../data/arRacm';
+
+// ─── Linkable risks (Link Risk sidesheet) ────────────────────────────────────
+// Extra business-process risks that are NOT part of any RACM's seed mapping, so
+// they're available to link. Combined with the Risk Register seed risks (minus
+// whatever is already mapped) to populate the picker.
+type LinkableRisk = { id: string; name: string; description: string; priority: string; bpAbbr: string };
+const LINKABLE_RISKS: LinkableRisk[] = [
+  { id: 'RSK-021', name: 'Goods received not reconciled to purchase order', description: 'GRN quantities not matched against the PO, allowing over-receipt or payment for undelivered goods', priority: 'High', bpAbbr: 'P2P' },
+  { id: 'RSK-022', name: 'Vendor bank details changed without re-verification', description: 'Bank account updates on the vendor master not independently confirmed, enabling payment diversion', priority: 'Critical', bpAbbr: 'P2P' },
+  { id: 'RSK-023', name: 'Advance payments released without milestone evidence', description: 'Advances paid to vendors without supporting milestone or delivery confirmation', priority: 'Medium', bpAbbr: 'P2P' },
+];
+
+// All BP risks that could be linked: the Risk Register seed risks for the process
+// plus the extra linkable samples, de-duplicated by id (extras win).
+function getLinkableRisks(bpAbbr: string): { id: string; name: string; description: string; priority: string }[] {
+  const extra = LINKABLE_RISKS.filter(r => r.bpAbbr === bpAbbr)
+    .map(r => ({ id: r.id, name: r.name, description: r.description, priority: r.priority }));
+  const seed = SEED_RISKS.filter(r => r.businessProcess === bpAbbr)
+    .map(r => ({ id: r.id, name: r.name, description: r.description, priority: r.priority }));
+  const seen = new Set<string>();
+  return [...extra, ...seed].filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+}
 
 // ─── AR RACM column model ────────────────────────────────────────────────────
 // The rich RACM renders the full SOP-extract schema — every field of ArRacmEntry —
@@ -149,6 +173,24 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   const scopedWorkflows = isRichRacm ? [] : (bp ? WORKFLOWS.filter(w => w.bpId === bp.id) : []);
   const rels = { sop, risks: scopedRisks, controls: scopedControls, workflows: scopedWorkflows };
 
+  // Synthetic full-schema rows for the SEED entries table. The seed mockData only
+  // carries a handful of the AR_RACM_COLUMNS fields, so every column starts as the
+  // literal "[NA]" and we fill in the few we genuinely have. Typed as
+  // Record<string,string> (not ArRacmEntry) so the union-typed fields
+  // (riskRating / controlType / extractionConfidence) accept the "[NA]" sentinel.
+  const seedEntryRows: Record<string, string>[] = scopedControls.map(c => {
+    const row: Record<string, string> = {};
+    AR_RACM_COLUMNS.forEach(col => { row[col.key] = '[NA]'; });
+    const risk = scopedRisks.find(r => r.id === c.riskId);
+    row.riskId = c.riskId;
+    row.controlId = c.id;
+    row.processArea = bp?.name ?? '[NA]';
+    row.riskDescription = risk?.name ?? '[NA]';
+    row.riskRating = risk ? risk.severity.charAt(0).toUpperCase() + risk.severity.slice(1) : '[NA]';
+    row.controlActivity = c.desc ?? '[NA]';
+    return row;
+  });
+
   // ── Aggregations ─────────────────────────────────────────────────────────
   // Severity distribution. The AR data uses capitalised ratings ("Critical");
   // the legacy seed data uses lowercase ("critical"). Normalise to capitalised.
@@ -232,6 +274,56 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
     ? `The recent RACM analysis, encompassing ${uniqueControlIds.size} unique controls predominantly within the ${execTopArea} process, indicates that most identified risks are medium (${execPctMedium}%), with a notable ${execPctHigh}% classified as high. Control coverage leans slightly towards ${execDetective > execPreventive ? 'detective' : 'preventive'} measures, with ${execDetective} detective controls compared to ${execPreventive} preventive. While Segregation of Duties and Delegation of Authority are ${sodCoverage === 'Complete' ? 'adequately addressed' : 'partially addressed'}, a significant gap was identified in Key Performance Indicator (KPI) coverage, as ${hasKpiSignal ? 'few' : 'no'} controls for KPI reporting were present.`
     : '';
 
+  // Header controls — collapse the long SOP summary, and a Download menu.
+  const [showSummary, setShowSummary] = useState(true);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadRef = useRef<HTMLDivElement>(null);
+  // Close the Download menu on any outside click.
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const onDoc = (ev: MouseEvent) => {
+      if (downloadRef.current && !downloadRef.current.contains(ev.target as Node)) setDownloadOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [downloadOpen]);
+
+  // Trigger a real browser download from the on-screen rows. Rich RACMs export the
+  // full AR entries; seed RACMs export the synthetic "[NA]"-padded rows. XLSX is a
+  // pragmatic CSV-with-.xlsx-extension stub (opens cleanly in Excel) — enough to be
+  // functional without pulling in a spreadsheet library.
+  const triggerDownload = (format: 'xlsx' | 'csv' | 'json') => {
+    const rows: Record<string, unknown>[] = isRichRacm
+      ? (arEntries as unknown as Record<string, unknown>[])
+      : seedEntryRows;
+    const base = (racm.name || racm.id).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'racm';
+    let content: string;
+    let mime: string;
+    let ext: string;
+    if (format === 'json') {
+      content = JSON.stringify(rows, null, 2);
+      mime = 'application/json';
+      ext = 'json';
+    } else {
+      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const header = AR_RACM_COLUMNS.map(col => esc(col.label)).join(',');
+      const body = rows.map(r => AR_RACM_COLUMNS.map(col => esc(r[col.key as string])).join(',')).join('\n');
+      content = `${header}\n${body}`;
+      mime = format === 'xlsx' ? 'application/vnd.ms-excel' : 'text/csv';
+      ext = format;
+    }
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${base}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setDownloadOpen(false);
+  };
+
   // Entries-table search — functional filter on risk id / control id / description / sub-process.
   const [entriesQuery, setEntriesQuery] = useState('');
   const filteredEntries = isRichRacm && entriesQuery.trim()
@@ -259,13 +351,38 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       <RacmDetailHeader
         racm={racm}
         action={
-          <button
-            type="button"
-            onClick={onOpenMapping}
-            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
-          >
-            Open mapping<ArrowRight size={13} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSummary(v => !v)}
+              className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+            >
+              {showSummary ? 'Hide Summary' : 'Show Summary'}
+            </button>
+            <div ref={downloadRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDownloadOpen(v => !v)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 border border-canvas-border rounded-[8px] text-[12px] font-semibold text-ink-700 hover:bg-paper-50 cursor-pointer"
+              >
+                Download<ChevronDown size={13} />
+              </button>
+              {downloadOpen && (
+                <div className="absolute right-0 mt-1.5 w-[200px] bg-white border border-border-light rounded-[8px] shadow-lg z-50">
+                  <button type="button" onClick={() => triggerDownload('xlsx')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as XLSX</button>
+                  <button type="button" onClick={() => triggerDownload('csv')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as CSV</button>
+                  <button type="button" onClick={() => triggerDownload('json')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as JSON</button>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onOpenMapping}
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+            >
+              Open mapping<ArrowRight size={13} />
+            </button>
+          </div>
         }
       />
 
@@ -332,6 +449,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           </div>
 
           {/* ─── SOP Analysis Summary — long-form narrative + tables ─── */}
+          {showSummary && (
           <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
             <div>
               <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
@@ -464,6 +582,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               </ul>
             </section>
           </div>
+          )}
 
           {/* ─── Entries table — full Irame columns + search + scroll hint ─── */}
           <div className="bg-white border border-canvas-border rounded-[12px] p-5">
@@ -588,56 +707,193 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         ))}
       </div>
 
-      <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-        <h2 className="text-[13px] font-bold text-ink-900 mb-4">Risk Rating Distribution</h2>
-        {totalRisks === 0 ? (
-          <p className="text-[12px] text-ink-400 italic">No risks captured.</p>
-        ) : (
-          <div className="space-y-2.5">
-            {severityRows.map(s => {
-              const count = severityCounts[s.label] ?? 0;
-              const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-              return (
-                <div key={s.label} className="flex items-center gap-3 text-[12px]">
-                  <span className="w-16 shrink-0 text-ink-700">{s.label}</span>
-                  <div className="flex-1 h-3 bg-paper-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${s.tone}`} style={{ width: `${pct}%` }} />
+      {/* ─── Top dashboard: chart left, breakdown table right (mirrors rich) ─── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <h2 className="text-[13px] font-bold text-ink-900 mb-4">Risk Rating Distribution</h2>
+          {totalRisks === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No risks captured.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {severityRows.map(s => {
+                const count = severityCounts[s.label] ?? 0;
+                const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
+                return (
+                  <div key={s.label} className="flex items-center gap-3 text-[12px]">
+                    <span className="w-16 shrink-0 text-ink-700">{s.label}</span>
+                    <div className="flex-1 h-3 bg-paper-100 rounded-full overflow-hidden">
+                      <div className={`h-full ${s.tone}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-8 text-right tabular-nums text-ink-700 font-semibold">{count}</span>
+                    <span className="w-12 text-right tabular-nums text-ink-500">{pct.toFixed(1)}%</span>
                   </div>
-                  <span className="w-8 text-right tabular-nums text-ink-700 font-semibold">{count}</span>
-                  <span className="w-12 text-right tabular-nums text-ink-500">{pct.toFixed(1)}%</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+          <h2 className="text-[13px] font-bold text-ink-900 mb-3">Process Area Breakdown</h2>
+          {processAreaRows.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic">No process area mapped.</p>
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
+                  <th className="py-2 font-semibold">Process Area</th>
+                  <th className="py-2 font-semibold text-right">Risks</th>
+                  <th className="py-2 font-semibold text-right">Controls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processAreaRows.map(row => (
+                  <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
+                    <td className="py-2.5 text-ink-800">{row.area}</td>
+                    <td className="py-2.5 text-right tabular-nums text-ink-700">{row.risks}</td>
+                    <td className="py-2.5 text-right tabular-nums text-ink-700">{row.controls}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-        <h2 className="text-[13px] font-bold text-ink-900 mb-3">Process Area Breakdown</h2>
-        {processAreaRows.length === 0 ? (
-          <p className="text-[12px] text-ink-400 italic">No process area mapped.</p>
-        ) : (
-          <table className="w-full text-[12px]">
+      {/* ─── SOP Analysis Summary — same structure as rich; "[NA]" where the seed
+          mock data has no equivalent (exec summary, confidence, control-type,
+          gap analysis, notes). Overview / rating / process-area tables are real. ─── */}
+      {showSummary && (
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
+          <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+        </div>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
+          <p className="text-[13px] leading-relaxed max-w-[80ch] text-ink-400">[NA]</p>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-2">Overview</h3>
+          <ul className="text-[13px] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
+            <li><span className="font-semibold">Total Risk-Control Entries:</span> {totalRisks}</li>
+            <li><span className="font-semibold">Unique Controls:</span> {uniqueControlIds.size}</li>
+            <li><span className="font-semibold">Process Areas:</span> {processAreaSet.size}</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-3">Extraction Confidence</h3>
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                <th className="py-2 font-semibold">Process Area</th>
-                <th className="py-2 font-semibold text-right">Risks</th>
-                <th className="py-2 font-semibold text-right">Controls</th>
+              <tr className="text-left text-[11px] text-ink-500 font-semibold border-b border-canvas-border">
+                <th className="py-2 pr-3">Confidence</th>
+                <th className="py-2 pr-3">Count</th>
+                <th className="py-2">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {confidenceRows.map(c => (
+                <tr key={c.label} className="border-b border-canvas-border/40 last:border-0">
+                  <td className={`py-2.5 font-semibold ${c.tone}`}>{c.label}</td>
+                  <td className="py-2.5 text-ink-400">[NA]</td>
+                  <td className="py-2.5 text-ink-400">[NA]</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-3">Risk Rating Distribution</h3>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-[11px] text-ink-500 font-semibold border-b border-canvas-border">
+                <th className="py-2 pr-3">Rating</th>
+                <th className="py-2 pr-3">Count</th>
+                <th className="py-2">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {severityRows.map(s => {
+                const count = severityCounts[s.label] ?? 0;
+                const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
+                return (
+                  <tr key={s.label} className="border-b border-canvas-border/40 last:border-0">
+                    <td className="py-2.5 text-ink-800">{s.label}</td>
+                    <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
+                    <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-3">Control Type Distribution</h3>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-[11px] text-ink-500 font-semibold border-b border-canvas-border">
+                <th className="py-2 pr-3">Type</th>
+                <th className="py-2">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['Preventive', 'Detective'] as const).map(type => (
+                <tr key={type} className="border-b border-canvas-border/40 last:border-0">
+                  <td className="py-2.5 text-ink-800">{type}</td>
+                  <td className="py-2.5 text-ink-400">[NA]</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-3">Process Area Breakdown</h3>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-[11px] text-ink-500 font-semibold border-b border-canvas-border">
+                <th className="py-2 pr-3">Process Area</th>
+                <th className="py-2 pr-3">Risks</th>
+                <th className="py-2">Controls</th>
               </tr>
             </thead>
             <tbody>
               {processAreaRows.map(row => (
                 <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
                   <td className="py-2.5 text-ink-800">{row.area}</td>
-                  <td className="py-2.5 text-right tabular-nums text-ink-700">{row.risks}</td>
-                  <td className="py-2.5 text-right tabular-nums text-ink-700">{row.controls}</td>
+                  <td className="py-2.5 tabular-nums text-ink-800">{row.risks}</td>
+                  <td className="py-2.5 tabular-nums text-ink-800">{row.controls}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </section>
 
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-2">Gap Analysis</h3>
+          <ul className="text-[13px] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
+            <li><span className="font-semibold">SoD Coverage:</span> <span className="text-ink-400">[NA]</span></li>
+            <li><span className="font-semibold">DOA Matrix:</span> <span className="text-ink-400">[NA]</span></li>
+            <li><span className="font-semibold">KPI Coverage:</span> <span className="text-ink-400">[NA]</span></li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className="text-[14px] font-bold text-ink-900 mb-2">Notes</h3>
+          <ul className="text-[13px] leading-relaxed space-y-1 list-disc pl-5 text-ink-400">
+            <li>[NA]</li>
+          </ul>
+        </section>
+      </div>
+      )}
+
+      {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); "[NA]" for
+          fields the seed mock data lacks. ─── */}
       <div className="bg-white border border-canvas-border rounded-[12px] p-5">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-[13px] font-bold text-ink-900">Entries</h2>
@@ -649,39 +905,50 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           <p className="text-[12px] text-ink-400 italic">No risk–control pairs in this RACM yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-max min-w-full text-[12px]">
               <thead>
                 <tr className="text-left text-[10px] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                  <th className="py-2 font-semibold pr-3">Risk ID</th>
-                  <th className="py-2 font-semibold pr-3">Control ID</th>
-                  <th className="py-2 font-semibold pr-3">Process Area</th>
-                  <th className="py-2 font-semibold pr-3">Risk Description</th>
-                  <th className="py-2 font-semibold pr-3">Rating</th>
-                  <th className="py-2 font-semibold">Status</th>
+                  {AR_RACM_COLUMNS.map(col => (
+                    <th
+                      key={col.key}
+                      className="py-2 font-semibold pr-4 whitespace-nowrap align-bottom"
+                      style={col.minW ? { minWidth: col.minW } : undefined}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {scopedControls.map(c => {
-                  const risk = scopedRisks.find(r => r.id === c.riskId);
-                  return (
-                    <tr key={c.id} className="border-b border-canvas-border/40 last:border-0 align-top">
-                      <td className="py-2.5 pr-3 font-mono text-[11px] text-ink-600 tabular-nums">{c.riskId}</td>
-                      <td className="py-2.5 pr-3 font-mono text-[11px] text-ink-600 tabular-nums">{c.id}</td>
-                      <td className="py-2.5 pr-3 text-ink-700">{bp?.name ?? '—'}</td>
-                      <td className="py-2.5 pr-3 text-ink-800 max-w-[360px]">{risk?.name ?? '—'}</td>
-                      <td className="py-2.5 pr-3">
-                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center capitalize ${
-                          risk?.severity === 'critical' ? 'bg-risk-50 text-risk-700' :
-                          risk?.severity === 'high'     ? 'bg-high-50 text-high-700' :
-                          risk?.severity === 'medium'   ? 'bg-mitigated-50 text-mitigated-700' :
-                          risk?.severity === 'low'      ? 'bg-compliant-50 text-compliant-700' :
-                                                          'bg-paper-100 text-ink-600'
-                        }`}>{risk?.severity ?? '—'}</span>
-                      </td>
-                      <td className="py-2.5 text-ink-700 capitalize">{risk?.status ?? '—'}</td>
-                    </tr>
-                  );
-                })}
+                {seedEntryRows.map((row, i) => (
+                  <tr key={`${row.riskId}-${row.controlId}-${i}`} className="border-b border-canvas-border/40 last:border-0 align-top">
+                    {AR_RACM_COLUMNS.map(col => {
+                      const val = row[col.key];
+                      return (
+                        <td
+                          key={col.key}
+                          className="py-2.5 pr-4 align-top"
+                          style={col.minW ? { minWidth: col.minW } : undefined}
+                        >
+                          {val === '[NA]' ? (
+                            <span className="text-ink-400">[NA]</span>
+                          ) : col.kind === 'mono' ? (
+                            <span className="font-mono text-[11px] text-ink-600 tabular-nums whitespace-nowrap">{val}</span>
+                          ) : col.kind === 'rating' ? (
+                            <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center whitespace-nowrap ${
+                              val === 'Critical' ? 'bg-risk-50 text-risk-700' :
+                              val === 'High'     ? 'bg-high-50 text-high-700' :
+                              val === 'Medium'   ? 'bg-mitigated-50 text-mitigated-700' :
+                                                   'bg-compliant-50 text-compliant-700'
+                            }`}>{val}</span>
+                          ) : (
+                            <span className="text-ink-700">{val}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -710,6 +977,9 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           )}
         </div>
 
+        {/* Risks / Controls / Workflows cards — commented out. The risk + control
+            detail now lives in the full-schema Entries table above (every
+            AR_RACM_COLUMNS field, "[NA]" where the SOP extract has no value).
         <div className="bg-white border border-canvas-border rounded-[12px] p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
@@ -791,6 +1061,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
             </ul>
           )}
         </div>
+        */}
       </div>
       </>
       )}
@@ -1087,6 +1358,54 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [archivedIds, setArchivedIds] = useState<string[]>([]);
   const [unfrozenIds, setUnfrozenIds] = useState<string[]>([]);
+  // Inline card expansion (risk–control mapping preview) + locally-unmapped pairs.
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
+  const [unmappedPairs, setUnmappedPairs] = useState<Set<string>>(new Set());
+  // Per-card expanded-panel search query + locally-deleted risk rows.
+  const [expandSearch, setExpandSearch] = useState<Record<string, string>>({});
+  const [deletedRows, setDeletedRows] = useState<Set<string>>(new Set());
+  // Link Risk sidesheet — opened from a RACM's expanded-panel row action. Holds the
+  // target RACM + its business-process abbr (scopes the selectable risks). When the
+  // user hits "Create Risk", createRiskFromLink swaps in the existing Create Risk drawer.
+  const [linkRiskTarget, setLinkRiskTarget] = useState<{ racmId: string; bpAbbr: string } | null>(null);
+  const [createRiskFromLink, setCreateRiskFromLink] = useState(false);
+  // Risks/controls added locally via the Link sidesheets. Risks are keyed by RACM
+  // id (they become new mapping rows); controls are keyed by risk id (they become
+  // extra chips on that risk's row).
+  const [linkedRisks, setLinkedRisks] = useState<Record<string, { id: string; name: string }[]>>({});
+  const [linkedControls, setLinkedControls] = useState<Record<string, { id: string; name: string; isKey: boolean }[]>>({});
+  // Link Control sidesheet target (which risk row opened it) + remove-mapping confirm.
+  // createControlFromLink swaps in the shared Create Control wizard over the picker.
+  const [linkControlTarget, setLinkControlTarget] = useState<{ riskId: string; riskName: string; bpAbbr: string } | null>(null);
+  const [createControlFromLink, setCreateControlFromLink] = useState(false);
+  const [confirmUnmap, setConfirmUnmap] = useState<{ riskId: string; ctlId: string } | null>(null);
+  // Link Workflow flow: pick a control on the risk (skipped if it has exactly one),
+  // then the workflow picker. linkedWorkflows records the result keyed by riskId:ctlId.
+  const [linkWfTarget, setLinkWfTarget] = useState<{ riskId: string; riskName: string; controls: { id: string; name: string; isKey: boolean }[] } | null>(null);
+  const [linkWfControl, setLinkWfControl] = useState<{ id: string; name: string; isKey: boolean } | null>(null);
+  const [linkedWorkflows, setLinkedWorkflows] = useState<Record<string, { id: string; name: string; version: string }>>({});
+
+  const addLinkedWorkflow = (riskId: string, ctlId: string, wf: { id: string; name: string; version: string }) =>
+    setLinkedWorkflows(prev => ({ ...prev, [`${riskId}:${ctlId}`]: { id: wf.id, name: wf.name, version: wf.version } }));
+  // Description lookup for a control id (Control Library first, then the seed controls).
+  const controlDescription = (id: string) => {
+    const lib = CONTROL_LIBRARY.find(c => c.id.toUpperCase() === id.toUpperCase());
+    if (lib) return lib.description;
+    return CONTROLS.find(c => c.id === id)?.desc ?? '';
+  };
+
+  const addLinkedRisks = (racmId: string, risks: { id: string; name: string }[]) =>
+    setLinkedRisks(prev => {
+      const have = new Set((prev[racmId] ?? []).map(r => r.id));
+      const added = risks.filter(r => !have.has(r.id));
+      return added.length ? { ...prev, [racmId]: [...(prev[racmId] ?? []), ...added] } : prev;
+    });
+  const addLinkedControls = (riskId: string, controls: { id: string; name: string; isKey: boolean }[]) =>
+    setLinkedControls(prev => {
+      const have = new Set((prev[riskId] ?? []).map(c => c.id));
+      const added = controls.filter(c => !have.has(c.id));
+      return added.length ? { ...prev, [riskId]: [...(prev[riskId] ?? []), ...added] } : prev;
+    });
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [readinessFilter, setReadinessFilter] = useState<string[]>([]);
   const [processColFilter, setProcessColFilter] = useState<string[]>([]);
@@ -1200,6 +1519,19 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const toggleSelectOne = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
+  const toggleCardExpand = (id: string) => {
+    setExpandedCardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const unmapPair = (riskId: string, controlId: string) => {
+    setUnmappedPairs(prev => new Set(prev).add(`${riskId}:${controlId}`));
+  };
+  const deleteRow = (racmId: string, riskId: string) => {
+    setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
+  };
   const handleBulkArchive = () => {
     setArchivedIds(prev => [...prev, ...selectedIds]);
     setSelectedIds([]);
@@ -1289,7 +1621,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           <button type="button" onClick={onCreate} className="px-4 py-2 rounded-[8px] bg-brand-600 text-paper-0 text-[13px] font-medium hover:bg-brand-700">New RACM</button>
         </div>
       ) : (
-      <div className="space-y-3">
+      <div className="space-y-5">
         {/* Filter row — search on the left, dropdown filters + clear on the right. */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="relative shrink-0">
@@ -1315,6 +1647,14 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             <ColumnFilter variant="button" label="Readiness" options={readinessOptions} value={readinessFilter} onChange={setReadinessFilter} align="end" />
             <ColumnFilter variant="button" label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} align="end" />
             <ColumnFilter variant="button" label="Framework" options={frameworkOptions} value={frameworkFilter} onChange={setFrameworkFilter} align="end" />
+            {onCreate && (
+              <button
+                type="button"
+                onClick={onCreate}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />Create new RACM
+              </button>
+            )}
           </div>
         </div>
 
@@ -1371,6 +1711,36 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             const isSelected = selectedIds.includes(racm.id);
             const versionLabel = racm.version.replace(/^v/i, '');
             const descLine = `${racm.risks} risks · ${racm.controls} controls · v${versionLabel} · framework ${racm.framework}`;
+            // Inline risk–control mapping rows for the expand panel — derived from the
+            // process's risks/controls (locally-unmapped pairs removed).
+            const cardExpanded = expandedCardIds.has(racm.id);
+            const cardBp = BUSINESS_PROCESSES.find(b => b.abbr === racm.process);
+            const cardRiskList = cardBp ? RISKS.filter(r => r.bpId === cardBp.id) : [];
+            const cardRiskIds = new Set(cardRiskList.map(r => r.id));
+            const cardControlList = CONTROLS.filter(c => cardRiskIds.has(c.riskId));
+            // Unified risk rows: this process's seed risks + risks linked via the Link Risk sheet.
+            const rowRisks: { id: string; name: string }[] = [
+              ...cardRiskList.map(r => ({ id: r.id, name: r.name })),
+              ...(linkedRisks[racm.id] ?? []),
+            ];
+            // Controls per risk: seed controls + controls linked via the Link Control sheet,
+            // with any locally-removed (unmapped) pairs filtered out.
+            const controlsForRisk = (riskId: string) =>
+              [
+                ...cardControlList.filter(c => c.riskId === riskId).map(c => ({ id: c.id, name: c.name, isKey: c.isKey })),
+                ...(linkedControls[riskId] ?? []),
+              ].filter(c => !unmappedPairs.has(`${riskId}:${c.id}`));
+            const mappingRows = rowRisks.map(risk => ({ risk, controls: controlsForRisk(risk.id) }));
+            const cardSearch = (expandSearch[racm.id] ?? '').trim().toLowerCase();
+            const visibleMappingRows = mappingRows.filter(({ risk, controls }) => {
+              if (deletedRows.has(`${racm.id}:${risk.id}`)) return false;
+              if (!cardSearch) return true;
+              return (
+                risk.id.toLowerCase().includes(cardSearch) ||
+                risk.name.toLowerCase().includes(cardSearch) ||
+                controls.some(c => c.id.toLowerCase().includes(cardSearch) || c.name.toLowerCase().includes(cardSearch))
+              );
+            });
 
             return (
               <motion.div
@@ -1378,19 +1748,30 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                onClick={() => setDetailRacmId(racm.id)}
-                className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                className={`group rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Select column */}
-                <div onClick={e => e.stopPropagation()} className="pt-0.5">
+                <div
+                  onClick={() => toggleCardExpand(racm.id)}
+                  className="grid grid-cols-[44px_2.6fr_1fr_1.7fr_104px] gap-5 px-6 py-5 cursor-pointer items-start"
+                >
+                {/* Leading control — chevron always visible (expand indicator + click
+                    target); the selection checkbox fades in between the chevron and the
+                    RACM name on hover, and stays while selected. */}
+                <div className="flex items-center gap-2 pt-0.5">
+                  <ChevronRight
+                    size={14}
+                    aria-hidden="true"
+                    className={`shrink-0 text-ink-400 transition-transform duration-200 ${cardExpanded ? 'rotate-90' : ''}`}
+                  />
                   <input
                     type="checkbox"
                     aria-label={`Select ${racm.id}`}
                     checked={isSelected}
+                    onClick={e => e.stopPropagation()}
                     onChange={() => toggleSelectOne(racm.id)}
-                    className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
+                    className={`shrink-0 w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                   />
                 </div>
 
@@ -1453,50 +1834,593 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                   {isSelected ? (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => handleArchiveOne(racm.id)}
-                        title="Archive"
-                        className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                      >
-                        <Archive size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCancelOne(racm.id)}
-                        title="Cancel selection"
-                        className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                      >
-                        <X size={14} />
-                      </button>
+                      <div className="relative group/archive">
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveOne(racm.id)}
+                          aria-label="Archive"
+                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                        >
+                          <Archive size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
+                      </div>
+                      <div className="relative group/cancel">
+                        <button
+                          type="button"
+                          onClick={() => handleCancelOne(racm.id)}
+                          aria-label="Cancel selection"
+                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">Cancel selection</span>
+                      </div>
                     </>
                   ) : (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => setDetailRacmId(racm.id)}
-                        title="Open RACM"
-                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                      >
-                        <Play size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleArchiveOne(racm.id)}
-                        title="Archive"
-                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="relative group/lrisk">
+                        <button
+                          type="button"
+                          onClick={() => setLinkRiskTarget({ racmId: racm.id, bpAbbr: racm.process })}
+                          aria-label="Link risk"
+                          className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                        >
+                          <AlertTriangle size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
+                      </div>
+                      <div className="relative group/edit">
+                        <button
+                          type="button"
+                          onClick={() => setDetailRacmId(racm.id)}
+                          aria-label="Edit"
+                          className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Edit</span>
+                      </div>
+                      <div className="relative group/archive">
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveOne(racm.id)}
+                          aria-label="Archive"
+                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
+                      </div>
                     </>
                   )}
                 </div>
+                </div>
+                <AnimatePresence initial={false}>
+                  {cardExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden border-t border-canvas-border bg-canvas/40"
+                    >
+                      <div className="p-4 space-y-3" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="text-[12px] font-bold uppercase tracking-wider text-ink-600">Risk &amp; Control Mapping</h4>
+                          <div className="relative w-[260px] shrink-0">
+                            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+                            <input
+                              value={expandSearch[racm.id] ?? ''}
+                              onChange={e => setExpandSearch(prev => ({ ...prev, [racm.id]: e.target.value }))}
+                              placeholder="Search risks & controls..."
+                              className="pl-9 pr-3 py-1.5 rounded-[8px] border border-border bg-white text-[12px] w-full placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          {visibleMappingRows.length === 0 ? (
+                            <p className="text-[12px] text-ink-400 italic">{cardSearch ? 'No risks or controls match your search.' : 'No risk–control mappings for this RACM.'}</p>
+                          ) : visibleMappingRows.map(({ risk, controls }) => {
+                            const mapped = controls.length > 0;
+                            return (
+                            <div key={risk.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas/50 transition-colors">
+                              <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" aria-hidden="true" />
+                              <span className="font-mono text-[10.5px] font-semibold text-brand-700 shrink-0">{risk.id}</span>
+                              <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0 truncate">{risk.name}</span>
+                              {/* Risk Status */}
+                              <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${mapped ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{mapped ? 'Mapped' : 'Unmapped'}</span>
+                              {/* Control(s) */}
+                              <div className="shrink-0 flex items-center gap-1 flex-wrap justify-end max-w-[220px]">
+                                {controls.length === 0 ? (
+                                  <span className="text-[11px] text-ink-400">—</span>
+                                ) : controls.map(ctl => (
+                                  <span key={ctl.id} title={ctl.isKey ? `${ctl.name} · Key control` : ctl.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                                    <Star size={10} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
+                                    <span className="font-mono">{ctl.id}</span>
+                                    <button type="button" onClick={() => setConfirmUnmap({ riskId: risk.id, ctlId: ctl.id })} className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors" aria-label={`Remove ${ctl.id}`}>
+                                      <X size={10} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                              {/* Workflow Status */}
+                              {(() => {
+                                const wf = controls.map(c => linkedWorkflows[`${risk.id}:${c.id}`]).find(Boolean);
+                                return wf
+                                  ? <span className="shrink-0 w-10 flex justify-center" title={`Workflow: ${wf.name} ${wf.version}`}><Check size={13} className="text-compliant-700" /></span>
+                                  : <span className="shrink-0 w-10 text-center text-[11px] text-ink-400" title="Workflow status">—</span>;
+                              })()}
+                              {/* Mapping */}
+                              <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${mapped ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{mapped ? 'Mapped' : 'Unmapped'}</span>
+                              {/* Row actions — Link Control / Link Workflow / Delete (tooltips on hover).
+                                  Link Risk lives on the RACM card's action row (it maps risks to the
+                                  whole RACM), not per risk. */}
+                              <div className="shrink-0 flex items-center gap-0.5">
+                                <div className="relative group/lctrl">
+                                  <button type="button" aria-label="Link Control" onClick={() => setLinkControlTarget({ riskId: risk.id, riskName: risk.name, bpAbbr: racm.process })} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
+                                    <Shield size={13} />
+                                  </button>
+                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lctrl:opacity-100 pointer-events-none transition-opacity z-50">Link Control</span>
+                                </div>
+                                {/* Link Workflow moved to the Control Library (one per control row).
+                                    Commented out here per request — restore this block to bring it back.
+                                <div className="relative group/lwf">
+                                  <button type="button" aria-label="Link Workflow" onClick={() => { const ctrls = controlsForRisk(risk.id); setLinkWfTarget({ riskId: risk.id, riskName: risk.name, controls: ctrls }); setLinkWfControl(ctrls.length === 1 ? ctrls[0] : null); }} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
+                                    <WorkflowIcon size={13} />
+                                  </button>
+                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lwf:opacity-100 pointer-events-none transition-opacity z-50">Link Workflow</span>
+                                </div>
+                                */}
+                                <div className="relative group/del">
+                                  <button type="button" aria-label="Delete" onClick={() => deleteRow(racm.id, risk.id)} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
+                                    <Trash2 size={13} />
+                                  </button>
+                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
+                                </div>
+                              </div>
+                            </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             );
           })}
         </div>
       </div>
       )}
+
+      {/* ── Link Risk to RACM sidesheet (opened from an expanded-row action) ── */}
+      <AnimatePresence>
+        {linkRiskTarget && !createRiskFromLink && (() => {
+          const lrt = linkRiskTarget;
+          const bpId = BUSINESS_PROCESSES.find(b => b.abbr === lrt.bpAbbr)?.id;
+          const alreadyLinkedIds = [
+            ...RISKS.filter(r => r.bpId === bpId).map(r => r.id),
+            ...(linkedRisks[lrt.racmId] ?? []).map(r => r.id),
+          ];
+          return (
+            <LinkRiskDrawer
+              bpAbbr={lrt.bpAbbr}
+              alreadyLinkedIds={alreadyLinkedIds}
+              onClose={() => setLinkRiskTarget(null)}
+              onCreateRisk={() => setCreateRiskFromLink(true)}
+              onLink={risks => { addLinkedRisks(lrt.racmId, risks); setLinkRiskTarget(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Create Risk drawer — swaps in over the Link Risk sheet, swaps back on close ── */}
+      <AnimatePresence>
+        {linkRiskTarget && createRiskFromLink && (
+          <RiskDrawer
+            risk={null}
+            defaultProcess={linkRiskTarget.bpAbbr}
+            onClose={() => setCreateRiskFromLink(false)}
+            onSave={() => setCreateRiskFromLink(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Link Control sidesheet (opened from a risk row's Link Control action) ── */}
+      <AnimatePresence>
+        {linkControlTarget && !createControlFromLink && (() => {
+          const lct = linkControlTarget;
+          const alreadyLinkedIds = (linkedControls[lct.riskId] ?? []).map(c => c.id);
+          return (
+            <LinkControlPickerDrawer
+              riskName={lct.riskName}
+              alreadyLinkedIds={alreadyLinkedIds}
+              onClose={() => setLinkControlTarget(null)}
+              onCreateControl={() => setCreateControlFromLink(true)}
+              onApply={controls => { addLinkedControls(lct.riskId, controls); setLinkControlTarget(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Create Control wizard — swaps in over the Link Control picker. Cancel/X
+            returns to the picker; saving links the new control to this risk + closes. ── */}
+      <AnimatePresence>
+        {linkControlTarget && createControlFromLink && (() => {
+          const lct = linkControlTarget;
+          return (
+            <CreateControlDrawer
+              defaultProcess={lct.bpAbbr}
+              defaultRiskIds={[lct.riskId]}
+              defaultRisk={lct.riskName}
+              onClose={() => setCreateControlFromLink(false)}
+              onSave={data => {
+                const newId = `CTL-${String(Date.now()).slice(-4)}`;
+                addLinkedControls(lct.riskId, [{ id: newId, name: data.name, isKey: data.classification === 'Key' }]);
+                setCreateControlFromLink(false);
+                setLinkControlTarget(null);
+              }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Remove-mapping confirmation (unlink a control from a risk) ── */}
+      <AnimatePresence>
+        {confirmUnmap && (() => {
+          const cu = confirmUnmap;
+          return (
+            <ConfirmUnmapModal
+              ctlId={cu.ctlId}
+              onCancel={() => setConfirmUnmap(null)}
+              onConfirm={() => { unmapPair(cu.riskId, cu.ctlId); setConfirmUnmap(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Link Workflow — step 1: choose which control (only when the risk has >1) ── */}
+      <AnimatePresence>
+        {linkWfTarget && !linkWfControl && (() => {
+          const lwt = linkWfTarget;
+          return (
+            <WorkflowControlChooserDrawer
+              riskName={lwt.riskName}
+              controls={lwt.controls}
+              onPick={ctl => setLinkWfControl(ctl)}
+              onClose={() => setLinkWfTarget(null)}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Link Workflow — step 2: the workflow picker for the chosen control ── */}
+      <AnimatePresence>
+        {linkWfTarget && linkWfControl && (() => {
+          const lwt = linkWfTarget;
+          const lwc = linkWfControl;
+          return (
+            <LinkWorkflowToControlDrawer
+              control={{ name: lwc.name, description: controlDescription(lwc.id), isKey: lwc.isKey, workflows: [] }}
+              onClose={() => { if (lwt.controls.length > 1) setLinkWfControl(null); else { setLinkWfControl(null); setLinkWfTarget(null); } }}
+              onLink={(wf: ControlWorkflow) => { addLinkedWorkflow(lwt.riskId, lwc.id, wf); setLinkWfControl(null); setLinkWfTarget(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Link Risk to RACM sidesheet ─────────────────────────────────────────────
+// Multi-select picker of the business-process's risks to map onto a RACM. The
+// "Create Risk" button beside the search swaps in the shared Create Risk drawer
+// (RiskDrawer) — the parent toggles createRiskFromLink to perform the swap.
+function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLink }: {
+  bpAbbr: string;
+  alreadyLinkedIds: string[];
+  onClose: () => void;
+  onCreateRisk: () => void;
+  onLink: (risks: { id: string; name: string }[]) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // This process's linkable risks, minus whatever is already mapped to the RACM.
+  const pool = getLinkableRisks(bpAbbr).filter(r => !alreadyLinkedIds.includes(r.id));
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? pool.filter(r => r.id.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
+    : pool;
+
+  const toggle = (id: string) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const PRIORITY_BADGE: Record<string, string> = {
+    Critical: 'bg-risk-50 text-risk-700',
+    High: 'bg-high-50 text-high-700',
+    Medium: 'bg-amber-50 text-amber-700',
+    Low: 'bg-paper-100 text-ink-500',
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+        role="dialog" aria-label="Link Risk to RACM">
+
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
+          <div>
+            <h2 className="font-display text-[18px] font-semibold text-ink-900">Link Risk to RACM</h2>
+            <p className="text-[12px] text-ink-500 mt-0.5">Select risks from this business process to map to the RACM.</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+        </div>
+
+        {/* Search + Create Risk */}
+        <div className="px-6 py-3 border-b border-canvas-border flex items-center gap-2 shrink-0">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search risks by ID or name..."
+              className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] placeholder:text-ink-400 outline-none focus:border-brand-500/60 transition-all" />
+          </div>
+          <button type="button" onClick={onCreateRisk}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-paper-0 text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+            <Plus size={13} />Create Risk
+          </button>
+        </div>
+
+        {/* Risk list */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
+          {filtered.length === 0 ? (
+            <div className="text-center py-10 text-[12px] text-ink-400">{q ? 'No risks match your search.' : 'No risks in this business process yet.'}</div>
+          ) : filtered.map(r => {
+            const checked = selected.has(r.id);
+            return (
+              <label key={r.id}
+                className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${checked ? 'border-brand-400 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50'}`}>
+                <input type="checkbox" checked={checked} onChange={() => toggle(r.id)}
+                  className="mt-0.5 w-[18px] h-[18px] rounded-[5px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-[11px] text-ink-500">{r.id}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${PRIORITY_BADGE[r.priority] ?? 'bg-paper-100 text-ink-500'}`}>{r.priority}</span>
+                  </div>
+                  <div className="text-[13.5px] font-semibold text-ink-900 leading-snug truncate">{r.name}</div>
+                  {r.description && <div className="text-[11.5px] text-ink-400 leading-snug truncate mt-0.5">{r.description}</div>}
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+          <button type="button" disabled={selected.size === 0}
+            onClick={() => onLink(pool.filter(r => selected.has(r.id)).map(r => ({ id: r.id, name: r.name })))}
+            className="px-4 py-2 rounded-lg bg-brand-600 text-paper-0 text-[13px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            Link Risks{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
+        </footer>
+      </motion.aside>
+    </>
+  );
+}
+
+// ─── Link Existing Control sidesheet ─────────────────────────────────────────
+// Multi-select picker over the Control Library, scoped to one risk row. "Apply
+// Changes" hands the chosen controls back to the parent, which adds them as chips
+// on that risk's mapping row.
+function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, onCreateControl, onApply }: {
+  riskName: string;
+  alreadyLinkedIds: string[];
+  onClose: () => void;
+  onCreateControl: () => void;
+  onApply: (controls: { id: string; name: string; isKey: boolean }[]) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [keyFilter, setKeyFilter] = useState<'all' | 'key' | 'non-key'>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const available = CONTROL_LIBRARY.filter(c => !alreadyLinkedIds.includes(c.id.toUpperCase()));
+  const q = search.trim().toLowerCase();
+  const filtered = available.filter(c => {
+    if (keyFilter === 'key' && !c.isKey) return false;
+    if (keyFilter === 'non-key' && c.isKey) return false;
+    if (q) return c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q) || c.id.toLowerCase().includes(q);
+    return true;
+  });
+
+  const toggle = (id: string) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const apply = () =>
+    onApply(
+      (CONTROL_LIBRARY as MappedControl[])
+        .filter(c => selected.has(c.id))
+        .map(c => ({ id: c.id.toUpperCase(), name: c.name, isKey: c.isKey })),
+    );
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+        role="dialog" aria-label="Link Existing Control">
+
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2"><Link2 size={18} className="text-brand-600 shrink-0" /><h2 className="font-display text-[18px] font-semibold text-ink-900">Link Existing Control</h2></div>
+            <p className="text-[12px] text-ink-500 mt-0.5">Search the Control Library to map a control to <span className="font-semibold text-ink-700">{riskName}</span>.</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+        </div>
+
+        {/* Search + Create Control + Key filter + selected count */}
+        <div className="px-6 py-3 border-b border-canvas-border space-y-2.5 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search controls..."
+                className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[13px] placeholder:text-ink-400 outline-none focus:border-brand-500/60 transition-all" />
+            </div>
+            <button type="button" onClick={onCreateControl}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-paper-0 text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <Plus size={13} />Create Control
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-ink-500">Key:</span>
+              {(['all', 'key', 'non-key'] as const).map(k => (
+                <button key={k} type="button" onClick={() => setKeyFilter(k)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-all ${keyFilter === k ? 'bg-brand-600 text-white' : 'bg-canvas text-ink-500 hover:bg-brand-50'}`}>
+                  {k === 'all' ? 'All' : k === 'key' ? 'Key' : 'Non-Key'}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-ink-400">{selected.size} selected</span>
+          </div>
+        </div>
+
+        {/* Control list */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
+          {filtered.length === 0 ? (
+            <div className="text-center py-10 text-[12px] text-ink-400">{available.length === 0 ? 'All controls are already linked.' : 'No controls match your search.'}</div>
+          ) : filtered.map(c => {
+            const checked = selected.has(c.id);
+            return (
+              <label key={c.id}
+                className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${checked ? 'border-brand-400 bg-brand-50/40' : 'border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50'}`}>
+                <input type="checkbox" checked={checked} onChange={() => toggle(c.id)}
+                  className="mt-0.5 w-[18px] h-[18px] rounded-[5px] border-canvas-border accent-brand-600 cursor-pointer shrink-0" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="text-[13px] font-semibold text-ink-900 leading-snug line-clamp-2">{c.name}</div>
+                  {c.isKey && <Star size={11} className="fill-amber-400 text-amber-500" aria-label="Key control" />}
+                  <p className="text-[11px] text-ink-400 leading-snug line-clamp-2">{c.description}</p>
+                  <div className="flex items-center gap-2.5 text-[10px]">
+                    <span className={`px-1.5 h-4 rounded font-bold inline-flex items-center ${AUTO_CLS[c.automation] ?? 'bg-gray-100 text-gray-700'}`}>{c.automation}</span>
+                    <span className="text-ink-400">{c.workflowLinked ? c.workflowName : 'No workflow'}</span>
+                    <span className="font-mono text-ink-400">{c.id.toUpperCase()}</span>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+          <button type="button" disabled={selected.size === 0} onClick={apply}
+            className="px-4 py-2 rounded-lg bg-brand-600 text-paper-0 text-[13px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            Apply Changes{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
+        </footer>
+      </motion.aside>
+    </>
+  );
+}
+
+// ─── Remove-mapping confirmation ─────────────────────────────────────────────
+// Guards unlinking a control from a risk in the expanded mapping.
+function ConfirmUnmapModal({ ctlId, onCancel, onConfirm }: {
+  ctlId: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/30 backdrop-blur-sm" onClick={onCancel}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.18 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[400px] p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
+          <h2 className="text-[17px] font-bold text-ink-900">Remove control mapping?</h2>
+        </div>
+        <p className="text-[12.5px] text-ink-500 leading-relaxed mb-5">
+          This unlinks <span className="font-mono font-semibold text-ink-700">{ctlId}</span> from this risk. It stays in the Control Library, so you can re-link it anytime from <span className="font-medium text-ink-700">Link Control</span>.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-risk text-paper-0 text-[13px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Remove</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Link Workflow — control chooser ─────────────────────────────────────────
+// Workflows attach to a control, but the Link Workflow action sits on a risk row.
+// When the risk has more than one control, this step asks which one; it's skipped
+// upstream when there's exactly one control, and shows an empty state when none.
+function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClose }: {
+  riskName: string;
+  controls: { id: string; name: string; isKey: boolean }[];
+  onPick: (ctl: { id: string; name: string; isKey: boolean }) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+        role="dialog" aria-label="Choose a control">
+
+        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2"><WorkflowIcon size={18} className="text-brand-600 shrink-0" /><h2 className="font-display text-[18px] font-semibold text-ink-900">Link Workflow</h2></div>
+            <p className="text-[12px] text-ink-500 mt-0.5">Choose which control on <span className="font-semibold text-ink-700">{riskName}</span> to link a workflow to.</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
+          {controls.length === 0 ? (
+            <div className="text-center py-10">
+              <Shield size={26} className="mx-auto text-ink-300 mb-2" />
+              <p className="text-[13px] font-semibold text-ink-600 mb-1">No controls on this risk yet</p>
+              <p className="text-[11px] text-ink-400">Link a control first, then attach a workflow to it.</p>
+            </div>
+          ) : controls.map(ctl => (
+            <button key={ctl.id} type="button" onClick={() => onPick(ctl)}
+              className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
+              <Star size={12} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
+              <span className="font-mono text-[11px] text-brand-700 font-semibold shrink-0">{ctl.id}</span>
+              <span className="text-[12.5px] text-ink-800 leading-snug flex-1 min-w-0 truncate">{ctl.name}</span>
+              <ChevronRight size={14} className="shrink-0 text-ink-400" />
+            </button>
+          ))}
+        </div>
+
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas">
+          <button type="button" onClick={onClose}
+            className="w-full px-4 py-2.5 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+        </footer>
+      </motion.aside>
+    </>
   );
 }

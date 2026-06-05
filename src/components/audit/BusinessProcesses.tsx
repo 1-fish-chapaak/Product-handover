@@ -2,12 +2,13 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search, Plus, Upload, Sparkles,
-  ChevronRight, ChevronDown,
+  ChevronRight, ChevronLeft, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
   FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive, Share2,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive, Share2, Zap,
 } from 'lucide-react';
+import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
@@ -18,6 +19,19 @@ import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
+
+// RACMs surfaced in the P2P RACM tab so the list mirrors the "RACM Ready" SOPs in
+// the SOP section — each shares its source SOP's name (sop-102/104/105). Injected
+// through the RacmListTable `extraRacms` prop (NOT the global RACM_SEED_DATA), so
+// Audit Planning and every other RACM consumer stay untouched. Badge state is a
+// deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
+// while Testing RACM is mapped but still Workflow Missing.
+const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
+  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
+  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+];
+const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
 
 interface Props {
   selectedBPId: string | null;
@@ -1347,7 +1361,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       uploadedBy: s.by, uploadedAt: s.at,
       status: (s.racmId ? 'Linked' : idx % 3 === 0 ? 'Processed' : 'Draft') as SOPStatus,
       progress: s.racmId ? 100 : 0, processingStep: s.racmId ? 6 : 0,
-      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null, failureReason: null,
+      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null,
+      failureReason: s.status === 'failed' ? 'RACM generation timed out — no progress for over 15 minutes. Please re-upload the SOP to retry.' : null,
       extractedRisks: s.racmId ? [] : buildMockExtractions().risks,
       extractedControls: s.racmId ? [] : buildMockExtractions().controls,
     }))
@@ -1367,6 +1382,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Inline SOP rename — the pencil action puts a card's title into edit mode.
+  const [editingSopNameId, setEditingSopNameId] = useState<string | null>(null);
+  const [editingSopName, setEditingSopName] = useState('');
+  const saveSopName = (id: string) => {
+    const name = editingSopName.trim();
+    const current = localSops.find(s => s.id === id);
+    if (name && current && name !== current.name) {
+      setLocalSops(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+      addToast({ message: `SOP renamed to "${name}".`, type: 'success' });
+    }
+    setEditingSopNameId(null);
+  };
 
   // URL sync — ?sop=sop-001
   useEffect(() => {
@@ -1716,7 +1743,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border text-[11px] font-medium cursor-pointer transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border text-[12px] font-medium cursor-pointer transition-colors ${
             hasFilter
               ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
               : 'border-border bg-white text-ink-700 hover:bg-paper-50'
@@ -1759,7 +1786,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[12px] text-ink-800 hover:bg-paper-50 cursor-pointer"
                     >
                       <span className={`w-3.5 h-3.5 inline-flex items-center justify-center rounded-[3px] border ${checked ? 'bg-brand-600 border-brand-600' : 'bg-white border-ink-300'}`}>
-                        {checked && <CheckCircle2 size={9} className="text-white" strokeWidth={3} />}
+                        {checked && <Check size={9} className="text-white" strokeWidth={3} />}
                       </span>
                       <span className="truncate">{opt}</span>
                     </button>
@@ -1802,8 +1829,10 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </div>
       ) : (
         <>
-          {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT. */}
-          <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-border-light">
+          {/* Filter row — search on the LEFT, Clear all + CTA filter pills on the RIGHT.
+              -mt-4 cancels the shared header's mb-4 so the header→search gap is exactly
+              py-5 (20px); pb-5 keeps the search→list gap at 20px too. */}
+          <div className="flex items-center justify-between gap-3 py-5 -mt-4">
             <div className="relative shrink-0">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
@@ -1825,7 +1854,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               )}
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
-              <FilterCTA label="Uploader" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              <button
+                type="button"
+                onClick={() => setShowUploadDrawer(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+                <Plus size={13} />Create new SOP
+              </button>
             </div>
           </div>
 
@@ -1855,8 +1890,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
             </div>
           )}
 
-          {/* Card stack */}
-          <div className="border-t border-border-light min-h-[calc(100vh-280px)] px-6 py-4 space-y-2">
+          {/* SOP cards */}
+          <div className="min-h-[calc(100vh-280px)] pb-4 space-y-2">
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
@@ -1888,13 +1923,27 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               </div>
             ) : (
               sortedSops.map((sop, i) => {
-                const isProcessing = sop.status === 'Processing';
-                const isChecked = selectedIds.includes(sop.id);
-                const extractedRiskCount = sop.extractedRisks?.length ?? 0;
-                const extractedControlCount = sop.extractedControls?.length ?? 0;
-                const hasExtraction = extractedRiskCount > 0 || extractedControlCount > 0;
-                const fileType = getFileType(sop);
-                const currentStep = PROCESSING_STEPS[sop.processingStep] ?? PROCESSING_STEPS[0];
+                // Status shown to match the SOP-section screenshot:
+                //   failed generation → "Generation Failed" (red)
+                //   SOP with a RACM   → "RACM Ready" (green)
+                const statusLabel = sop.failureReason ? 'Generation Failed' : sop.racmId ? 'RACM Ready' : sop.status;
+                const statusCls = sop.failureReason
+                  ? 'bg-risk-50 text-risk-700'
+                  : sop.racmId
+                    ? 'bg-compliant-50 text-compliant-700'
+                    : SOP_STATUS_STYLES[sop.status];
+                // RACM Ready = has a RACM and generation didn't fail. Only these
+                // open their RACM on card-body click; everything else is inert.
+                const isRacmReady = !sop.failureReason && !!sop.racmId;
+                // Commented out — these drove elements not present in the screenshot
+                // (status spinner, selection, extraction summary, file-type, readiness):
+                // const isProcessing = sop.status === 'Processing';
+                // const isChecked = selectedIds.includes(sop.id);
+                // const extractedRiskCount = sop.extractedRisks?.length ?? 0;
+                // const extractedControlCount = sop.extractedControls?.length ?? 0;
+                // const hasExtraction = extractedRiskCount > 0 || extractedControlCount > 0;
+                // const fileType = getFileType(sop);
+                // const currentStep = PROCESSING_STEPS[sop.processingStep] ?? PROCESSING_STEPS[0];
 
                 return (
                   <motion.div
@@ -1902,128 +1951,119 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    onClick={() => setDetailSopId(sop.id)}
-                    className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
-                      isChecked
-                        ? 'border-primary/40 ring-1 ring-primary/20'
-                        : sop.status === 'Archived'
-                          ? 'border-border-light opacity-60'
-                          : 'border-border-light'
-                    }`}
+                    onClick={isRacmReady && sop.racmId && onViewRacm ? () => onViewRacm(sop.racmId!) : undefined}
+                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all ${isRacmReady ? 'cursor-pointer hover:border-primary/50 hover:shadow-sm' : 'cursor-default'} ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
                   >
-                    {/* Col 1 — select checkbox */}
-                    <div onClick={e => e.stopPropagation()} className="pt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleSelectOne(sop.id)}
-                        className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
-                        aria-label={`Select ${sop.name}`}
-                      />
-                    </div>
-
-                    {/* Col 2 — title + status + summary + meta + tags */}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-[13px] font-medium text-text leading-snug">{sop.name}</span>
-                        <span className="font-mono text-[10px] text-ink-500 bg-paper-50 border border-canvas-border px-2 py-0.5 rounded-full tabular-nums">v{sop.version.replace(/^v/i, '')}</span>
-                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>
-                          {isProcessing && <Loader2 size={9} className="animate-spin mr-1" />}
-                          {sop.status}
+                    {/* Main — name + status badge inline, failure message, uploader · date.
+                        Card layout per the Risk-card reference (image #21); same data as the table. */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2.5 mb-1 flex-wrap">
+                        {editingSopNameId === sop.id ? (
+                          <input
+                            autoFocus
+                            value={editingSopName}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => setEditingSopName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveSopName(sop.id); }
+                              else if (e.key === 'Escape') { setEditingSopNameId(null); }
+                            }}
+                            onBlur={() => saveSopName(sop.id)}
+                            className="text-[15px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
+                          />
+                        ) : (
+                          <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
+                        )}
+                        <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>
+                          {statusLabel}
                         </span>
                       </div>
-                      {(sop.description || '').trim() && (
-                        <p className="line-clamp-2 text-[12px] text-text-secondary mb-1.5">{sop.description}</p>
+                      {sop.failureReason && (
+                        <p className="text-[12.5px] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
                       )}
-                      <div className="text-[11px] text-text-muted mb-1.5">
-                        <span className="font-mono">{sop.id}</span>
-                        <span className="mx-1">·</span>
-                        uploaded by {sop.uploadedBy}
-                        <span className="mx-1">·</span>
-                        {sop.uploadedAt}
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
-                          {fileType}
-                        </span>
-                        <span className="px-2 h-4 rounded-full text-[10px] font-medium bg-paper-100 text-ink-700 border border-border-light inline-flex items-center">
-                          {sop.racmId ? `linked to ${sop.racmId}` : 'Standalone'}
-                        </span>
+                      <div className="text-[12px] text-ink-400">
+                        {sop.uploadedBy}
+                        <span className="mx-1.5">·</span>
+                        Uploaded {sop.uploadedAt}
                       </div>
                     </div>
 
-                    {/* Col 3 — extraction summary */}
-                    <div className="pt-0.5">
-                      {hasExtraction || sop.status === 'Draft' ? (
-                        <span className="inline-flex items-center px-2 h-5 rounded-[6px] text-[11px] bg-paper-100 text-ink-700 border border-border-light tabular-nums">
-                          {extractedRiskCount} risks · {extractedControlCount} controls
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-text-muted italic">Not extracted</span>
-                      )}
-                    </div>
-
-                    {/* Col 4 — processing readiness */}
-                    <div className="pt-0.5">
-                      {sop.status === 'Processing' ? (
-                        <span className="text-[11px] text-text-secondary inline-flex items-center gap-1.5">
-                          <Loader2 size={11} className="animate-spin text-brand-600" />
-                          {currentStep.label}
-                        </span>
-                      ) : sop.status === 'Draft' ? (
-                        <span className="text-[11px] text-mitigated-700 italic inline-flex items-center gap-1">
-                          <AlertTriangle size={11} className="text-mitigated-700" />
-                          Pending upload
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-compliant-700 italic inline-flex items-center gap-1">
-                          <CheckCircle2 size={11} className="text-compliant-700" />
-                          Ready
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Col 5 — actions */}
-                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1">
-                      {isChecked ? (
+                    {/* Actions — Edit RACM Draft pill + preview + delete. */}
+                    <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
+                      {editingSopNameId === sop.id ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => archiveSop(sop.id)}
-                            aria-label={`Archive ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <Archive size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleSelectOne(sop.id)}
-                            aria-label={`Cancel selection of ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <X size={13} />
-                          </button>
+                          {/* onMouseDown preventDefault keeps the input focused so its
+                              onBlur doesn't fire before these click handlers run. */}
+                          <div className="relative group/cancel">
+                            <button
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => setEditingSopNameId(null)}
+                              aria-label="Cancel rename"
+                              className="w-7 h-7 rounded-[6px] border border-ink-300/20 inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
+                            >
+                              <X size={15} />
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">
+                              Cancel
+                            </span>
+                          </div>
+                          <div className="relative group/save">
+                            <button
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => saveSopName(sop.id)}
+                              aria-label="Save name"
+                              className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center bg-brand-600 text-paper-0 hover:bg-brand-500 cursor-pointer transition-colors"
+                            >
+                              <Check size={15} strokeWidth={2.5} />
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">
+                              Save
+                            </span>
+                          </div>
                         </>
                       ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewingSopId(sop.id)}
-                            aria-label={`Open ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-600 hover:bg-paper-100 cursor-pointer transition-colors"
-                          >
-                            <Play size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => archiveSop(sop.id)}
-                            aria-label={`Archive ${sop.name}`}
-                            className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 hover:text-risk-700 cursor-pointer transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
+                      <div className="relative group/edit">
+                        <button
+                          type="button"
+                          onClick={() => { setEditingSopNameId(sop.id); setEditingSopName(sop.name); }}
+                          aria-label="Edit SOP"
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">
+                          Edit SOP
+                        </span>
+                      </div>
                       )}
+                      <div className="relative group/view">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewingSopId(sop.id)}
+                          aria-label={`View ${sop.name}`}
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/view:opacity-100 pointer-events-none transition-opacity z-50">
+                          View
+                        </span>
+                      </div>
+                      <div className="relative group/delete">
+                        <button
+                          type="button"
+                          onClick={() => archiveSop(sop.id)}
+                          aria-label={`Delete ${sop.name}`}
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/delete:opacity-100 pointer-events-none transition-opacity z-50">
+                          Delete
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 );
@@ -2459,9 +2499,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 -mt-4 pt-5">
 
-      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right. */}
+      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right.
+          -mt-4 cancels the shared header's mb-4 → 20px above; space-y-5 → 20px below. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative shrink-0">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -3003,8 +3044,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
   };
 
   return (
-    <div className="space-y-4">
-      {/* Search (LEFT) + Clear all + Filter pills (RIGHT) */}
+    <div className="space-y-5 -mt-4 pt-5">
+      {/* Search (LEFT) + Clear all + Filter pills (RIGHT).
+          -mt-4 cancels the shared header's mb-4 → 20px above; space-y-5 → 20px below. */}
       <div className="flex items-center gap-3">
         <div className="relative w-[260px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -3023,6 +3065,12 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail }: { bpAbb
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           <FilterPill filterKey="nature" label="Trigger" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
+          <button
+            type="button"
+            onClick={() => setShowCreateDrawer(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
+            <Plus size={13} />Create new Workflow
+          </button>
         </div>
       </div>
 
@@ -4049,7 +4097,7 @@ function SectionEntryCard({ data }: { data: EntryData }) {
 // an engagement-style sub-card. Clicking the centre area drills into the section.
 function SectionCard({
   title, count, locked, lockedReason, onClick,
-  ratio, healthRatioText, entries, emptyEntriesLabel,
+  ratio, healthRatioText, icon: Icon, iconCls, attention, fixLabel,
 }: {
   title: string;
   count: number;
@@ -4062,93 +4110,76 @@ function SectionCard({
   healthRatioText?: string;
   entries?: EntryData[];
   emptyEntriesLabel?: string;
+  icon?: React.ElementType;
+  iconCls?: string;
+  attention?: boolean;
+  fixLabel?: string | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (locked) {
     return (
-      <div className="w-full bg-paper-50/40 border border-dashed border-canvas-border rounded-[12px] px-5 py-4">
-        <div className="flex items-baseline justify-between gap-3 mb-1">
-          <h2 className="font-display text-[18px] font-[420] tracking-tight text-ink-400 leading-none">{title}</h2>
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-400 inline-flex items-center gap-1 shrink-0">
-            <Lock size={9} aria-hidden />Locked
-          </span>
+      <div className="flex items-center gap-3 py-2.5 px-2 -mx-2 opacity-60">
+        <span className="w-8 h-8 rounded-lg bg-paper-100 grid place-items-center text-ink-300 shrink-0">
+          {Icon ? <Icon size={15} /> : <Lock size={15} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-[13px] font-semibold text-ink-400">{title}</span>
+          <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 mt-0.5"><Lock size={9} aria-hidden />{lockedReason ?? 'Locked'}</div>
         </div>
-        <div className="text-[12px] text-ink-400 leading-tight">{lockedReason ?? 'Available after the previous step is set up.'}</div>
       </div>
     );
   }
 
   const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
-  const pct = hasHealth ? Math.round((ratio as number) * 100) : null;
-  // Split the health fraction so the numeric token ("5/6") wears JetBrains Mono —
-  // the auditor's data register — while the word ("mapped") stays in the body face.
+  const pct = hasHealth ? Math.round((ratio as number) * 100) : 0;
+  // The numeric token ("5/6") wears JetBrains Mono, the word ("mapped") stays in the body face.
   const ratioNum = healthRatioText ? healthRatioText.split(' ')[0] : '';
   const ratioWord = healthRatioText ? healthRatioText.split(' ').slice(1).join(' ') : '';
 
+  // Health-tier colour, matching the Engagements overview (compliant / mitigated / risk).
+  const tier = pct >= 85
+    ? { bar: 'bg-compliant', text: 'text-compliant-700' }
+    : pct >= 65
+      ? { bar: 'bg-mitigated', text: 'text-mitigated-700' }
+      : { bar: 'bg-risk', text: 'text-risk-700' };
+
   return (
-    <div className="space-y-2.5">
-      {/* Scorecard row — one calm line per section: title + count, then the section's
-          own health as a coverage meter + fraction. The cross-section "needs attention"
-          rollup lives once, in the summary line above the list — never restated here.
-          When expanded a thin divider separates the header from the entries below. */}
-      <div className={`group/row flex items-center gap-3 px-1 ${expanded ? 'pb-3 border-b border-canvas-border' : 'py-2.5'}`}>
-        <button
-          type="button"
-          onClick={() => setExpanded(e => !e)}
-          aria-label={expanded ? `Hide ${title} entries` : `Show ${title} entries`}
-          aria-expanded={expanded}
-          className="no-focus-ring shrink-0 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-paper-100 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer"
-        >
-          {expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-        </button>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Open ${title}`}
+      className="group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer text-left"
+    >
+      {/* identity icon chip — coloured by the section's GRC semantic, in the Engagements
+          event-icon style (bg-{sem}-50 / text-{sem}-700) */}
+      <span className={`w-8 h-8 rounded-md grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
+        {Icon ? <Icon size={20} /> : null}
+      </span>
 
-        {/* The whole right area is one drill target → opens the section. The title lane is
-            a fixed width so the meters line up down the column; the count sits beside the
-            name as a quiet mono annotation, and a chevron slides in from the right on hover.
-            Inner elements are spans (a button may only contain phrasing content). */}
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={`Open ${title}`}
-          className="no-focus-ring flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
-        >
-          <span className="flex items-baseline gap-1.5 w-[120px] shrink-0">
-            <span className="text-[13px] font-semibold text-ink-900 leading-none group-hover/row:text-brand-700 transition-colors">{title}</span>
-            <span className="text-[12px] font-mono tabular-nums text-ink-400 shrink-0">· {count}</span>
-          </span>
-
-          {hasHealth ? (
-            <span className="flex items-center gap-2.5 min-w-0">
-              <span className="block h-1.5 w-24 rounded-full bg-paper-100 overflow-hidden shrink-0" role="img" aria-label={`${pct}% — ${healthRatioText}`}>
-                <span className="block h-full rounded-full bg-ink-400 transition-[width]" style={{ width: `${pct}%` }} />
-              </span>
-              <span className="text-[12px] text-ink-500 whitespace-nowrap">
-                <span className="font-mono tabular-nums text-ink-600">{ratioNum}</span> {ratioWord}
-              </span>
-            </span>
-          ) : null}
-
-          <ChevronRight
-            size={15}
-            aria-hidden
-            className="ml-auto shrink-0 text-ink-300 opacity-0 -translate-x-1 group-hover/row:opacity-100 group-hover/row:translate-x-0 transition-all duration-150"
-          />
-        </button>
+      {/* name + the count fraction */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[13px] font-semibold text-ink-800 truncate group-hover:text-brand-700 transition-colors">{title}</span>
+          <span className="text-[11px] text-ink-400 tabular-nums shrink-0">· {count}</span>
+        </div>
+        {hasHealth && (
+          <div className="text-[11px] text-ink-400 mt-0.5">
+            <span className="font-mono tabular-nums">{ratioNum}</span> {ratioWord}
+          </div>
+        )}
       </div>
 
-      {/* Expanded entries — nested under the section with a left rail + indent so they
-          read as belonging to it, not as peers of the section headers. */}
-      {expanded && entries && (
-        <div className="ml-3 pl-5 border-l border-canvas-border/70 space-y-2.5">
-          {entries.length > 0 ? (
-            entries.map(e => <SectionEntryCard key={e.id} data={e} />)
-          ) : (
-            <div className="text-[12px] text-ink-500 italic">{emptyEntriesLabel ?? `No ${title.toLowerCase()} yet.`}</div>
-          )}
+      {/* health bar + tier percentage */}
+      {hasHealth && (
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:block w-24 h-1.5 bg-paper-100 rounded-full overflow-hidden" role="img" aria-label={`${pct}% coverage`}>
+            <div className={`h-full rounded-full ${tier.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`text-[13px] font-bold tabular-nums w-10 text-right ${tier.text}`}>{pct}%</span>
         </div>
       )}
-    </div>
+
+      <ChevronRight size={15} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
+    </button>
   );
 }
 
@@ -4186,6 +4217,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
+  // 2-column side-by-side experiment is P2P-only for now.
+  const isP2P = bp.id === 'p2p';
 
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
@@ -4300,6 +4333,17 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
   };
   const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+
+  // Single source of truth for "is this section set up?" — shared by both the
+  // "Set up this business process" checklist and the "Coverage by section"
+  // panel so they never disagree. A showcase override pins O2C to a mid-setup
+  // state; every other process derives done-state from real section content.
+  const SETUP_DEMO_OVERRIDE: Partial<Record<string, Record<SectionKey, boolean>>> = {
+    o2c: { sop: false, racm: true, risks: false, controls: false, workflows: false },
+  };
+  const sectionDemoOverride = SETUP_DEMO_OVERRIDE[bp.id];
+  const isSectionComplete = (k: SectionKey) =>
+    sectionDemoOverride ? sectionDemoOverride[k] : sectionMeta[k].count > 0;
 
   // ── Rich insights per section — drive the BP detail index cards. ────────────
   // Each section reads its underlying seed data and reports:
@@ -4579,6 +4623,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     controls: 'Controls',
     workflows: 'Workflows',
   };
+  // Tab icons — SOP upload, RACM document, risk triangle, control shield, workflow nodes.
+  const sectionTabIcon: Record<SectionKey, React.ComponentType<{ size?: number; className?: string }>> = {
+    sop: Upload,
+    racm: FileText,
+    risks: AlertTriangle,
+    controls: Shield,
+    workflows: Workflow,
+  };
   // Switch to a different drilled section in-place (also updates URL).
   const switchDrilledSection = (next: SectionKey) => {
     if (next === drilledSection) return;
@@ -4632,18 +4684,67 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   // Dropdown menu — used in the BP detail INDEX header. Picks a section,
   // navigates to it, then fires triggerSectionCreate.
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  // Horizontal expand/collapse for the P2P 2-column experiment: the setup
+  // checklist and the coverage panel sit side-by-side and each folds to a slim
+  // rail on its own (both can be open, or either one closed).
+  const [setupOpen, setSetupOpen] = useState(true);
+  const [coverageOpen, setCoverageOpen] = useState(true);
+  // When a create/upload flow is requested for a section we aren't viewing yet,
+  // we navigate there first and remember the intent. The effect below fires the
+  // trigger once that section is mounted — child effects (which register the
+  // section's create listener) run before this parent effect, so the flow opens
+  // reliably instead of racing a fixed timeout.
+  const [pendingCreate, setPendingCreate] = useState<SectionKey | null>(null);
   const handleDropdownPick = (section: SectionKey) => {
     setCreateMenuOpen(false);
-    if (section !== drilledSection) switchDrilledSection(section);
-    // Defer trigger to next tick so the section component has mounted.
-    setTimeout(() => triggerSectionCreate(section), 50);
+    if (section === drilledSection) {
+      // Already viewing the section — open its flow immediately.
+      triggerSectionCreate(section);
+    } else {
+      setPendingCreate(section);
+      switchDrilledSection(section);
+    }
   };
+  useEffect(() => {
+    if (pendingCreate && drilledSection === pendingCreate) {
+      triggerSectionCreate(pendingCreate);
+      setPendingCreate(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drilledSection, pendingCreate]);
+
+  // Slim folded rail shown when a side-by-side panel is collapsed (P2P layout).
+  // Clicking anywhere on the rail re-opens the panel.
+  const renderCollapsedStrip = ({ title, icon: Icon, gradient, expandDir, onExpand }: {
+    title: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    gradient?: boolean;
+    expandDir: 'right' | 'left';
+    onExpand: () => void;
+  }) => (
+    <motion.section
+      {...revealProps(0)}
+      role="button"
+      tabIndex={0}
+      onClick={onExpand}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(); } }}
+      aria-label={`Expand ${title}`}
+      className="self-stretch shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-start gap-2 cursor-pointer hover:border-brand-200 transition-colors"
+    >
+      <span className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${gradient ? 'bg-gradient-to-r from-brand-400 to-brand-600 text-paper-0' : 'bg-brand-50 text-brand-700'}`}>
+        <Icon size={16} />
+      </span>
+      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
+        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </span>
+    </motion.section>
+  );
 
   // RACM editor takeover — full-screen replaces all views while editing
   if (reviewingRacm) {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
-        <div className="px-[124px] py-8">
+        <div className="px-8 py-8">
           <ReviewImportWorkspace
             racmName={reviewingRacm.name}
             bpAbbr={bp.abbr}
@@ -4680,7 +4781,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-6 border-b border-border">
+          <div className={`bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 ${(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? '' : 'border-b border-border'}`}>
             <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
               <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
                 <ArrowLeft size={12} />Process Hub
@@ -4704,11 +4805,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             {/* Section switcher pills + section-specific create button — share one row.
                 Hidden when a risk/control detail page is open so the detail owns the screen. */}
             {!detailIsOpen && !(drilledSection === 'racm' && racmTakeover) && (
-              <div className="flex items-center justify-between gap-3 mt-3">
-                <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0">
+              <div className="flex items-end justify-between gap-3 -mb-4">
+                <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
                 {sectionOrder.map(key => {
                   const m = sectionMeta[key];
                   const active = drilledSection === key;
+                  const TabIcon = sectionTabIcon[key];
                   return (
                     <button
                       type="button"
@@ -4716,29 +4818,26 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
                       aria-label={`Switch to ${m.title}`}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => switchDrilledSection(key)}
-                      className={`no-focus-ring shrink-0 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer ${
+                      className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
                         active
-                          ? 'bg-brand-600 text-paper-0'
-                          : 'bg-white text-ink-700 border border-canvas-border hover:bg-paper-50'
+                          ? 'border-brand-600 text-brand-700 font-semibold'
+                          : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
                       }`}
                     >
-                      {sectionPillLabel[key]}
+                      <TabIcon size={15} className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
+                      <span>{sectionPillLabel[key]}</span>
                       {m.count > 0 && (
-                        <span className={`ml-1.5 tabular-nums ${active ? 'text-paper-0/80' : 'text-ink-500'}`}>· {m.count}</span>
+                        <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
+                          active ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
+                        }`}>{m.count}</span>
                       )}
                     </button>
                   );
                 })}
                 </div>
-                {/* Section-specific create button — text changes per drilled section. */}
-                {can('bp_create') && (
-                  <button
-                    type="button"
-                    onClick={() => triggerSectionCreate(drilledSection)}
-                    className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer shrink-0">
-                    <Plus size={13} />{sectionCreateLabel[drilledSection]}
-                  </button>
-                )}
+                {/* Per-section create buttons now live in each section's own filter row
+                    (SOP / RACM / Risks / Workflows) or toolbar (Controls "New control"),
+                    not in this shared header. */}
               </div>
             )}
 
@@ -4762,9 +4861,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               onViewRacm={(racmId) => {
                 const exists = createdRacms.some(r => r.id === racmId);
                 if (!exists) {
+                  // A RACM generated from a SOP carries that SOP's name (pre-seeded in mockData RACMS).
+                  const seeded = RACMS.find(r => r.id === racmId);
+                  const sourceSop = SOPS.find(s => s.racmId === racmId);
                   setCreatedRacms(prev => [...prev, {
-                    id: racmId, name: `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                    risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
+                    id: racmId, name: seeded?.name ?? `RACM ${racmId}`, version: 'v1.0', process: bp.abbr, framework: seeded?.fw ?? 'SOX ICFR',
+                    risks: sourceSop?.risks ?? 0, controls: sourceSop?.controls ?? 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
                     workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
                     isFrozen: false,
                   }]);
@@ -4774,10 +4876,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             />
           )}
           {drilledSection === 'racm' && (
-            <div className="space-y-4">
+            <div className="space-y-4 -mt-4 pt-5">
               <RacmListTable
                 processFilter={bp.abbr}
-                extraRacms={createdRacms}
+                extraRacms={
+                  bp.id === 'p2p'
+                    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
+                    : createdRacms
+                }
                 onCreate={() => setShowCreateRacm(true)}
                 onEditDraft={(racm) => {
                   const exists = createdRacms.some(r => r.id === racm.id);
@@ -4821,7 +4927,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
               </AnimatePresence>
             </div>
           )}
-          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
+          {drilledSection === 'risks' && <div className="-mt-4 pt-5"><RiskRegister processFilter={bp.abbr} /></div>}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
           {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} />}
         </div>
@@ -4833,8 +4939,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-6 border-b border-border">
-          <div className="font-mono text-[12px] mb-2 tracking-tight flex items-center gap-1.5 min-w-0">
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border">
+          {/* breadcrumb on its own line; Quick add now lives on the byline row below */}
+          <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
             <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
               <ArrowLeft size={12} />Process Hub
             </button>
@@ -4842,95 +4949,96 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
             <span className="text-ink-700 truncate">{bp.name}</span>
           </div>
 
-          <div className="mb-2 flex items-start justify-between gap-4">
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
-            <div className="flex items-center gap-2 shrink-0 pt-2">
-              {can('bp_share') && (
-                <button
-                  onClick={() => addToast({ message: `Share "${bp.name}" with users and teams.`, type: 'info' })}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
-                >
-                  <Share2 size={14} /> Share
-                </button>
-              )}
-              {can('bp_delete') && (
-                <button
-                  onClick={() => addToast({ message: `"${bp.name}" deleted.`, type: 'success' })}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                >
-                  <Trash2 size={14} /> Delete
-                </button>
-              )}
-            </div>
-          </div>
+          {/* Masthead body — the process title and byline set the page; the rolled-up
+              health now lives in the Process Health Score card just below. */}
+          <div className="flex items-start justify-between gap-10 pb-6">
+            <div className="min-w-0 flex-1">
+              <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15] mb-4">{bp.name}</h1>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4 text-[12px] flex-wrap">
+                  <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
+                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-ink-400">Owner</span>
+                    <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
+                  </span>
+                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
+                  {(() => {
+                    const s = bp.status ?? 'Active';
+                    const tone =
+                      s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                      s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                      s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                         { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                    return (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                        {s}
+                      </span>
+                    );
+                  })()}
+                </div>
 
-          <p className="text-[13px] text-text-secondary mb-5 max-w-2xl leading-relaxed">
-            {bp.description ?? 'Map risks, controls, SOPs, and workflows for this process.'}
-          </p>
-
-          <div className="flex items-center justify-between gap-3 mb-5 text-[12px] text-text-muted">
-            <div className="flex items-center gap-6 min-w-0">
-              <span className="font-mono">{bp.abbr}</span>
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Owner:</span>
-                <span className="font-medium text-text">{bp.owner ?? 'Tushar Goel'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Status:</span>
-                {(() => {
-                  const s = bp.status ?? 'Active';
-                  const tone =
-                    s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                    s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                    s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                       { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                  return (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                      {s}
-                    </span>
-                  );
-                })()}
-              </div>
-            </div>
-            {/* Quick add dropdown — shortcut to any of the five section create flows. */}
-            <div className="shrink-0">
-              <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCreateMenuOpen(v => !v)}
-                aria-haspopup="menu"
-                aria-expanded={createMenuOpen}
-                className="no-focus-ring inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
-                Quick add
-                <ChevronDown size={13} />
-              </button>
-              {createMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
-                  <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
-                    {([
-                      { key: 'sop' as const,        label: 'SOP' },
-                      { key: 'racm' as const,       label: 'RACM' },
-                      { key: 'risks' as const,      label: 'Risk' },
-                      { key: 'controls' as const,   label: 'Control' },
-                      { key: 'workflows' as const,  label: 'Workflow' },
-                    ]).map(item => (
-                      <button
-                        type="button"
-                        key={item.key}
-                        role="menuitem"
-                        onClick={() => handleDropdownPick(item.key)}
-                        className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+                {/* Right-side actions: gated Share / Delete, then the Quick add menu. */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {can('bp_share') && (
+                    <button
+                      onClick={() => addToast({ message: `Share "${bp.name}" with users and teams.`, type: 'info' })}
+                      className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+                    >
+                      <Share2 size={14} /> Share
+                    </button>
+                  )}
+                  {can('bp_delete') && (
+                    <button
+                      onClick={() => addToast({ message: `"${bp.name}" deleted.`, type: 'success' })}
+                      className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[12px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  )}
+                {/* Quick add dropdown — shortcut to any of the five section create flows. */}
+                <div className="shrink-0">
+                  <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setCreateMenuOpen(v => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={createMenuOpen}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-paper-0 rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer">
+                    Quick add
+                    <ChevronDown size={13} />
+                  </button>
+                  {createMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
+                      <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
+                        {([
+                          { key: 'sop' as const,        label: 'SOP' },
+                          { key: 'racm' as const,       label: 'RACM' },
+                          { key: 'risks' as const,      label: 'Risk' },
+                          { key: 'controls' as const,   label: 'Control' },
+                          { key: 'workflows' as const,  label: 'Workflow' },
+                        ]).map(item => (
+                          <button
+                            type="button"
+                            key={item.key}
+                            role="menuitem"
+                            onClick={() => handleDropdownPick(item.key)}
+                            className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   </div>
-                </>
-              )}
+                </div>
+                </div>
               </div>
             </div>
+
           </div>
         </div>
 
@@ -4956,59 +5064,211 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail }: {
           </div>
         )}
 
-        {/* Summary line — one honest health number for the whole process, plus a
-            jump to the first thing to fix. Replaces the old "needs attention" list:
-            the per-section issues now live on their own rows, so nothing's said twice. */}
-        {!isFreshBP && overallCoverage !== null && (
-          <motion.div className="mb-4 flex items-center justify-between gap-3 px-1" {...revealProps(0)}>
-            <p className="text-[13px] leading-none">
-              <span className="font-semibold text-ink-900"><span className="font-mono tabular-nums">{overallCoverage}%</span> healthy</span>
-              {attentionItems.length > 0 ? (
-                <span className="text-ink-500"> · {attentionItems.length} item{attentionItems.length !== 1 ? 's' : ''} need{attentionItems.length === 1 ? 's' : ''} attention</span>
-              ) : (
-                <span className="text-compliant-700"> · all clear</span>
-              )}
-            </p>
-            {attentionItems.length > 0 && firstFixSection && (
+        {/* KPI strip — process-level rollups, in the Engagements-overview style (shared
+            KpiTile: count-up value, label, footer; click to drill). */}
+        {!isFreshBP && overallCoverage !== null && (() => {
+          const controlsOpen = sectionInsights.controls.openCount ?? 0;
+          const risksOpen = sectionInsights.risks.openCount ?? 0;
+          const controlsEffective = Math.max(0, sectionMeta.controls.count - controlsOpen);
+          const risksMapped = Math.max(0, sectionMeta.risks.count - risksOpen);
+          const fixName = firstFixSection ? sectionMeta[firstFixSection].title : null;
+          const atRisk = attentionItems.length;
+          return (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <KpiTile
+                label="Process Health"
+                value={`${overallCoverage}%`}
+                index={0}
+                onClick={firstFixSection ? () => switchDrilledSection(firstFixSection) : undefined}
+                footer={
+                  <span className={`text-[11px] font-semibold ${atRisk > 0 ? 'text-risk-700' : 'text-ink-400'}`}>
+                    {atRisk > 0 ? `${atRisk} section${atRisk !== 1 ? 's' : ''} need${atRisk === 1 ? 's' : ''} attention` : 'All sections on track'}
+                  </span>
+                }
+              />
+              <KpiTile
+                label="Open items"
+                value={String(atRisk)}
+                index={1}
+                onClick={firstFixSection ? () => switchDrilledSection(firstFixSection) : undefined}
+                footer={<span className="text-[11px] text-ink-400">{fixName ? `Start with ${fixName}` : 'Nothing flagged'}</span>}
+              />
+              <KpiTile
+                label="Controls"
+                value={String(sectionMeta.controls.count)}
+                index={2}
+                onClick={() => switchDrilledSection('controls')}
+                footer={<span className="text-[11px] text-ink-400"><span className="font-semibold text-ink-600 tabular-nums">{controlsEffective}</span> effective</span>}
+              />
+              <KpiTile
+                label="Risks"
+                value={String(sectionMeta.risks.count)}
+                index={3}
+                onClick={() => switchDrilledSection('risks')}
+                footer={<span className="text-[11px] text-ink-400"><span className="font-semibold text-ink-600 tabular-nums">{risksMapped}</span> mapped</span>}
+              />
+            </div>
+          );
+        })()}
+
+        {/* Setup checklist + Coverage by section. On the P2P process these sit
+            side-by-side in a 2-column layout where each panel folds to a slim rail
+            independently; every other process keeps the stacked layout. */}
+        <div className={isP2P ? 'flex items-stretch gap-5 mb-5' : 'contents'}>
+
+        {!isFreshBP && (
+          isP2P && !setupOpen ? renderCollapsedStrip({
+            title: 'Set up this business process',
+            icon: Zap,
+            gradient: true,
+            expandDir: 'right',
+            onExpand: () => setSetupOpen(true),
+          }) : (() => {
+          const SETUP_STEPS = [
+            { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
+            { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: Grid3x3 },
+            { key: 'risks' as const,     title: 'Create Risks',    desc: 'Identify and document risks relevant to this business process.',                      cta: 'Create Risk',            icon: AlertTriangle },
+            { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
+            { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
+          ];
+          // Done-state comes from the shared isSectionComplete helper, so the
+          // checklist and the Coverage panel always tell the same story.
+          const isStepDone = isSectionComplete;
+          const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
+          const pct = Math.round((completed / SETUP_STEPS.length) * 100);
+          return (
+            <motion.section className={`rounded-xl border border-canvas-border bg-white p-5 ${isP2P ? 'flex-1 min-w-0' : 'mb-5'}`} {...revealProps(0)}>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 grid place-items-center shrink-0">
+                    <Zap size={18} className="text-paper-0" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold text-ink-900 leading-tight">Set up this business process</h3>
+                    <p className="text-[12px] text-ink-400 mt-0.5">
+                      <span className="font-mono tabular-nums">{completed}</span> of <span className="font-mono tabular-nums">{SETUP_STEPS.length}</span> steps complete
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  {isP2P && (
+                    <button
+                      type="button"
+                      onClick={() => setSetupOpen(false)}
+                      aria-label="Collapse setup checklist"
+                      className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {SETUP_STEPS.map((step, i) => {
+                  const done = isStepDone(step.key);
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.key} className={`flex items-center gap-4 px-4 py-3.5 rounded-[10px] border transition-colors ${done ? 'border-compliant/25 bg-compliant-50/40' : 'border-canvas-border/40 bg-white'}`}>
+                      {done ? (
+                        <span className="w-6 h-6 rounded-full bg-compliant grid place-items-center shrink-0">
+                          <CheckCircle2 size={16} className="text-paper-0" strokeWidth={2.5} />
+                        </span>
+                      ) : (
+                        <span className="w-6 h-6 rounded-full bg-paper-100 grid place-items-center shrink-0 font-mono text-[12px] font-semibold text-ink-500 tabular-nums">{i + 1}</span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`text-[14px] font-semibold leading-tight ${done ? 'text-compliant-700' : 'text-ink-900'}`}>{step.title}</h4>
+                        <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">{step.desc}</p>
+                      </div>
+                      {!done && (
+                        <button
+                          type="button"
+                          onClick={() => handleDropdownPick(step.key)}
+                          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[8px] bg-brand-50 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer"
+                        >
+                          <Icon size={13} />{step.cta}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.section>
+          );
+        })())}
+
+        {/* Coverage by section — a bordered panel with one clickable row per area, matching
+            the Engagements overview's SectionCard + Row pattern. Locked rows show on a fresh
+            process so the path ahead stays visible. */}
+        {isP2P && !coverageOpen ? renderCollapsedStrip({
+          title: 'Coverage by section',
+          icon: LayoutGrid,
+          gradient: false,
+          expandDir: 'left',
+          onExpand: () => setCoverageOpen(true),
+        }) : (
+        <motion.section className={`rounded-xl border border-canvas-border bg-white p-4 ${isP2P ? 'flex-1 min-w-0' : ''}`} {...revealProps(0)}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[13px] font-semibold text-ink-800">Coverage by section</h3>
+            {isP2P && (
               <button
                 type="button"
-                onClick={() => switchDrilledSection(firstFixSection)}
-                className="no-focus-ring shrink-0 inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+                onClick={() => setCoverageOpen(false)}
+                aria-label="Collapse coverage by section"
+                className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
               >
-                Fix first <ChevronRight size={13} aria-hidden />
+                <ChevronRight size={18} />
               </button>
             )}
-          </motion.div>
-        )}
-
-        <div className="space-y-3">
-          {sortedIndexSections.map((key, i) => {
-            const m = sectionMeta[key];
-            const ins = sectionInsights[key];
-            // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-            const locked = lockedFor(key);
-            const lockedReason = key === 'sop'
-              ? undefined
-              : key === 'racm'
-                ? 'Available after the first SOP is uploaded.'
-                : 'Available after the first RACM is created.';
-            return (
-              <motion.div key={key} {...revealProps(i + 1)}>
+          </div>
+          <div className="space-y-0.5">
+            {sortedIndexSections.map((key) => {
+              // Stay in sync with the setup checklist: a section that reads
+              // "not done" there must show its 0/empty state here too.
+              const incomplete = !isSectionComplete(key);
+              const m = incomplete ? { ...sectionMeta[key], count: 0 } : sectionMeta[key];
+              const ins = incomplete
+                ? { ...sectionInsights[key], ratio: null, healthRatioText: '', openCount: 0 }
+                : sectionInsights[key];
+              // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
+              const locked = lockedFor(key);
+              const lockedReason = key === 'sop'
+                ? undefined
+                : key === 'racm'
+                  ? 'Available after the first SOP is uploaded.'
+                  : 'Available after the first RACM is created.';
+              const SECTION_ICON = { sop: FileText, racm: Grid3x3, risks: AlertTriangle, controls: ShieldCheck, workflows: Workflow } as const;
+              const SECTION_ICON_CLS = {
+                sop: 'bg-brand-50 text-brand-700',
+                racm: 'bg-brand-50 text-brand-700',
+                risks: 'bg-brand-50 text-brand-700',
+                controls: 'bg-brand-50 text-brand-700',
+                workflows: 'bg-brand-50 text-brand-700',
+              } as const;
+              const attention = (ins.openCount ?? 0) > 0;
+              return (
                 <SectionCard
+                  key={key}
                   title={m.title}
                   count={m.count}
                   ratio={ins.ratio}
-                  openCount={ins.openCount}
-                  openLabel={ins.openLabel}
                   healthRatioText={ins.healthRatioText}
-                  entries={ins.entries}
                   locked={locked}
                   lockedReason={lockedReason}
+                  icon={SECTION_ICON[key]}
+                  iconCls={SECTION_ICON_CLS[key]}
+                  attention={attention}
                   onClick={() => switchDrilledSection(key)}
                 />
-              </motion.div>
-            );
-          })}
+              );
+            })}
+          </div>
+        </motion.section>
+        )}
+
         </div>
       </div>
     </div>
