@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
+import ConfirmationModal from '../shared/ConfirmationModal';
+import { LinkControlPickerDrawer } from './RacmListTable';
 import { getRiskRelationships } from '../../data/processHubJoins';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -553,6 +555,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const [isLoading, setIsLoading] = useState(true);
+  // Inline card expansion — chevron opens a Description / Sub-process / Owner / Created panel.
+  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null);
+  const [editingRiskCard, setEditingRiskCard] = useState<RiskEntry | null>(null);
+  const [linkControlRisk, setLinkControlRisk] = useState<RiskEntry | null>(null);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
   const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
   const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
@@ -650,6 +656,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Risk archived`, type: 'success' });
+  };
+  // Delete-risk confirmation (the trash action on a risk card).
+  const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ id: string; name: string } | null>(null);
+  const handleDeleteOne = (id: string) => {
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk deleted`, type: 'success' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
@@ -837,6 +850,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
+            const isExpanded = expandedRiskId === risk.id;
             const rels = getRiskRelationships(risk.id, risk.businessProcess);
             const controlCount = rels.controls.length;
             const keyControlCount = rels.controls.filter(c => c.isKey).length;
@@ -846,42 +860,37 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                onClick={() => setDetailRiskId(risk.id)}
-                className={`grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer items-start ${
+                className={`rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
                   isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Select column */}
-                <div onClick={e => e.stopPropagation()} className="pt-0.5">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${risk.id}`}
-                    checked={isChecked}
-                    onChange={() => toggleSelectRisk(risk.id)}
-                    className="w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
-                  />
+                <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 items-start">
+                {/* Open column — chevron toggles the detail panel (matches the RACM card). */}
+                <div className="flex items-center pt-0.5">
+                  <button
+                    type="button"
+                    aria-label={isExpanded ? `Collapse ${risk.id}` : `Expand ${risk.id}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedRiskId(prev => prev === risk.id ? null : risk.id)}
+                    className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
+                  >
+                    <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                  </button>
                 </div>
 
-                {/* Risk column — title + status pill + description + meta + tag pills */}
+                {/* Risk column — title + status pill + id + tag pills.
+                    Description / sub-process / owner / created intentionally live
+                    only in the expanded panel to avoid duplicating them here. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[14.5px] font-semibold text-text leading-snug">{risk.name}</h3>
+                    <h3 className="text-[14.5px] font-semibold text-text leading-snug">
+                      <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
+                      {risk.name}
+                    </h3>
                     <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_STYLES[risk.status]}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
                       {risk.status}
                     </span>
-                  </div>
-                  <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
-                    {risk.description}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
-                    <span className="font-mono tracking-tight">{risk.id}</span>
-                    <span className="text-border">·</span>
-                    <span>{risk.subProcess || '—'}</span>
-                    <span className="text-border">·</span>
-                    <span>{risk.owner || 'Unassigned'}</span>
-                    <span className="text-border">·</span>
-                    <span className="tabular-nums">Created {risk.createdAt}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                     <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
@@ -944,16 +953,24 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     <>
                       <button
                         type="button"
-                        onClick={() => setDetailRiskId(risk.id)}
-                        title="Open risk"
+                        onClick={() => setEditingRiskCard(risk)}
+                        title="Edit risk"
                         className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                       >
-                        <Play size={14} />
+                        <Edit3 size={14} />
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleArchiveOne(risk.id)}
-                        title="Archive"
+                        onClick={() => setLinkControlRisk(risk)}
+                        title="Link control"
+                        className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                      >
+                        <Shield size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })}
+                        title="Delete risk"
                         className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                       >
                         <Trash2 size={14} />
@@ -961,6 +978,42 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     </>
                   )}
                 </div>
+                </div>
+
+                {/* Expanded detail panel — Description + Sub-process / Owner / Created */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden border-t border-canvas-border bg-canvas/40"
+                    >
+                      <div className="px-6 py-5 pl-[68px]">
+                        <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Description</span>
+                        <p className="text-[13px] text-text leading-relaxed max-w-3xl">{risk.description || '—'}</p>
+
+                        <div className="flex items-start justify-between gap-6 mt-5">
+                          <div>
+                            <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Sub-process</span>
+                            <span className="text-[13px] text-text block">{risk.subProcess || '—'}</span>
+                          </div>
+                          <div className="flex items-start gap-12">
+                            <div>
+                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Owner</span>
+                              <span className="text-[13px] text-text block">{risk.owner || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Created</span>
+                              <span className="text-[13px] text-text block tabular-nums">{risk.createdAt}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             );
           })}
@@ -982,6 +1035,46 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           <RiskDetailDrawer risk={detailRisk} onClose={() => setDetailRisk(null)} onUpdate={handleUpdateRisk} />
         )}
       </AnimatePresence>
+
+      {/* Edit Risk side sheet (opened from a card's edit button) */}
+      <AnimatePresence>
+        {editingRiskCard && (
+          <RiskDrawer
+            risk={editingRiskCard}
+            onClose={() => setEditingRiskCard(null)}
+            onSave={(updated) => { handleUpdateRisk(updated); setEditingRiskCard(null); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Link Control sidesheet (opened from a card's Link Control action) */}
+      <AnimatePresence>
+        {linkControlRisk && (
+          <LinkControlPickerDrawer
+            riskName={linkControlRisk.name}
+            alreadyLinkedIds={[]}
+            onClose={() => setLinkControlRisk(null)}
+            onCreateControl={() => addToast({ message: 'Open the Control Library to create a new control.', type: 'info' })}
+            onApply={(controls) => {
+              addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+              setLinkControlRisk(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete-risk confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteRisk}
+        title="Delete this risk?"
+        description={confirmDeleteRisk
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteRisk.name}</span> (<span className="font-mono">{confirmDeleteRisk.id}</span>) from the register. You can't undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteRisk) handleDeleteOne(confirmDeleteRisk.id); setConfirmDeleteRisk(null); }}
+        onClose={() => setConfirmDeleteRisk(null)}
+      />
     </div>
   );
 }

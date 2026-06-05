@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Check, Grid3x3,
   Archive, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
-  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2,
+  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye,
 } from 'lucide-react';
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
+import SopDetailDrawer from './SopDetailDrawer';
+import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
 import { SEED_RISKS, RiskDrawer } from './RiskRegister';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
@@ -178,18 +180,72 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
   // literal "[NA]" and we fill in the few we genuinely have. Typed as
   // Record<string,string> (not ArRacmEntry) so the union-typed fields
   // (riskRating / controlType / extractionConfidence) accept the "[NA]" sentinel.
+  const SUB_PROCESS_POOL: Record<string, string[]> = {
+    P2P: ['Vendor Management', 'Purchase Orders', 'Invoice Processing', 'Payment Execution', 'Goods Receipt'],
+    O2C: ['Order Entry', 'Credit Management', 'Billing & Invoicing', 'Revenue Recognition', 'Collections'],
+    R2R: ['Journal Entries', 'GL Reconciliation', 'Financial Close', 'Intercompany', 'Fixed Assets'],
+    ITGC: ['Access Management', 'Change Management', 'Operations', 'Data Backup', 'Incident Response'],
+    S2C: ['Supplier Selection', 'Contract Negotiation', 'Contract Compliance', 'Supplier Performance', 'Contract Renewal'],
+  };
+  const CATEGORY_POOL = ['Financial', 'Operational', 'Compliance', 'IT', 'Fraud'];
+  const OWNER_POOL = ['Rajiv Sharma', 'Deepak Bansal', 'Meera Patel', 'Neha Joshi', 'Karan Mehta'];
+  const ASSERTION_POOL = ['C, A, V', 'E, A', 'C, E, A, V', 'A, O', 'C, A'];
+  const FS_POOL = ['Accounts Payable', 'Revenue', 'Cash & Bank', 'Inventory', 'Accruals'];
+  const APP_POOL = ['SAP', 'Oracle ERP', 'NetSuite', 'Manual'];
+  const hashStr = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+  // Seed RACMs lack the rich per-row audit fields, so synthesise realistic values
+  // (deterministic per risk/control) to match the AR RACM's full-detail table.
   const seedEntryRows: Record<string, string>[] = scopedControls.map(c => {
-    const row: Record<string, string> = {};
-    AR_RACM_COLUMNS.forEach(col => { row[col.key] = '[NA]'; });
     const risk = scopedRisks.find(r => r.id === c.riskId);
-    row.riskId = c.riskId;
-    row.controlId = c.id;
-    row.processArea = bp?.name ?? '[NA]';
-    row.riskDescription = risk?.name ?? '[NA]';
-    row.riskRating = risk ? risk.severity.charAt(0).toUpperCase() + risk.severity.slice(1) : '[NA]';
-    row.controlActivity = c.desc ?? '[NA]';
-    return row;
+    const h = hashStr(c.id + ':' + c.riskId);
+    const subs = SUB_PROCESS_POOL[racm.process] ?? ['General Operations'];
+    const rating = risk ? risk.severity.charAt(0).toUpperCase() + risk.severity.slice(1) : 'Medium';
+    const likelihood = rating === 'Critical' || rating === 'High' ? 'High' : rating === 'Medium' ? 'Medium' : 'Low';
+    const impact = rating === 'Critical' || rating === 'High' ? 'High' : rating === 'Medium' ? 'Medium' : 'Low';
+    const owner = OWNER_POOL[h % OWNER_POOL.length];
+    const reviewer = OWNER_POOL[(h + 2) % OWNER_POOL.length];
+    const exception = h % 6 === 0;
+    return {
+      riskId: c.riskId,
+      controlId: c.id,
+      processArea: bp?.name ?? racm.process,
+      subProcess: subs[h % subs.length],
+      riskCategory: CATEGORY_POOL[h % CATEGORY_POOL.length],
+      riskDescription: risk?.name ?? c.name,
+      riskRating: rating,
+      riskLikelihood: likelihood,
+      riskImpact: impact,
+      controlObjective: `Ensure ${(risk?.name ?? c.name).toLowerCase()} is mitigated through timely control execution.`,
+      controlActivity: c.desc ?? c.name,
+      controlType: c.isKey ? 'Key' : 'Non-Key',
+      controlNature: h % 2 === 0 ? 'Preventive' : 'Detective',
+      controlFrequency: ['Per transaction', 'Daily', 'Monthly', 'Quarterly'][h % 4],
+      controlOwner: owner,
+      controlEvidence: 'System logs, approval records, reconciliation reports',
+      assertionsCoveredCEAVOP: ASSERTION_POOL[h % ASSERTION_POOL.length],
+      financialStatementLineItem: FS_POOL[h % FS_POOL.length],
+      regulatoryReference: 'SOX 404 / IFC',
+      segregationOfDuties: h % 3 === 0 ? 'Enforced' : 'Partial',
+      extractionConfidence: 'EXTRACTED',
+      sopSectionReference: `Section ${(h % 6) + 1}`,
+      gapsIdentified: exception ? 'Approval evidence not consistently retained.' : 'No gaps identified.',
+      itApplication: APP_POOL[h % APP_POOL.length],
+      todDataValidated: 'Sample population reconciled to source documents.',
+      todChecksPerformed: 'Verified authorization, recomputation and completeness.',
+      todResults: exception ? 'Exceptions noted' : 'No exceptions',
+      remediationActionPlan: exception ? 'Strengthen approval workflow and re-test next quarter.' : 'Not applicable',
+      timelines: exception ? 'Q3 FY26' : '—',
+      processOwnerName: reviewer,
+      remarks: '—',
+      reviewerApprover: reviewer,
+    };
   });
+  // Gap-analysis aggregates derived from the synthesised seed entries.
+  const seedSodEnforced = seedEntryRows.filter(r => r.segregationOfDuties === 'Enforced').length;
+  const seedGapCount = seedEntryRows.filter(r => r.gapsIdentified !== 'No gaps identified.').length;
+  const seedKeyCount = seedEntryRows.filter(r => r.controlType === 'Key').length;
+  const seedTotal = seedEntryRows.length;
+  const seedKpiPct = seedTotal ? Math.round((seedKeyCount / seedTotal) * 100) : 0;
 
   // ── Aggregations ─────────────────────────────────────────────────────────
   // Severity distribution. The AR data uses capitalised ratings ("Critical");
@@ -877,16 +933,18 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         <section>
           <h3 className="text-[14px] font-bold text-ink-900 mb-2">Gap Analysis</h3>
           <ul className="text-[13px] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-            <li><span className="font-semibold">SoD Coverage:</span> <span className="text-ink-400">[NA]</span></li>
-            <li><span className="font-semibold">DOA Matrix:</span> <span className="text-ink-400">[NA]</span></li>
-            <li><span className="font-semibold">KPI Coverage:</span> <span className="text-ink-400">[NA]</span></li>
+            <li><span className="font-semibold">SoD Coverage:</span> {seedSodEnforced} of {seedTotal} controls enforce segregation of duties</li>
+            <li><span className="font-semibold">DOA Matrix:</span> Delegation of Authority thresholds mapped for {seedKeyCount} key control{seedKeyCount !== 1 ? 's' : ''}</li>
+            <li><span className="font-semibold">KPI Coverage:</span> Monitoring KPIs defined for {seedKpiPct}% of controls</li>
           </ul>
         </section>
 
         <section>
           <h3 className="text-[14px] font-bold text-ink-900 mb-2">Notes</h3>
-          <ul className="text-[13px] leading-relaxed space-y-1 list-disc pl-5 text-ink-400">
-            <li>[NA]</li>
+          <ul className="text-[13px] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
+            <li>{seedGapCount} of {seedTotal} entries have documented gaps to remediate</li>
+            <li>{seedKeyCount} key control{seedKeyCount !== 1 ? 's' : ''} identified across the process</li>
+            <li>Test of Design completed for all mapped controls; results recorded per entry</li>
           </ul>
         </section>
       </div>
@@ -1346,6 +1404,25 @@ interface Props {
 }
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
+  const { addToast } = useToast();
+  // Inline RACM rename (pencil action) — renamed names overlay the source data.
+  const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
+  const [editingRacmName, setEditingRacmName] = useState('');
+  const [renamedNames, setRenamedNames] = useState<Record<string, string>>({});
+  const saveRacmName = (id: string, current: string) => {
+    const name = editingRacmName.trim();
+    if (name && name !== current) {
+      setRenamedNames(prev => ({ ...prev, [id]: name }));
+      addToast({ message: `RACM renamed to "${name}".`, type: 'success' });
+    }
+    setEditingRacmNameId(null);
+  };
+  // Source-SOP preview drawer (opened from a RACM extracted from a SOP).
+  const [viewSop, setViewSop] = useState<{
+    subProcess: string; title: string; version: string; uploadedAgo: string;
+    summary: { controls: number; risks: number; attributes: number; racmName: string };
+    controls: { id: string; description: string }[];
+  } | null>(null);
   const [racmList] = useState<RacmEntry[]>(RACM_SEED_DATA);
   const allRacms = (() => {
     if (!extraRacms || extraRacms.length === 0) return racmList;
@@ -1379,6 +1456,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [linkControlTarget, setLinkControlTarget] = useState<{ riskId: string; riskName: string; bpAbbr: string } | null>(null);
   const [createControlFromLink, setCreateControlFromLink] = useState(false);
   const [confirmUnmap, setConfirmUnmap] = useState<{ riskId: string; ctlId: string } | null>(null);
+  // Delete-risk confirm (removes the whole risk row from the expanded mapping).
+  const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ racmId: string; riskId: string; riskName: string } | null>(null);
   // Link Workflow flow: pick a control on the risk (skipped if it has exactly one),
   // then the workflow picker. linkedWorkflows records the result keyed by riskId:ctlId.
   const [linkWfTarget, setLinkWfTarget] = useState<{ riskId: string; riskName: string; controls: { id: string; name: string; isKey: boolean }[] } | null>(null);
@@ -1710,14 +1789,34 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             const readiness = getRacmTableReadiness(racm);
             const isSelected = selectedIds.includes(racm.id);
             const versionLabel = racm.version.replace(/^v/i, '');
-            const descLine = `${racm.risks} risks · ${racm.controls} controls · v${versionLabel} · framework ${racm.framework}`;
+            const descLine = `${racm.risks} risks · ${racm.controls} controls · v${versionLabel}`;
             // Inline risk–control mapping rows for the expand panel — derived from the
             // process's risks/controls (locally-unmapped pairs removed).
             const cardExpanded = expandedCardIds.has(racm.id);
+            const displayName = renamedNames[racm.id] ?? racm.name;
+            const isRenaming = editingRacmNameId === racm.id;
             const cardBp = BUSINESS_PROCESSES.find(b => b.abbr === racm.process);
             const cardRiskList = cardBp ? RISKS.filter(r => r.bpId === cardBp.id) : [];
             const cardRiskIds = new Set(cardRiskList.map(r => r.id));
             const cardControlList = CONTROLS.filter(c => cardRiskIds.has(c.riskId));
+            // Source SOP this RACM was extracted from (if any) — drives the "View SOP" action.
+            const cardSourceSop = SOPS.find(s => s.racmId === racm.id);
+            const openSourceSop = () => {
+              if (!cardSourceSop) return;
+              setViewSop({
+                subProcess: racm.process,
+                title: cardSourceSop.name,
+                version: cardSourceSop.version,
+                uploadedAgo: cardSourceSop.at,
+                summary: {
+                  controls: cardSourceSop.controls,
+                  risks: cardSourceSop.risks,
+                  attributes: cardSourceSop.controls * 3,
+                  racmName: racm.name,
+                },
+                controls: cardControlList.map(c => ({ id: c.id, description: c.name })),
+              });
+            };
             // Unified risk rows: this process's seed risks + risks linked via the Link Risk sheet.
             const rowRisks: { id: string; name: string }[] = [
               ...cardRiskList.map(r => ({ id: r.id, name: r.name })),
@@ -1753,32 +1852,50 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 }`}
               >
                 <div
-                  onClick={() => toggleCardExpand(racm.id)}
-                  className="grid grid-cols-[44px_2.6fr_1fr_1.7fr_104px] gap-5 px-6 py-5 cursor-pointer items-start"
+                  className="grid grid-cols-[44px_2.6fr_1fr_1.7fr_104px] gap-5 px-6 py-5 items-start"
                 >
-                {/* Leading control — chevron always visible (expand indicator + click
-                    target); the selection checkbox fades in between the chevron and the
-                    RACM name on hover, and stays while selected. */}
+                {/* Leading control — the chevron is the ONLY expand trigger (the rest
+                    of the card no longer toggles). */}
                 <div className="flex items-center gap-2 pt-0.5">
-                  <ChevronRight
-                    size={14}
-                    aria-hidden="true"
-                    className={`shrink-0 text-ink-400 transition-transform duration-200 ${cardExpanded ? 'rotate-90' : ''}`}
-                  />
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${racm.id}`}
-                    checked={isSelected}
-                    onClick={e => e.stopPropagation()}
-                    onChange={() => toggleSelectOne(racm.id)}
-                    className={`shrink-0 w-3.5 h-3.5 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCardExpand(racm.id)}
+                    aria-label={cardExpanded ? `Collapse ${racm.id}` : `Expand ${racm.id}`}
+                    aria-expanded={cardExpanded}
+                    className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
+                  >
+                    <ChevronRight
+                      size={14}
+                      aria-hidden="true"
+                      className={`shrink-0 transition-transform duration-200 ${cardExpanded ? 'rotate-90' : ''}`}
+                    />
+                  </button>
                 </div>
 
                 {/* RACM column — title + status pill + description + meta + tag pills */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[14.5px] font-semibold text-text leading-snug">{racm.name}</h3>
+                    {isRenaming ? (
+                      <input
+                        autoFocus
+                        value={editingRacmName}
+                        onChange={e => setEditingRacmName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveRacmName(racm.id, displayName); }
+                          else if (e.key === 'Escape') { setEditingRacmNameId(null); }
+                        }}
+                        onBlur={() => saveRacmName(racm.id, displayName)}
+                        className="text-[14.5px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDetailRacmId(racm.id)}
+                        className="text-[14.5px] font-semibold text-text leading-snug hover:text-brand-700 hover:underline cursor-pointer text-left"
+                      >
+                        {displayName}
+                      </button>
+                    )}
                     <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold border ${STATUS_BADGE[status]}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
                       {status}
@@ -1789,10 +1906,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
                     <span className="font-mono tracking-tight">{racm.id}</span>
-                    <span className="text-border">·</span>
-                    <span>{racm.process}</span>
-                    <span className="text-border">·</span>
-                    <span>{racm.framework}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                     <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
@@ -1857,8 +1970,50 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">Cancel selection</span>
                       </div>
                     </>
+                  ) : isRenaming ? (
+                    <>
+                      {/* onMouseDown preventDefault keeps the input focused so its onBlur
+                          doesn't commit before these click handlers run. */}
+                      <div className="relative group/cancel">
+                        <button
+                          type="button"
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => setEditingRacmNameId(null)}
+                          aria-label="Cancel rename"
+                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">Cancel</span>
+                      </div>
+                      <div className="relative group/save">
+                        <button
+                          type="button"
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => saveRacmName(racm.id, displayName)}
+                          aria-label="Save name"
+                          className="p-1.5 rounded-md bg-brand-600 text-paper-0 hover:bg-brand-500 transition-colors cursor-pointer"
+                        >
+                          <Check size={14} strokeWidth={2.5} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">Save</span>
+                      </div>
+                    </>
                   ) : (
                     <>
+                      {cardSourceSop && (
+                        <div className="relative group/vsop">
+                          <button
+                            type="button"
+                            onClick={openSourceSop}
+                            aria-label="View SOP"
+                            className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/vsop:opacity-100 pointer-events-none transition-opacity z-50">View SOP</span>
+                        </div>
+                      )}
                       <div className="relative group/lrisk">
                         <button
                           type="button"
@@ -1873,13 +2028,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                       <div className="relative group/edit">
                         <button
                           type="button"
-                          onClick={() => setDetailRacmId(racm.id)}
-                          aria-label="Edit"
+                          onClick={() => { setEditingRacmNameId(racm.id); setEditingRacmName(displayName); }}
+                          aria-label="Rename"
                           className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                         >
                           <Pencil size={14} />
                         </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Edit</span>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Rename</span>
                       </div>
                       <div className="relative group/archive">
                         <button
@@ -1973,7 +2128,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                                 </div>
                                 */}
                                 <div className="relative group/del">
-                                  <button type="button" aria-label="Delete" onClick={() => deleteRow(racm.id, risk.id)} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
+                                  <button type="button" aria-label="Delete" onClick={() => setConfirmDeleteRisk({ racmId: racm.id, riskId: risk.id, riskName: risk.name })} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
                                     <Trash2 size={13} />
                                   </button>
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
@@ -2078,6 +2233,37 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             />
           );
         })()}
+      </AnimatePresence>
+
+      {/* ── Delete-risk confirmation (remove a risk row from the expanded mapping) ── */}
+      <AnimatePresence>
+        {confirmDeleteRisk && (() => {
+          const dr = confirmDeleteRisk;
+          return (
+            <ConfirmDeleteRiskModal
+              riskId={dr.riskId}
+              riskName={dr.riskName}
+              onCancel={() => setConfirmDeleteRisk(null)}
+              onConfirm={() => { deleteRow(dr.racmId, dr.riskId); setConfirmDeleteRisk(null); }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Source SOP preview (opened from a RACM extracted from a SOP) ── */}
+      <AnimatePresence>
+        {viewSop && (
+          <SopDetailDrawer
+            subProcess={viewSop.subProcess}
+            title={viewSop.title}
+            version={viewSop.version}
+            uploadedAgo={viewSop.uploadedAgo}
+            summary={viewSop.summary}
+            controls={viewSop.controls}
+            onDownload={() => addToast({ message: `Downloading ${viewSop.title}…`, type: 'info' })}
+            onClose={() => setViewSop(null)}
+          />
+        )}
       </AnimatePresence>
 
       {/* ── Link Workflow — step 1: choose which control (only when the risk has >1) ── */}
@@ -2222,7 +2408,7 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
 // Multi-select picker over the Control Library, scoped to one risk row. "Apply
 // Changes" hands the chosen controls back to the parent, which adds them as chips
 // on that risk's mapping row.
-function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, onCreateControl, onApply }: {
+export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, onCreateControl, onApply }: {
   riskName: string;
   alreadyLinkedIds: string[];
   onClose: () => void;
@@ -2365,6 +2551,37 @@ function ConfirmUnmapModal({ ctlId, onCancel, onConfirm }: {
             className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
           <button type="button" onClick={onConfirm}
             className="px-4 py-2 rounded-lg bg-risk text-paper-0 text-[13px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Remove</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Delete-risk confirmation ────────────────────────────────────────────────
+// Guards removing a whole risk row from the expanded RACM mapping.
+function ConfirmDeleteRiskModal({ riskId, riskName, onCancel, onConfirm }: {
+  riskId: string;
+  riskName: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/30 backdrop-blur-sm" onClick={onCancel}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.18 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[400px] p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
+          <h2 className="text-[17px] font-bold text-ink-900">Delete this risk?</h2>
+        </div>
+        <p className="text-[12.5px] text-ink-500 leading-relaxed mb-5">
+          This removes <span className="font-mono font-semibold text-ink-700">{riskId}</span> <span className="text-ink-700">{riskName}</span> and its control mappings from this RACM. This can't be undone here.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-paper-50 transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-risk text-paper-0 text-[13px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">Delete</button>
         </div>
       </motion.div>
     </motion.div>
