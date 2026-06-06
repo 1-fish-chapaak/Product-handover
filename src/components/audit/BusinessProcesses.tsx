@@ -16,6 +16,7 @@ import { generateRacmForProcess, type RACMRow } from '../../data/racm';
 import type { ProcessCode } from '../../data/engagements';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
@@ -1405,6 +1406,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const { addToast } = useToast();
 
   // Local SOP state (seed from mock + allow new uploads)
+  const { can } = useCan();
   const [localSops, setLocalSops] = useState<LocalSOP[]>(() =>
     existingSops.map((s, idx) => ({
       id: s.id, name: s.name, fileName: `${s.name.replace(/\s+/g, '_')}.pdf`, version: s.version,
@@ -1933,9 +1935,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
+          {can('bp_create') && (
           <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)}>
             Upload SOP
           </Button>
+          )}
         </div>
       ) : (
         <>
@@ -1965,9 +1969,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
+              {can('bp_create') && (
               <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadModal(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
+              )}
             </div>
           </div>
 
@@ -2120,6 +2126,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           Download SOP
                         </span>
                       </div>
+                      {can('sop_archive') && (
                       <div className="relative group/delete">
                         <button
                           type="button"
@@ -2133,6 +2140,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           Delete
                         </span>
                       </div>
+                      )}
                     </div>
                     </div>
                   </motion.div>
@@ -2899,6 +2907,7 @@ function toDesignControl(c: CreatedControl): DesignControl {
 function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
   // `onGoToRacm` powers the empty-state "Open RACM" CTA.
   const { addToast } = useToast();
+  const { can } = useCan();
   // Hydrate from the per-BP store so edits made in a detail tab (workflow Map /
   // unlink) and just-created controls survive across the list and the new tab.
   const [controls, setControls] = useState<DesignControl[]>(() => {
@@ -3122,6 +3131,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
           <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
+          {can('ctrl_create') && (
           <button
             type="button"
             onClick={() => setShowCreateControl(true)}
@@ -3129,6 +3139,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           >
             <Plus size={14} /> Create Control
           </button>
+          )}
         </div>
       </div>
 
@@ -3247,6 +3258,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               {/* Lane 4 — Actions: delete only. Always-visible hover tooltip (matches the
                   Workflow/RACM rows) + the "Delete this control?" confirmation modal. */}
               <div className="flex items-start justify-end gap-1">
+                {can('ctrl_delete') && (
                 <div className="relative group/del">
                   <button
                     type="button"
@@ -3260,6 +3272,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                     Delete control
                   </span>
                 </div>
+                )}
               </div>
               </div>
             </motion.div>
@@ -3564,6 +3577,7 @@ const SEED_BP_WF: BPWorkflow[] = [
 
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -3738,9 +3752,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No workflows yet</h3>
         <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Connect approval steps and evidence collection.</p>
+        {can('wf_create') && (
         <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()}>
           Create Workflow
         </Button>
+        )}
       </div>
     );
   }
@@ -3853,9 +3869,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
           )}
           <FilterPill filterKey="owner"  label="User"   options={ownerOptions}  value={ownerFilter}  onChange={setOwnerFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
+          {can('wf_create') && (
           <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
+          )}
         </div>
       </div>
 
@@ -4031,11 +4049,13 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
                   {isSelected ? (
                     <>
+                      {can('wf_update_delete') && (
                       <button type="button" aria-label="Archive" title="Archive"
                         onClick={() => handleArchiveOne(wf.id)}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
                         <Archive size={14} />
                       </button>
+                      )}
                       <button type="button" aria-label="Cancel selection" title="Cancel selection"
                         onClick={() => toggleSelect(wf.id)}
                         className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">

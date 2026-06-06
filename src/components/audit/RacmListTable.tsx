@@ -9,6 +9,7 @@ import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlD
 import SopDocumentModal from './SopDocumentModal';
 import ConfirmDeleteRacmModal from './ConfirmDeleteRacmModal';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -1618,6 +1619,7 @@ interface Props {
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   // Inline RACM rename (pencil action) — renamed names overlay the source data.
   const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
   const [editingRacmName, setEditingRacmName] = useState('');
@@ -2125,6 +2127,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                   {isSelected ? (
                     <>
+                      {can('racm_archive') && (
                       <div className="relative group/archive">
                         <button
                           type="button"
@@ -2136,6 +2139,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
                       </div>
+                      )}
                       <div className="relative group/cancel">
                         <button
                           type="button"
@@ -2163,6 +2167,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/vsop:opacity-100 pointer-events-none transition-opacity z-50">View SOP</span>
                         </div>
                       )}
+                      {can('racm_link_risk') && (
                       <div className="relative group/lrisk">
                         <button
                           type="button"
@@ -2175,6 +2180,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
                       </div>
+                      )}
+                      {can('racm_edit') && (
                       <div className="relative group/edit">
                         <button
                           type="button"
@@ -2186,6 +2193,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Open in editor</span>
                       </div>
+                      )}
+                      {can('racm_archive') && (
                       <div className="relative group/del">
                         <button
                           type="button"
@@ -2197,6 +2206,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
                       </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2234,7 +2244,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         {linkRiskTarget && createRiskFromLink && (
           <RiskDrawer
             risk={null}
-            presentation="modal"
             defaultProcess={linkRiskTarget.bpAbbr}
             onClose={() => setCreateRiskFromLink(false)}
             onSave={() => setCreateRiskFromLink(false)}
