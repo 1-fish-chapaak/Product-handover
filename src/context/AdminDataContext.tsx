@@ -31,6 +31,8 @@ export interface AdminTeam {
   id: string;
   name: string;
   members: string[];
+  /** Team admin/owner — one member's name; the person who manages the team. */
+  owner?: string;
 }
 
 const SEED_USERS: AdminUser[] = [
@@ -49,9 +51,20 @@ const SEED_USERS: AdminUser[] = [
 ];
 
 function deriveTeams(users: AdminUser[]): AdminTeam[] {
-  const map: Record<string, string[]> = {};
-  users.forEach(u => { if (u.team !== '—') { (map[u.team] ??= []).push(u.name); } });
-  return Object.entries(map).map(([name, members]) => ({ id: `team-${name.toLowerCase().replace(/\s+/g, '-')}`, name, members }));
+  const map: Record<string, AdminUser[]> = {};
+  users.forEach(u => { if (u.team !== '—') { (map[u.team] ??= []).push(u); } });
+  return Object.entries(map).map(([name, mem]) => {
+    // Strict: a team is owned by a System Admin member only — otherwise it starts
+    // Unassigned (matches the deletion-reconcile rule; never auto-assign a
+    // non-admin as team admin).
+    const admin = mem.find(m => m.roleId === 'role-admin');
+    return {
+      id: `team-${name.toLowerCase().replace(/\s+/g, '-')}`,
+      name,
+      members: mem.map(m => m.name),
+      owner: admin?.name,
+    };
+  });
 }
 
 export interface AuditLog {
@@ -100,7 +113,7 @@ interface AdminDataContextValue {
   removeUser: (email: string) => void;
   // Teams
   teams: AdminTeam[];
-  addTeam: (name: string, members: string[]) => void;
+  addTeam: (name: string, members: string[], owner?: string) => void;
   updateTeam: (id: string, patch: Partial<Omit<AdminTeam, 'id'>>) => void;
   removeTeam: (id: string) => void;
 }
@@ -140,15 +153,60 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     setUsers(prev => [user, ...prev]);
   }, []);
   const updateUser = useCallback((email: string, patch: Partial<AdminUser>) => {
-    setUsers(prev => prev.map(u => (u.email === email ? { ...u, ...patch } : u)));
+    setUsers(prevUsers => {
+      const before = prevUsers.find(u => u.email === email);
+      // Keep team member/owner references in sync when a person is renamed —
+      // teams store members + owner by name, so a stale name would orphan them.
+      if (before && patch.name && patch.name !== before.name) {
+        const oldName = before.name;
+        const newName = patch.name;
+        setTeams(prevTeams => prevTeams.map(t => ({
+          ...t,
+          members: t.members.map(m => (m === oldName ? newName : m)),
+          owner: t.owner === oldName ? newName : t.owner,
+        })));
+      }
+      // A suspended/locked person can't actively own a team — transfer ownership
+      // to another System Admin member, else leave it Unassigned. (Strict.)
+      if (before && (patch.status === 'Suspended' || patch.status === 'Locked') && before.status !== patch.status) {
+        const name = before.name;
+        setTeams(prevTeams => prevTeams.map(t => {
+          if (t.owner !== name) return t;
+          const adminMember = t.members.find(mn => mn !== name && prevUsers.find(u => u.name === mn)?.roleId === 'role-admin');
+          return { ...t, owner: adminMember };
+        }));
+      }
+      return prevUsers.map(u => (u.email === email ? { ...u, ...patch } : u));
+    });
   }, []);
   const removeUser = useCallback((email: string) => {
-    setUsers(prev => prev.filter(u => u.email !== email));
+    setUsers(prevUsers => {
+      const removed = prevUsers.find(u => u.email === email);
+      // Reconcile teams: drop the removed person from members, and if they were
+      // the owner, transfer ONLY to a System Admin member. Never auto-promote a
+      // non-admin (Viewer/Enabler/etc.) to team admin — leave it Unassigned so
+      // an admin makes the call deliberately.
+      if (removed) {
+        const name = removed.name;
+        const remaining = prevUsers.filter(u => u.email !== email);
+        setTeams(prevTeams => prevTeams.map(t => {
+          if (!t.members.includes(name)) return t;
+          const members = t.members.filter(m => m !== name);
+          let owner = t.owner;
+          if (t.owner === name) {
+            // undefined → Unassigned when no System Admin member remains.
+            owner = members.find(mn => remaining.find(u => u.name === mn)?.roleId === 'role-admin');
+          }
+          return { ...t, members, owner };
+        }));
+      }
+      return prevUsers.filter(u => u.email !== email);
+    });
   }, []);
 
   // ── Teams ──
-  const addTeam = useCallback((name: string, members: string[]) => {
-    setTeams(prev => [...prev, { id: `team-${Date.now()}`, name, members }]);
+  const addTeam = useCallback((name: string, members: string[], owner?: string) => {
+    setTeams(prev => [...prev, { id: `team-${Date.now()}`, name, members, owner: owner ?? members[0] }]);
   }, []);
   const updateTeam = useCallback((id: string, patch: Partial<Omit<AdminTeam, 'id'>>) => {
     setTeams(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));

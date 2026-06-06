@@ -63,7 +63,7 @@ export default function ConfirmationModal({
               <div className="flex-1 min-w-0 pt-1">
                 <h3 className="text-[0.875rem] font-semibold text-ink-800">{title}</h3>
                 {description && (
-                  <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">{description}</p>
+                  <div className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">{description}</div>
                 )}
               </div>
             </div>

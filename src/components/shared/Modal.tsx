@@ -65,12 +65,12 @@ export default function Modal({
           aria-modal="true"
           aria-label={ariaLabel ?? title}
         >
-          <header className="shrink-0 px-7 pt-6 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <header className={`shrink-0 px-7 ${subtitle ? 'py-3.5' : 'py-3'} flex items-center justify-between gap-4 border-b border-canvas-border`}>
             <div className="min-w-0">
-              <h2 className="text-[1.25rem] leading-[1.3] font-semibold text-ink-900 tracking-tight">
+              <h2 className="text-[1.25rem] leading-tight font-semibold text-ink-900 tracking-tight">
                 {title}
               </h2>
-              {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-1 leading-snug">{subtitle}</p>}
+              {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-0.5 leading-snug">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
@@ -81,10 +81,10 @@ export default function Modal({
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto px-7 py-6">{children}</div>
+          <div className="flex-1 overflow-y-auto px-7 py-5">{children}</div>
 
           {footer && (
-            <footer className="shrink-0 px-7 py-4 border-t border-canvas-border flex items-center justify-end gap-2">
+            <footer className="shrink-0 px-7 py-3 border-t border-canvas-border flex items-center justify-end gap-2">
               {footer}
             </footer>
           )}

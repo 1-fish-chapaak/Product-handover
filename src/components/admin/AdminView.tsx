@@ -1,327 +1,297 @@
+/**
+ * Administration — the "Access Console".
+ *
+ * A flattened, single-spine governance surface: People · Teams · Roles ·
+ * Audit Log. Roles is a two-pane workspace (see RolesWorkspace.tsx); the other
+ * sections are an inline stat ledger over a SmartTable, with create/edit flows
+ * in centered modals. Every mutation writes to the audit trail and the live
+ * RBAC model. No impersonation surface — invite → role assignment only.
+ */
+
 import { DateFilterPicker, dateInFilter, isDateFilterActive, DEFAULT_DATE_FILTER, type DateFilter } from '../shared/DateFilterPicker';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, Shield, ScrollText,
-  UserPlus, Plus, Download,
-  Eye, ChevronDown, Search, Pencil, CopyPlus, Info, Trash2, X, Check,
+  UserPlus, Plus, Download, ArrowRight,
+  ChevronDown, Pencil, Trash2, X, Check, Crown, Send,
 } from 'lucide-react';
-import { PERMISSION_GROUPS, ALL_PERMISSION_KEYS, PERSON_ROLES, type PermissionKey, type Role } from '../../data/rbac';
+import { PERMISSION_GROUPS } from '../../data/rbac';
 import { useCurrentUser } from '../../context/CurrentUserContext';
-import { useAdminData, useAuditLog, type AuditLog, type AdminTeam } from '../../context/AdminDataContext';
+import { useAdminData, useAuditLog, type AuditLog, type AdminTeam, type AdminUser, type UserStatus } from '../../context/AdminDataContext';
 import SmartTable, { type Column } from '../shared/SmartTable';
 import ColumnFilter from '../shared/ColumnFilter';
-import { StatusBadge, ActionBadge, ResultBadge } from '../shared/StatusBadge';
 import FloatingLines from '../shared/FloatingLines';
+import { StatusBadge, ActionBadge, ResultBadge } from '../shared/StatusBadge';
 import Modal from '../shared/Modal';
 import Toggle from '../shared/Toggle';
 import Checkbox from '../shared/Checkbox';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import EmptyState from '../shared/EmptyState';
-import { KpiTile } from '../shared/KpiTile';
 import { useToast } from '../shared/Toast';
+import { RolesWorkspace, CreateRoleModal, type RoleSeed } from './RolesWorkspace';
+import {
+  FIELD_LABEL, FIELD_INPUT, FIELD_SELECT, BTN_CANCEL, BTN_PRIMARY,
+  BTN_CTA_PRIMARY, BTN_CTA_OUTLINE, BTN_ROW, type Stat,
+} from './adminTokens';
+import { InitialsAvatar, MemberSearch, RowActions } from './AdminPrimitives';
 
 interface Props {
   activeTab?: string;
 }
 
-type TabId = 'access' | 'logs';
-type AccessSeg = 'users' | 'teams' | 'roles';
-
-interface Tab {
-  id: TabId;
-  label: string;
-  icon: typeof Users;
-}
-
-const tabs: Tab[] = [
-  { id: 'access', label: 'Access', icon: Users },
-  { id: 'logs', label: 'Audit Logs', icon: ScrollText },
-];
-
-type UserStatus = 'Active' | 'Inactive' | 'Invited' | 'Suspended' | 'Locked';
-
-interface MockUser {
-  name: string;
-  initials: string;
-  email: string;
-  roleId: string;
-  team: string;
-  status: UserStatus;
-  lastLogin: string;
-}
+/** Four equal, flat tabs — every one shares the same skeleton: KPI band →
+ *  toolbar (search left · filters/CTA right) → content. */
+type SectionId = 'people' | 'teams' | 'roles' | 'logs';
 
 const STATUS_MAP: Record<UserStatus, string> = {
-  Active: 'active',
-  Inactive: 'inactive',
-  Invited: 'invited',
-  Suspended: 'suspended',
-  Locked: 'locked',
+  Active: 'active', Inactive: 'inactive', Invited: 'invited', Suspended: 'suspended', Locked: 'locked',
 };
 
-/* ── Shared form-field + footer button tokens (match canonical drawer) ── */
-const FIELD_LABEL = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
-const FIELD_INPUT =
-  'w-full px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 outline-none placeholder:text-ink-400 focus:border-brand-600 transition-colors';
-const FIELD_SELECT = `${FIELD_INPUT} appearance-none cursor-pointer pr-9`;
-const FIELD_TEXTAREA =
-  'w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 outline-none placeholder:text-ink-400 resize-none focus:border-brand-600 transition-colors';
-const BTN_CANCEL =
-  'h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-lg hover:bg-canvas transition-colors cursor-pointer';
-const BTN_PRIMARY =
-  'h-9 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer';
+/* Semantic tones for the status selector pills — the status is a noun, so a
+   selected pill wears its own colour (active=compliant, suspended=high,
+   locked=risk, inactive=draft) rather than a generic brand fill. */
+const STATUS_PILL_TONE: Record<UserStatus, { on: string; dot: string }> = {
+  Active:    { on: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' },
+  Suspended: { on: 'bg-high-50 text-high-700',           dot: 'bg-high-700' },
+  Locked:    { on: 'bg-risk-50 text-risk-700',           dot: 'bg-risk-700' },
+  Inactive:  { on: 'bg-draft-50 text-draft-700',         dot: 'bg-draft-700' },
+  Invited:   { on: 'bg-brand-50 text-brand-700',         dot: 'bg-brand-500' },
+};
 
-/* ── Page CTAs — match the Dashboard list page exactly (flat, h-10, rounded-md,
-      no shadow). Not the shared <Button> (rounded-lg + shadow). ── */
-const BTN_CTA_PRIMARY =
-  'flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer';
-const BTN_CTA_OUTLINE =
-  'flex items-center gap-2 px-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[0.8125rem] font-semibold hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer';
+/* Status-filter chip dots — a semantic colour per status so the People filter
+   bar reads as a colour-coded status board (All = neutral). */
+const CHIP_DOT: Record<string, string> = {
+  total: 'bg-ink-300', active: 'bg-compliant', invited: 'bg-brand-500', suspended: 'bg-high',
+};
 
-/**
- * Brand-tinted initials avatar — matches the platform people convention
- * (ShareModal: `bg-primary/15 text-primary`). Monochrome on purpose: the
- * design system keeps brand as the only chromatic anchor, so people lists stay
- * calm instead of rainbow-coloured.
- */
-function InitialsAvatar({ name, size = 32 }: { name: string; size?: number }) {
-  const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+/* Team owner/admin badge — a small crown pill, reused in the Teams table and
+   the Create / Manage Team member lists. */
+function OwnerBadge() {
   return (
-    <div
-      className="rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.36 }}
-    >
-      {initials}
+    <span className="inline-flex items-center gap-1 px-1.5 h-5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold shrink-0">
+      <Crown size={10} /> Owner
+    </span>
+  );
+}
+
+/* ── Section tabs — the horizontal underlined nav at the bottom of the header
+      strip, matching Knowledge Hub's UnderlinedTabs exactly (pb-3 + font-semibold
+      + a spring motion underline via layoutId). No inline CTA: each section's
+      primary action lives on its body's controls row, the way KH does it. ── */
+interface SectionDef { id: SectionId; label: string; icon: typeof Users; count?: number; }
+function SectionTabs({ sections, current, onSelect }: { sections: SectionDef[]; current: SectionId; onSelect: (id: SectionId) => void }) {
+  return (
+    <div className="flex gap-6">
+      {sections.map(s => {
+        const Icon = s.icon;
+        const isActive = current === s.id;
+        return (
+          <button
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
+              isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Icon size={14} />
+              {s.label}
+              {s.count != null && (
+                <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+                  isActive ? 'bg-brand-100 text-brand-700' : 'bg-paper-50 text-ink-500'
+                }`}>{s.count}</span>
+              )}
+            </span>
+            {isActive && (
+              <motion.div
+                layoutId="admin-tab-underline"
+                className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">{label}</div>
-      {children}
-    </div>
-  );
-}
+/* ════════════════════════════════════════════════════════════════════════
+ * Modals
+ * ════════════════════════════════════════════════════════════════════════ */
 
-function MemberSearch({ value, onChange, placeholder, className = '' }: { value: string; onChange: (v: string) => void; placeholder: string; className?: string }) {
+/* ── Inline cell select — a self-contained dropdown that edits one field
+      directly in the table (role / team / status), so the common changes never
+      need a modal. `trigger` renders the current value; the menu picks a new
+      one. Stops row-click propagation so it doesn't also open Manage. ── */
+interface InlineOption { value: string; label: string; node?: React.ReactNode; }
+function InlineCellSelect({
+  current, options, onPick, trigger, footer, menuWidth = 'w-48', align = 'left', direction = 'down',
+}: {
+  current: string;
+  options: InlineOption[];
+  onPick: (value: string) => void;
+  trigger: (open: boolean) => React.ReactNode;
+  footer?: (close: () => void) => React.ReactNode;
+  menuWidth?: string;
+  align?: 'left' | 'right';
+  direction?: 'up' | 'down';
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  const up = direction === 'up';
+  const posCls = `${up ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} ${align === 'right' ? 'right-0' : 'left-0'}`;
+  const originCls = up ? (align === 'right' ? 'origin-bottom-right' : 'origin-bottom-left') : (align === 'right' ? 'origin-top-right' : 'origin-top-left');
   return (
-    <div className={`flex items-center gap-2 px-3 h-10 rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 transition-colors ${className}`}>
-      <Search size={14} className="text-ink-400 shrink-0" />
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="flex-1 min-w-0 bg-transparent outline-none text-[0.8125rem] text-ink-800 placeholder:text-ink-400"
-      />
-      {value && (
-        <button onClick={() => onChange('')} className="text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Clear search">
-          <X size={13} />
-        </button>
+    <div className="relative" ref={ref} onClick={e => e.stopPropagation()}>
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} className="no-focus-ring cursor-pointer text-left">
+        {trigger(open)}
+      </button>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: up ? 4 : -4, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.13, ease: [0.2, 0, 0, 1] }}
+          className={`absolute ${posCls} ${originCls} ${menuWidth} bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] p-1 z-30 max-h-[280px] overflow-y-auto`}
+        >
+          {options.map(o => {
+            const sel = o.value === current;
+            return (
+              <button
+                key={o.value}
+                onClick={e => { e.stopPropagation(); onPick(o.value); setOpen(false); }}
+                className={`no-focus-ring flex w-full items-center justify-between gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-left cursor-pointer transition-colors ${sel ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'}`}
+              >
+                <span className="truncate flex items-center gap-2 min-w-0">{o.node ?? o.label}</span>
+                {sel && <Check size={14} className="shrink-0 text-brand-600" />}
+              </button>
+            );
+          })}
+          {footer && footer(() => setOpen(false))}
+        </motion.div>
       )}
     </div>
   );
 }
 
-/* ── Row action — labelled pill button (icon + word). Hairline border + white
-      surface so it reads clearly as a button; soft brand-tint on hover keeps
-      it light and modern, not a chunky default button. ── */
-const BTN_ROW =
-  'inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:border-brand-200 hover:bg-brand-50/60 transition-colors cursor-pointer';
+/* Action button styles for the floating bulk bar (on the dark brand surface). */
+const BULK_ACTION = 'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.8125rem] font-medium text-white/90 hover:bg-white/10 transition-colors cursor-pointer';
+const BULK_ACTION_RISK = 'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.8125rem] font-medium text-risk-300 hover:bg-white/10 transition-colors cursor-pointer';
 
-function RowActions({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-end gap-1.5">
-      {children}
-    </div>
-  );
-}
-
-/* ── KPI summary row — canonical KpiTile cascade. Tiles become click-to-filter
-      chips when `onSelect` is wired (active tile gets a brand border). ── */
-interface KpiStat { key: string; label: string; value: number; }
-function KpiRow({ stats, active, onSelect }: { stats: KpiStat[]; active?: string; onSelect?: (key: string) => void }) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5" role="list">
-      {stats.map((s, i) => {
-        const isActive = active === s.key;
-        return (
-          <KpiTile
-            key={s.key}
-            index={i}
-            label={s.label}
-            value={String(s.value)}
-            onClick={onSelect ? () => onSelect(s.key) : undefined}
-            className={isActive ? '!border-brand-500 ring-1 ring-brand-200 bg-brand-50/30' : ''}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-interface RoleSeed { name: string; description: string; permissions: PermissionKey[]; }
-
-/* ── Access sub-nav — 3-way segmented control (Users / Teams / Roles), the
-      single sub-navigation for the merged Access tab. Sliding white pill. ── */
-function AccessNav({ seg, setSeg, counts, action }: { seg: AccessSeg; setSeg: (s: AccessSeg) => void; counts: Record<AccessSeg, number>; action?: React.ReactNode }) {
+/* ── Bulk bar — the floating selection toolbar shared by People & Teams. A
+      content-width pill anchored bottom-center on the brand-900 surface (the
+      platform's single dark surface), with thin vertical dividers between the
+      count, the actions, and the close. Matches the app's other bulk bars. ── */
+function BulkBar({ count, total, allSelected, onSelectAll, onClear, children }: {
+  count: number;
+  total: number;
+  allSelected: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+  children: React.ReactNode;
+}) {
   const prefersReduced = useReducedMotion();
-  const items: { key: AccessSeg; label: string; icon: typeof Users }[] = [
-    { key: 'users', label: 'Users', icon: User },
-    { key: 'teams', label: 'Teams', icon: Users },
-    { key: 'roles', label: 'Roles', icon: Shield },
-  ];
   return (
-    <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
-      <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit">
-      {items.map(t => {
-        const isActive = seg === t.key;
-        const Icon = t.icon;
-        return (
-          <button
-            key={t.key}
-            onClick={() => setSeg(t.key)}
-            className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] transition-colors cursor-pointer ${
-              isActive ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
-            }`}
-          >
-            {isActive && (
-              <motion.div
-                layoutId="admin-access-seg"
-                className="absolute inset-0 bg-canvas-elevated rounded-md shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
-                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
-              />
-            )}
-            <span className="relative z-10 flex items-center gap-1.5">
-              <Icon size={14} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
-              {t.label}
-              <span className={`tabular-nums font-bold ${isActive ? 'text-brand-700' : 'text-ink-400'}`}>{counts[t.key]}</span>
-            </span>
-          </button>
-        );
-      })}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-// Permission matrix + total now come from the single RBAC source of truth.
-const DETAILED_PERMISSIONS = PERMISSION_GROUPS;
-const TOTAL_PERMS = ALL_PERMISSION_KEYS.length;
-
-const userColumns: Column<MockUser & Record<string, unknown>>[] = [
-  { key: 'name', label: 'Name', sortable: true },
-  { key: 'roleName', label: 'Role', sortable: true },
-  { key: 'team', label: 'Team', sortable: true },
-  {
-    key: 'status',
-    label: 'Status',
-    sortable: true,
-    render: (item) => <StatusBadge status={STATUS_MAP[item.status as UserStatus] || 'draft'} />,
-  },
-  {
-    key: 'lastLogin',
-    label: 'Last Login',
-    sortable: true,
-    render: (item) => <span className="text-[0.75rem] text-ink-500 tabular-nums">{item.lastLogin as string}</span>,
-  },
-  { key: 'action', label: '', sortable: false, align: 'right' as const, width: '140px' },
-];
-
-
-const TEAM_MEMBERS = [
-  { name: 'Abhinav Sharma', email: 'abhinav@irame.ai' },
-  { name: 'Aditya Thakur', email: 'aditya.thakur@irame.ai' },
-  { name: 'AI', email: 'ai@irame.ai' },
-  { name: 'Ajay 14110008', email: 'ajay.aj@btech2014.iitgn.ac.in' },
-  { name: 'ajay mudhai', email: 'ajay@irame.ai' },
-  { name: 'Ajay Mudhai', email: 'ajay@irame.ai' },
-  { name: 'Ayushi Narang', email: 'ayushi.narang@irame.ai' },
-  { name: 'Chulbul Pandey', email: 'kuldeep.msvm@gmail.com' },
-  { name: 'CS', email: 'cs@irame.ai' },
-  { name: 'larobe', email: 'larobe6188@hlkes.com' },
-  { name: 'Lee cheng', email: 'lecade7207@7novels.com' },
-];
-
-/* ── User detail drawer (read-only) ── */
-function UserDetailDrawer({ user, onClose }: { user: MockUser; onClose: () => void }) {
-  const { roles } = useCurrentUser();
-  const roleLabel = roles.find(r => r.id === user.roleId)?.name ?? '—';
-  const recentActivity = [
-    { action: 'Logged in', time: user.lastLogin },
-    { action: 'Updated risk register', time: 'Apr 18' },
-    { action: 'Ran duplicate invoice workflow', time: 'Apr 16' },
-    { action: 'Exported SOX report', time: 'Apr 14' },
-  ];
-
-  return (
-    <Modal
-      title="User Details"
-      onClose={onClose}
-      footer={<button className={BTN_CANCEL} onClick={onClose}>Close</button>}
+    <motion.div
+      initial={prefersReduced ? { opacity: 0, x: '-50%' } : { opacity: 0, y: 16, x: '-50%' }}
+      animate={{ opacity: 1, y: 0, x: '-50%' }}
+      exit={prefersReduced ? { opacity: 0, x: '-50%' } : { opacity: 0, y: 16, x: '-50%' }}
+      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+      className="fixed bottom-6 left-1/2 z-50 flex items-center h-11 rounded-xl bg-brand-900 text-white shadow-[0_12px_36px_-12px_rgba(15,8,30,0.5)]"
     >
-      <div className="space-y-6">
-        {/* Identity — avatar + name/email, status pinned right. */}
-        <div className="flex items-center gap-3.5">
-          <InitialsAvatar name={user.name} size={48} />
-          <div className="min-w-0">
-            <div className="text-[0.9375rem] font-semibold text-ink-900 truncate">{user.name}</div>
-            <div className="text-[0.8125rem] text-ink-500 mt-0.5 truncate">{user.email}</div>
-          </div>
-          <div className="ml-auto shrink-0"><StatusBadge status={STATUS_MAP[user.status] || 'draft'} /></div>
-        </div>
-
-        {/* Details — grouped in a quiet panel for structure. */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-canvas-border bg-canvas p-4">
-          {[
-            { label: 'Role', value: roleLabel },
-            { label: 'Team', value: user.team },
-            { label: 'Last Login', value: user.lastLogin },
-            { label: 'Account Created', value: 'Jan 15, 2026' },
-          ].map(d => (
-            <DetailField key={d.label} label={d.label}>
-              <span className="text-[0.8125rem] font-medium text-ink-800">{d.value}</span>
-            </DetailField>
-          ))}
-        </div>
-
-        {/* Recent activity — bordered list with hairline row dividers. */}
-        <section>
-          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recent Activity</h3>
-          <div className="rounded-xl border border-canvas-border overflow-hidden">
-            {recentActivity.map((a, i) => (
-              <div key={i} className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-canvas transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''}`}>
-                <span className="text-[0.8125rem] text-ink-700">{a.action}</span>
-                <span className="text-[0.75rem] text-ink-500 tabular-nums">{a.time}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+      <div className="flex items-center gap-2 pl-3.5 pr-3">
+        <span className="text-[0.8125rem] font-semibold tabular-nums whitespace-nowrap">{count} selected</span>
+        {!allSelected && (
+          <button onClick={onSelectAll} className="text-[0.75rem] font-medium text-white/55 hover:text-white transition-colors cursor-pointer whitespace-nowrap">Select all {total}</button>
+        )}
       </div>
-    </Modal>
+      <span className="w-px h-5 bg-white/15" />
+      <div className="flex items-center gap-0.5 px-1.5">{children}</div>
+      <span className="w-px h-5 bg-white/15" />
+      <button onClick={onClear} aria-label="Clear selection" className="mx-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer">
+        <X size={16} />
+      </button>
+    </motion.div>
   );
 }
 
-/* ── User edit drawer ── */
-function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void }) {
+/* ── Manage user — one modal that shows the user AND edits them. Opened from a
+      row click or the Manage action; saves name / email / role / team / status,
+      shows effective permissions + recent activity, and removes. ── */
+function UserManageModal({ user, onClose, onManageRole }: { user: AdminUser; onClose: () => void; onManageRole: (roleId: string) => void }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const { updateUser, removeUser } = useAdminData();
+  const { updateUser, removeUser, updateTeam, teams, users } = useAdminData();
   const { roles } = useCurrentUser();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSuspend, setConfirmSuspend] = useState(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [roleId, setRoleId] = useState(user.roleId);
   const [team, setTeam] = useState(user.team);
   const [status, setStatus] = useState<UserStatus>(user.status);
+  // Per-team chosen new owner for the transfer picker (team.id \u2192 member name; '' = Unassigned).
+  const [transfer, setTransfer] = useState<Record<string, string>>({});
 
-  const save = () => {
+  const teamOptions = [...new Set([...teams.map(t => t.name), user.team, '\u2014'])];
+  // Teams this person currently owns \u2014 drives the transfer-ownership warnings.
+  const ownedTeams = teams.filter(t => t.owner === user.name);
+  const isAdminName = (n: string) => users.find(u => u.name === n)?.roleId === 'role-admin';
+  // Default new owner per team: a System Admin member (excl. this user), else Unassigned.
+  const defaultNewOwner = (t: AdminTeam) => t.members.filter(m => m !== user.name).find(isAdminName) ?? '';
+  const chosenOwner = (t: AdminTeam) => transfer[t.id] ?? defaultNewOwner(t);
+  const applyTransfers = () => {
+    ownedTeams.forEach(t => {
+      const next = chosenOwner(t);
+      updateTeam(t.id, { owner: next || undefined });
+      logEvent({ action: 'Update', description: `Transferred ownership of "${t.name}" to ${next || 'Unassigned'}`, module: 'Admin', entity: 'Team' });
+    });
+  };
+
+  // Inline per-team owner picker shown inside the delete / suspend confirms.
+  const transferPicker = ownedTeams.length === 0 ? null : (
+    <div className="mt-3 rounded-lg border border-canvas-border bg-canvas p-2.5 space-y-2">
+      <div className="text-[0.625rem] font-semibold text-ink-500 uppercase tracking-wide">Reassign ownership</div>
+      {ownedTeams.map(t => {
+        const cands = t.members.filter(m => m !== user.name);
+        return (
+          <div key={t.id} className="flex items-center gap-2">
+            <span className="text-[0.75rem] text-ink-700 flex-1 min-w-0 truncate">{t.name}</span>
+            <div className="relative shrink-0">
+              <select
+                value={chosenOwner(t)}
+                onChange={e => setTransfer(p => ({ ...p, [t.id]: e.target.value }))}
+                className="no-focus-ring appearance-none h-8 pl-2.5 pr-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 outline-none focus:border-brand-600 cursor-pointer max-w-[11rem] truncate"
+              >
+                <option value="">Unassigned</option>
+                {cands.map(c => <option key={c} value={c}>{c}{isAdminName(c) ? ' \u00b7 Admin' : ''}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const doSave = () => {
     updateUser(user.email, { name, email, roleId, team, status });
     logEvent({ action: 'Update', description: `Updated user "${name}" (status: ${status})`, module: 'Admin', entity: 'User' });
     onClose();
     addToast({ message: 'User updated', type: 'success' });
+  };
+  const save = () => {
+    // Suspending/locking a team owner hands their ownership off \u2014 confirm first.
+    const restricting = (status === 'Suspended' || status === 'Locked') && user.status !== status;
+    if (restricting && ownedTeams.length > 0) { setConfirmSuspend(true); return; }
+    doSave();
   };
   const remove = () => {
     removeUser(user.email);
@@ -334,14 +304,12 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
   return (
     <>
       <Modal
-        title="Edit User"
+        title="Manage User"
+        width="max-w-[600px]"
         onClose={onClose}
         footer={
           <>
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-            >
+            <button onClick={() => setConfirmDelete(true)} className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
               <Trash2 size={14} /> Remove User
             </button>
             <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
@@ -349,78 +317,179 @@ function UserEditDrawer({ user, onClose }: { user: MockUser; onClose: () => void
           </>
         }
       >
-        <div className="space-y-5">
-          <div>
-            <label className={FIELD_LABEL}>Full Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} className={FIELD_INPUT} />
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} className={FIELD_INPUT} />
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Role</label>
-            <div className="relative">
-              <select value={roleId} onChange={e => setRoleId(e.target.value)} className={FIELD_SELECT}>
-                {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+        <div className="space-y-6">
+          {/* Profile — name + email are the identity; no separate card. */}
+          <section>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Profile</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={FIELD_LABEL}>Full Name</label>
+                <input value={name} onChange={e => setName(e.target.value)} className={FIELD_INPUT} />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Email</label>
+                <input value={email} onChange={e => setEmail(e.target.value)} className={FIELD_INPUT} />
+              </div>
             </div>
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Team</label>
-            <div className="relative">
-              <select value={team} onChange={e => setTeam(e.target.value)} className={FIELD_SELECT}>
-                {['SOX Audit', 'IFC Team', 'Engineering', 'Management', '—'].filter((v, i, a) => a.indexOf(v) === i).map(t => <option key={t}>{t}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          </section>
+
+          {/* Access — role, team, status in one tight block. */}
+          <section>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Access</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={FIELD_LABEL}>Role</label>
+                <div className="relative">
+                  <select value={roleId} onChange={e => setRoleId(e.target.value)} className={FIELD_SELECT}>
+                    {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Team</label>
+                <div className="relative">
+                  <select value={team} onChange={e => setTeam(e.target.value)} className={FIELD_SELECT}>
+                    {teamOptions.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                </div>
+              </div>
             </div>
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Status</label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {(['Active', 'Suspended', 'Locked', 'Inactive'] as UserStatus[]).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setStatus(s)}
-                  className={`px-3 h-8 rounded-lg border text-[0.75rem] font-medium transition-colors cursor-pointer ${
-                    status === s ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-canvas'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+            <div className="mt-4">
+              <label className={FIELD_LABEL}>Status</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(['Active', 'Suspended', 'Locked', 'Inactive'] as UserStatus[]).map(s => {
+                  const sel = status === s;
+                  const tone = STATUS_PILL_TONE[s];
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setStatus(s)}
+                      aria-pressed={sel}
+                      className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border text-[0.75rem] font-medium transition-colors cursor-pointer ${
+                        sel ? `${tone.on} border-transparent` : 'border-canvas-border text-ink-600 hover:bg-canvas'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${sel ? tone.dot : 'bg-ink-300'}`} />
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          </section>
+
+          {/* Effective permissions — one compact summary line + bar; the full
+              matrix lives behind "Manage role" (no long grid here). */}
+          {(() => {
+            const role = roles.find(r => r.id === roleId);
+            const enabled = new Set(role?.permissions ?? []);
+            const allPerms = PERMISSION_GROUPS.flatMap(g => g.perms);
+            const enabledCount = allPerms.filter(p => enabled.has(p.key)).length;
+            const pct = allPerms.length ? Math.round((enabledCount / allPerms.length) * 100) : 0;
+            return (
+              <section>
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Effective Permissions</h3>
+                  <button
+                    onClick={() => onManageRole(roleId)}
+                    className="shrink-0 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+                  >
+                    Manage role <ArrowRight size={12} />
+                  </button>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[0.8125rem] text-ink-700">
+                    <span className="font-semibold text-ink-900 tabular-nums">{enabledCount}</span>
+                    <span className="text-ink-400 tabular-nums"> / {allPerms.length}</span> permissions
+                    <span className="text-ink-400"> · via </span>
+                    <span className="font-medium text-ink-700">{role?.name ?? '—'}</span>
+                  </span>
+                  <span className="text-[0.8125rem] font-semibold text-brand-700 tabular-nums shrink-0">{pct}%</span>
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-canvas-border/70 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+                </div>
+
+                {/* Granted permissions — active ones only, grouped, scrollable so
+                    the modal stays bounded. Shows the user exactly what the role
+                    allows without opening the role editor. */}
+                {enabledCount === 0 ? (
+                  <p className="mt-3 text-[0.75rem] text-ink-400">No permissions granted by this role.</p>
+                ) : (
+                  <div className="mt-3 rounded-xl border border-canvas-border max-h-[200px] overflow-y-auto divide-y divide-canvas-border">
+                    {PERMISSION_GROUPS.map(group => {
+                      const on = group.perms.filter(p => enabled.has(p.key));
+                      if (on.length === 0) return null;
+                      return (
+                        <div key={group.group} className="px-3.5 py-2.5">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">{group.group}</span>
+                            <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">{on.length}/{group.perms.length}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {on.map(p => (
+                              <span key={p.key} className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-brand-50 text-brand-700 text-[0.6875rem] font-medium">
+                                <Check size={11} className="shrink-0" />{p.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
         </div>
       </Modal>
 
       <ConfirmationModal
         open={confirmDelete}
         title="Remove user?"
-        description={<>This will remove <span className="font-semibold">{user.name}</span>. This action cannot be undone.</>}
+        description={<>
+          This will remove <span className="font-semibold">{user.name}</span>. This action cannot be undone.
+          {ownedTeams.length > 0 && (
+            <>
+              <span className="mt-2 block text-risk-700">⚠ They own {ownedTeams.length === 1 ? 'a team' : 'teams'}. Choose who inherits {ownedTeams.length === 1 ? 'it' : 'each'}:</span>
+              {transferPicker}
+            </>
+          )}
+        </>}
         confirmLabel="Remove User"
         tone="destructive"
-        onConfirm={remove}
+        onConfirm={() => { applyTransfers(); remove(); }}
         onClose={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmationModal
+        open={confirmSuspend}
+        title={`${status === 'Locked' ? 'Lock' : 'Suspend'} a team owner?`}
+        description={<>
+          <span className="font-semibold">{user.name}</span> owns {ownedTeams.length === 1 ? 'a team' : 'teams'}. {status === 'Locked' ? 'Locking' : 'Suspending'} them hands it off — choose who inherits {ownedTeams.length === 1 ? 'it' : 'each'}:
+          {transferPicker}
+        </>}
+        confirmLabel={status === 'Locked' ? 'Lock & transfer' : 'Suspend & transfer'}
+        tone="destructive"
+        onConfirm={() => { applyTransfers(); setConfirmSuspend(false); doSave(); }}
+        onClose={() => setConfirmSuspend(false)}
       />
     </>
   );
 }
 
-/* ── Invite user drawer ── */
-function InviteUserDrawer({ onClose }: { onClose: () => void }) {
+/* ── Invite user ── */
+function InviteUserModal({ onClose }: { onClose: () => void }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const { inviteUser, defaultRoleId } = useAdminData();
+  const { inviteUser, defaultRoleId, teams } = useAdminData();
   const { roles } = useCurrentUser();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [team, setTeam] = useState('');
-  // Pre-select the org's configured default role.
-  const [selectedRoleId, setSelectedRoleId] = useState(
-    () => roles.find(r => r.id === defaultRoleId)?.id ?? roles[0]?.id ?? '',
-  );
+  const [selectedRoleId, setSelectedRoleId] = useState(() => roles.find(r => r.id === defaultRoleId)?.id ?? roles[0]?.id ?? '');
   const [previewRole, setPreviewRole] = useState<string | null>(null);
 
   const invite = () => {
@@ -437,6 +506,7 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
     <Modal
       title="Invite User"
       subtitle="Add a new member and assign their initial role."
+      width="max-w-[600px]"
       onClose={onClose}
       footer={
         <>
@@ -446,34 +516,38 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="space-y-6">
-        <div className="space-y-5">
-          <div>
-            <label className={FIELD_LABEL}>Full Name <span className="text-risk-700">*</span></label>
-            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter full name" className={FIELD_INPUT} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+        {/* Profile */}
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Profile</h3>
+          <div className="space-y-4">
             <div>
-              <label className={FIELD_LABEL}>Email <span className="text-risk-700">*</span></label>
-              <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter email address" className={FIELD_INPUT} />
+              <label className={FIELD_LABEL}>Full Name <span className="text-risk-700">*</span></label>
+              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter full name" className={FIELD_INPUT} />
             </div>
-            <div>
-              <label className={FIELD_LABEL}>Team <span className="text-risk-700">*</span></label>
-              <div className="relative">
-                <select className={FIELD_SELECT} value={team} onChange={e => setTeam(e.target.value)}>
-                  <option value="" disabled>Select team</option>
-                  <option>SOX Audit</option>
-                  <option>IFC Team</option>
-                  <option>Management</option>
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={FIELD_LABEL}>Email <span className="text-risk-700">*</span></label>
+                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter email address" className={FIELD_INPUT} />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Team</label>
+                <div className="relative">
+                  <select className={FIELD_SELECT} value={team} onChange={e => setTeam(e.target.value)}>
+                    <option value="">Unassigned</option>
+                    {teams.map(t => <option key={t.id}>{t.name}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="border-t border-canvas-border pt-5">
-          <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1">Initial Role</h3>
-          <p className="text-[0.8125rem] text-ink-500 mb-4">You can assign only one role to a user.</p>
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Initial Role</h3>
+            <span className="text-[0.6875rem] text-ink-400">One role per user</span>
+          </div>
 
           <div className="space-y-2.5">
             {roles.map(role => {
@@ -485,14 +559,10 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
                 <div
                   key={role.id}
                   onClick={() => setSelectedRoleId(role.id)}
-                  className={`rounded-lg border cursor-pointer transition-colors ${
-                    isSelected ? 'border-brand-600 bg-brand-50/40' : 'border-canvas-border hover:bg-canvas'
-                  }`}
+                  className={`rounded-lg border cursor-pointer transition-colors ${isSelected ? 'border-brand-600 bg-brand-50/40' : 'border-canvas-border hover:bg-canvas'}`}
                 >
                   <div className="flex items-center gap-3 px-4 py-3">
-                    <span className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${
-                      isSelected ? 'border-brand-600' : 'border-canvas-border'
-                    }`}>
+                    <span className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'border-brand-600' : 'border-canvas-border'}`}>
                       {isSelected && <span className="w-2 h-2 rounded-full bg-brand-600" />}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -514,7 +584,7 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
                   </div>
                   {isPreview && (
                     <div className="px-4 pb-3 border-t border-canvas-border mt-1 pt-2 max-h-[220px] overflow-y-auto">
-                      {DETAILED_PERMISSIONS.map((group, gi) => (
+                      {PERMISSION_GROUPS.map((group, gi) => (
                         <div key={group.group}>
                           <div className={`py-2 ${gi > 0 ? 'border-t border-canvas-border mt-1' : ''}`}>
                             <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
@@ -536,38 +606,46 @@ function InviteUserDrawer({ onClose }: { onClose: () => void }) {
               );
             })}
           </div>
-        </div>
+        </section>
       </div>
     </Modal>
   );
 }
 
-/* ── Create team drawer ── */
-function CreateTeamDrawer({ onClose }: { onClose: () => void }) {
+/* ── Create team ── */
+function CreateTeamModal({ onClose }: { onClose: () => void }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const { addTeam } = useAdminData();
+  const { addTeam, users } = useAdminData();
+  const { currentUser } = useCurrentUser();
+  const creatorName = currentUser?.name ?? '';
   const [teamName, setTeamName] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Owner defaults to the creator; pick a member via "Make owner" to reassign
+  // (tracked by email). Null means "still the creator".
+  const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
 
-  const filtered = TEAM_MEMBERS.filter(m =>
+  const filtered = users.filter(m =>
     !memberSearch || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email.toLowerCase().includes(memberSearch.toLowerCase())
   );
 
-  const toggle = (key: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
+  const toggle = (email: string) => setSelected(prev => {
+    const n = new Set(prev);
+    if (n.has(email)) { n.delete(email); if (ownerEmail === email) setOwnerEmail(null); }
+    else n.add(email);
+    return n;
+  });
+
+  // Effective owner: the chosen member if any, else the creator.
+  const ownerName = users.find(m => m.email === ownerEmail)?.name ?? creatorName;
 
   const create = () => {
     if (!teamName.trim()) { addToast({ message: 'Team name is required', type: 'error' }); return; }
-    const members = TEAM_MEMBERS.filter(m => selected.has(m.email + m.name)).map(m => m.name);
-    addTeam(teamName.trim(), members);
-    logEvent({ action: 'Create', description: `Created team "${teamName.trim()}" with ${members.length} member${members.length !== 1 ? 's' : ''}`, module: 'Admin', entity: 'Team' });
+    const members = users.filter(m => selected.has(m.email)).map(m => m.name);
+    const finalOwner = ownerName || members[0];
+    addTeam(teamName.trim(), members, finalOwner);
+    logEvent({ action: 'Create', description: `Created team "${teamName.trim()}" with ${members.length} member${members.length !== 1 ? 's' : ''}${finalOwner ? `, owner ${finalOwner}` : ''}`, module: 'Admin', entity: 'Team' });
     onClose();
     addToast({ message: 'Team created', type: 'success' });
   };
@@ -586,38 +664,48 @@ function CreateTeamDrawer({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="space-y-6">
-        <div>
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Details</h3>
           <label className={FIELD_LABEL}>Team Name <span className="text-risk-700">*</span></label>
           <input value={teamName} onChange={e => setTeamName(e.target.value)} placeholder="Enter a unique team name" className={FIELD_INPUT} />
-        </div>
+        </section>
 
-        <div className="border-t border-canvas-border pt-5">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-[0.875rem] font-semibold text-ink-900">Add Members</h3>
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Add Members</h3>
             {selected.size > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-brand-50 text-[0.75rem] font-semibold text-brand-700 tabular-nums">{selected.size} selected</span>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{selected.size} selected</span>
             )}
           </div>
-          <p className="text-[0.8125rem] text-ink-500 mb-4">Select users to add now. You can add more later.</p>
+          {/* Owner defaults to you (the creator) until you make a member owner. */}
+          {ownerName && (
+            <p className="mb-3 flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+              <Crown size={12} className="text-brand-600 shrink-0" />
+              Owner: <span className="font-medium text-ink-700">{ownerName}{!ownerEmail && ' (you)'}</span>
+            </p>
+          )}
 
           <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search by name or email" />
 
-          <div className="mt-3 border border-canvas-border rounded-lg overflow-hidden">
+          <div className="mt-3 border border-canvas-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
             {filtered.map((m, i) => {
-              const key = m.email + m.name;
-              const isChecked = selected.has(key);
+              const isChecked = selected.has(m.email);
               return (
                 <div
-                  key={key}
-                  onClick={() => toggle(key)}
+                  key={m.email}
+                  onClick={() => toggle(m.email)}
                   className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''} ${isChecked ? 'bg-brand-50/40' : 'hover:bg-canvas'}`}
                 >
                   <Checkbox checked={isChecked} />
                   <InitialsAvatar name={m.name} size={28} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-[0.8125rem] font-medium text-ink-800 truncate">{m.name}</div>
                     <div className="text-[0.75rem] text-ink-500 truncate">{m.email}</div>
                   </div>
+                  {isChecked && (ownerEmail === m.email
+                    ? <OwnerBadge />
+                    : <button onClick={e => { e.stopPropagation(); setOwnerEmail(m.email); }} className="text-[0.6875rem] font-medium text-ink-400 hover:text-brand-700 transition-colors cursor-pointer shrink-0">Make owner</button>
+                  )}
                 </div>
               );
             })}
@@ -625,14 +713,14 @@ function CreateTeamDrawer({ onClose }: { onClose: () => void }) {
               <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-400">No users match your search.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </Modal>
   );
 }
 
-/* ── Edit team drawer ── */
-function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => void }) {
+/* ── Manage / edit team ── */
+function EditTeamModal({ team, onClose }: { team: AdminTeam; onClose: () => void }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { users, updateTeam, removeTeam } = useAdminData();
@@ -640,21 +728,27 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
   const [memberSearch, setMemberSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [members, setMembers] = useState<Set<string>>(new Set(team.members));
+  const [owner, setOwner] = useState<string>(team.owner ?? '');
 
-  const allUsers = users.map(u => u.name);
-  const filtered = allUsers.filter(name => !memberSearch || name.toLowerCase().includes(memberSearch.toLowerCase()));
+  const filtered = users.map(u => u.name).filter(name => !memberSearch || name.toLowerCase().includes(memberSearch.toLowerCase()));
 
-  const toggle = (name: string) => {
-    setMembers(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      return next;
-    });
-  };
+  // Strict reassignment: when the owner is removed, ownership transfers ONLY to a
+  // System Admin member — never auto-promote a non-admin. (Manual "Make owner"
+  // below stays a deliberate admin choice and can still pick any member.)
+  const firstAdminMember = (names: Iterable<string>) =>
+    [...names].find(n => users.find(u => u.name === n)?.roleId === 'role-admin');
+
+  const toggle = (name: string) => setMembers(prev => {
+    const n = new Set(prev);
+    if (n.has(name)) { n.delete(name); if (owner === name) setOwner(firstAdminMember(n) ?? ''); }
+    else n.add(name);
+    return n;
+  });
 
   const save = () => {
-    updateTeam(team.id, { name: teamName.trim() || team.name, members: [...members] });
-    logEvent({ action: 'Update', description: `Updated team "${teamName.trim() || team.name}" (${members.size} members)`, module: 'Admin', entity: 'Team' });
+    const finalOwner = members.has(owner) ? owner : (firstAdminMember(members) ?? undefined);
+    updateTeam(team.id, { name: teamName.trim() || team.name, members: [...members], owner: finalOwner });
+    logEvent({ action: 'Update', description: `Updated team "${teamName.trim() || team.name}" (${members.size} members${finalOwner ? `, owner ${finalOwner}` : ''})`, module: 'Admin', entity: 'Team' });
     onClose();
     addToast({ message: 'Team updated', type: 'success' });
   };
@@ -669,14 +763,12 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
   return (
     <>
       <Modal
-        title="Edit Team"
+        title="Manage Team"
+        width="max-w-[600px]"
         onClose={onClose}
         footer={
           <>
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-            >
+            <button onClick={() => setConfirmDelete(true)} className="mr-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
               <Trash2 size={14} /> Delete Team
             </button>
             <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
@@ -685,21 +777,32 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
         }
       >
         <div className="space-y-6">
-          <div>
+          {/* Details */}
+          <section>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Details</h3>
             <label className={FIELD_LABEL}>Team Name</label>
             <input value={teamName} onChange={e => setTeamName(e.target.value)} className={FIELD_INPUT} />
-          </div>
+          </section>
 
-          <div className="border-t border-canvas-border pt-5">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[0.875rem] font-semibold text-ink-900">Members</h3>
-              <span className="text-[0.75rem] text-ink-500 tabular-nums">{members.size} selected</span>
+          {/* Members */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Members</h3>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{members.size} selected</span>
             </div>
-            <p className="text-[0.8125rem] text-ink-500 mb-4">Add or remove members from this team.</p>
+            {/* Current owner (or Unassigned). Removing the owner transfers it to a
+                System Admin member, else leaves it Unassigned. */}
+            <p className="mb-3 flex items-center gap-1.5 text-[0.75rem]">
+              <Crown size={12} className={`shrink-0 ${owner ? 'text-brand-600' : 'text-ink-300'}`} />
+              <span className="text-ink-500">Owner:</span>
+              {owner
+                ? <span className="font-medium text-ink-700">{owner}</span>
+                : <span className="text-ink-400">Unassigned</span>}
+            </p>
 
-            <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search members" />
+            <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search members to add or remove" />
 
-            <div className="mt-3 border border-canvas-border rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
+            <div className="mt-3 border border-canvas-border rounded-xl overflow-hidden max-h-[280px] overflow-y-auto">
               {filtered.map((name, i) => {
                 const isIn = members.has(name);
                 return (
@@ -709,13 +812,17 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
                     className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-canvas-border' : ''} ${isIn ? 'bg-brand-50/40' : 'hover:bg-canvas'}`}
                   >
                     <Checkbox checked={isIn} />
-                    <InitialsAvatar name={name} size={26} />
-                    <span className="text-[0.8125rem] text-ink-800">{name}</span>
+                    <InitialsAvatar name={name} size={28} />
+                    <span className="text-[0.8125rem] text-ink-800 flex-1 min-w-0 truncate">{name}</span>
+                    {isIn && (owner === name
+                      ? <OwnerBadge />
+                      : <button onClick={e => { e.stopPropagation(); setOwner(name); }} className="text-[0.6875rem] font-medium text-ink-400 hover:text-brand-700 transition-colors cursor-pointer shrink-0">Make owner</button>
+                    )}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
         </div>
       </Modal>
 
@@ -732,651 +839,577 @@ function EditTeamDrawer({ team, onClose }: { team: AdminTeam; onClose: () => voi
   );
 }
 
-interface MockRole {
-  name: string;
-  users: number;
-  createdBy: string;
-  type: 'System' | 'Custom';
-  permissions: number;
-  lastModified: string;
-}
+/* ════════════════════════════════════════════════════════════════════════
+ * People section
+ * ════════════════════════════════════════════════════════════════════════ */
 
-/* ── Role detail drawer (editable — writes back to the live permission model) ── */
-function RoleDetailDrawer({ role, userCount, onClose }: { role: Role; userCount: number; onClose: () => void }) {
-  const { addToast } = useToast();
-  const { updateRolePermissions } = useCurrentUser();
-  const logEvent = useAuditLog();
-  const [enabled, setEnabled] = useState<Set<string>>(() => new Set(role.permissions));
+type UserRow = AdminUser & { roleName: string } & Record<string, unknown>;
 
-  const toggle = (key: string) =>
-    setEnabled(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+const USER_STATUSES: UserStatus[] = ['Active', 'Suspended', 'Locked', 'Inactive'];
 
-  const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
-    if (preset === 'none') { setEnabled(new Set()); return; }
-    const n = new Set<string>();
-    DETAILED_PERMISSIONS.forEach(g => {
-      if (preset === 'full') g.perms.forEach(p => n.add(p.key));
-      else if (g.perms[0]) n.add(g.perms[0].key);
-    });
-    setEnabled(n);
-  };
-
-  const save = () => {
-    updateRolePermissions(role.id, [...enabled] as PermissionKey[]);
-    logEvent({ action: 'Update', description: `Updated permissions for role "${role.name}" (${enabled.size} enabled)`, module: 'Admin', entity: 'Role' });
-    addToast({ message: `${role.name} permissions updated`, type: 'success' });
-    onClose();
-  };
-
-  const presetChip = (active: boolean) =>
-    `px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${
-      active ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-canvas'
-    }`;
-
-  return (
-    <Modal
-      title={role.name}
-      subtitle={`${role.type} role · ${userCount} ${userCount === 1 ? 'user' : 'users'}`}
-      width="max-w-[620px]"
-      onClose={onClose}
-      footer={
-        <>
-          <span className="mr-auto inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
-            <Info size={13} /> Changes apply to everyone with this role.
-          </span>
-          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
-          <button className={BTN_PRIMARY} onClick={save}>Save Changes</button>
-        </>
-      }
-    >
-      <div className="space-y-5">
-        <section className="grid grid-cols-2 gap-x-8 gap-y-5">
-          <DetailField label="Type">
-            <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] font-medium ${
-              role.type === 'System' ? 'bg-evidence-50 text-evidence-700' : 'bg-draft-50 text-draft-700'
-            }`}>{role.type}</span>
-          </DetailField>
-          <DetailField label="Created By"><span className="text-[0.8125rem] text-ink-800">{role.createdBy}</span></DetailField>
-        </section>
-
-        <div className="border-t border-canvas-border pt-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[0.875rem] font-semibold text-ink-900">Permissions</h3>
-            <div className="flex items-center gap-1">
-              <button onClick={() => applyPreset('none')} className={presetChip(enabled.size === 0)}>None</button>
-              <button onClick={() => applyPreset('readonly')} className={presetChip(false)}>View Only</button>
-              <button onClick={() => applyPreset('full')} className={presetChip(enabled.size === TOTAL_PERMS)}>Full Access</button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-1.5 rounded-full bg-canvas-border overflow-hidden">
-              <div className="h-full rounded-full bg-brand-600 transition-all duration-200" style={{ width: `${(enabled.size / TOTAL_PERMS) * 100}%` }} />
-            </div>
-            <span className="text-[0.75rem] text-ink-500 tabular-nums shrink-0">{enabled.size}/{TOTAL_PERMS}</span>
-          </div>
-
-          <div className="border border-canvas-border rounded-lg overflow-hidden">
-            {DETAILED_PERMISSIONS.map((group, gi) => (
-              <div key={group.group}>
-                <div className={`px-4 py-2.5 bg-canvas ${gi > 0 ? 'border-t border-canvas-border' : ''}`}>
-                  <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
-                </div>
-                {group.perms.map(perm => {
-                  const isOn = enabled.has(perm.key);
-                  return (
-                    <div
-                      key={perm.key}
-                      onClick={() => toggle(perm.key)}
-                      className="flex items-center justify-between px-4 py-2.5 border-t border-canvas-border/60 cursor-pointer hover:bg-canvas transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-[0.8125rem] font-medium text-ink-800">{perm.name}</div>
-                        <div className="text-[0.75rem] text-ink-500">{perm.desc}</div>
-                      </div>
-                      <Toggle checked={isOn} />
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-/* ── Create role drawer ── */
-function CreateRoleDrawer({ onClose, seed }: { onClose: () => void; seed?: RoleSeed | null }) {
-  const { addToast } = useToast();
-  const { addRole } = useCurrentUser();
-  const logEvent = useAuditLog();
-  const [name, setName] = useState(seed?.name ?? '');
-  const [description, setDescription] = useState(seed?.description ?? '');
-  const [enabled, setEnabled] = useState<Set<string>>(() => new Set<string>(seed?.permissions ?? []));
-  const totalPerms = TOTAL_PERMS;
-
-  const togglePerm = (key: string) => {
-    setEnabled(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
-  };
-
-  const applyPreset = (preset: 'none' | 'readonly' | 'full') => {
-    if (preset === 'none') { setEnabled(new Set()); return; }
-    const n = new Set<string>();
-    DETAILED_PERMISSIONS.forEach(g => {
-      if (preset === 'full') g.perms.forEach(p => n.add(p.key));
-      else if (g.perms[0]) n.add(g.perms[0].key);
-    });
-    setEnabled(n);
-  };
-
-  const create = () => {
-    if (!name.trim()) { addToast({ message: 'Role name is required', type: 'error' }); return; }
-    addRole({
-      id: `role-${Date.now()}`,
-      name: name.trim(),
-      type: 'Custom',
-      description: description.trim(),
-      createdBy: 'You',
-      lastModified: 'Just now',
-      permissions: [...enabled] as PermissionKey[],
-    });
-    logEvent({ action: 'Create', description: `Created role "${name.trim()}" with ${enabled.size} permissions`, module: 'Admin', entity: 'Role' });
-    onClose();
-    addToast({ message: `Role "${name.trim()}" created`, type: 'success' });
-  };
-
-  const presetChip = (active: boolean) =>
-    `px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${
-      active ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-canvas'
-    }`;
-
-  return (
-    <Modal
-      title="Create Role"
-      subtitle={seed ? 'Duplicated from an existing role. Adjust and save as new.' : 'Define a role and choose its permissions.'}
-      width="max-w-[620px]"
-      onClose={onClose}
-      footer={
-        <>
-          <span className="mr-auto inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
-            <Info size={13} /> Editable later from role settings.
-          </span>
-          <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
-          <button className={BTN_PRIMARY} onClick={create}>Create Role</button>
-        </>
-      }
-    >
-      <div className="space-y-5">
-        <div>
-          <label className={FIELD_LABEL}>Role Name <span className="text-risk-700">*</span></label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter role name" className={FIELD_INPUT} />
-        </div>
-        <div>
-          <label className={FIELD_LABEL}>Description <span className="text-risk-700">*</span></label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Enter a description..." className={FIELD_TEXTAREA} />
-        </div>
-
-        <div className="border-t border-canvas-border pt-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[0.875rem] font-semibold text-ink-900">Permissions</h3>
-            <div className="flex items-center gap-1">
-              <button onClick={() => applyPreset('none')} className={presetChip(enabled.size === 0)}>None</button>
-              <button onClick={() => applyPreset('readonly')} className={presetChip(false)}>View Only</button>
-              <button onClick={() => applyPreset('full')} className={presetChip(enabled.size === totalPerms)}>Full Access</button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-1.5 rounded-full bg-canvas-border overflow-hidden">
-              <div className="h-full rounded-full bg-brand-600 transition-all duration-200" style={{ width: `${(enabled.size / totalPerms) * 100}%` }} />
-            </div>
-            <span className="text-[0.75rem] text-ink-500 tabular-nums shrink-0">{enabled.size}/{totalPerms}</span>
-          </div>
-
-          <div className="border border-canvas-border rounded-lg overflow-hidden">
-            {DETAILED_PERMISSIONS.map((group, gi) => (
-              <div key={group.group}>
-                <div className={`px-4 py-2.5 bg-canvas ${gi > 0 ? 'border-t border-canvas-border' : ''}`}>
-                  <span className="text-[0.8125rem] font-semibold text-ink-800">{group.group}</span>
-                </div>
-                {group.perms.map(perm => {
-                  const isOn = enabled.has(perm.key);
-                  return (
-                    <div
-                      key={perm.key}
-                      onClick={() => togglePerm(perm.key)}
-                      className="flex items-center justify-between px-4 py-2.5 border-t border-canvas-border/60 cursor-pointer hover:bg-canvas transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-[0.8125rem] font-medium text-ink-800">{perm.name}</div>
-                        <div className="text-[0.75rem] text-ink-500">{perm.desc}</div>
-                      </div>
-                      <Toggle checked={isOn} />
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-const roleColumns: Column<MockRole & Record<string, unknown>>[] = [
-  { key: 'name', label: 'Role', sortable: true, width: '32%' },
-  {
-    key: 'type',
-    label: 'Type',
-    sortable: true,
-    width: '11%',
-    render: (item) => (
-      <span className={`inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] font-medium ${
-        item.type === 'System' ? 'bg-evidence-50 text-evidence-700' : 'bg-draft-50 text-draft-700'
-      }`}>{item.type as string}</span>
-    ),
-  },
-  {
-    key: 'users',
-    label: 'Users',
-    sortable: true,
-    width: '9%',
-    render: (item) => {
-      const n = item.users as number;
-      return <span className={`text-[0.8125rem] tabular-nums ${n === 0 ? 'text-ink-400' : 'font-medium text-ink-800'}`}>{n}</span>;
-    },
-  },
-  {
-    key: 'permissions',
-    label: 'Permissions',
-    sortable: true,
-    width: '17%',
-    render: (item) => {
-      const n = item.permissions as number;
-      const pct = Math.min(100, (n / TOTAL_PERMS) * 100);
-      const full = n >= TOTAL_PERMS;
-      return (
-        <div className="flex items-center gap-2.5">
-          <div className="flex-1 h-1.5 rounded-full bg-canvas-border max-w-[84px] overflow-hidden">
-            <div className={`h-full rounded-full ${full ? 'bg-brand-600' : 'bg-brand-500'}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-[0.75rem] tabular-nums whitespace-nowrap"><span className="font-semibold text-ink-800">{n}</span><span className="text-ink-400">/{TOTAL_PERMS}</span></span>
-        </div>
-      );
-    },
-  },
-  {
-    key: 'createdBy',
-    label: 'Created by',
-    sortable: true,
-    width: '13%',
-    render: (item) => <span className="text-[0.8125rem] text-ink-600 whitespace-nowrap">{item.createdBy as string}</span>,
-  },
-  {
-    key: 'lastModified',
-    label: 'Updated',
-    sortable: true,
-    width: '12%',
-    render: (item) => <span className="text-[0.75rem] text-ink-500 tabular-nums whitespace-nowrap">{item.lastModified as string}</span>,
-  },
-  { key: 'action', label: '', sortable: false, align: 'right' as const, width: '150px' },
-];
-
-function RolesTab({ onCreateRole }: { onCreateRole: (seed?: RoleSeed) => void }) {
+function PeopleSection({ onManageRole, onInvite }: { onManageRole: (roleId: string) => void; onInvite: () => void }) {
   const prefersReduced = useReducedMotion();
+  const { users, teams, updateUser, removeUser, updateTeam, inviteUser } = useAdminData();
   const { roles } = useCurrentUser();
-  const { defaultRoleId, setDefaultRoleId } = useAdminData();
+  const logEvent = useAuditLog();
   const { addToast } = useToast();
-  const [viewRole, setViewRole] = useState<Role | null>(null);
-  const [search, setSearch] = useState('');
-  const [defaultOpen, setDefaultOpen] = useState(false);
-  const defaultRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!defaultOpen) return;
-    const close = (e: MouseEvent) => { if (defaultRef.current && !defaultRef.current.contains(e.target as Node)) setDefaultOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [defaultOpen]);
-
-  // User counts per role, derived from the people→role mapping.
-  const userCounts = Object.values(PERSON_ROLES).reduce<Record<string, number>>((acc, rid) => {
-    acc[rid] = (acc[rid] ?? 0) + 1; return acc;
-  }, {});
-  const roleById = Object.fromEntries(roles.map(r => [r.id, r] as const));
-
-  type RoleRow = MockRole & Record<string, unknown>;
-  const tableData: RoleRow[] = roles.map(r => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? '',
-    type: r.type,
-    users: userCounts[r.id] ?? 0,
-    permissions: r.permissions.length,
-    createdBy: r.createdBy,
-    lastModified: r.lastModified,
-  }));
-
-  const columnsWithAction = roleColumns.map(col => {
-    if (col.key === 'name') {
-      return {
-        ...col,
-        render: (item: RoleRow) => (
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${item.type === 'System' ? 'bg-brand-50' : 'bg-canvas'}`}>
-              <Shield size={14} className={item.type === 'System' ? 'text-brand-700' : 'text-ink-400'} />
-            </div>
-            <div className="min-w-0">
-              <button onClick={() => setViewRole(roleById[item.id as string])} className="block truncate text-[0.8125rem] font-semibold text-ink-800 hover:text-brand-700 cursor-pointer text-left">{item.name as string}</button>
-              {(item.description as string) ? (
-                <div className="text-[0.75rem] text-ink-500 truncate">{item.description as string}</div>
-              ) : null}
-            </div>
-          </div>
-        ),
-      };
-    }
-    if (col.key === 'action') {
-      return {
-        ...col,
-        render: (item: RoleRow) => {
-          const role = roleById[item.id as string];
-          return (
-            <RowActions>
-              <button className={BTN_ROW} onClick={() => setViewRole(role)}><Pencil size={12} />Edit</button>
-              <button
-                className={BTN_ROW}
-                onClick={() => onCreateRole({ name: `${role.name} (copy)`, description: role.description ?? '', permissions: [...role.permissions] })}
-              ><CopyPlus size={12} />Duplicate</button>
-            </RowActions>
-          );
-        },
-      };
-    }
-    return col;
-  });
-
-  // KPI summary + external search (unified toolbar across all admin tabs).
-  const systemCount = roles.filter(r => r.type === 'System').length;
-  const customCount = roles.filter(r => r.type === 'Custom').length;
-  const avgPerms = roles.length ? Math.round(roles.reduce((s, r) => s + r.permissions.length, 0) / roles.length) : 0;
-  const kpiStats: KpiStat[] = [
-    { key: 'total', label: 'Total Roles', value: roles.length },
-    { key: 'system', label: 'System', value: systemCount },
-    { key: 'custom', label: 'Custom', value: customCount },
-    { key: 'avg', label: 'Avg Permissions', value: avgPerms },
-  ];
-
-  const q = search.trim().toLowerCase();
-  const visibleData = q
-    ? tableData.filter(r => [r.name, r.createdBy, r.description].some(v => String(v ?? '').toLowerCase().includes(q)))
-    : tableData;
-
-  const viewRoleUsers = viewRole ? (userCounts[viewRole.id] ?? 0) : 0;
-
-  return (
-    <motion.div
-      initial={prefersReduced ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
-      transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
-    >
-      {roles.length > 0 && <KpiRow stats={kpiStats} />}
-
-      {/* Unified toolbar: search left, default-role selector right. */}
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <MemberSearch value={search} onChange={setSearch} placeholder="Search roles..." className="w-full sm:w-[300px]" />
-        <div className="flex items-center gap-2 text-[0.8125rem] text-ink-600 shrink-0">
-          <span className="font-medium text-ink-700 whitespace-nowrap">Default role for new users</span>
-          {/* Custom select popover — matches the inline team dropdown. */}
-          <div className="relative" ref={defaultRef}>
-            <button
-              onClick={() => setDefaultOpen(o => !o)}
-              className={`no-focus-ring inline-flex items-center gap-2 h-9 pl-3 pr-2.5 rounded-lg border bg-canvas-elevated text-[0.8125rem] cursor-pointer transition-colors ${
-                defaultOpen ? 'border-brand-600 text-brand-700' : 'border-canvas-border text-ink-700 hover:border-brand-200'
-              }`}
-            >
-              <span className="whitespace-nowrap">{roles.find(r => r.id === defaultRoleId)?.name ?? 'Select role'}</span>
-              <ChevronDown size={13} className={`text-ink-400 transition-transform ${defaultOpen ? 'rotate-180 text-brand-600' : ''}`} />
-            </button>
-            {defaultOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.13, ease: [0.2, 0, 0, 1] }}
-                className="absolute right-0 top-full mt-1.5 w-56 max-h-[280px] overflow-y-auto origin-top-right bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] p-1 z-30"
-              >
-                {roles.map(r => {
-                  const selected = r.id === defaultRoleId;
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => { setDefaultRoleId(r.id); setDefaultOpen(false); addToast({ message: `Default role set to ${r.name}`, type: 'success' }); }}
-                      className={`no-focus-ring flex w-full items-center justify-between gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-left cursor-pointer transition-colors ${
-                        selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'
-                      }`}
-                    >
-                      <span className="truncate">{r.name}</span>
-                      {selected && <Check size={14} className="shrink-0 text-brand-600" />}
-                    </button>
-                  );
-                })}
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <SmartTable
-        columns={columnsWithAction}
-        data={visibleData}
-        keyField="id"
-        searchable={false}
-        paginated
-        pageSize={10}
-        emptyContent={
-          <EmptyState
-            icon={Shield}
-            size="compact"
-            title={search ? 'No roles match your search' : 'No roles yet'}
-            body={search ? 'Try a different name or clear the search.' : 'Create a role to define what members can see and do.'}
-            action={search
-              ? <button className={BTN_CTA_OUTLINE} onClick={() => setSearch('')}>Clear search</button>
-              : <button className={BTN_CTA_PRIMARY} onClick={() => onCreateRole()}><Plus size={14} />Create Role</button>}
-          />
-        }
-      />
-      <AnimatePresence>
-        {viewRole && <RoleDetailDrawer key="role-detail" role={viewRole} userCount={viewRoleUsers} onClose={() => setViewRole(null)} />}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function UsersTab({ subTab, onCreateTeam }: { subTab: 'users' | 'teams'; onCreateTeam: () => void }) {
-  const prefersReduced = useReducedMotion();
-  const { users, teams, updateUser } = useAdminData();
-  const { roles } = useCurrentUser();
   const roleName = (roleId: string) => roles.find(r => r.id === roleId)?.name ?? '—';
-  const tableData = users.map(u => ({ ...u, roleName: roleName(u.roleId) } as MockUser & Record<string, unknown>));
-  const [viewUser, setViewUser] = useState<MockUser | null>(null);
-  const [editUser, setEditUser] = useState<MockUser | null>(null);
-  const [teamDropdown, setTeamDropdown] = useState<string | null>(null);
-  const [editTeam, setEditTeam] = useState<AdminTeam | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const tableData: UserRow[] = users.map(u => ({ ...u, roleName: roleName(u.roleId) }));
+
+  const [manageUser, setManageUser] = useState<AdminUser | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
+  // Bulk suspend/lock of owners is gated by a confirm (with the owner picker).
+  const [pendingBulkStatus, setPendingBulkStatus] = useState<UserStatus | null>(null);
+  // Per-team chosen new owner for the bulk transfer picker (team.id → name; '' = Unassigned).
+  const [bulkTransfer, setBulkTransfer] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState<UserStatus | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const teamDropdownRef = useRef<HTMLDivElement>(null);
+  // Pending-invitation row actions (Resend / Revoke) are gated by a confirm.
+  const [inviteAction, setInviteAction] = useState<{ kind: 'resend' | 'revoke'; user: UserRow } | null>(null);
 
-  useEffect(() => {
-    if (!teamDropdown) return;
-    const close = (e: MouseEvent) => { if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) setTeamDropdown(null); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [teamDropdown]);
+  // Pending-invitation actions, shown only on Invited rows, each confirmed first.
+  // Resend re-sends the email; Revoke removes the pending invite (Undo in the
+  // toast restores it).
+  const resendInvite = (u: UserRow) => {
+    logEvent({ action: 'Update', description: `Resent invitation to "${u.name}"`, module: 'Admin', entity: 'User' });
+    addToast({ message: `Invitation resent to ${u.email}`, type: 'success' });
+  };
+  const revokeInvite = (u: UserRow) => {
+    removeUser(u.email);
+    logEvent({ action: 'Delete', description: `Revoked invitation for "${u.name}"`, module: 'Admin', entity: 'User' });
+    addToast({
+      message: `Invitation to ${u.name} revoked`,
+      type: 'success',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          inviteUser({ name: u.name, initials: u.initials, email: u.email, roleId: u.roleId, team: u.team, status: 'Invited', lastLogin: 'Never' });
+          addToast({ message: 'Invitation restored', type: 'info' });
+        },
+      },
+    });
+  };
 
-  type UserRow = MockUser & Record<string, unknown>;
+  // Inline single-field edit — writes through to the live model + audit trail,
+  // so changing a role / team / status never needs the Manage panel. The change
+  // applies instantly (no confirm dialog — that would break the quick-edit
+  // pattern and breed confirmation fatigue); instead the success toast carries
+  // an Undo, the right safety net for a reversible, access-affecting change.
+  const applyChange = (u: UserRow, patch: Partial<AdminUser>, desc: string, toast: string) => {
+    const prev = Object.fromEntries(
+      Object.keys(patch).map(k => [k, (u as Record<string, unknown>)[k]]),
+    ) as Partial<AdminUser>;
+    updateUser(u.email, patch);
+    logEvent({ action: 'Update', description: desc, module: 'Admin', entity: 'User' });
+    addToast({
+      message: toast,
+      type: 'success',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          updateUser(u.email, prev);
+          logEvent({ action: 'Update', description: `Reverted change for "${u.name}"`, module: 'Admin', entity: 'User' });
+          addToast({ message: 'Change reverted', type: 'info' });
+        },
+      },
+    });
+  };
 
-  const teamsData = teams;
+  const toggleSelect = (email: string) => setSelected(prev => { const n = new Set(prev); if (n.has(email)) n.delete(email); else n.add(email); return n; });
+  const clearSelection = () => setSelected(new Set());
 
+  // KPI band — the same skeleton every tab opens on. Cards double as
+  // click-to-filter chips (active card carries the 2px brand bottom border).
   const counts = {
     active: users.filter(u => u.status === 'Active').length,
     invited: users.filter(u => u.status === 'Invited').length,
     suspended: users.filter(u => u.status === 'Suspended').length,
-    inactive: users.filter(u => u.status === 'Inactive' || u.status === 'Locked').length,
   };
-
-  const columnsWithAction: Column<UserRow>[] = userColumns.map(col => {
-    if (col.key === 'name') {
-      return {
-        ...col,
-        render: (item: UserRow) => (
-          <div className="flex items-center gap-3">
-            <InitialsAvatar name={item.name as string} size={32} />
-            <div className="min-w-0">
-              <button onClick={() => setViewUser(item as unknown as MockUser)} className="text-[0.8125rem] font-semibold text-ink-800 hover:text-brand-700 cursor-pointer text-left">{item.name as string}</button>
-              <div className="text-[0.75rem] text-ink-500 mt-0.5">{item.email as string}</div>
-            </div>
-          </div>
-        ),
-      };
-    }
-    if (col.key === 'roleName') {
-      return {
-        ...col,
-        render: (item: UserRow) => (
-          <button onClick={() => setEditUser(item as unknown as MockUser)} className="inline-flex items-center gap-1 text-[0.8125rem] text-ink-600 hover:text-brand-700 cursor-pointer group">
-            {item.roleName as string}
-            <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-        ),
-      };
-    }
-    if (col.key === 'team') {
-      return {
-        ...col,
-        render: (item: UserRow) => {
-          const teamName = item.team as string;
-          const rowId = item.email as string;
-          const isOpen = teamDropdown === rowId;
-          const teamNames = teams.map(t => t.name);
-          const isUnassigned = teamName === '—';
-
-          return (
-            <div className="relative" ref={isOpen ? teamDropdownRef : undefined}>
-              {/* Trigger reads as an editable select chip; focus shown via the
-                  open-state tint (no harsh global ring → .no-focus-ring). */}
-              <button
-                onClick={() => setTeamDropdown(isOpen ? null : rowId)}
-                className={`no-focus-ring inline-flex items-center gap-1 px-2 h-7 -ml-2 rounded-md text-[0.8125rem] cursor-pointer transition-colors ${
-                  isOpen ? 'bg-canvas text-brand-700' : isUnassigned ? 'text-ink-400 hover:bg-canvas hover:text-brand-700' : 'text-ink-700 hover:bg-canvas hover:text-brand-700'
-                }`}
-              >
-                {isUnassigned ? 'Assign team' : teamName}
-                <ChevronDown size={12} className={`text-ink-400 transition-transform ${isOpen ? 'rotate-180 text-brand-600' : ''}`} />
-              </button>
-              {isOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.13, ease: [0.2, 0, 0, 1] }}
-                  className="absolute left-0 top-full mt-1.5 w-48 origin-top-left bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] p-1 z-30"
-                >
-                  {teamNames.map(t => {
-                    const selected = t === teamName;
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => { updateUser(rowId, { team: t }); setTeamDropdown(null); }}
-                        className={`no-focus-ring flex w-full items-center justify-between gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-left cursor-pointer transition-colors ${
-                          selected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'
-                        }`}
-                      >
-                        <span className="truncate">{t}</span>
-                        {selected && <Check size={14} className="shrink-0 text-brand-600" />}
-                      </button>
-                    );
-                  })}
-                  {!isUnassigned && (
-                    <>
-                      <div className="h-px bg-canvas-border my-1 mx-1.5" />
-                      <button
-                        onClick={() => { updateUser(rowId, { team: '—' }); setTeamDropdown(null); }}
-                        className="no-focus-ring flex w-full items-center gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
-                      >
-                        <X size={13} className="shrink-0" /> Remove from team
-                      </button>
-                    </>
-                  )}
-                </motion.div>
-              )}
-            </div>
-          );
-        },
-      };
-    }
-    if (col.key === 'action') {
-      return {
-        ...col,
-        render: (item: UserRow) => (
-          <RowActions>
-            <button className={BTN_ROW} onClick={() => setViewUser(item as unknown as MockUser)}><Eye size={12} />View</button>
-            <button className={BTN_ROW} onClick={() => setEditUser(item as unknown as MockUser)}><Pencil size={12} />Edit</button>
-          </RowActions>
-        ),
-      };
-    }
-    return col;
-  });
-
-  // KPI status tiles double as filters; external search keeps the toolbar
-  // identical across all admin tabs.
-  const STATUS_FILTER_MAP: Record<string, string | null> = { total: null, active: 'Active', invited: 'Invited', suspended: 'Suspended' };
-  const kpiStats: KpiStat[] = [
+  // Status filter chips — counts only (no icons; the chips render label + count).
+  const stats: Stat[] = [
     { key: 'total', label: 'Total Users', value: users.length },
     { key: 'active', label: 'Active', value: counts.active },
     { key: 'invited', label: 'Invited', value: counts.invited },
     { key: 'suspended', label: 'Suspended', value: counts.suspended },
   ];
-  const activeKpi = statusFilter === null ? 'total' : (Object.keys(STATUS_FILTER_MAP).find(k => STATUS_FILTER_MAP[k] === statusFilter) ?? 'total');
+  const STATUS_BY_KEY: Record<string, UserStatus | null> = { total: null, active: 'Active', invited: 'Invited', suspended: 'Suspended' };
+
   const q = search.trim().toLowerCase();
   const visibleUsers = tableData.filter(u => {
     if (statusFilter && u.status !== statusFilter) return false;
+    if (roleFilter.length && !roleFilter.includes(u.roleName)) return false;
+    if (teamFilter.length && !teamFilter.includes(u.team)) return false;
     if (q && ![u.name, u.email, u.roleName, u.team].some(v => String(v ?? '').toLowerCase().includes(q))) return false;
     return true;
   });
 
-  // Teams KPI row (display only) — mirrors the Users/Roles summary.
-  const totalMembers = teamsData.reduce((s, t) => s + t.members.length, 0);
-  const avgTeamSize = teamsData.length ? Math.round(totalMembers / teamsData.length) : 0;
-  const unassignedCount = users.filter(u => u.team === '—').length;
-  const teamKpiStats: KpiStat[] = [
-    { key: 'total', label: 'Total Teams', value: teamsData.length },
-    { key: 'members', label: 'Members Assigned', value: totalMembers },
-    { key: 'avg', label: 'Avg Team Size', value: avgTeamSize },
-    { key: 'unassigned', label: 'Unassigned', value: unassignedCount },
-  ];
+  const roleOptions = [...new Set(tableData.map(u => u.roleName))].sort();
+  const teamOptions = [...new Set(tableData.map(u => u.team))].sort((a, b) => (a === '—' ? 1 : b === '—' ? -1 : a.localeCompare(b)));
+  const hasFilter = roleFilter.length > 0 || teamFilter.length > 0 || !!statusFilter || q.length > 0;
+  const clearFilters = () => { setRoleFilter([]); setTeamFilter([]); setStatusFilter(null); setSearch(''); };
 
-  // Teams render as a table (consistent with Users & Roles) rather than a
-  // sparse card grid.
-  type TeamRow = { id: string; name: string; count: number; members: string[]; team: AdminTeam } & Record<string, unknown>;
-  const teamTableData: TeamRow[] = teamsData.map(t => ({ id: t.id, name: t.name, count: t.members.length, members: t.members, team: t }));
-  const teamColumns: Column<TeamRow>[] = [
-    {
-      key: 'name', label: 'Team', sortable: true,
-      render: (t) => (
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-            <Users size={14} className="text-brand-700" />
+  // Selection works over the currently-visible (filtered) rows.
+  const visibleEmails = visibleUsers.map(u => u.email);
+  const selectedCount = selected.size;
+  // Teams whose owner is among the selected users — drives the bulk owner picker.
+  const selectedNames = new Set(users.filter(u => selected.has(u.email)).map(u => u.name));
+  const selectedOwnerTeams = teams.filter(t => t.owner && selectedNames.has(t.owner));
+  const isAdminName = (n: string) => users.find(u => u.name === n)?.roleId === 'role-admin';
+  // Candidate new owners for a team = members NOT in the bulk selection.
+  const bulkCandidates = (t: AdminTeam) => t.members.filter(m => !selectedNames.has(m));
+  const chosenBulkOwner = (t: AdminTeam) => bulkTransfer[t.id] ?? (bulkCandidates(t).find(isAdminName) ?? '');
+  const applyBulkTransfers = () => {
+    selectedOwnerTeams.forEach(t => {
+      const next = chosenBulkOwner(t);
+      updateTeam(t.id, { owner: next || undefined });
+      logEvent({ action: 'Update', description: `Transferred ownership of "${t.name}" to ${next || 'Unassigned'}`, module: 'Admin', entity: 'Team' });
+    });
+  };
+  const bulkTransferPicker = selectedOwnerTeams.length === 0 ? null : (
+    <div className="mt-3 rounded-lg border border-canvas-border bg-canvas p-2.5 space-y-2">
+      <div className="text-[0.625rem] font-semibold text-ink-500 uppercase tracking-wide">Reassign ownership</div>
+      {selectedOwnerTeams.map(t => {
+        const cands = bulkCandidates(t);
+        return (
+          <div key={t.id} className="flex items-center gap-2">
+            <span className="text-[0.75rem] text-ink-700 flex-1 min-w-0 truncate">{t.name}</span>
+            <div className="relative shrink-0">
+              <select
+                value={chosenBulkOwner(t)}
+                onChange={e => setBulkTransfer(p => ({ ...p, [t.id]: e.target.value }))}
+                className="no-focus-ring appearance-none h-8 pl-2.5 pr-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 outline-none focus:border-brand-600 cursor-pointer max-w-[11rem] truncate"
+              >
+                <option value="">Unassigned</option>
+                {cands.map(c => <option key={c} value={c}>{c}{isAdminName(c) ? ' · Admin' : ''}</option>)}
+              </select>
+              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            </div>
           </div>
-          <span className="truncate text-[0.8125rem] font-semibold text-ink-800">{t.name}</span>
+        );
+      })}
+    </div>
+  );
+  const allVisibleSelected = visibleEmails.length > 0 && visibleEmails.every(e => selected.has(e));
+  const selectAllVisible = () => setSelected(new Set(visibleEmails));
+  const teamNames = teams.map(t => t.name);
+
+  const bulkAssignTeam = (t: string) => {
+    selected.forEach(email => updateUser(email, { team: t }));
+    logEvent({ action: 'Update', description: `${t === '—' ? 'Unassigned' : `Assigned to "${t}"`} ${selectedCount} user${selectedCount !== 1 ? 's' : ''}`, module: 'Admin', entity: 'User' });
+    addToast({ message: `${selectedCount} user${selectedCount !== 1 ? 's' : ''} ${t === '—' ? 'unassigned' : `moved to ${t}`}`, type: 'success' });
+    clearSelection();
+  };
+  const bulkSetStatus = (s: UserStatus) => {
+    selected.forEach(email => updateUser(email, { status: s }));
+    logEvent({ action: 'Update', description: `Set status "${s}" for ${selectedCount} user${selectedCount !== 1 ? 's' : ''}`, module: 'Admin', entity: 'User' });
+    addToast({ message: `${selectedCount} user${selectedCount !== 1 ? 's' : ''} set to ${s}`, type: 'success' });
+    clearSelection();
+  };
+  const bulkRemove = () => {
+    const n = selectedCount;
+    selected.forEach(email => removeUser(email));
+    logEvent({ action: 'Delete', description: `Removed ${n} user${n !== 1 ? 's' : ''}`, module: 'Admin', entity: 'User' });
+    addToast({ message: `${n} user${n !== 1 ? 's' : ''} removed`, type: 'success' });
+    setConfirmBulkRemove(false);
+    clearSelection();
+  };
+
+  const columns: Column<UserRow>[] = [
+    {
+      key: 'select', label: '', sortable: false, width: '40px',
+      render: (item) => (
+        <div onClick={e => e.stopPropagation()} className="flex items-center justify-center">
+          <Checkbox checked={selected.has(item.email)} onChange={() => toggleSelect(item.email)} ariaLabel="Select row" />
         </div>
       ),
     },
     {
-      key: 'count', label: 'Members', sortable: true, width: '14%',
+      key: 'name', label: 'Name', sortable: true,
+      render: (item) => (
+        <div className="flex items-center gap-3">
+          <InitialsAvatar name={item.name} size={36} />
+          <div className="min-w-0 leading-tight">
+            <div className="text-[0.875rem] font-semibold text-ink-900 truncate">{item.name}</div>
+            <div className="text-[0.75rem] text-ink-400 mt-0.5 truncate">{item.email}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'roleName', label: 'Role', sortable: true,
+      render: (item) => (
+        <InlineCellSelect
+          current={item.roleId}
+          options={roles.map(r => ({ value: r.id, label: r.name }))}
+          onPick={(roleId) => applyChange(item, { roleId }, `Changed ${item.name}'s role to "${roleName(roleId)}"`, 'Role updated')}
+          trigger={(open) => (
+            <span className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-md border text-[0.8125rem] font-medium transition-colors ${open ? 'border-brand-400 bg-brand-50/50 text-brand-700' : 'border-canvas-border text-ink-700 hover:border-ink-300/70 hover:bg-canvas'}`}>
+              {item.roleName}
+              <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} />
+            </span>
+          )}
+        />
+      ),
+    },
+    {
+      key: 'team', label: 'Team', sortable: true,
+      render: (item) => {
+        const isUnassigned = item.team === '—';
+        return (
+          <InlineCellSelect
+            current={item.team}
+            options={teamNames.map(t => ({ value: t, label: t }))}
+            onPick={(t) => applyChange(item, { team: t }, `Moved ${item.name} to ${t}`, `Moved to ${t}`)}
+            footer={!isUnassigned ? (close) => (
+              <>
+                <div className="h-px bg-canvas-border my-1 mx-1.5" />
+                <button
+                  onClick={e => { e.stopPropagation(); applyChange(item, { team: '—' }, `Removed ${item.name} from team`, 'Removed from team'); close(); }}
+                  className="no-focus-ring flex w-full items-center gap-2 px-2.5 h-8 rounded-lg text-[0.8125rem] text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
+                >
+                  <X size={13} className="shrink-0" /> Remove from team
+                </button>
+              </>
+            ) : undefined}
+            trigger={(open) => (
+              <span className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-md border text-[0.8125rem] font-medium transition-colors ${
+                open ? 'border-brand-400 bg-brand-50/50 text-brand-700'
+                : isUnassigned ? 'border-dashed border-canvas-border text-ink-400 hover:border-ink-300/70 hover:bg-canvas'
+                : 'border-canvas-border text-ink-700 hover:border-ink-300/70 hover:bg-canvas'
+              }`}>
+                {isUnassigned ? 'Assign team' : item.team}
+                <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180 text-brand-600' : 'text-ink-400'}`} />
+              </span>
+            )}
+          />
+        );
+      },
+    },
+    {
+      // Status is read-only here — a display badge, matching every other registry
+      // on the platform. Status is changed deliberately in the Manage modal (one
+      // user) or the bulk bar (many), never inline on the label.
+      key: 'status', label: 'Status', sortable: true,
+      render: (item) => <StatusBadge status={STATUS_MAP[item.status] || 'draft'} />,
+    },
+    { key: 'lastLogin', label: 'Last Login', sortable: true, render: (item) => <span className="text-[0.75rem] text-ink-500 tabular-nums">{item.lastLogin}</span> },
+    {
+      // Invited (pending) rows get invite-specific actions — Resend / Revoke —
+      // instead of Manage; everyone else gets Manage.
+      key: 'action', label: '', sortable: false, align: 'right', width: '184px',
+      render: (item) => (
+        <RowActions>
+          {item.status === 'Invited' ? (
+            <>
+              <button className={BTN_ROW} onClick={e => { e.stopPropagation(); setInviteAction({ kind: 'resend', user: item }); }}><Send size={12} />Resend</button>
+              <button
+                onClick={e => { e.stopPropagation(); setInviteAction({ kind: 'revoke', user: item }); }}
+                className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-risk-700 hover:bg-risk-50 hover:border-risk-200 transition-colors cursor-pointer"
+              >
+                <X size={12} />Revoke
+              </button>
+            </>
+          ) : (
+            <button className={BTN_ROW} onClick={e => { e.stopPropagation(); setManageUser(item); }}><Pencil size={12} />Manage</button>
+          )}
+        </RowActions>
+      ),
+    },
+  ];
+
+  return (
+    <motion.div
+      initial={prefersReduced ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
+    >
+      {/* Toolbar — search + status filter chips (left) · filters + primary action
+          (right). The chips are counts that double as a one-click status filter
+          (All / Active / Invited / Suspended); sitting beside search keeps People
+          on a single control row, matching the other tabs. Pinned so it stays
+          reachable while the table scrolls under it. */}
+      <div className="mb-4 sticky top-0 z-20 bg-canvas pt-1 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <MemberSearch value={search} onChange={setSearch} placeholder="Search by name or email..." className="w-full sm:w-[260px]" />
+          {users.length > 0 && stats.map(s => {
+            const on = STATUS_BY_KEY[s.key] === statusFilter;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setStatusFilter(STATUS_BY_KEY[s.key] ?? null)}
+                aria-pressed={on}
+                className={`group/chip inline-flex items-center gap-2 pl-2.5 pr-1.5 h-8 rounded-lg border text-[0.8125rem] font-medium transition-all cursor-pointer ${
+                  on
+                    ? 'border-brand-300 bg-brand-50 text-brand-700 ring-1 ring-brand-200/60'
+                    : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-canvas hover:border-ink-300/70'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${CHIP_DOT[s.key] ?? 'bg-ink-300'}`} aria-hidden="true" />
+                {s.key === 'total' ? 'All' : s.label}
+                <span className={`min-w-[1.25rem] px-1.5 h-[1.375rem] inline-flex items-center justify-center rounded-md text-[0.75rem] font-semibold tabular-nums transition-colors ${
+                  on ? 'bg-brand-100 text-brand-700' : 'bg-canvas text-ink-500 group-hover/chip:bg-canvas-elevated'
+                }`}>{s.value}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {hasFilter && (
+            <button type="button" onClick={clearFilters} className="mr-0.5 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer">Clear all</button>
+          )}
+          <ColumnFilter variant="button" label="Role" options={roleOptions} value={roleFilter} onChange={setRoleFilter} align="end" />
+          <ColumnFilter variant="button" label="Team" options={teamOptions} value={teamFilter} onChange={setTeamFilter} align="end" />
+          <span className="hidden sm:block w-px h-5 bg-canvas-border" />
+          <button className={BTN_CTA_PRIMARY} onClick={onInvite}><UserPlus size={14} />Invite User</button>
+        </div>
+      </div>
+
+      {/* Bulk action bar — floating brand-900 pill, shown only while a selection
+          is active. Acts on every selected user at once. */}
+      <AnimatePresence>
+        {selectedCount > 0 && (
+          <BulkBar count={selectedCount} total={visibleUsers.length} allSelected={allVisibleSelected} onSelectAll={selectAllVisible} onClear={clearSelection}>
+            <InlineCellSelect
+              current="" menuWidth="w-48" direction="up"
+              options={teamNames.map(t => ({ value: t, label: t }))}
+              onPick={(t) => bulkAssignTeam(t)}
+              trigger={(open) => (
+                <span className={BULK_ACTION}>
+                  <Users size={14} /> Assign team <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                </span>
+              )}
+            />
+            <InlineCellSelect
+              current="" menuWidth="w-44" direction="up"
+              options={USER_STATUSES.map(s => ({ value: s, label: s, node: <StatusBadge status={STATUS_MAP[s]} /> }))}
+              onPick={(s) => {
+                const next = s as UserStatus;
+                // Gate access-revoking states behind the transfer confirm when any
+                // selected user owns a team; otherwise apply immediately.
+                if ((next === 'Suspended' || next === 'Locked') && selectedOwnerTeams.length > 0) setPendingBulkStatus(next);
+                else bulkSetStatus(next);
+              }}
+              trigger={(open) => (
+                <span className={BULK_ACTION}>
+                  <Check size={14} /> Set status <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                </span>
+              )}
+            />
+            <button onClick={() => setConfirmBulkRemove(true)} className={BULK_ACTION_RISK}>
+              <Trash2 size={14} /> Remove
+            </button>
+          </BulkBar>
+        )}
+      </AnimatePresence>
+
+      <SmartTable
+        columns={columns}
+        data={visibleUsers}
+        keyField="email"
+        searchable={false}
+        paginated
+        pageSize={10}
+        stickyHeader
+        stickyHeaderTop="top-11"
+        noRowHover
+        isRowSelected={(item) => selected.has(item.email)}
+        onRowClick={(item) => setManageUser(item)}
+        emptyContent={
+          <EmptyState
+            icon={Users}
+            size="compact"
+            title={hasFilter ? 'No users match your filters' : 'No users yet'}
+            body={hasFilter ? 'Try a different search, or clear the active filters.' : 'Invite a member to get started.'}
+            action={hasFilter
+              ? <button className={BTN_CTA_OUTLINE} onClick={clearFilters}>Clear filters</button>
+              : <button className={BTN_CTA_PRIMARY} onClick={onInvite}><UserPlus size={14} />Invite User</button>}
+          />
+        }
+      />
+
+      <AnimatePresence>
+        {manageUser && <UserManageModal key="user-manage" user={manageUser} onClose={() => setManageUser(null)} onManageRole={onManageRole} />}
+      </AnimatePresence>
+
+      <ConfirmationModal
+        open={confirmBulkRemove}
+        title={`Remove ${selectedCount} user${selectedCount !== 1 ? 's' : ''}?`}
+        description={<>
+          This will remove the {selectedCount} selected user{selectedCount !== 1 ? 's' : ''}. This action cannot be undone.
+          {selectedOwnerTeams.length > 0 && (
+            <>
+              <span className="mt-2 block text-risk-700">⚠ {selectedOwnerTeams.length === 1 ? 'A selected user owns a team' : 'Selected users own teams'}. Choose who inherits {selectedOwnerTeams.length === 1 ? 'it' : 'each'}:</span>
+              {bulkTransferPicker}
+            </>
+          )}
+        </>}
+        confirmLabel="Remove"
+        tone="destructive"
+        onConfirm={() => { applyBulkTransfers(); bulkRemove(); }}
+        onClose={() => setConfirmBulkRemove(false)}
+      />
+
+      <ConfirmationModal
+        open={!!inviteAction}
+        title={inviteAction?.kind === 'revoke'
+          ? `Revoke invitation for ${inviteAction.user.name}?`
+          : `Resend invitation to ${inviteAction?.user.name ?? ''}?`}
+        description={inviteAction?.kind === 'revoke'
+          ? <>This removes the pending invitation for <span className="font-semibold">{inviteAction.user.name}</span> ({inviteAction.user.email}). They’ll need a new invite to join.</>
+          : <>This re-sends the invitation email to <span className="font-semibold">{inviteAction?.user.email}</span>.</>}
+        confirmLabel={inviteAction?.kind === 'revoke' ? 'Revoke Invitation' : 'Resend Invitation'}
+        tone={inviteAction?.kind === 'revoke' ? 'destructive' : 'primary'}
+        onConfirm={() => {
+          if (inviteAction?.kind === 'revoke') revokeInvite(inviteAction.user);
+          else if (inviteAction) resendInvite(inviteAction.user);
+          setInviteAction(null);
+        }}
+        onClose={() => setInviteAction(null)}
+      />
+
+      <ConfirmationModal
+        open={pendingBulkStatus !== null}
+        title={`${pendingBulkStatus === 'Locked' ? 'Lock' : 'Suspend'} ${selectedCount} user${selectedCount !== 1 ? 's' : ''}?`}
+        description={<>
+          {selectedOwnerTeams.length === 1 ? 'A selected user owns a team' : 'Selected users own teams'}. {pendingBulkStatus === 'Locked' ? 'Locking' : 'Suspending'} them hands it off — choose who inherits {selectedOwnerTeams.length === 1 ? 'it' : 'each'}:
+          {bulkTransferPicker}
+        </>}
+        confirmLabel={pendingBulkStatus === 'Locked' ? 'Lock & transfer' : 'Suspend & transfer'}
+        tone="destructive"
+        onConfirm={() => { applyBulkTransfers(); if (pendingBulkStatus) bulkSetStatus(pendingBulkStatus); setPendingBulkStatus(null); }}
+        onClose={() => setPendingBulkStatus(null)}
+      />
+
+    </motion.div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Teams section
+ * ════════════════════════════════════════════════════════════════════════ */
+
+type TeamRow = { id: string; name: string; count: number; members: string[]; team: AdminTeam } & Record<string, unknown>;
+
+/* ── Inline rename — click the pencil to edit a name in place (Enter / blur
+      commits, Esc cancels). The low-click parallel to People's inline edits. ── */
+function InlineRename({ value, onCommit }: { value: string; onCommit: (next: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef(false);
+
+  useEffect(() => {
+    if (editing) requestAnimationFrame(() => inputRef.current?.select());
+  }, [editing]);
+
+  const startEditing = () => { setDraft(value); setEditing(true); };
+
+  const commit = () => {
+    if (cancelRef.current) { cancelRef.current = false; setEditing(false); return; }
+    const v = draft.trim();
+    if (v && v !== value) onCommit(v);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { cancelRef.current = true; inputRef.current?.blur(); }
+        }}
+        onBlur={commit}
+        className="no-focus-ring w-full max-w-[15rem] px-2 h-7 -ml-2 rounded-md border border-brand-600 bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-800 outline-none"
+      />
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 group/rename min-w-0">
+      <span className="truncate text-[0.8125rem] font-semibold text-ink-800">{value}</span>
+      <button
+        onClick={e => { e.stopPropagation(); startEditing(); }}
+        className="no-focus-ring opacity-0 group-hover/rename:opacity-100 text-ink-400 hover:text-brand-700 transition-opacity cursor-pointer shrink-0"
+        aria-label="Rename team"
+      >
+        <Pencil size={12} />
+      </button>
+    </span>
+  );
+}
+
+function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
+  const prefersReduced = useReducedMotion();
+  const { teams, updateTeam, removeTeam } = useAdminData();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const [editTeam, setEditTeam] = useState<AdminTeam | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const renameTeam = (t: AdminTeam, name: string) => {
+    updateTeam(t.id, { name });
+    logEvent({ action: 'Update', description: `Renamed team "${t.name}" to "${name}"`, module: 'Admin', entity: 'Team' });
+    addToast({ message: 'Team renamed', type: 'success' });
+  };
+
+  const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const clearSelection = () => setSelected(new Set());
+  const selectedCount = selected.size;
+  const allSelected = teams.length > 0 && teams.every(t => selected.has(t.id));
+  const selectAll = () => setSelected(new Set(teams.map(t => t.id)));
+  const bulkRemove = () => {
+    const n = selectedCount;
+    selected.forEach(id => removeTeam(id));
+    logEvent({ action: 'Delete', description: `Deleted ${n} team${n !== 1 ? 's' : ''}`, module: 'Admin', entity: 'Team' });
+    addToast({ message: `${n} team${n !== 1 ? 's' : ''} deleted`, type: 'success' });
+    setConfirmBulkRemove(false);
+    clearSelection();
+  };
+
+  const tq = search.trim().toLowerCase();
+  const teamTableData: TeamRow[] = teams
+    .filter(t => !tq || t.name.toLowerCase().includes(tq) || t.members.some(m => m.toLowerCase().includes(tq)))
+    .map(t => ({ id: t.id, name: t.name, count: t.members.length, members: t.members, team: t }));
+  const columns: Column<TeamRow>[] = [
+    {
+      key: 'select', label: '', sortable: false, width: '40px',
+      render: (t) => (
+        <div onClick={e => e.stopPropagation()} className="flex items-center justify-center">
+          <Checkbox checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} ariaLabel="Select team" />
+        </div>
+      ),
+    },
+    {
+      key: 'name', label: 'Team', sortable: true,
+      render: (t) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+            <Users size={15} className="text-brand-700" />
+          </div>
+          <InlineRename value={t.name} onCommit={(name) => renameTeam(t.team, name)} />
+        </div>
+      ),
+    },
+    {
+      key: 'owner', label: 'Owner', sortable: false, width: '26%',
+      render: (t) => t.team.owner ? (
+        <div className="flex items-center gap-2 min-w-0">
+          <InitialsAvatar name={t.team.owner} size={26} />
+          <span className="text-[0.8125rem] text-ink-800 truncate">{t.team.owner}</span>
+          <OwnerBadge />
+        </div>
+      ) : <span className="text-[0.75rem] text-ink-400">Unassigned</span>,
+    },
+    {
+      key: 'count', label: 'Members', sortable: true, width: '12%',
       render: (t) => <span className={`text-[0.8125rem] tabular-nums ${t.count === 0 ? 'text-ink-400' : 'font-medium text-ink-800'}`}>{t.count}</span>,
     },
     {
@@ -1395,7 +1428,7 @@ function UsersTab({ subTab, onCreateTeam }: { subTab: 'users' | 'teams'; onCreat
       ),
     },
     {
-      key: 'action', label: '', sortable: false, align: 'right' as const, width: '120px',
+      key: 'action', label: '', sortable: false, align: 'right', width: '120px',
       render: (t) => (
         <RowActions>
           <button className={BTN_ROW} onClick={(e) => { e.stopPropagation(); setEditTeam(t.team); }}><Pencil size={12} />Manage</button>
@@ -1408,83 +1441,77 @@ function UsersTab({ subTab, onCreateTeam }: { subTab: 'users' | 'teams'; onCreat
     <motion.div
       initial={prefersReduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
       transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
     >
-      {/* KPI summary — hidden when the segment is truly empty (no records).
-          Users tiles double as status filters; Teams is display only. */}
-      {subTab === 'users' && users.length > 0 && (
-        <KpiRow stats={kpiStats} active={activeKpi} onSelect={(k) => setStatusFilter(STATUS_FILTER_MAP[k] ?? null)} />
-      )}
-      {subTab === 'teams' && teamsData.length > 0 && (
-        <KpiRow stats={teamKpiStats} />
-      )}
-
-      {/* Search — Users view only. The segmented nav + Create Team both live on
-          the AccessNav row above, so Teams goes straight to its cards. */}
-      {subTab === 'users' && (
-        <div className="mb-4">
-          <MemberSearch value={search} onChange={setSearch} placeholder="Search by name or email..." className="w-full sm:w-[300px]" />
-        </div>
-      )}
-
-      {subTab === 'users' ? (
-        <SmartTable
-          columns={columnsWithAction}
-          data={visibleUsers}
-          keyField="email"
-          searchable={false}
-          paginated
-          pageSize={10}
-          emptyContent={
-            <EmptyState
-              icon={Users}
-              size="compact"
-              title={(statusFilter || search) ? 'No users match your filters' : 'No users yet'}
-              body={(statusFilter || search) ? 'Try a different search, or clear the active filter.' : 'Invite a member to get started.'}
-              action={(statusFilter || search)
-                ? <button className={BTN_CTA_OUTLINE} onClick={() => { setStatusFilter(null); setSearch(''); }}>Clear filters</button>
-                : undefined}
-            />
-          }
-        />
-      ) : teamsData.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="No teams yet"
-          body="Group members for shared access and assignments."
-          action={<button className={BTN_CTA_PRIMARY} onClick={onCreateTeam}><Plus size={14} />Create Team</button>}
-        />
-      ) : (
-        <SmartTable
-          columns={teamColumns}
-          data={teamTableData}
-          keyField="id"
-          searchable={false}
-          paginated
-          pageSize={10}
-          onRowClick={(t) => setEditTeam(t.team)}
-        />
-      )}
+      {/* No KPI band — Teams opens straight into its toolbar + table (same as
+          Audit Log). KPIs are kept only on People, where they double as filters. */}
+      {/* Toolbar — search left · Create Team right (same skeleton as People/Audit). */}
+      <div className="mb-4 sticky top-0 z-20 bg-canvas pt-1 flex items-center justify-between gap-3 flex-wrap">
+        <MemberSearch value={search} onChange={setSearch} placeholder="Search teams or members..." className="w-full sm:w-[300px]" />
+        <button className={BTN_CTA_PRIMARY} onClick={onCreateTeam}><Plus size={14} />Create Team</button>
+      </div>
 
       <AnimatePresence>
-        {viewUser && <UserDetailDrawer key="user-detail" user={viewUser} onClose={() => setViewUser(null)} />}
-        {editUser && <UserEditDrawer key="user-edit" user={editUser} onClose={() => setEditUser(null)} />}
-        {editTeam && <EditTeamDrawer key="team-edit" team={editTeam} onClose={() => setEditTeam(null)} />}
+        {selectedCount > 0 && (
+          <BulkBar count={selectedCount} total={teams.length} allSelected={allSelected} onSelectAll={selectAll} onClear={clearSelection}>
+            <button onClick={() => setConfirmBulkRemove(true)} className={BULK_ACTION_RISK}>
+              <Trash2 size={14} /> Delete
+            </button>
+          </BulkBar>
+        )}
       </AnimatePresence>
+
+      <SmartTable
+        columns={columns}
+        data={teamTableData}
+        keyField="id"
+        searchable={false}
+        paginated
+        pageSize={10}
+        stickyHeader
+        stickyHeaderTop="top-11"
+        noRowHover
+        isRowSelected={(t) => selected.has(t.id)}
+        onRowClick={(t) => setEditTeam(t.team)}
+        emptyContent={
+          <EmptyState
+            icon={Users}
+            size="compact"
+            title={tq ? 'No teams match your search' : 'No teams yet'}
+            body={tq ? 'Try a different search.' : 'Group members for shared access and assignments.'}
+            action={tq
+              ? <button className={BTN_CTA_OUTLINE} onClick={() => setSearch('')}>Clear search</button>
+              : <button className={BTN_CTA_PRIMARY} onClick={onCreateTeam}><Plus size={14} />Create Team</button>}
+          />
+        }
+      />
+
+      <AnimatePresence>
+        {editTeam && <EditTeamModal key="team-edit" team={editTeam} onClose={() => setEditTeam(null)} />}
+      </AnimatePresence>
+
+      <ConfirmationModal
+        open={confirmBulkRemove}
+        title={`Delete ${selectedCount} team${selectedCount !== 1 ? 's' : ''}?`}
+        description={<>This will delete the {selectedCount} selected team{selectedCount !== 1 ? 's' : ''} and unassign their members.</>}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={bulkRemove}
+        onClose={() => setConfirmBulkRemove(false)}
+      />
     </motion.div>
   );
 }
 
-// Anchor for the date-range presets (Last 7/30/90 days). Midnight today.
+/* ════════════════════════════════════════════════════════════════════════
+ * Audit Log section
+ * ════════════════════════════════════════════════════════════════════════ */
+
 const AUDIT_TODAY = new Date(new Date().toISOString().slice(0, 10));
 
 const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
   {
-    key: 'timestamp',
-    label: 'Timestamp',
-    sortable: true,
-    width: '15%',
+    key: 'timestamp', label: 'Timestamp', sortable: true, width: '15%',
     render: (item) => {
       const [date, time] = (item.timestamp as string).split(' ');
       return (
@@ -1496,54 +1523,34 @@ const logColumns: Column<AuditLog & Record<string, unknown>>[] = [
     },
   },
   {
-    key: 'user',
-    label: 'Performed By',
-    sortable: true,
-    width: '17%',
+    key: 'user', label: 'Performed By', sortable: true, width: '17%',
     render: (item) => {
       const name = item.user as string;
       const unknown = name === 'Unknown';
       return (
         <div className="flex items-center gap-3 min-w-0">
-          <InitialsAvatar name={unknown ? 'U' : name} size={32} />
-          <span className={`text-[0.8125rem] truncate ${unknown ? 'italic text-ink-400' : 'font-medium text-ink-800'}`}>{name}</span>
+          <InitialsAvatar name={unknown ? 'U' : name} size={36} />
+          <span className={`text-[0.875rem] truncate ${unknown ? 'italic text-ink-400' : 'font-semibold text-ink-900'}`}>{name}</span>
         </div>
       );
     },
   },
+  { key: 'action', label: 'Action', sortable: true, width: '9%', render: (item) => <ActionBadge action={item.action as string} /> },
   {
-    key: 'action',
-    label: 'Action',
-    sortable: true,
-    width: '9%',
-    render: (item) => <ActionBadge action={item.action as string} />,
-  },
-  {
-    // No fixed width — Activity is the flex column that fills the row, so the
-    // Result pill anchors cleanly to the right edge with no dead gap.
-    key: 'description',
-    label: 'Activity',
-    sortable: false,
+    key: 'description', label: 'Activity', sortable: false,
     render: (item) => (
       <div className="min-w-0">
-        <div className="text-[0.8125rem] text-ink-800 leading-snug truncate">{item.description as string}</div>
+        <div className="text-[0.8125rem] font-medium text-ink-900 leading-snug truncate">{item.description as string}</div>
         <div className="text-[0.6875rem] text-ink-400 mt-1 font-medium uppercase tracking-[0.04em] truncate">
           {item.module as string} · {item.entity as string}
         </div>
       </div>
     ),
   },
-  {
-    key: 'status',
-    label: 'Result',
-    sortable: true,
-    width: '10%',
-    align: 'right',
-    render: (item) => <ResultBadge result={item.status as string} />,
-  },
+  { key: 'status', label: 'Result', sortable: true, width: '10%', align: 'right', render: (item) => <ResultBadge result={item.status as string} /> },
 ];
 
-function AuditLogsTab() {
+function AuditLogSection({ action }: { action?: React.ReactNode }) {
   const prefersReduced = useReducedMotion();
   const { logs } = useAdminData();
   const tableData = logs.map(l => ({ ...l } as AuditLog & Record<string, unknown>));
@@ -1555,16 +1562,10 @@ function AuditLogsTab() {
   const [dateOpen, setDateOpen] = useState(false);
 
   const uniqueUsers = [...new Set(logs.map(l => l.user))];
-  const hasAnyFilter =
-    searchQuery.length > 0 || actionFilter.length > 0 || resultFilter.length > 0 ||
-    userFilter.length > 0 || isDateFilterActive(dateFilter);
+  const hasAnyFilter = searchQuery.length > 0 || actionFilter.length > 0 || resultFilter.length > 0 || userFilter.length > 0 || isDateFilterActive(dateFilter);
 
   const clearAll = () => {
-    setSearchQuery('');
-    setActionFilter([]);
-    setResultFilter([]);
-    setUserFilter([]);
-    setDateFilter(DEFAULT_DATE_FILTER);
+    setSearchQuery(''); setActionFilter([]); setResultFilter([]); setUserFilter([]); setDateFilter(DEFAULT_DATE_FILTER);
   };
 
   const filtered = tableData.filter(l => {
@@ -1574,9 +1575,7 @@ function AuditLogsTab() {
     if (!dateInFilter(l.timestamp as string, dateFilter, AUDIT_TODAY)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const hit = ['user', 'description', 'module', 'entity'].some(
-        k => String(l[k] ?? '').toLowerCase().includes(q)
-      );
+      const hit = ['user', 'description', 'module', 'entity'].some(k => String(l[k] ?? '').toLowerCase().includes(q));
       if (!hit) return false;
     }
     return true;
@@ -1584,108 +1583,113 @@ function AuditLogsTab() {
 
   return (
     <motion.div
-      initial={prefersReduced ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      initial={prefersReduced ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
     >
-      {/* One cohesive panel: filter header + table share a single card, so the
-          top reads anchored instead of a toolbar floating over empty space. */}
-      <div className="bg-canvas-elevated border border-canvas-border rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <MemberSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search logs..." className="w-full sm:w-[260px]" />
-          </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {hasAnyFilter && (
-              <button
-                type="button"
-                onClick={clearAll}
-                className="mr-0.5 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
-              >
-                Clear all
-              </button>
-            )}
-            <ColumnFilter
-              variant="button"
-              label="User"
-              options={uniqueUsers}
-              value={userFilter}
-              onChange={setUserFilter}
-              align="end"
-              renderOption={(name) => (
-                <>
-                  <InitialsAvatar name={name === 'Unknown' ? 'U' : name} size={20} />
-                  <span className="truncate">{name}</span>
-                </>
-              )}
-            />
-            <ColumnFilter variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end" />
-            <ColumnFilter variant="button" label="Result" options={['Success', 'Failed']} value={resultFilter} onChange={setResultFilter} align="end" />
-            {/* Reused platform date dropdown — presets + custom range, matching the filter pills. */}
-            <DateFilterPicker
-              filter={dateFilter}
-              open={dateOpen}
-              onToggle={() => setDateOpen(o => !o)}
-              onClose={() => setDateOpen(false)}
-              onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
-              today={AUDIT_TODAY}
-              triggerHeight="h-8"
-            />
-          </div>
+      {/* No KPI band: our audit log is a small, static, fully-visible table —
+          Total/Today/Failed counts restate what the rows already show. Filter
+          via the controls below; revisit a KPI band only if this becomes a
+          live, high-volume stream. */}
+      <div className="mb-4 sticky top-0 z-20 bg-canvas pt-1 flex items-center justify-between gap-3 flex-wrap">
+        <MemberSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search logs..." className="w-full sm:w-[300px]" />
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {hasAnyFilter && (
+            <button type="button" onClick={clearAll} className="mr-0.5 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer">Clear all</button>
+          )}
+          <ColumnFilter
+            variant="button" label="User" options={uniqueUsers} value={userFilter} onChange={setUserFilter} align="end"
+            renderOption={(name) => (<><InitialsAvatar name={name === 'Unknown' ? 'U' : name} size={20} /><span className="truncate">{name}</span></>)}
+          />
+          <ColumnFilter variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end" />
+          <ColumnFilter variant="button" label="Result" options={['Success', 'Failed']} value={resultFilter} onChange={setResultFilter} align="end" />
+          <DateFilterPicker
+            filter={dateFilter}
+            open={dateOpen}
+            onToggle={() => setDateOpen(o => !o)}
+            onClose={() => setDateOpen(false)}
+            onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
+            today={AUDIT_TODAY}
+            triggerHeight="h-8"
+          />
+          {action && (
+            <>
+              <span className="hidden lg:block w-px h-5 bg-canvas-border" />
+              {action}
+            </>
+          )}
         </div>
-
-        <SmartTable
-          columns={logColumns}
-          data={filtered}
-          keyField="timestamp"
-          variant="modern"
-          searchable={false}
-          paginated
-          pageSize={10}
-          emptyContent={
-            <EmptyState
-              icon={ScrollText}
-              size="compact"
-              title={hasAnyFilter ? 'No audit logs match your filters' : 'No audit activity yet'}
-              body={hasAnyFilter ? 'Try a different search, or clear the active filters.' : 'Activity across the platform will appear here.'}
-              action={hasAnyFilter ? <button className={BTN_CTA_OUTLINE} onClick={clearAll}>Clear filters</button> : undefined}
-            />
-          }
-        />
       </div>
+
+      <SmartTable
+        columns={logColumns}
+        data={filtered}
+        keyField="timestamp"
+        searchable={false}
+        paginated
+        pageSize={10}
+        stickyHeader
+        stickyHeaderTop="top-11"
+        noRowHover
+        emptyContent={
+          <EmptyState
+            icon={ScrollText}
+            size="compact"
+            title={hasAnyFilter ? 'No audit logs match your filters' : 'No audit activity yet'}
+            body={hasAnyFilter ? 'Try a different search, or clear the active filters.' : 'Activity across the platform will appear here.'}
+            action={hasAnyFilter ? <button className={BTN_CTA_OUTLINE} onClick={clearAll}>Clear filters</button> : undefined}
+          />
+        }
+      />
     </motion.div>
   );
 }
 
-export default function AdminView({ activeTab }: Props) {
-  // The sidebar still passes legacy view ids (users/roles/logs); map them onto
-  // the merged Access tab + its segment.
-  const initialTab: TabId = activeTab === 'logs' ? 'logs' : 'access';
-  const initialSeg: AccessSeg = activeTab === 'roles' ? 'roles' : 'users';
+/* ════════════════════════════════════════════════════════════════════════
+ * Page shell
+ * ════════════════════════════════════════════════════════════════════════ */
 
-  const prefersReduced = useReducedMotion();
-  const { addToast } = useToast();
-  const { can, roles } = useCurrentUser();
+export default function AdminView({ activeTab }: Props) {
+  // Map sidebar view ids onto the flat four-tab shell.
+  const initialSection: SectionId = activeTab === 'logs' ? 'logs' : activeTab === 'roles' ? 'roles' : 'people';
+
+  const { can } = useCurrentUser();
   const logEvent = useAuditLog();
-  const { logs, users, teams } = useAdminData();
-  const [currentTab, setCurrentTab] = useState<TabId>(initialTab);
-  const [accessSeg, setAccessSeg] = useState<AccessSeg>(initialSeg);
+  const { logs } = useAdminData();
+  const { addToast } = useToast();
+
+  const [section, setSection] = useState<SectionId>(initialSection);
+  // When a user's Manage panel jumps to the role editor, focus that role. The
+  // nonce forces RolesWorkspace to remount so it re-selects, even for the same id.
+  const [roleFocusId, setRoleFocusId] = useState<string | undefined>(undefined);
+  const [roleFocusNonce, setRoleFocusNonce] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [createRoleSeed, setCreateRoleSeed] = useState<RoleSeed | null>(null);
-  const accessCounts: Record<AccessSeg, number> = { users: users.length, teams: teams.length, roles: roles.length };
 
   const openCreateRole = (seed?: RoleSeed) => { setCreateRoleSeed(seed ?? null); setCreateRoleOpen(true); };
+
+  // Jump from a user's Manage panel to that role's permission editor. The nonce
+  // forces RolesWorkspace to remount so it re-selects, even for the same id.
+  const goManageRole = (roleId: string) => {
+    setRoleFocusId(roleId);
+    setRoleFocusNonce(n => n + 1);
+    setSection('roles');
+  };
+
+  const sections: SectionDef[] = [
+    { id: 'people', label: 'People', icon: User },
+    { id: 'teams', label: 'Teams', icon: Users },
+    { id: 'roles', label: 'Roles & Permissions', icon: Shield },
+    { id: 'logs', label: 'Audit Log', icon: ScrollText },
+  ];
+
   const exportLogs = () => {
-    // The relevant audit fields only — no IP. Quote every cell and escape any
-    // embedded quotes so descriptions with commas stay in one column.
     const headers = ['Timestamp', 'Performed By', 'Action', 'Activity', 'Module', 'Entity', 'Result'];
     const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = logs.map(l => [l.timestamp, l.user, l.action, l.description, l.module, l.entity, l.status].map(esc).join(','));
     const csv = [headers.map(esc).join(','), ...rows].join('\r\n');
-
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1695,35 +1699,28 @@ export default function AdminView({ activeTab }: Props) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-
     logEvent({ action: 'Export', description: `Exported audit log as CSV (${logs.length} events)`, module: 'Admin', entity: 'Audit Log' });
     addToast({ message: `Exported ${logs.length} audit events as CSV.`, type: 'success' });
   };
 
-  // Access primary action sits on the AccessNav row (right side), right above
-  // the content — contextual to the active segment. Audit Logs keeps Export in
-  // the header (it has no sub-nav row).
-  const accessAction =
-    accessSeg === 'roles' ? (
-      <button className={BTN_CTA_PRIMARY} onClick={() => openCreateRole()}><Plus size={14} />Create Role</button>
-    ) : accessSeg === 'teams' ? (
-      <button className={BTN_CTA_PRIMARY} onClick={() => setCreateTeamOpen(true)}><Plus size={14} />Create Team</button>
-    ) : (
-      <button className={BTN_CTA_PRIMARY} onClick={() => setInviteOpen(true)}><UserPlus size={14} />Invite User</button>
-    );
-
-  const headerCta =
-    currentTab === 'logs' && can('ad_logs_export')
-      ? <button className={BTN_CTA_OUTLINE} onClick={exportLogs}><Download size={14} />Export CSV</button>
-      : null;
+  // Each tab's primary action lives on its own toolbar (right), so every tab
+  // reads the same: KPI band → search-left / action-right → content. Export is
+  // sized to the h-8 filter chips so the Audit toolbar row stays flush.
+  const exportAction = can('ad_logs_export')
+    ? <button onClick={exportLogs} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[12px] font-medium hover:border-brand-200 hover:bg-canvas transition-colors cursor-pointer"><Download size={13} />Export CSV</button>
+    : null;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
-      {/* Header strip — full-bleed bg-canvas-elevated with ambient FloatingLines,
-          serif title + subhead, and underline tabs sitting on the strip border.
-          Mirrors the Knowledge Hub chrome. */}
+      {/* Header strip — matches Knowledge Hub: a single full-bleed
+          bg-canvas-elevated panel (extends past the page insets via negative
+          margins) with ambient FloatingLines texture behind a serif display
+          title, and the section tabs sitting on the strip's bottom hairline. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
         <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+          {/* Ambient FloatingLines — top + bottom waves only, low opacity, so
+              the lines read as brand texture behind the type, never a competing
+              element. Content sits in normal flow above the absolute canvas. */}
           <FloatingLines
             enabledWaves={['top', 'bottom']}
             lineCount={3}
@@ -1741,13 +1738,8 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
-                <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Manage users, teams, roles, and audit logs.</p>
-              </div>
-              {headerCta && <div className="shrink-0 pt-1">{headerCta}</div>}
-            </div>
+            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
+            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Manage people, teams, roles, and the audit trail.</p>
           </motion.div>
 
           <motion.div
@@ -1756,60 +1748,37 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
             className="-mb-px"
           >
-            <div className="flex gap-6">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = currentTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setCurrentTab(tab.id)}
-                    className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
-                      isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Icon size={14} />
-                      {tab.label}
-                    </span>
-                    {isActive && (
-                      <motion.div
-                        layoutId="admin-tab-underline"
-                        className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
-                        transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32 }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <SectionTabs sections={sections} current={section} onSelect={setSection} />
           </motion.div>
         </div>
       </div>
 
-      {/* Content — header strip is fixed above; this region scrolls. */}
-      <div className="px-6 lg:px-12 xl:px-[124px] pt-5 pb-8 flex-1 min-h-0 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          {currentTab === 'access' ? (
-            <div key="access">
-              <AccessNav seg={accessSeg} setSeg={setAccessSeg} counts={accessCounts} action={accessAction} />
-              {/* Segment switch: the new content mounts (per-segment key) and
-                  plays its own enter motion. No AnimatePresence/exit, so the old
-                  is replaced instantly — a snappy fade-in with no empty gap. */}
-              {accessSeg === 'roles'
-                ? <RolesTab key="roles" onCreateRole={openCreateRole} />
-                : <UsersTab key={accessSeg} subTab={accessSeg} onCreateTeam={() => setCreateTeamOpen(true)} />}
-            </div>
-          ) : (
-            <AuditLogsTab key="logs" />
-          )}
-        </AnimatePresence>
+      {/* Content — header strip is fixed above; this region scrolls (except the
+          Roles two-pane, which manages its own internal scroll). The top inset
+          lives on the inner content, not this scroll container, so a pinned
+          toolbar's sticky `top-0` reaches the true top and rows can't leak
+          through the padding above it. */}
+      <div className={`px-6 lg:px-12 xl:px-[124px] pb-8 flex-1 min-h-0 ${section === 'roles' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        {section === 'people' ? (
+          <div className="pt-4"><PeopleSection key="people" onManageRole={goManageRole} onInvite={() => setInviteOpen(true)} /></div>
+        ) : section === 'teams' ? (
+          <div className="pt-4"><TeamsSection key="teams" onCreateTeam={() => setCreateTeamOpen(true)} /></div>
+        ) : section === 'roles' ? (
+          // No KPI band here: Total/System/Custom/Assigned were vanity counts
+          // (derivable from, or duplicated by, the role list + People tab). The
+          // role list is self-evident, so the two-pane workspace fills the tab.
+          <div className="pt-4 h-full min-h-0">
+            <RolesWorkspace key={`roles-${roleFocusNonce}`} initialRoleId={roleFocusId} onCreateRole={openCreateRole} />
+          </div>
+        ) : (
+          <div className="pt-4"><AuditLogSection key="logs" action={exportAction} /></div>
+        )}
       </div>
 
       <AnimatePresence>
-        {inviteOpen && <InviteUserDrawer key="invite" onClose={() => setInviteOpen(false)} />}
-        {createTeamOpen && <CreateTeamDrawer key="createteam" onClose={() => setCreateTeamOpen(false)} />}
-        {createRoleOpen && <CreateRoleDrawer key="createrole" seed={createRoleSeed} onClose={() => { setCreateRoleOpen(false); setCreateRoleSeed(null); }} />}
+        {inviteOpen && <InviteUserModal key="invite" onClose={() => setInviteOpen(false)} />}
+        {createTeamOpen && <CreateTeamModal key="createteam" onClose={() => setCreateTeamOpen(false)} />}
+        {createRoleOpen && <CreateRoleModal key="createrole" seed={createRoleSeed} onClose={() => { setCreateRoleOpen(false); setCreateRoleSeed(null); }} />}
       </AnimatePresence>
     </div>
   );

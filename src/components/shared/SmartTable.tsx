@@ -22,7 +22,18 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   paginated?: boolean;
   pageSize?: number;
   striped?: boolean;
+  /** Pin the column-header row while the rows scroll. The table sits in the
+   *  page's scroll container (not its own), so the card's clip + the body's
+   *  horizontal-scroll wrapper are dropped to let `position: sticky` escape to
+   *  the page scroller. Pair with `stickyHeaderTop` when a toolbar is pinned
+   *  above the table, so the header parks just under it instead of behind it. */
   stickyHeader?: boolean;
+  /** Tailwind `top-*` class for the sticky header's offset. Defaults to
+   *  `top-0`; pass e.g. `top-11` to clear a pinned toolbar of that height. */
+  stickyHeaderTop?: string;
+  /** Opt out of the row hover tint (e.g. admin tables where it adds no value).
+   *  Selected-row treatment is unaffected. */
+  noRowHover?: boolean;
   expandable?: (item: T) => ReactNode;
   onRowClick?: (item: T) => void;
   emptyMessage?: string;
@@ -45,6 +56,11 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   /** Show the resting sort-hint icon on sortable column headers even in the
    *  'modern' variant (which otherwise hides it until a column is active). */
   showSortHint?: boolean;
+  /** Opt-in selected-row treatment. When provided, rows where this returns true
+   *  get a brand tint + a left accent bar (the first cell carries the bar). Used
+   *  by surfaces that own selection externally (e.g. Admin checkboxes). Off by
+   *  default, so every other SmartTable is unaffected. */
+  isRowSelected?: (item: T, index: number) => boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -71,6 +87,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
   paginated = true,
   pageSize = 8,
   striped = true,
+  stickyHeader = false,
+  stickyHeaderTop = 'top-0',
+  noRowHover = false,
   expandable,
   onRowClick,
   emptyMessage = 'No results found',
@@ -82,6 +101,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   hideResultCount = false,
   searchBg = 'bg-white',
   showSortHint = false,
+  isRowSelected,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -151,7 +171,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
       className={
         isModern
           ? `${className}`
-          : `bg-white border border-border-light overflow-hidden rounded-xl ${className}`
+          // When the header is pinned, drop `overflow-hidden` — it would clip the
+          // sticky context and trap the header inside the card.
+          : `bg-white border border-border-light rounded-xl ${stickyHeader ? '' : 'overflow-hidden'} ${className}`
       }
     >
       {/* Toolbar */}
@@ -185,12 +207,13 @@ export default function SmartTable<T extends Record<string, unknown>>({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Table — `overflow-x-auto` also forces overflow-y to `auto`, which would
+          trap the sticky header; drop it when the header is pinned. */}
+      <div className={stickyHeader ? '' : 'overflow-x-auto'}>
         <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
             <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
-              {expandable && <th className="w-8" />}
+              {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : ''}`} />}
               {columns.map((col, ci) => (
                 <th
                   key={col.key}
@@ -200,6 +223,10 @@ export default function SmartTable<T extends Record<string, unknown>>({
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
+                    // Pin the header row to the page scroller, parked under any
+                    // sticky toolbar via `stickyHeaderTop`. Each cell carries the
+                    // header fill so scrolled rows don't show through.
+                    stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : '',
                   ].filter(Boolean).join(' ')}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
@@ -251,6 +278,8 @@ export default function SmartTable<T extends Record<string, unknown>>({
                 transition: { delay: i * 0.02 },
               } : {};
 
+              const selected = isRowSelected?.(item, safePage * pageSize + i) ?? false;
+
               return (
                 <Wrapper key={String(id)} {...wrapperProps}>
                   <tr
@@ -259,9 +288,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
                       isModern
                         ? 'border-b border-border-light/70'
                         : 'border-b border-border-light last:border-0',
-                      stripeOn && i % 2 === 1 ? 'bg-surface-2/30' : '',
+                      selected ? 'bg-brand-50/60' : (stripeOn && i % 2 === 1 ? 'bg-surface-2/30' : ''),
                       onRowClick || expandable ? 'cursor-pointer' : '',
-                      isModern ? 'hover:bg-paper-50/50' : 'hover:bg-primary-xlight/50',
+                      noRowHover ? '' : (selected ? 'hover:bg-brand-50/70' : (isModern ? 'hover:bg-paper-50/50' : 'hover:bg-primary-xlight/50')),
                     ].filter(Boolean).join(' ')}
                     onClick={() => {
                       if (expandable) handleToggleExpand(id);
@@ -283,6 +312,8 @@ export default function SmartTable<T extends Record<string, unknown>>({
                           isModern
                             ? `py-4 ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                             : 'px-4 py-3',
+                          // Opt-in selected-row accent: a left brand bar carried by the first cell.
+                          ci === 0 && selected ? 'shadow-[inset_3px_0_0_#6A12CD]' : '',
                           alignClass(col.align),
                         ].filter(Boolean).join(' ')}
                       >
