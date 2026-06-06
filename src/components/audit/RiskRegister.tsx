@@ -16,7 +16,8 @@ import { LinkControlPickerDrawer } from './RacmListTable';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
 import { addCreatedControl, useCreatedControls } from '../../data/createdControlsStore';
 import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
-import { getRiskRelationships } from '../../data/processHubJoins';
+import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
+import { BUSINESS_PROCESSES } from '../../data/mockData';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -289,234 +290,181 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
   );
 }
 
-// ─── Risk Detail Drawer ─────────────────────────────────────────────────────
+// (Risk detail side sheet retired — editing now lives on the full detail page.)
 
-function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClose: () => void; onUpdate: (r: RiskEntry) => void }) {
-  const { addToast } = useToast();
-  const [editing, setEditing] = useState(false);
-
-  const handleStatusChange = (newStatus: RiskLifecycleStatus) => {
-    onUpdate({ ...risk, status: newStatus, lastReviewed: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) });
-    addToast({ message: `Risk status changed to ${newStatus}`, type: 'success' });
-  };
-
-  const transitions: Partial<Record<RiskLifecycleStatus, { label: string; status: RiskLifecycleStatus; cls: string }[]>> = {
-    Draft: [
-      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    Active: [
-      { label: 'Mark Under Review', status: 'Under Review', cls: 'bg-high-50 text-high-700 hover:bg-high-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    'Under Review': [
-      { label: 'Activate', status: 'Active', cls: 'bg-compliant-50 text-compliant-700 hover:bg-compliant-50/70' },
-      { label: 'Archive', status: 'Archived', cls: 'bg-paper-100 text-ink-500 hover:bg-paper-200' },
-    ],
-    Archived: [],
-  };
-
-  const availableActions = transitions[risk.status] || [];
-
-  const fields = [
-    { label: 'Risk ID', value: risk.id },
-    { label: 'Business Process', value: risk.businessProcess },
-    { label: 'Sub-process', value: risk.subProcess || '—' },
-    { label: 'Category', value: risk.category },
-    { label: 'Priority', value: risk.priority },
-    { label: 'Owner', value: risk.owner || '—' },
-    { label: 'Reviewer', value: risk.reviewer || '—' },
-    { label: 'Created', value: risk.createdAt },
-    { label: 'Last Reviewed', value: risk.lastReviewed },
-  ];
-
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
-
-        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-[18px] font-semibold text-ink-900">{risk.name}</h2>
-              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
-            </div>
-            <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
-          </div>
-          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Description */}
-          <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Description</h3>
-            <p className="text-[13px] text-text leading-relaxed">{risk.description}</p>
-          </div>
-
-          {/* Fields */}
-          <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Details</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              {fields.map(f => (
-                <div key={f.label}>
-                  <span className="text-[10px] text-ink-400 uppercase block">{f.label}</span>
-                  <span className={`text-[13px] mt-0.5 block ${f.label === 'Priority' ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
-        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <Button variant="outline" size="md" onClick={onClose} className="w-full">Close</Button>
-        </footer>
-
-        {/* Edit modal (nested) */}
-        <AnimatePresence>
-          {editing && (
-            <RiskDrawer risk={risk} presentation="modal" onClose={() => setEditing(false)} onSave={(updated) => { onUpdate(updated); setEditing(false); }} />
-          )}
-        </AnimatePresence>
-      </motion.aside>
-    </>
-  );
-}
-
-// ─── Detail Page (spike C) ──────────────────────────────────────────────────
-function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void; onEdit: () => void }) {
+// ─── Risk detail page — full page, stacked sections (Control-detail data format) ─
+function RiskDetailPage({
+  risk,
+  controls,
+  onBack,
+  onEdit,
+}: {
+  risk: RiskEntry;
+  controls: { id: string; name: string; desc: string; isKey: boolean }[];
+  onBack: () => void;
+  onEdit: () => void;
+}) {
   const rels = getRiskRelationships(risk.id, risk.businessProcess);
-  const fields = [
-    { label: 'Risk ID', value: risk.id, mono: true },
-    { label: 'Business Process', value: risk.businessProcess },
+  const keyCount = controls.filter(c => c.isKey).length;
+
+  // Business Process / Category / Priority / Status are surfaced as header badges &
+  // pills now (like the control detail page), so the grid keeps the remaining facts.
+  const fields: { label: string; value: string }[] = [
     { label: 'Sub-process', value: risk.subProcess || '—' },
-    { label: 'Category', value: risk.category },
-    { label: 'Priority', value: risk.priority, priority: true },
     { label: 'Owner', value: risk.owner || '—' },
     { label: 'Reviewer', value: risk.reviewer || '—' },
-    { label: 'Status', value: risk.status },
     { label: 'Created', value: risk.createdAt },
     { label: 'Last Reviewed', value: risk.lastReviewed },
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+    <div>
+      {/* Back + Edit row — keeps the header card clean, like the control detail page */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-brand-700 font-medium cursor-pointer transition-colors">
+          <ArrowLeft size={14} /> Back to risks
+        </button>
+        <Button variant="primary" size="sm" shape="lg" onClick={onEdit} leftIcon={<Edit3 size={13} />} className="shrink-0">
+          Edit risk
+        </Button>
+      </div>
+
+      {/* Header card — matches the control detail page header */}
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6 mb-6">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_STYLES[risk.status]}`}>{risk.status}</span>
               <span className="font-mono text-[11px] text-ink-500">{risk.id}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${
+                risk.priority === 'Critical' ? 'bg-risk-50 text-risk-700'
+                  : risk.priority === 'High' ? 'bg-high-50 text-high-700'
+                  : risk.priority === 'Medium' ? 'bg-mitigated-50 text-mitigated-700'
+                  : 'bg-compliant-50 text-compliant-700'
+              }`}>{risk.priority}</span>
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            shape="lg"
-            onClick={onEdit}
-            leftIcon={<Edit3 size={13} />}
-            className="shrink-0"
-          >
-            Edit risk
-          </Button>
+          {/* Status + Business Process + Category pills */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <span className={`px-2.5 h-7 rounded-full text-[11px] font-semibold inline-flex items-center gap-1.5 ${STATUS_STYLES[risk.status]}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+              {risk.status}
+            </span>
+            <span className="px-2.5 h-7 rounded-full text-[11px] font-semibold border border-border-light bg-surface-2 text-text-secondary inline-flex items-center">
+              {risk.businessProcess}
+            </span>
+            <span className="px-2.5 h-7 rounded-full text-[11px] font-semibold border border-border-light bg-white text-text-muted inline-flex items-center">
+              {risk.category}
+            </span>
+          </div>
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
 
-        <div className="grid grid-cols-5 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
           {fields.map(f => (
             <div key={f.label}>
               <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
-              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : f.priority ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
+              <span className="text-[13px] block text-text">{f.value}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Shield size={13} className="text-ink-500" />
-              Mapped Controls
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+      {/* Stacked sections */}
+      <div className="space-y-6">
+
+        {/* Mapped controls */}
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Shield size={13} className="text-ink-400" /> Mapped Controls
+              {keyCount > 0 && <span className="font-medium normal-case tracking-normal text-ink-400">· {keyCount} key</span>}
+            </h3>
+            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{controls.length}</span>
           </div>
-          {rels.controls.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No controls mapped yet.</p>
+          {controls.length === 0 ? (
+            <div className="text-[0.75rem] text-high-700 italic inline-flex items-center gap-1.5">
+              <AlertTriangle size={12} className="text-high-700 shrink-0" /> No controls mapped to this risk yet.
+            </div>
           ) : (
-            <ul className="space-y-2">
-              {rels.controls.map(c => (
-                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
-                      </div>
-                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-canvas-border">
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Control</th>
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider w-[88px]">Key</th>
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Description</th>
+                    <th className="py-2 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Linked Workflows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {controls.map(c => (
+                    <tr key={c.id} className="border-b border-canvas-border/60 last:border-0 align-top">
+                      <td className="py-3 pr-4">
+                        <div className="font-mono text-[10.5px] font-semibold text-brand-700">{c.id}</div>
+                        <div className="text-[12.5px] font-semibold text-ink-800 leading-snug">{c.name}</div>
+                      </td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        {c.isKey ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[0.625rem] font-bold bg-mitigated-50 text-mitigated-700">
+                            <Star size={10} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" /> Key
+                          </span>
+                        ) : (
+                          <span className="text-ink-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4 text-[12.5px] text-ink-600 leading-snug">{c.desc}</td>
+                      <td className="py-3 align-top">
+                        {(() => {
+                          const wfs = getControlRelationships(c.id).workflows;
+                          if (wfs.length === 0) return <span className="text-ink-300">—</span>;
+                          return (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {wfs.map(w => (
+                                <span key={w.id} title={`${w.name} · ${w.runs} runs`}
+                                  className="inline-flex items-center gap-1 pl-1.5 pr-2 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                                  <WorkflowIcon size={10} className="shrink-0" />
+                                  <span className="truncate max-w-[170px]">{w.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <WorkflowIcon size={13} className="text-ink-500" />
-              Linked Workflows
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.workflows.length}</span>
-          </div>
-          {rels.workflows.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
-          ) : (
-            <ul className="space-y-2">
-              {rels.workflows.map(w => (
-                <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
-                  </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Grid3x3 size={13} className="text-ink-500" />
-              Found in RACMs
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racms.length}</span>
+        {/* Found in RACMs */}
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-400" /> Found in RACMs
+            </h3>
+            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.racms.length}</span>
           </div>
           {rels.racms.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+            <p className="text-[0.75rem] text-ink-400 italic">Not part of any RACM yet.</p>
           ) : (
-            <ul className="space-y-2">
+            <div className="space-y-2">
               {rels.racms.map(r => (
-                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                <div key={r.id} className="flex items-center gap-4 px-4 py-3 rounded-lg border border-canvas-border bg-white">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[0.8125rem] font-medium text-ink-800 block truncate">{r.name}</span>
+                    <span className="text-[0.6875rem] text-ink-400">Owner: {r.owner}</span>
                   </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
-                </li>
+                  <span className="text-[0.6875rem] text-ink-400 shrink-0">{r.fw}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
+
       </div>
     </div>
   );
@@ -540,7 +488,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   // null = show all). Kept separate from the slim High Priority / Unreviewed dropdown.
   const [activeStatusTile, setActiveStatusTile] = useState<RiskLifecycleStatus | null>(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
-  const [detailRisk, setDetailRisk] = useState<RiskEntry | null>(null);
   const [detailRiskId, setDetailRiskId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('risk');
@@ -580,8 +527,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  // Inline card expansion — chevron opens a Description / Sub-process / Owner / Created panel.
-  const [editingRiskCard, setEditingRiskCard] = useState<RiskEntry | null>(null);
   const [linkControlRisk, setLinkControlRisk] = useState<RiskEntry | null>(null);
   // When true, the Create Control wizard swaps in over the Link Control picker.
   const [createControlFromLink, setCreateControlFromLink] = useState(false);
@@ -711,12 +656,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       addToast({ message: `Risk "${risk.name}" created as ${risk.status}`, type: 'success' });
     }
     setShowCreateDrawer(false);
-    setDetailRisk(null);
   };
 
   const handleUpdateRisk = (updated: RiskEntry) => {
     setRisks(prev => prev.map(r => r.id === updated.id ? updated : r));
-    setDetailRisk(updated);
+    // Editing happens on the full detail page; Save updates it in place + toasts.
+    addToast({ message: `Risk "${updated.name}" updated`, type: 'success' });
   };
 
   // Single-row archive replaces the old sticky bulk bar.
@@ -773,7 +718,17 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
           <RiskDetailPage
             risk={detailRiskFromUrl}
-            onBack={() => setDetailRiskId(null)}
+            controls={controlsForRisk(detailRiskFromUrl)}
+            onBack={() => {
+              // Inside the Process Hub already → just close the detail (back to the embedded Risks list).
+              if (embedded) { setDetailRiskId(null); return; }
+              // Opened standalone (new tab) → land on this risk's process in the Process Hub, Risks tab.
+              const bp = BUSINESS_PROCESSES.find(b => b.abbr === detailRiskFromUrl.businessProcess);
+              const params = bp
+                ? new URLSearchParams({ view: 'bp-detail', bp: bp.id, section: 'risks' })
+                : new URLSearchParams({ view: 'business-processes' });
+              window.location.assign(`${window.location.origin}${window.location.pathname}?${params.toString()}`);
+            }}
             onEdit={() => setEditingRisk(detailRiskFromUrl)}
           />
           <AnimatePresence>
@@ -927,8 +882,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
             const cardControls = controlsForRisk(risk);
-            const controlCount = cardControls.length;
-            const keyControlCount = cardControls.filter(c => c.isKey).length;
             return (
               <motion.div
                 key={risk.id}
@@ -944,16 +897,22 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
+                        <h3 className="text-[0.9375rem] font-semibold leading-snug">
                           <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
-                          {risk.name}
+                          <button type="button"
+                            onClick={() => {
+                              const params = new URLSearchParams({ view: 'audit-risk-register', risk: risk.id });
+                              window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+                            }}
+                            title="Open detail in a new tab"
+                            className="text-left text-text hover:text-brand-700 hover:underline underline-offset-2 transition-colors cursor-pointer">
+                            {risk.name}
+                          </button>
                         </h3>
                         <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_STYLES[risk.status]}`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
                           {risk.status}
                         </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                         <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                           {risk.businessProcess}
                         </span>
@@ -966,7 +925,16 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       </div>
                       <p className="text-[13px] text-text leading-relaxed mt-3 max-w-3xl">{risk.description || '—'}</p>
                     </div>
-                    <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1 shrink-0">
+                    {/* Top-right: control tags moved up (before the actions, like the workflow card),
+                        then row actions — Link control placed like the RACM card's Link risk button. */}
+                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5 shrink-0 flex-wrap max-w-[60%]">
+                      {cardControls.map(ctrl => (
+                        <span key={ctrl.id}
+                          className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[11px] font-mono font-semibold">
+                          {ctrl.isKey && <Star size={11} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" />}
+                          {ctrl.id}
+                        </span>
+                      ))}
                       {isChecked ? (
                         <>
                           <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive"
@@ -980,10 +948,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         </>
                       ) : (
                         <>
-                          <button type="button" onClick={() => setEditingRiskCard(risk)} title="Edit risk"
-                            className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
-                            <Edit3 size={14} />
-                          </button>
+                          <div className="relative group/lcontrol">
+                            <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
+                              className="shrink-0 inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[11px] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                              <Link2 size={12} className="shrink-0" /> Control
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
+                          </div>
                           <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk"
                             className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
                             <Trash2 size={14} />
@@ -991,44 +962,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         </>
                       )}
                     </div>
-                  </div>
-
-                  {/* Risk → control mapping, shown upfront (replaces the chevron/expand) */}
-                  <div className="border-t border-canvas-border mt-4 pt-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <span className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">
-                        Mapped controls{controlCount > 0 ? ` (${controlCount})` : ''}
-                        {keyControlCount > 0 && (
-                          <span className="ml-2 font-medium text-ink-400 normal-case tracking-normal">· {keyControlCount} key</span>
-                        )}
-                      </span>
-                      <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
-                        className="shrink-0 inline-flex items-center gap-1 px-2.5 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[11px] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
-                        <Link2 size={12} className="shrink-0" /> Link control
-                      </button>
-                    </div>
-                    {controlCount === 0 ? (
-                      <div className="text-[12px] text-high-700 italic inline-flex items-center gap-1.5">
-                        <AlertTriangle size={12} className="text-high-700 shrink-0" /> No controls mapped to this risk yet.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {cardControls.map(ctrl => (
-                          <div key={ctrl.id} className="flex items-start gap-2.5 rounded-lg border border-border-light bg-canvas/40 px-3.5 py-2.5">
-                            {ctrl.isKey
-                              ? <Star size={12} className="fill-amber-400 text-amber-500 shrink-0 mt-[3px]" aria-label="Key control" />
-                              : <span className="w-3 shrink-0" aria-hidden="true" />}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[13px] font-semibold text-text leading-snug">{ctrl.name}</span>
-                                <span className="font-mono text-[10px] text-ink-400 shrink-0">{ctrl.id}</span>
-                              </div>
-                              <p className="text-[12px] text-text-muted leading-snug mt-0.5">{ctrl.desc}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </motion.div>
@@ -1046,24 +979,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Detail Drawer */}
-      <AnimatePresence>
-        {detailRisk && !showCreateDrawer && (
-          <RiskDetailDrawer risk={detailRisk} onClose={() => setDetailRisk(null)} onUpdate={handleUpdateRisk} />
-        )}
-      </AnimatePresence>
-
-      {/* Edit Risk modal (opened from a card's edit button) */}
-      <AnimatePresence>
-        {editingRiskCard && (
-          <RiskDrawer
-            risk={editingRiskCard}
-            presentation="modal"
-            onClose={() => setEditingRiskCard(null)}
-            onSave={(updated) => { handleUpdateRisk(updated); setEditingRiskCard(null); }}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Link Control picker (opened from a card's Link Control action) — modal */}
       <AnimatePresence>

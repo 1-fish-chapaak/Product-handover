@@ -244,6 +244,10 @@ function AppInner() {
         backView: 'business-processes',
       });
       setView('racm-full-editor');
+    } else if (params.get('view') === 'audit-risk-register') {
+      // Deep-link: "open risk detail in a new tab" lands here with ?risk=RSK-xxx.
+      // RiskRegister reads the risk param itself and shows its full detail page.
+      setView('audit-risk-register');
     }
   }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];

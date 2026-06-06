@@ -18,6 +18,12 @@ import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
+import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
+import { AuditLogsView, deterministicCaseCount, type LibraryWorkflow, type BulkRunWorkflowResult } from '../workflow/WorkflowLibraryView';
+
+// Shape of a completed bulk-run, fed to the shared AuditLogsView (same flow as
+// the Workflow Library's bulk run).
+type BulkAuditRun = { name: string; workflows: BulkRunWorkflowResult[]; skippedCount: number; date: string };
 import BPOverviewDashboard from './BPOverviewDashboard';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -3536,6 +3542,8 @@ interface BPWorkflow {
   lastRunStatus: RunStatus | null;   // result of the last run; null = never run
   lastRunError: string | null;       // failure reason, shown when lastRunStatus === 'Error'
   lastRunErrorKind: RunErrorKind | null; // drives Retry behaviour (in-place vs executor)
+  tags: string[];                    // functional/domain tags shown on the card
+  isSql: boolean;                    // SQL-based workflow → shows the green "Live" tag
 }
 
 // Run-status dot colour + pill styling for the run-status tag.
@@ -3547,22 +3555,25 @@ const RUN_STATUS_PILL: Record<RunStatus, string> = {
 };
 
 const SEED_BP_WF: BPWorkflow[] = [
-  { id: 'wf-c1', name: 'Three-Way PO Match', description: 'Automated matching of PO, GRN, and Invoice before payment release.', type: 'Automated', nature: 'Preventive', status: 'Active', linkedControls: ['C-001', 'C-004'], owner: 'Karan Mehta', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null },
-  { id: 'wf-c2', name: 'Vendor Change Monitor', description: 'Monitors vendor master data changes and validates approval chain.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-002'], owner: 'Tushar Goel', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Error', lastRunError: 'Vendor master feed unavailable — connection timed out after 30s.', lastRunErrorKind: 'technical' },
-  { id: 'wf-c3', name: 'Duplicate Invoice Detector', description: 'Scans invoices against historical data to flag duplicates.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-003'], owner: 'Deepak Bansal', lastRun: 'May 17, 2026 · 2:00 AM', lastRunStatus: 'Error', lastRunError: "Source file 'invoice_register_apr.csv' could not be parsed — column 'Invoice Date' is missing.", lastRunErrorKind: 'data' },
-  { id: 'wf-c4', name: 'Payment Approval Review', description: 'Manual review of high-value payment approvals.', type: 'Manual', nature: 'Preventive', status: 'Active', linkedControls: ['C-004'], owner: 'Neha Joshi', lastRun: 'May 16, 2026 · 11:30 AM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null },
-  { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [], owner: 'Tushar Goel', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null },
+  { id: 'wf-c1', name: 'Three-Way PO Match', description: 'Automated matching of PO, GRN, and Invoice before payment release.', type: 'Automated', nature: 'Preventive', status: 'Active', linkedControls: ['C-001', 'C-004'], owner: 'Karan Mehta', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Matching'], isSql: false },
+  { id: 'wf-c2', name: 'Vendor Change Monitor', description: 'Monitors vendor master data changes and validates approval chain.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-002'], owner: 'Tushar Goel', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Error', lastRunError: 'Vendor master feed unavailable — connection timed out after 30s.', lastRunErrorKind: 'technical', tags: ['Vendor', 'Master Data'], isSql: true },
+  { id: 'wf-c3', name: 'Duplicate Invoice Detector', description: 'Scans invoices against historical data to flag duplicates.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-003'], owner: 'Deepak Bansal', lastRun: 'May 17, 2026 · 2:00 AM', lastRunStatus: 'Error', lastRunError: "Source file 'invoice_register_apr.csv' could not be parsed — column 'Invoice Date' is missing.", lastRunErrorKind: 'data', tags: ['Duplicates', 'Fraud'], isSql: true },
+  { id: 'wf-c4', name: 'Payment Approval Review', description: 'Manual review of high-value payment approvals.', type: 'Manual', nature: 'Preventive', status: 'Active', linkedControls: ['C-004'], owner: 'Neha Joshi', lastRun: 'May 16, 2026 · 11:30 AM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Payments'], isSql: false },
+  { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [], owner: 'Tushar Goel', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: ['Authorization'], isSql: false },
 ];
 
-function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void }) {
+function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Bulk-run config modal (shared with the Workflow Library flow).
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   // Workflows currently re-running in place after a technical error.
   const [retryingIds, setRetryingIds] = useState<string[]>([]);
   // Per-row filter dropdown state (which filter button is open, if any).
@@ -3597,15 +3608,18 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   }) : workflows;
   const filtered = searched
     .filter(w => typeFilter.length === 0 || typeFilter.includes(w.type))
-    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature));
+    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature))
+    .filter(w => ownerFilter.length === 0 || ownerFilter.includes(w.owner));
   const typeOptions = Array.from(new Set(workflows.map(w => w.type))).sort();
   const natureOptions = Array.from(new Set(workflows.map(w => w.nature))).sort();
+  const ownerOptions = Array.from(new Set(workflows.map(w => w.owner))).sort();
 
-  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0;
+  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || ownerFilter.length > 0;
   const clearAllFilters = () => {
     setSearchQuery('');
     setTypeFilter([]);
     setNatureFilter([]);
+    setOwnerFilter([]);
   };
 
   const handleDelete = (id: string) => {
@@ -3629,7 +3643,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   };
 
   const handleCreate = (data: { name: string; type: 'Automated' | 'Manual'; nature: 'Preventive' | 'Detective'; desc: string }) => {
-    setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [], owner: 'You', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null }, ...prev]);
+    setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [], owner: 'You', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: [], isSql: false }, ...prev]);
     setShowCreateDrawer(false);
     addToast({ message: `Workflow "${data.name}" created.`, type: 'success' });
   };
@@ -3670,6 +3684,39 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     }
   };
   const clearSelection = () => setSelectedIds([]);
+
+  // Selected workflows mapped to the Library's shape so the shared BulkExecuteModal
+  // can drive the same bulk-run flow from the Process Hub.
+  const selectedBulkWorkflows: LibraryWorkflow[] = workflows
+    .filter(w => selectedIds.includes(w.id))
+    .map(w => ({
+      id: w.id,
+      name: w.name,
+      description: w.description,
+      tags: [bpAbbr],
+      businessProcess: bpAbbr,
+      controlId: w.id.toUpperCase(),
+      live: w.lastRunStatus != null,
+    }));
+
+  // Same hand-off as WorkflowLibraryView.handleModalContinue: build the run result
+  // and surface the shared AuditLogsView (rendered by BPDetailView).
+  const handleBulkRunContinue = (data: { auditName: string }) => {
+    setBulkModalOpen(false);
+    const results: BulkRunWorkflowResult[] = selectedBulkWorkflows.map(w => ({
+      id: w.id,
+      code: w.controlId,
+      name: w.name,
+      casesFlagged: deterministicCaseCount(w.controlId + w.id),
+    }));
+    onBulkRunComplete?.({
+      name: data.auditName || 'BulkRun',
+      workflows: results,
+      skippedCount: 0,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    clearSelection();
+  };
 
   const handleArchiveOne = (id: string) => {
     const wf = workflows.find(w => w.id === id);
@@ -3792,6 +3839,19 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
               Clear all
             </button>
           )}
+          {/* Bulk run — appears once ≥1 workflow is selected; single runs go via the
+              card's Execute button. Same button + flow as the Workflow Library. */}
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setBulkModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] shrink-0"
+            >
+              <Play size={14} />
+              Bulk Run
+            </button>
+          )}
+          <FilterPill filterKey="owner"  label="User"   options={ownerOptions}  value={ownerFilter}  onChange={setOwnerFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
             Create Workflow
@@ -3875,36 +3935,38 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className={`group grid grid-cols-[28px_2.2fr_1.5fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
+                className={`group grid grid-cols-[28px_1.8fr_2.1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Col 1 — select checkbox (fades in on hover, stays while selected) */}
-                <div onClick={e => e.stopPropagation()} className="pt-0.5">
+                {/* Select checkbox — its own column on the left, always visible. */}
+                <div onClick={e => e.stopPropagation()} className="pt-[2px]">
                   <input
                     type="checkbox"
                     aria-label={`Select ${wf.name}`}
                     checked={isSelected}
                     onChange={() => toggleSelect(wf.id)}
-                    className={`w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    className="w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
                   />
                 </div>
 
-                {/* Col 2 — id + title, description, run meta. Control links live on
-                    the detail page (Overview tab), not on the card. */}
+                {/* Col 2 — id + title, description, run meta, error/retry. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[12px] font-semibold text-brand-700 shrink-0">{wf.id.toUpperCase()}</span>
                     <button type="button" onClick={openDetail} className="text-[14px] font-semibold text-text leading-snug truncate text-left hover:text-brand-700 hover:underline cursor-pointer">{wf.name}</button>
+                    {/* Live tag — only for SQL-based workflows (matches the Workflow Library pill) */}
+                    {wf.isSql && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" style={{ backgroundColor: '#ECFEF3', color: '#047A48' }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#047A48' }} />
+                        Live
+                      </span>
+                    )}
                   </div>
                   {wf.description && (
                     <p className="mt-1 line-clamp-2 text-[12px] text-text-secondary leading-snug">{wf.description}</p>
                   )}
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
-                    <span className="inline-flex items-center gap-1" title="Owner">
-                      <User size={11} className="text-ink-400 shrink-0" />
-                      {wf.owner}
-                    </span>
                     <span className="inline-flex items-center gap-1" title="Last run">
                       <Clock size={11} className="text-ink-400 shrink-0" />
                       {wf.lastRun ? `Last run ${wf.lastRun}` : 'Not run yet'}
@@ -3917,36 +3979,51 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                       <button
                         type="button"
                         aria-label={isRetrying ? `Retrying ${wf.name}` : `Retry ${wf.name}`}
+                        title="Retry"
                         disabled={isRetrying}
                         onClick={(e) => { e.stopPropagation(); handleRetry(wf); }}
-                        className="shrink-0 inline-flex items-center gap-1 px-2 h-6 rounded-[6px] border border-risk-100 font-medium text-risk-700 hover:bg-risk-50 disabled:opacity-60 disabled:cursor-default cursor-pointer transition-colors"
+                        className="shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer"
                       >
-                        <RotateCcw size={11} className={isRetrying ? 'animate-spin' : ''} />
-                        {isRetrying ? 'Retrying…' : 'Retry'}
+                        <RotateCcw size={13} className={isRetrying ? 'animate-spin' : ''} />
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* Col 3 — run status pill + workflow type (automation · nature).
+                {/* Col 3 — run status pill + workflow type (automation · nature) + linked controls + owner.
                     The status pill sits in a fixed-width slot so the type tags stay
                     left-aligned across every card, even when a workflow never ran. */}
-                <div className="pt-0.5 flex items-center gap-2">
+                <div className="pt-0.5 flex flex-wrap items-center gap-2">
                   <div className="w-[92px] shrink-0">
                     {isRetrying ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-semibold bg-paper-100 text-ink-500 border-canvas-border">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[6px] border text-[11px] font-semibold bg-paper-100 text-ink-500 border-canvas-border">
                         <Loader2 size={11} className="animate-spin" />
                         Running…
                       </span>
                     ) : wf.lastRunStatus ? (
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-semibold ${RUN_STATUS_PILL[wf.lastRunStatus]}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${RUN_STATUS_PILL[wf.lastRunStatus]}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${RUN_STATUS_DOT[wf.lastRunStatus]}`} />
                         {wf.lastRunStatus}
                       </span>
                     ) : null}
                   </div>
-                  <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold shrink-0 ${natureStyle}`}>
-                    {wf.type} · {wf.nature}
+                  {/* type tag slot — fixed width keeps the control chips aligned across cards */}
+                  <div className="w-[144px] shrink-0">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${natureStyle}`}>
+                      {wf.type} · {wf.nature}
+                    </span>
+                  </div>
+                  {/* controls slot — fixed width (reserved even when empty) keeps the owner aligned across cards */}
+                  <div className="w-[100px] shrink-0 flex items-center gap-1.5 ml-4">
+                    {wf.linkedControls.map(c => (
+                      <span key={c} className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[11px] font-mono font-semibold shrink-0">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="inline-flex items-center gap-1 ml-4 text-[11px] text-text-muted shrink-0" title="Owner">
+                    <User size={11} className="text-ink-400 shrink-0" />
+                    {wf.owner}
                   </span>
                 </div>
 
@@ -4008,6 +4085,17 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         onConfirm={() => { if (confirmDeleteWf) handleDelete(confirmDeleteWf.id); setConfirmDeleteWf(null); }}
         onClose={() => setConfirmDeleteWf(null)}
       />
+
+      {/* Bulk-run config modal — shared with the Workflow Library bulk-run flow */}
+      {bulkModalOpen && (
+        <BulkExecuteModal
+          selectedWorkflows={selectedBulkWorkflows}
+          onClose={() => setBulkModalOpen(false)}
+          onContinue={handleBulkRunContinue}
+          defaultAuditName={`${bpAbbr} Bulk Run`}
+          defaultAuditDescription=""
+        />
+      )}
 
       {/* Create Workflow Drawer */}
       <AnimatePresence>
@@ -4828,6 +4916,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   onRunWorkflow?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
+  // Completed bulk-run from the Workflows tab — when set, the shared AuditLogsView
+  // takes over the page (same results view as the Workflow Library bulk run).
+  const [bulkAuditRun, setBulkAuditRun] = useState<BulkAuditRun | null>(null);
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
   // Two-card "New RACM" flow (ported from the engagement RACM tab): pick a file,
@@ -5529,6 +5620,12 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     );
   }
 
+  // Bulk-run results take over the page (shared with the Workflow Library flow).
+  // Back returns to the Workflows tab (drilledSection is preserved).
+  if (bulkAuditRun) {
+    return <AuditLogsView run={bulkAuditRun} onBack={() => setBulkAuditRun(null)} />;
+  }
+
   // Drilled view — full-screen content for one section with updated breadcrumb
   if (drilledSection) {
     const info = sectionMeta[drilledSection];
@@ -5636,7 +5733,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           )}
           {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
-          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} />}
+          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} onBulkRunComplete={setBulkAuditRun} />}
         </div>
       </div>
     );
