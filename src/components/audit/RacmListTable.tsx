@@ -214,7 +214,7 @@ function RacmDetailHeader({ racm, action }: { racm: RacmEntry; action: React.Rea
     { label: 'Attributes Coverage', value: `${racm.attributesCoverage}%`, mono: true },
   ];
   return (
-    <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+    <div className="px-1">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -516,13 +516,6 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         racm={racm}
         action={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSummary(v => !v)}
-              className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-            >
-              {showSummary ? 'Hide Summary' : 'Show Summary'}
-            </button>
             <div ref={downloadRef} className="relative">
               <Button
                 variant="outline"
@@ -616,13 +609,22 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           </div>
 
           {/* ─── SOP Analysis Summary — long-form narrative + tables ─── */}
-          {showSummary && (
           <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-              <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
+                <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSummary(v => !v)}
+                className="shrink-0 mt-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+              >
+                {showSummary ? 'Hide summary' : 'Show summary'}
+              </button>
             </div>
 
+            {showSummary && (<>
             <section>
               <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
               <p className="text-[13px] text-ink-700 leading-relaxed max-w-[80ch]">{executiveSummary}</p>
@@ -748,8 +750,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                 <li>{entriesWithGaps} of {arEntries.length} entries have documented gaps to remediate</li>
               </ul>
             </section>
+            </>)}
           </div>
-          )}
 
           {/* ─── Entries table — full Irame columns + search + scroll hint ─── */}
           <div className="bg-white border border-canvas-border rounded-[12px] p-5">
@@ -938,13 +940,22 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       {/* ─── SOP Analysis Summary — same structure as rich. Every section is now
           derived from the synthesised seed entries (exec summary, confidence,
           control-type, gap analysis, notes). ─── */}
-      {showSummary && (
       <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
-        <div>
-          <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-          <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
+            <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSummary(v => !v)}
+            className="shrink-0 mt-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+          >
+            {showSummary ? 'Hide summary' : 'Show summary'}
+          </button>
         </div>
 
+        {showSummary && (<>
         <section>
           <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
           <p className="text-[13px] leading-relaxed max-w-[80ch] text-ink-700">{executiveSummary}</p>
@@ -1070,8 +1081,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
             <li>Test of Design completed for all mapped controls; results recorded per entry</li>
           </ul>
         </section>
+        </>)}
       </div>
-      )}
 
       {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); every field
           is synthesised for seed RACMs. ─── */}
@@ -1861,11 +1872,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
       <RacmDetailPage
         racm={detailRacmFromUrl}
         onBack={() => setDetailRacmId(null)}
-        onOpenMapping={() => {
-          setMappingRacm(detailRacmFromUrl);
-          setShowMappingWorkspace(true);
-          setDetailRacmId(null);
-        }}
+        // "Open mapping" opens the same full editable RACM grid as the card's
+        // "Open in editor" action — in a new browser tab. The detail page stays
+        // open behind it. (Old in-app ArRacmMappingView is still reachable via
+        // the initialMappingRacm path, line ~1750.)
+        onOpenMapping={() => onOpenInEditor?.(detailRacmFromUrl)}
       />
     );
   }
@@ -2067,7 +2078,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 }`}
               >
                 <div
-                  className="grid grid-cols-[2.6fr_1fr_1.7fr_104px] gap-5 px-6 py-5 items-start"
+                  className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start"
                 >
                 {/* RACM column — title + status pill + description + meta + tag pills */}
                 <div className="min-w-0">
@@ -2075,10 +2086,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                     <button
                       type="button"
                       onClick={() => setDetailRacmId(racm.id)}
-                      className="text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 hover:underline cursor-pointer text-left"
+                      className="group/title text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 cursor-pointer text-left"
                     >
                       <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{racm.id.toUpperCase()}</span>
-                      {displayName}
+                      <span className="group-hover/title:underline">{displayName}</span>
                     </button>
                     <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold border ${STATUS_BADGE[status]}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
@@ -2156,9 +2167,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           type="button"
                           onClick={() => setLinkRiskTarget({ racmId: racm.id, bpAbbr: racm.process })}
                           aria-label="Link risk"
-                          className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                          className="shrink-0 inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[11px] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
                         >
-                          <AlertTriangle size={14} />
+                          <Link2 size={12} className="shrink-0" />
+                          Risk
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
                       </div>

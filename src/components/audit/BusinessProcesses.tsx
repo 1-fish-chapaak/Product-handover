@@ -4394,9 +4394,22 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
+  // The RACM cards rendered in this tab come from <RacmListTable>: RACM_SEED_DATA
+  // merged with the same `racmExtra` we pass below, filtered by this process. Mirror
+  // that exact logic here so the tab badge equals the number of cards shown (the two
+  // previously read different mock arrays). createdRacms are already part of racmExtra.
+  const racmExtra = bp.id === 'p2p'
+    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
+    : createdRacms;
+  const racmExtraIds = new Set(racmExtra.map(r => r.id));
+  const racmCardsForBp = [
+    ...RACM_SEED_DATA.filter(r => !racmExtraIds.has(r.id)),
+    ...racmExtra,
+  ].filter(r => r.process === bp.abbr);
+
   const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
     sop: { title: 'SOPs', count: bpSops.length, countLabel: 'documents', warning: bpSops.length === 0 ? 'no SOPs uploaded' : undefined },
-    racm: { title: 'RACMs', count: bpRacms.length + createdRacms.length, countLabel: 'matrices', warning: (bpRacms.length + createdRacms.length) === 0 ? 'no RACMs yet' : undefined },
+    racm: { title: 'RACMs', count: racmCardsForBp.length, countLabel: 'matrices', warning: racmCardsForBp.length === 0 ? 'no RACMs yet' : undefined },
     risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
     controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
     workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
@@ -4962,11 +4975,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             <div className="space-y-4">
               <RacmListTable
                 processFilter={bp.abbr}
-                extraRacms={
-                  bp.id === 'p2p'
-                    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
-                    : createdRacms
-                }
+                extraRacms={racmExtra}
                 onCreate={() => setShowCreateRacm(true)}
                 onEditDraft={(racm) => {
                   const exists = createdRacms.some(r => r.id === racm.id);
