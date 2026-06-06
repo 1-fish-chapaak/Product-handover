@@ -69,6 +69,7 @@ export type View =
   | 'dev-configurable-engagement-v3'
   // Platform
   | 'racm-full-editor'
+  | 'control-detail'
   // Engagement Config (under Programs)
   | 'engagement-config';
 
@@ -109,6 +110,9 @@ export interface AppState {
   selectedWorkflowId: string | null;
   /** Which tab WorkflowDetail should open on (e.g. 'runs' when drilled in from an engagement). */
   workflowDetailInitialTab: 'overview' | 'runs' | 'config';
+  /** Where the executor's Back button returns to. 'business-processes' when launched
+   *  from the Process Hub Workflows tab; null keeps the default (workflow-templates). */
+  workflowExecutorBackView: 'business-processes' | null;
   selectedBPId: string | null;
   /** Business processes created by the user in Process Hub (persisted across navigation). */
   userProcesses: UserProcess[];
@@ -195,6 +199,9 @@ const getInitialView = (): View => {
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
+  if (v === 'chat') return 'chat';
+  if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
   if (v === 'engagement-detail') return 'engagement-detail';
   if (v === 'workflow-executor') return 'workflow-executor';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
@@ -214,6 +221,15 @@ const getInitialEngagementId = (): string | null => {
   return new URLSearchParams(window.location.search).get('eng');
 };
 
+// New-tab deep links into the Process Hub BP detail (e.g. a control's risk/RACM
+// opened in a new tab) carry ?view=bp-detail&bp=<id>; seed selectedBPId from it.
+const getInitialBPId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'bp-detail') return null;
+  return params.get('bp');
+};
+
 const INITIAL_STATE: AppState = {
   view: getInitialView(),
   sidebarExpanded: false,
@@ -223,8 +239,9 @@ const INITIAL_STATE: AppState = {
   showArtifacts: false,
   showChatHistory: false,
   selectedWorkflowId: getInitialWorkflowId(),
-  workflowDetailInitialTab: 'overview',
-  selectedBPId: null,
+  workflowDetailInitialTab: 'runs',
+  workflowExecutorBackView: null,
+  selectedBPId: getInitialBPId(),
   userProcesses: [],
   selectedEngagementId: getInitialEngagementId(),
   selectedRiskId: null,
@@ -310,7 +327,7 @@ export function useAppState() {
     setState(prev => ({ ...prev, showChatHistory: !prev.showChatHistory }));
   }, []);
 
-  const setSelectedWorkflow = useCallback((id: string | null, initialTab: AppState['workflowDetailInitialTab'] = 'overview') => {
+  const setSelectedWorkflow = useCallback((id: string | null, initialTab: AppState['workflowDetailInitialTab'] = 'runs') => {
     setState(prev => ({ ...prev, selectedWorkflowId: id, workflowDetailInitialTab: initialTab, view: id ? 'workflow-detail' : 'workflow-templates' }));
   }, []);
 
@@ -444,8 +461,8 @@ export function useAppState() {
     }));
   }, []);
 
-  const openWorkflowExecutor = useCallback((workflowId: string) => {
-    setState(prev => ({ ...prev, view: 'workflow-executor' as View, selectedWorkflowId: workflowId }));
+  const openWorkflowExecutor = useCallback((workflowId: string, backTo: AppState['workflowExecutorBackView'] = null) => {
+    setState(prev => ({ ...prev, view: 'workflow-executor' as View, selectedWorkflowId: workflowId, workflowExecutorBackView: backTo }));
   }, []);
 
   const openDashboard = useCallback((dashboardId: string, customFields?: string[]) => {

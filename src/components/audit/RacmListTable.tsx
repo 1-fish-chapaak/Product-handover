@@ -3,19 +3,18 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Check, Grid3x3,
   Archive, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
-  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye,
+  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye, ExternalLink,
 } from 'lucide-react';
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
-import SopDetailDrawer from './SopDetailDrawer';
+import SopDocumentModal from './SopDocumentModal';
+import ConfirmDeleteRacmModal from './ConfirmDeleteRacmModal';
 import { useToast } from '../shared/Toast';
-import { useCan } from '../../context/CurrentUserContext';
-import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
-import { Pill, type Tone } from '../shared/StatusBadge';
 import { SEED_RISKS, RiskDrawer } from './RiskRegister';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
+import { useCreatedControls } from '../../data/createdControlsStore';
 import { BUSINESS_PROCESSES, RISKS, CONTROLS, WORKFLOWS, SOPS } from '../../data/mockData';
 import { AR_RACM_ENTRIES, AR_RACM_ID, type ArRacmEntry } from '../../data/arRacm';
 
@@ -216,12 +215,12 @@ function RacmDetailHeader({ racm, action }: { racm: RacmEntry; action: React.Rea
     { label: 'Attributes Coverage', value: `${racm.attributesCoverage}%`, mono: true },
   ];
   return (
-    <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+    <div className="px-1">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <Pill tone={STATUS_TONE[rawStatus]}>{rawStatus}</Pill>
-            <Pill tone={READINESS_TONE[readiness]}>{readiness}</Pill>
+            <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${STATUS_BADGE[rawStatus]}`}>{rawStatus}</span>
+            <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
             <span className="font-mono text-[11px] text-ink-500">{racm.id}</span>
           </div>
           <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{racm.name}</h1>
@@ -518,13 +517,6 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         racm={racm}
         action={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSummary(v => !v)}
-              className="text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-            >
-              {showSummary ? 'Hide Summary' : 'Show Summary'}
-            </button>
             <div ref={downloadRef} className="relative">
               <Button
                 variant="outline"
@@ -618,13 +610,22 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
           </div>
 
           {/* ─── SOP Analysis Summary — long-form narrative + tables ─── */}
-          {showSummary && (
           <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-              <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
+                <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSummary(v => !v)}
+                className="shrink-0 mt-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+              >
+                {showSummary ? 'Hide summary' : 'Show summary'}
+              </button>
             </div>
 
+            {showSummary && (<>
             <section>
               <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
               <p className="text-[13px] text-ink-700 leading-relaxed max-w-[80ch]">{executiveSummary}</p>
@@ -750,8 +751,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
                 <li>{entriesWithGaps} of {arEntries.length} entries have documented gaps to remediate</li>
               </ul>
             </section>
+            </>)}
           </div>
-          )}
 
           {/* ─── Entries table — full Irame columns + search + scroll hint ─── */}
           <div className="bg-white border border-canvas-border rounded-[12px] p-5">
@@ -940,13 +941,22 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
       {/* ─── SOP Analysis Summary — same structure as rich. Every section is now
           derived from the synthesised seed entries (exec summary, confidence,
           control-type, gap analysis, notes). ─── */}
-      {showSummary && (
       <div className="bg-white border border-canvas-border rounded-[12px] p-6 space-y-6">
-        <div>
-          <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-          <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
+            <h2 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSummary(v => !v)}
+            className="shrink-0 mt-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
+          >
+            {showSummary ? 'Hide summary' : 'Show summary'}
+          </button>
         </div>
 
+        {showSummary && (<>
         <section>
           <h3 className="text-[14px] font-bold text-ink-900 mb-2">Executive Summary</h3>
           <p className="text-[13px] leading-relaxed max-w-[80ch] text-ink-700">{executiveSummary}</p>
@@ -1072,8 +1082,8 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
             <li>Test of Design completed for all mapped controls; results recorded per entry</li>
           </ul>
         </section>
+        </>)}
       </div>
-      )}
 
       {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); every field
           is synthesised for seed RACMs. ─── */}
@@ -1267,6 +1277,8 @@ export interface RacmEntry {
   risks: number; controls: number; mappedRisks: number; unmappedRisks: number;
   keyControls: number; workflowCoverage: number; attributesCoverage: number;
   isValidated: boolean; linkedToEngagement: boolean;
+  /** Creation date (human-readable, e.g. "May 28, 2026") — shown on the RACM card meta line. */
+  createdAt?: string;
   /** false = still in draft review (editable Excel grid); true | undefined = frozen / active */
   isFrozen?: boolean;
   /** Original uploaded file name — used when re-opening the review editor */
@@ -1285,11 +1297,11 @@ function getRacmTableStatus(racm: RacmEntry): RacmTableStatus {
   return 'Draft';
 }
 
-const STATUS_TONE: Record<RacmTableStatus, Tone> = {
-  'Draft':       'draft',
-  'In Progress': 'evidence',
-  'Active':      'compliant',
-  'Locked':      'mitigated',
+const STATUS_BADGE: Record<RacmTableStatus, string> = {
+  'Draft':       'bg-paper-100 text-ink-600 border-paper-200/50',
+  'In Progress': 'bg-evidence-50 text-evidence-700 border-evidence-200/50',
+  'Active':      'bg-compliant-50 text-compliant-700 border-compliant-700/20',
+  'Locked':      'bg-mitigated-50 text-mitigated-700 border-mitigated-700/20',
 };
 
 // ─── RACM Readiness (computed, never stored) ────────────────────────────────
@@ -1303,22 +1315,22 @@ function getRacmTableReadiness(racm: RacmEntry): RacmTableReadiness {
   return 'Ready';
 }
 
-const READINESS_TONE: Record<RacmTableReadiness, Tone> = {
-  'Mapping Incomplete':     'high',
-  'Workflow Missing':       'mitigated',
-  'Configuration Pending':  'evidence',
-  'Ready':                  'compliant',
+const READINESS_BADGE: Record<RacmTableReadiness, string> = {
+  'Mapping Incomplete':     'bg-high-50 text-high-700',
+  'Workflow Missing':       'bg-mitigated-50 text-mitigated-700',
+  'Configuration Pending':  'bg-evidence-50 text-evidence-700',
+  'Ready':                  'bg-compliant-50 text-compliant-700',
 };
 
 // ─── Seed Data ──────────────────────────────────────────────────────────────
 
 export const RACM_SEED_DATA: RacmEntry[] = [
   { id: AR_RACM_ID, name: 'FY26 AR — Accounts Receivable RACM', version: 'v1.0', process: 'O2C', framework: 'IFC/ICOFR, COSO 2013', risks: AR_RACM_ENTRIES.length, controls: new Set(AR_RACM_ENTRIES.map(e => e.controlId)).size, mappedRisks: AR_RACM_ENTRIES.length, unmappedRisks: 0, keyControls: AR_RACM_ENTRIES.filter(e => e.riskRating === 'Critical' || e.riskRating === 'High').length, workflowCoverage: 0, attributesCoverage: 100, isValidated: true, linkedToEngagement: false, sourceFileName: 'SOP_Accounts Receivable.pptx' },
-  { id: 'racm-001', name: 'FY26 P2P — Vendor Payment', version: 'v2.1', process: 'P2P', framework: 'SOX ICFR', risks: 9, controls: 24, mappedRisks: 9, unmappedRisks: 0, keyControls: 6, workflowCoverage: 92, attributesCoverage: 88, isValidated: true, linkedToEngagement: true },
-  { id: 'racm-002', name: 'FY26 O2C — Revenue & AR', version: 'v2.1', process: 'O2C', framework: 'SOX ICFR', risks: 7, controls: 18, mappedRisks: 6, unmappedRisks: 1, keyControls: 4, workflowCoverage: 78, attributesCoverage: 65, isValidated: false, linkedToEngagement: false },
-  { id: 'racm-003', name: 'FY26 R2R — Financial Close', version: 'v2.1', process: 'R2R', framework: 'SOX ICFR', risks: 11, controls: 31, mappedRisks: 10, unmappedRisks: 1, keyControls: 8, workflowCoverage: 85, attributesCoverage: 80, isValidated: true, linkedToEngagement: true },
-  { id: 'racm-004', name: 'FY26 S2C — Contract Review', version: 'v1.8', process: 'S2C', framework: 'Internal Policy', risks: 5, controls: 14, mappedRisks: 3, unmappedRisks: 2, keyControls: 2, workflowCoverage: 60, attributesCoverage: 45, isValidated: false, linkedToEngagement: false },
-  { id: 'racm-005', name: 'FY26 ITGC — Access & Change', version: 'v2.1', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-001', name: 'FY26 P2P — Vendor Payment', version: 'v2.1', createdAt: 'May 20, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 9, controls: 24, mappedRisks: 9, unmappedRisks: 0, keyControls: 6, workflowCoverage: 92, attributesCoverage: 88, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-002', name: 'FY26 O2C — Revenue & AR', version: 'v2.1', createdAt: 'May 15, 2026', process: 'O2C', framework: 'SOX ICFR', risks: 7, controls: 18, mappedRisks: 6, unmappedRisks: 1, keyControls: 4, workflowCoverage: 78, attributesCoverage: 65, isValidated: false, linkedToEngagement: false },
+  { id: 'racm-003', name: 'FY26 R2R — Financial Close', version: 'v2.1', createdAt: 'Apr 28, 2026', process: 'R2R', framework: 'SOX ICFR', risks: 11, controls: 31, mappedRisks: 10, unmappedRisks: 1, keyControls: 8, workflowCoverage: 85, attributesCoverage: 80, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-004', name: 'FY26 S2C — Contract Review', version: 'v1.8', createdAt: 'Apr 10, 2026', process: 'S2C', framework: 'Internal Policy', risks: 5, controls: 14, mappedRisks: 3, unmappedRisks: 2, keyControls: 2, workflowCoverage: 60, attributesCoverage: 45, isValidated: false, linkedToEngagement: false },
+  { id: 'racm-005', name: 'FY26 ITGC — Access & Change', version: 'v2.1', createdAt: 'Mar 30, 2026', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
 ];
 
 // ─── RACM mapping view ───────────────────────────────────────────────────────
@@ -1606,8 +1618,6 @@ interface Props {
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
   const { addToast } = useToast();
-  const { can } = useCan();
-  const logEvent = useAuditLog();
   // Inline RACM rename (pencil action) — renamed names overlay the source data.
   const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
   const [editingRacmName, setEditingRacmName] = useState('');
@@ -1622,9 +1632,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   };
   // Source-SOP preview drawer (opened from a RACM extracted from a SOP).
   const [viewSop, setViewSop] = useState<{
-    subProcess: string; title: string; version: string; uploadedAgo: string;
-    summary: { controls: number; risks: number; attributes: number; racmName: string };
-    controls: { id: string; description: string }[];
+    sopName: string; subProcess: string; version: string; uploadedAgo: string; uploadedBy: string;
   } | null>(null);
   const [racmList] = useState<RacmEntry[]>(RACM_SEED_DATA);
   const allRacms = (() => {
@@ -1641,6 +1649,9 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [archivedIds, setArchivedIds] = useState<string[]>([]);
+  // Permanently-deleted RACMs (distinct from archive — no recovery); filtered out of the list.
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [confirmDeleteRacm, setConfirmDeleteRacm] = useState<{ id: string; name: string } | null>(null);
   const [unfrozenIds, setUnfrozenIds] = useState<string[]>([]);
   // Inline card expansion (risk–control mapping preview) + locally-unmapped pairs.
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
@@ -1754,7 +1765,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   }, [initialMappingRacm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseFiltered = processFilter ? allRacms.filter(r => r.process === processFilter) : allRacms;
-  const preColFiltered = baseFiltered.filter(r => !archivedIds.includes(r.id));
+  const preColFiltered = baseFiltered.filter(r => !archivedIds.includes(r.id) && !deletedIds.includes(r.id));
   const filtered = preColFiltered
     .filter(r => {
       if (statusFilter.length === 0) return true;
@@ -1787,7 +1798,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   // Keep selected list scoped to currently visible rows
   useEffect(() => {
     setSelectedIds(prev => prev.filter(id => filtered.some(r => r.id === id)));
-  }, [archivedIds, processFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [archivedIds, deletedIds, processFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allVisibleIds = filtered.map(r => r.id);
   const allSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedIds.includes(id));
@@ -1815,15 +1826,12 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   };
   const unmapPair = (riskId: string, controlId: string) => {
     setUnmappedPairs(prev => new Set(prev).add(`${riskId}:${controlId}`));
-    logEvent({ action: 'Update', description: `Unmapped control ${controlId} from risk ${riskId}`, module: 'Governance', entity: 'RACM' });
   };
   const deleteRow = (racmId: string, riskId: string) => {
     setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
-    logEvent({ action: 'Delete', description: `Removed risk ${riskId} from RACM ${racmId}`, module: 'Governance', entity: 'RACM' });
   };
   const handleBulkArchive = () => {
     setArchivedIds(prev => [...prev, ...selectedIds]);
-    logEvent({ action: 'Update', description: `Archived ${selectedIds.length} RACM${selectedIds.length === 1 ? '' : 's'}`, module: 'Governance', entity: 'RACM' });
     setSelectedIds([]);
   };
   const handleReopen = (racmId: string) => {
@@ -1865,11 +1873,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
       <RacmDetailPage
         racm={detailRacmFromUrl}
         onBack={() => setDetailRacmId(null)}
-        onOpenMapping={() => {
-          setMappingRacm(detailRacmFromUrl);
-          setShowMappingWorkspace(true);
-          setDetailRacmId(null);
-        }}
+        // "Open mapping" opens the same full editable RACM grid as the card's
+        // "Open in editor" action — in a new browser tab. The detail page stays
+        // open behind it. (Old in-app ArRacmMappingView is still reachable via
+        // the initialMappingRacm path, line ~1750.)
+        onOpenMapping={() => onOpenInEditor?.(detailRacmFromUrl)}
       />
     );
   }
@@ -1884,7 +1892,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const handleArchiveOne = (id: string) => {
     setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedIds(prev => prev.filter(s => s !== id));
-    logEvent({ action: 'Update', description: `Archived RACM ${id}`, module: 'Governance', entity: 'RACM' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedIds(prev => prev.filter(s => s !== id));
@@ -1947,14 +1954,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               </button>
             )}
             <ColumnFilter variant="button" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} align="end" />
-            <ColumnFilter variant="button" label="Readiness" options={readinessOptions} value={readinessFilter} onChange={setReadinessFilter} align="end" />
             <ColumnFilter variant="button" label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} align="end" />
             <ColumnFilter variant="button" label="Framework" options={frameworkOptions} value={frameworkFilter} onChange={setFrameworkFilter} align="end" />
             {onCreate && (
               <Button
                 variant="primary"
                 size="md"
-                className="shrink-0"
+                className="shrink-0 !h-8"
                 leftIcon={<Plus size={13} />}
                 onClick={onCreate}
               >
@@ -2016,7 +2022,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             const readiness = getRacmTableReadiness(racm);
             const isSelected = selectedIds.includes(racm.id);
             const versionLabel = racm.version.replace(/^v/i, '');
-            const descLine = `${racm.risks} risks · ${racm.controls} controls · v${versionLabel}`;
+            const descLine = racm.createdAt ? `v${versionLabel} · Created ${racm.createdAt}` : `v${versionLabel}`;
             // Inline risk–control mapping rows for the expand panel — derived from the
             // process's risks/controls (locally-unmapped pairs removed).
             const cardExpanded = expandedCardIds.has(racm.id);
@@ -2031,17 +2037,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             const openSourceSop = () => {
               if (!cardSourceSop) return;
               setViewSop({
+                sopName: cardSourceSop.name,
                 subProcess: racm.process,
-                title: cardSourceSop.name,
                 version: cardSourceSop.version,
                 uploadedAgo: cardSourceSop.at,
-                summary: {
-                  controls: cardSourceSop.controls,
-                  risks: cardSourceSop.risks,
-                  attributes: cardSourceSop.controls * 3,
-                  racmName: racm.name,
-                },
-                controls: cardControlList.map(c => ({ id: c.id, description: c.name })),
+                uploadedBy: cardSourceSop.by,
               });
             };
             // Unified risk rows: this process's seed risks + risks linked via the Link Risk sheet.
@@ -2079,99 +2079,52 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 }`}
               >
                 <div
-                  className="grid grid-cols-[44px_2.6fr_1fr_1.7fr_104px] gap-5 px-6 py-5 items-start"
+                  className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start"
                 >
-                {/* Leading control — the chevron is the ONLY expand trigger (the rest
-                    of the card no longer toggles). */}
-                <div className="flex items-center gap-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleCardExpand(racm.id)}
-                    aria-label={cardExpanded ? `Collapse ${racm.id}` : `Expand ${racm.id}`}
-                    aria-expanded={cardExpanded}
-                    className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
-                  >
-                    <ChevronRight
-                      size={14}
-                      aria-hidden="true"
-                      className={`shrink-0 transition-transform duration-200 ${cardExpanded ? 'rotate-90' : ''}`}
-                    />
-                  </button>
-                </div>
-
                 {/* RACM column — title + status pill + description + meta + tag pills */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {isRenaming ? (
-                      <input
-                        autoFocus
-                        value={editingRacmName}
-                        onChange={e => setEditingRacmName(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') { e.preventDefault(); saveRacmName(racm.id, displayName); }
-                          else if (e.key === 'Escape') { setEditingRacmNameId(null); }
-                        }}
-                        onBlur={() => saveRacmName(racm.id, displayName)}
-                        className="text-[0.9375rem] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDetailRacmId(racm.id)}
-                        className="text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 hover:underline cursor-pointer text-left"
-                      >
-                        {displayName}
-                      </button>
-                    )}
-                    <Pill tone={STATUS_TONE[status]}>{status}</Pill>
+                    <button
+                      type="button"
+                      onClick={() => setDetailRacmId(racm.id)}
+                      className="group/title text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 cursor-pointer text-left"
+                    >
+                      <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{racm.id.toUpperCase()}</span>
+                      <span className="group-hover/title:underline">{displayName}</span>
+                    </button>
+                    <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold border ${STATUS_BADGE[status]}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+                      {status}
+                    </span>
                   </div>
                   <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
                     {descLine}
                   </p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted flex-wrap">
-                    <span className="font-mono tracking-tight">{racm.id}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
-                      {racm.process}
-                    </span>
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
-                      {racm.framework}
-                    </span>
-                  </div>
                 </div>
 
-                {/* Readiness column */}
-                <div className="flex flex-col items-start gap-1.5">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-paper-100 text-ink-700 border border-border-light">
-                    {readiness}
+                {/* Tags column — process + framework (moved here; replaces the old Readiness column) */}
+                <div className="flex flex-wrap items-start gap-1.5">
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    {racm.process}
+                  </span>
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
+                    {racm.framework}
                   </span>
                 </div>
 
-                {/* Mapping coverage column */}
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  {racm.mappedRisks === 0 ? (
-                    <div className="text-[11px] text-high-700 italic inline-flex items-center gap-1">
-                      <AlertTriangle size={11} className="text-high-700" /> Not mapped
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-baseline gap-2 min-w-0">
-                        <span className="text-[15px] font-bold tabular-nums leading-none text-text">{racm.mappedRisks}/{racm.risks}</span>
-                        <span className="text-[11px] text-text-secondary">risks mapped</span>
-                      </div>
-                      <div className="text-[11px] text-text-muted">
-                        <span className="font-semibold text-text">{racm.keyControls}</span> key controls
-                      </div>
-                    </>
-                  )}
+                {/* Meta line — risks · controls · key · attributes% · created (replaces mapping coverage) */}
+                <div className="text-[12px] text-text-muted leading-relaxed flex flex-wrap items-center gap-x-1.5 min-w-0">
+                  <span>{racm.risks} risks</span>
+                  <span className="text-ink-300" aria-hidden="true">·</span>
+                  <span>{racm.controls} controls</span>
+                  <span className="text-ink-300" aria-hidden="true">·</span>
+                  <span className="font-semibold text-mitigated-700">{racm.keyControls} key</span>
                 </div>
 
                 {/* Actions column */}
                 <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                   {isSelected ? (
                     <>
-                      {can('racm_archive') && (
                       <div className="relative group/archive">
                         <button
                           type="button"
@@ -2183,7 +2136,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
                       </div>
-                      )}
                       <div className="relative group/cancel">
                         <button
                           type="button"
@@ -2194,35 +2146,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           <X size={14} />
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">Cancel selection</span>
-                      </div>
-                    </>
-                  ) : isRenaming ? (
-                    <>
-                      {/* onMouseDown preventDefault keeps the input focused so its onBlur
-                          doesn't commit before these click handlers run. */}
-                      <div className="relative group/cancel">
-                        <button
-                          type="button"
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => setEditingRacmNameId(null)}
-                          aria-label="Cancel rename"
-                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">Cancel</span>
-                      </div>
-                      <div className="relative group/save">
-                        <button
-                          type="button"
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => saveRacmName(racm.id, displayName)}
-                          aria-label="Save name"
-                          className="p-1.5 rounded-md bg-brand-600 text-paper-0 hover:bg-brand-500 transition-colors cursor-pointer"
-                        >
-                          <Check size={14} strokeWidth={2.5} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">Save</span>
                       </div>
                     </>
                   ) : (
@@ -2240,146 +2163,44 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/vsop:opacity-100 pointer-events-none transition-opacity z-50">View SOP</span>
                         </div>
                       )}
-                      {can('racm_link_risk') && (
                       <div className="relative group/lrisk">
                         <button
                           type="button"
                           onClick={() => setLinkRiskTarget({ racmId: racm.id, bpAbbr: racm.process })}
                           aria-label="Link risk"
-                          className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                          className="shrink-0 inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[11px] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
                         >
-                          <AlertTriangle size={14} />
+                          <Link2 size={12} className="shrink-0" />
+                          Risk
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
                       </div>
-                      )}
-                      {can('racm_edit') && (
                       <div className="relative group/edit">
                         <button
                           type="button"
-                          onClick={() => { setEditingRacmNameId(racm.id); setEditingRacmName(displayName); }}
-                          aria-label="Rename"
+                          onClick={() => onOpenInEditor?.(racm)}
+                          aria-label="Open in editor"
                           className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                         >
-                          <Pencil size={14} />
+                          <ExternalLink size={14} />
                         </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Rename</span>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Open in editor</span>
                       </div>
-                      )}
-                      {can('racm_archive') && (
-                      <div className="relative group/archive">
+                      <div className="relative group/del">
                         <button
                           type="button"
-                          onClick={() => handleArchiveOne(racm.id)}
-                          aria-label="Archive"
+                          onClick={() => setConfirmDeleteRacm({ id: racm.id, name: displayName })}
+                          aria-label="Delete"
                           className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} />
                         </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
                       </div>
-                      )}
                     </>
                   )}
                 </div>
                 </div>
-                <AnimatePresence initial={false}>
-                  {cardExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                      className="overflow-hidden border-t border-canvas-border bg-canvas/40"
-                    >
-                      <div className="p-4 space-y-3" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="text-[12px] font-bold uppercase tracking-wider text-ink-600">Risk &amp; Control Mapping</h4>
-                          <div className="relative w-[260px] shrink-0">
-                            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-                            <input
-                              value={expandSearch[racm.id] ?? ''}
-                              onChange={e => setExpandSearch(prev => ({ ...prev, [racm.id]: e.target.value }))}
-                              placeholder="Search risks & controls..."
-                              className="pl-9 pr-3 py-1.5 rounded-[8px] border border-border bg-white text-[12px] w-full placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          {visibleMappingRows.length === 0 ? (
-                            <p className="text-[12px] text-ink-400 italic">{cardSearch ? 'No risks or controls match your search.' : 'No risk–control mappings for this RACM.'}</p>
-                          ) : visibleMappingRows.map(({ risk, controls }) => {
-                            const mapped = controls.length > 0;
-                            return (
-                            <div key={risk.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-canvas-border bg-white hover:bg-canvas/50 transition-colors">
-                              <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" aria-hidden="true" />
-                              <span className="font-mono text-[0.6875rem] font-semibold text-brand-700 shrink-0">{risk.id}</span>
-                              <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{risk.name}</span>
-                              {/* Risk Status */}
-                              <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${mapped ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{mapped ? 'Mapped' : 'Unmapped'}</span>
-                              {/* Control(s) */}
-                              <div className="shrink-0 flex items-center gap-1 flex-wrap justify-end max-w-[220px]">
-                                {controls.length === 0 ? (
-                                  <span className="text-[11px] text-ink-400">—</span>
-                                ) : controls.map(ctl => (
-                                  <span key={ctl.id} title={ctl.isKey ? `${ctl.name} · Key control` : ctl.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[0.6875rem] font-semibold text-brand-700">
-                                    <Star size={10} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
-                                    <span className="font-mono">{ctl.id}</span>
-                                    {can('racm_unmap') && (
-                                    <button type="button" onClick={() => setConfirmUnmap({ riskId: risk.id, ctlId: ctl.id })} className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors" aria-label={`Remove ${ctl.id}`}>
-                                      <X size={10} />
-                                    </button>
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                              {/* Workflow Status */}
-                              {(() => {
-                                const wf = controls.map(c => linkedWorkflows[`${risk.id}:${c.id}`]).find(Boolean);
-                                return wf
-                                  ? <span className="shrink-0 w-10 flex justify-center" title={`Workflow: ${wf.name} ${wf.version}`}><Check size={13} className="text-compliant-700" /></span>
-                                  : <span className="shrink-0 w-10 text-center text-[11px] text-ink-400" title="Workflow status">—</span>;
-                              })()}
-                              {/* Mapping */}
-                              <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${mapped ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{mapped ? 'Mapped' : 'Unmapped'}</span>
-                              {/* Row actions — Link Control / Link Workflow / Delete (tooltips on hover).
-                                  Link Risk lives on the RACM card's action row (it maps risks to the
-                                  whole RACM), not per risk. */}
-                              <div className="shrink-0 flex items-center gap-0.5">
-                                {can('racm_link_control') && (
-                                <div className="relative group/lctrl">
-                                  <button type="button" aria-label="Link Control" onClick={() => setLinkControlTarget({ riskId: risk.id, riskName: risk.name, bpAbbr: racm.process })} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
-                                    <Shield size={13} />
-                                  </button>
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lctrl:opacity-100 pointer-events-none transition-opacity z-50">Link Control</span>
-                                </div>
-                                )}
-                                {/* Link Workflow moved to the Control Library (one per control row).
-                                    Commented out here per request — restore this block to bring it back.
-                                <div className="relative group/lwf">
-                                  <button type="button" aria-label="Link Workflow" onClick={() => { const ctrls = controlsForRisk(risk.id); setLinkWfTarget({ riskId: risk.id, riskName: risk.name, controls: ctrls }); setLinkWfControl(ctrls.length === 1 ? ctrls[0] : null); }} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
-                                    <WorkflowIcon size={13} />
-                                  </button>
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lwf:opacity-100 pointer-events-none transition-opacity z-50">Link Workflow</span>
-                                </div>
-                                */}
-                                {can('racm_archive') && (
-                                <div className="relative group/del">
-                                  <button type="button" aria-label="Delete" onClick={() => setConfirmDeleteRisk({ racmId: racm.id, riskId: risk.id, riskName: risk.name })} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
-                                    <Trash2 size={13} />
-                                  </button>
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
-                                </div>
-                                )}
-                              </div>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </motion.div>
             );
           })}
@@ -2389,7 +2210,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
       {/* ── Link Risk to RACM sidesheet (opened from an expanded-row action) ── */}
       <AnimatePresence>
-        {linkRiskTarget && !createRiskFromLink && (() => {
+        {linkRiskTarget && (() => {
           const lrt = linkRiskTarget;
           const bpId = BUSINESS_PROCESSES.find(b => b.abbr === lrt.bpAbbr)?.id;
           const alreadyLinkedIds = [
@@ -2413,6 +2234,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         {linkRiskTarget && createRiskFromLink && (
           <RiskDrawer
             risk={null}
+            presentation="modal"
             defaultProcess={linkRiskTarget.bpAbbr}
             onClose={() => setCreateRiskFromLink(false)}
             onSave={() => setCreateRiskFromLink(false)}
@@ -2444,6 +2266,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           const lct = linkControlTarget;
           return (
             <CreateControlDrawer
+              presentation="modal"
               defaultProcess={lct.bpAbbr}
               defaultRiskIds={[lct.riskId]}
               defaultRisk={lct.riskName}
@@ -2488,21 +2311,35 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         })()}
       </AnimatePresence>
 
-      {/* ── Source SOP preview (opened from a RACM extracted from a SOP) ── */}
+      {/* ── Delete RACM confirmation (permanent — no recovery) ── */}
       <AnimatePresence>
-        {viewSop && (
-          <SopDetailDrawer
-            subProcess={viewSop.subProcess}
-            title={viewSop.title}
-            version={viewSop.version}
-            uploadedAgo={viewSop.uploadedAgo}
-            summary={viewSop.summary}
-            controls={viewSop.controls}
-            onDownload={() => addToast({ message: `Downloading ${viewSop.title}…`, type: 'info' })}
-            onClose={() => setViewSop(null)}
-          />
-        )}
+        {confirmDeleteRacm && (() => {
+          const dr = confirmDeleteRacm;
+          return (
+            <ConfirmDeleteRacmModal
+              racmName={dr.name}
+              onCancel={() => setConfirmDeleteRacm(null)}
+              onConfirm={() => {
+                setDeletedIds(prev => prev.includes(dr.id) ? prev : [...prev, dr.id]);
+                addToast({ message: `RACM "${dr.name}" deleted.`, type: 'success' });
+                setConfirmDeleteRacm(null);
+              }}
+            />
+          );
+        })()}
       </AnimatePresence>
+
+      {/* ── Source SOP viewer — same in-app document modal the SOP tab uses ── */}
+      <SopDocumentModal
+        open={!!viewSop}
+        sopName={viewSop?.sopName ?? ''}
+        subProcess={viewSop?.subProcess}
+        version={viewSop?.version}
+        uploadedBy={viewSop?.uploadedBy}
+        uploadedAgo={viewSop?.uploadedAgo}
+        onDownload={() => viewSop && addToast({ message: `Downloading ${viewSop.sopName}…`, type: 'info' })}
+        onClose={() => setViewSop(null)}
+      />
 
       {/* ── Link Workflow — step 1: choose which control (only when the risk has >1) ── */}
       <AnimatePresence>
@@ -2576,9 +2413,9 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+      <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Risk to RACM">
 
         {/* Header */}
@@ -2652,13 +2489,30 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
   alreadyLinkedIds: string[];
   onClose: () => void;
   onCreateControl: () => void;
-  onApply: (controls: { id: string; name: string; isKey: boolean }[]) => void;
+  onApply: (controls: { id: string; name: string; description: string; isKey: boolean }[]) => void;
 }) {
   const [search, setSearch] = useState('');
   const [keyFilter, setKeyFilter] = useState<'all' | 'key' | 'non-key'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const available = CONTROL_LIBRARY.filter(c => !alreadyLinkedIds.includes(c.id.toUpperCase()));
+  // Wizard-created controls (e.g. from a risk's Link Control → Create Control) are
+  // merged in — newest first — so a just-created control is immediately linkable.
+  const created = useCreatedControls();
+  const createdMapped: MappedControl[] = created.map(c => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    isKey: c.classification === 'Key',
+    automation: c.automation,
+    nature: c.nature,
+    workflowLinked: c.workflowChoice === 'link' && !!c.linkedWorkflowId,
+    workflowName: WORKFLOWS.find(w => w.id === c.linkedWorkflowId)?.name ?? '',
+    attributeCount: c.attributes.length,
+    lastExecution: '—',
+    status: 'Not Tested',
+  }));
+
+  const available = [...createdMapped, ...CONTROL_LIBRARY].filter(c => !alreadyLinkedIds.includes(c.id.toUpperCase()));
   const q = search.trim().toLowerCase();
   const filtered = available.filter(c => {
     if (keyFilter === 'key' && !c.isKey) return false;
@@ -2676,18 +2530,18 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
 
   const apply = () =>
     onApply(
-      (CONTROL_LIBRARY as MappedControl[])
+      [...createdMapped, ...CONTROL_LIBRARY]
         .filter(c => selected.has(c.id))
-        .map(c => ({ id: c.id.toUpperCase(), name: c.name, isKey: c.isKey })),
+        .map(c => ({ id: c.id.toUpperCase(), name: c.name, description: c.description, isKey: c.isKey })),
     );
 
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+      <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Existing Control">
 
         {/* Header */}

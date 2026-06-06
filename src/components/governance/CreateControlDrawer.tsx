@@ -44,6 +44,8 @@ interface Props {
   defaultRiskIds?: string[];
   /** Optional prefill for the Risk field in Basic Details (the risk this control addresses) */
   defaultRisk?: string;
+  /** 'drawer' (default) = right sidesheet; 'modal' = centered modal (used in the RACM Link Control flow). */
+  presentation?: 'drawer' | 'modal';
 }
 
 /* ─── Constants ─── */
@@ -90,7 +92,8 @@ const selectClass = inputClass + ' cursor-pointer';
 const labelClass = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
 
 /* ─── Component ─── */
-export default function CreateControlDrawer({ onClose, onSave, defaultProcess, defaultRiskIds, defaultRisk }: Props) {
+export default function CreateControlDrawer({ onClose, onSave, defaultProcess, defaultRiskIds, defaultRisk, presentation = 'drawer' }: Props) {
+  const isModal = presentation === 'modal';
   const [step, setStep] = useState(0);
 
   // Form state — with optional prefills
@@ -475,11 +478,13 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
 
       {/* Drawer */}
       <motion.aside
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 24, opacity: 0 }}
+        initial={isModal ? { opacity: 0 } : { x: 24, opacity: 0 }}
+        animate={isModal ? { opacity: 1 } : { x: 0, opacity: 1 }}
+        exit={isModal ? { opacity: 0 } : { x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[600px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className={isModal
+          ? "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-canvas-elevated rounded-2xl shadow-xl flex flex-col overflow-hidden"
+          : "fixed top-0 right-0 bottom-0 w-full max-w-[600px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"}
         role="dialog"
         aria-label="Create Control"
       >

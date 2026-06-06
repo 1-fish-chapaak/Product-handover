@@ -7,6 +7,7 @@ import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData'
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -74,7 +75,21 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
     <div className="h-full overflow-y-auto bg-canvas relative">
       <div className="px-[124px] py-8 relative">
         {/* Header — full-bleed white strip, 124px side margins to match Reports. */}
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-4 border-b border-border">
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-6 mb-4 border-b border-border relative overflow-hidden">
+          {/* Ambient FloatingLines — same recipe as the Knowledge Hub / BP-detail
+              header. Top/bottom waves, low-opacity texture; the absolute canvas
+              paints behind the title, content stays in normal flow above it. */}
+          <FloatingLines
+            enabledWaves={['top', 'bottom']}
+            lineCount={3}
+            lineDistance={10}
+            bendRadius={5}
+            bendStrength={-0.3}
+            interactive
+            parallax
+            color="#6a12cd"
+            opacity={0.05}
+          />
           <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
           <p className="text-[13px] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
         </div>
