@@ -10,6 +10,7 @@ import SopDocumentModal from './SopDocumentModal';
 import ConfirmDeleteRacmModal from './ConfirmDeleteRacmModal';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -1620,6 +1621,7 @@ interface Props {
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   // Inline RACM rename (pencil action) — renamed names overlay the source data.
   const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
   const [editingRacmName, setEditingRacmName] = useState('');
@@ -1833,6 +1835,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
   };
   const handleBulkArchive = () => {
+    logEvent({ action: 'Update', description: `Archived ${selectedIds.length} RACM${selectedIds.length === 1 ? '' : 's'}`, module: 'Governance', entity: 'RACM' });
     setArchivedIds(prev => [...prev, ...selectedIds]);
     setSelectedIds([]);
   };
@@ -1892,6 +1895,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
   // Archive / cancel a single card.
   const handleArchiveOne = (id: string) => {
+    logEvent({ action: 'Update', description: `Archived RACM ${id}`, module: 'Governance', entity: 'RACM' });
     setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedIds(prev => prev.filter(s => s !== id));
   };

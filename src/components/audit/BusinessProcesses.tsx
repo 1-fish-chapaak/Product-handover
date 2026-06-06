@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock, Share2,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
@@ -17,6 +17,8 @@ import type { ProcessCode } from '../../data/engagements';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
@@ -1407,6 +1409,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
   // Local SOP state (seed from mock + allow new uploads)
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [localSops, setLocalSops] = useState<LocalSOP[]>(() =>
     existingSops.map((s, idx) => ({
       id: s.id, name: s.name, fileName: `${s.name.replace(/\s+/g, '_')}.pdf`, version: s.version,
@@ -1797,6 +1800,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     setLocalSops(prev => prev.map(s => s.id === id ? { ...s, status: 'Archived' as SOPStatus } : s));
     setSelectedIds(prev => prev.filter(x => x !== id));
     if (target) addToast({ message: `"${target.name}" archived`, type: 'info' });
+    if (target) logEvent({ action: 'Update', description: `Archived SOP "${target.name}"`, module: 'Process Hub', entity: 'SOP' });
   };
 
   const hasAnyFilter =
@@ -2908,6 +2912,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   // `onGoToRacm` powers the empty-state "Open RACM" CTA.
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   // Hydrate from the per-BP store so edits made in a detail tab (workflow Map /
   // unlink) and just-created controls survive across the list and the new tab.
   const [controls, setControls] = useState<DesignControl[]>(() => {
@@ -3023,6 +3028,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
   const handleArchiveOne = (id: string) => {
+    logEvent({ action: 'Update', description: `Archived control ${id}`, module: 'Control Library', entity: 'Control' });
     setControls(prev => prev.filter(c => c.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control archived`, type: 'success' });
@@ -3031,6 +3037,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const [confirmDeleteCtrl, setConfirmDeleteCtrl] = useState<{ id: string; name: string } | null>(null);
   const [showCreateControl, setShowCreateControl] = useState(false);
   const handleDeleteOne = (id: string) => {
+    logEvent({ action: 'Delete', description: `Deleted control ${id}`, module: 'Control Library', entity: 'Control' });
     setControls(prev => prev.filter(c => c.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Control deleted`, type: 'success' });
@@ -3578,6 +3585,7 @@ const SEED_BP_WF: BPWorkflow[] = [
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -3738,6 +3746,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'Archived' as const } : w));
     setSelectedIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
+    logEvent({ action: 'Update', description: `Archived workflow "${wf.name}" (${wf.id})`, module: 'Workflow Library', entity: 'Workflow' });
   };
 
   if (!isLoading && loadError) {
@@ -4938,6 +4947,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   const { addToast } = useToast();
   // Completed bulk-run from the Workflows tab — when set, the shared AuditLogsView
   // takes over the page (same results view as the Workflow Library bulk run).
+  const { can } = useCan();
+  const { openShare } = useShare();
   const [bulkAuditRun, setBulkAuditRun] = useState<BulkAuditRun | null>(null);
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
@@ -5572,10 +5583,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
         </div>
         <div className="pb-5 flex items-end justify-between gap-4 flex-wrap">
           <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          <div className="flex items-center gap-3 flex-wrap pb-1.5">
           {/* Process-meta (code · owner · status) — moved up onto the title row,
               right-aligned at the BP-name level. Overview only. */}
           {active === 'overview' && (
-            <div className="flex items-center gap-4 text-[12px] flex-wrap pb-1.5">
+            <div className="flex items-center gap-4 text-[12px] flex-wrap">
               <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
               <span className="w-px h-3 bg-canvas-border" aria-hidden />
               <span className="flex items-center gap-1.5">
@@ -5599,6 +5611,15 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
               })()}
             </div>
           )}
+          {can('bp_share') && (
+            <button
+              onClick={(e) => { e.stopPropagation(); openShare({ type: 'process', id: bp.abbr, anchor: rectFromEvent(e) }); }}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+            >
+              <Share2 size={14} /> Share
+            </button>
+          )}
+          </div>
         </div>
         <div className="pt-1">{renderTabBar(active)}</div>
       </div>
