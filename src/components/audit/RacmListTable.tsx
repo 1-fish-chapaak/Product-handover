@@ -14,6 +14,7 @@ import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
 import { SEED_RISKS, RiskDrawer } from './RiskRegister';
 import CreateControlDrawer from '../governance/CreateControlDrawer';
+import { useCreatedControls } from '../../data/createdControlsStore';
 import { BUSINESS_PROCESSES, RISKS, CONTROLS, WORKFLOWS, SOPS } from '../../data/mockData';
 import { AR_RACM_ENTRIES, AR_RACM_ID, type ArRacmEntry } from '../../data/arRacm';
 
@@ -2209,7 +2210,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
       {/* ── Link Risk to RACM sidesheet (opened from an expanded-row action) ── */}
       <AnimatePresence>
-        {linkRiskTarget && !createRiskFromLink && (() => {
+        {linkRiskTarget && (() => {
           const lrt = linkRiskTarget;
           const bpId = BUSINESS_PROCESSES.find(b => b.abbr === lrt.bpAbbr)?.id;
           const alreadyLinkedIds = [
@@ -2233,6 +2234,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         {linkRiskTarget && createRiskFromLink && (
           <RiskDrawer
             risk={null}
+            presentation="modal"
             defaultProcess={linkRiskTarget.bpAbbr}
             onClose={() => setCreateRiskFromLink(false)}
             onSave={() => setCreateRiskFromLink(false)}
@@ -2264,6 +2266,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
           const lct = linkControlTarget;
           return (
             <CreateControlDrawer
+              presentation="modal"
               defaultProcess={lct.bpAbbr}
               defaultRiskIds={[lct.riskId]}
               defaultRisk={lct.riskName}
@@ -2410,9 +2413,9 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+      <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Risk to RACM">
 
         {/* Header */}
@@ -2486,13 +2489,30 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
   alreadyLinkedIds: string[];
   onClose: () => void;
   onCreateControl: () => void;
-  onApply: (controls: { id: string; name: string; isKey: boolean }[]) => void;
+  onApply: (controls: { id: string; name: string; description: string; isKey: boolean }[]) => void;
 }) {
   const [search, setSearch] = useState('');
   const [keyFilter, setKeyFilter] = useState<'all' | 'key' | 'non-key'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const available = CONTROL_LIBRARY.filter(c => !alreadyLinkedIds.includes(c.id.toUpperCase()));
+  // Wizard-created controls (e.g. from a risk's Link Control → Create Control) are
+  // merged in — newest first — so a just-created control is immediately linkable.
+  const created = useCreatedControls();
+  const createdMapped: MappedControl[] = created.map(c => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    isKey: c.classification === 'Key',
+    automation: c.automation,
+    nature: c.nature,
+    workflowLinked: c.workflowChoice === 'link' && !!c.linkedWorkflowId,
+    workflowName: WORKFLOWS.find(w => w.id === c.linkedWorkflowId)?.name ?? '',
+    attributeCount: c.attributes.length,
+    lastExecution: '—',
+    status: 'Not Tested',
+  }));
+
+  const available = [...createdMapped, ...CONTROL_LIBRARY].filter(c => !alreadyLinkedIds.includes(c.id.toUpperCase()));
   const q = search.trim().toLowerCase();
   const filtered = available.filter(c => {
     if (keyFilter === 'key' && !c.isKey) return false;
@@ -2510,18 +2530,18 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
 
   const apply = () =>
     onApply(
-      (CONTROL_LIBRARY as MappedControl[])
+      [...createdMapped, ...CONTROL_LIBRARY]
         .filter(c => selected.has(c.id))
-        .map(c => ({ id: c.id.toUpperCase(), name: c.name, isKey: c.isKey })),
+        .map(c => ({ id: c.id.toUpperCase(), name: c.name, description: c.description, isKey: c.isKey })),
     );
 
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+      <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Existing Control">
 
         {/* Header */}

@@ -3561,7 +3561,6 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
-  const [usageFilter2, setUsageFilter2] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Workflows currently re-running in place after a technical error.
@@ -3598,22 +3597,15 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   }) : workflows;
   const filtered = searched
     .filter(w => typeFilter.length === 0 || typeFilter.includes(w.type))
-    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature))
-    .filter(w => {
-      if (usageFilter2.length === 0) return true;
-      const usage = w.linkedControls.length > 0 ? 'Used' : 'Unused';
-      return usageFilter2.includes(usage);
-    });
+    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature));
   const typeOptions = Array.from(new Set(workflows.map(w => w.type))).sort();
   const natureOptions = Array.from(new Set(workflows.map(w => w.nature))).sort();
-  const usageOptions = ['Used', 'Unused'];
 
-  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || usageFilter2.length > 0;
+  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0;
   const clearAllFilters = () => {
     setSearchQuery('');
     setTypeFilter([]);
     setNatureFilter([]);
-    setUsageFilter2([]);
   };
 
   const handleDelete = (id: string) => {
@@ -3801,7 +3793,6 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
             </button>
           )}
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
-          <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
           <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
