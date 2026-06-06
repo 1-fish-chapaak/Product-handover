@@ -768,9 +768,9 @@ function PaginationButton({
   );
 }
 
-type BulkRunWorkflowResult = { id: string; code: string; name: string; casesFlagged: number };
+export type BulkRunWorkflowResult = { id: string; code: string; name: string; casesFlagged: number };
 
-function deterministicCaseCount(seed: string): number {
+export function deterministicCaseCount(seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash * 31 + seed.charCodeAt(i)) | 0;
@@ -779,7 +779,7 @@ function deterministicCaseCount(seed: string): number {
   return buckets[Math.abs(hash) % buckets.length];
 }
 
-function AuditLogsView({
+export function AuditLogsView({
   run,
   onBack,
 }: {

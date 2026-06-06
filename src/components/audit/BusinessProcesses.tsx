@@ -2,26 +2,36 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Search, Plus, Upload, Sparkles,
-  ChevronRight, ChevronLeft, ChevronDown, LayoutGrid,
+  ChevronRight, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
-  FileText, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Pencil, Trash2,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap,
+  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
+  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
+import { getCreatedControls, type CreatedControl } from '../../data/createdControlsStore';
+import { generateRacmForProcess, type RACMRow } from '../../data/racm';
+import type { ProcessCode } from '../../data/engagements';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
+import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
+import { AuditLogsView, deterministicCaseCount, type LibraryWorkflow, type BulkRunWorkflowResult } from '../workflow/WorkflowLibraryView';
+
+// Shape of a completed bulk-run, fed to the shared AuditLogsView (same flow as
+// the Workflow Library's bulk run).
+type BulkAuditRun = { name: string; workflows: BulkRunWorkflowResult[]; skippedCount: number; date: string };
+import BPOverviewDashboard from './BPOverviewDashboard';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
-import ControlExpandedPanel from './ControlExpandedPanel';
-import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
+import SopDocumentModal from './SopDocumentModal';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
+import FloatingLines from '../shared/FloatingLines';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
@@ -32,11 +42,118 @@ import ListLoadError from '../shared/ListLoadError';
 // deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
 // while Testing RACM is mapped but still Workflow Missing.
 const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
-  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
-  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
-  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', createdAt: 'May 28, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', createdAt: 'May 12, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
+  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', createdAt: 'Apr 30, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
 ];
 const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
+
+// A new-tab deep link into the BP detail (?view=bp-detail&bp=&section=&risk=/racm=)
+// is captured once at module load. The BP detail strips its own ?section= on its
+// first (StrictMode) unmount, which wipes the whole query before the remount can
+// read it — so BPDetailView restores this on remount, then consumes it. Mutable
+// binding so it only forces the deep link once (not when returning to the BP later).
+let BP_DEEPLINK: { bp: string; qs: string } | null = (() => {
+  if (typeof window === 'undefined') return null;
+  const p = new URLSearchParams(window.location.search);
+  return p.get('view') === 'bp-detail' && p.get('bp')
+    ? { bp: p.get('bp')!, qs: window.location.search }
+    : null;
+})();
+
+// ─── New RACM flow (ported from the engagement RACM tab) ───────────────────
+// Two-card chooser: import an existing matrix, or upload an SOP and let IRA
+// extract the RACM. Mirrors RACMTab's NewRacmModal so the Process Hub create-
+// RACM flow is identical to the engagement one.
+function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => void; onUploadRacm: () => void; onUploadSop: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-[560px] bg-white rounded-2xl shadow-2xl overflow-hidden"
+      >
+        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
+          <div>
+            <h2 className="text-[16px] font-bold text-text">New RACM</h2>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+        </div>
+        <div className="p-6 grid grid-cols-2 gap-3">
+          <button onClick={onUploadRacm} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><FileUp size={16} className="text-evidence-700" /></div>
+            <div className="text-[13.5px] font-semibold text-text mb-1">Upload a RACM</div>
+            <div className="text-[11.5px] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
+          </button>
+          <button onClick={onUploadSop} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
+            <div className="text-[13.5px] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+            <div className="text-[11.5px] text-text-muted leading-relaxed">IRA reads a procedure (.pdf/.docx) and drafts the RACM.</div>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// SOP → RACM extraction overlay (ported from the engagement RACM tab).
+function RacmExtractionOverlay({ filename }: { filename: string }) {
+  const steps = ['Parsing the SOP document', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & test procedures'];
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-ink-900/50 backdrop-blur-[3px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.18 }} className="relative w-full max-w-[440px] bg-white rounded-2xl shadow-2xl p-6"
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 rounded-xl bg-brand-50"><Loader2 size={20} className="text-brand-600 animate-spin" /></div>
+          <div className="min-w-0">
+            <div className="text-[14px] font-bold text-text">Extracting RACM from SOP</div>
+            <div className="text-[11.5px] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {steps.map((s, i) => (
+            <motion.div key={s} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.32, duration: 0.3 }} className="flex items-center gap-2.5 text-[12px] text-text-secondary">
+              <span className="w-4 h-4 rounded-full bg-brand-50 border border-brand-100 inline-flex items-center justify-center shrink-0">
+                <Sparkles size={9} className="text-brand-600" />
+              </span>
+              {s}
+            </motion.div>
+          ))}
+        </div>
+        <div className="mt-5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+          <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Derive a readable RACM name from an uploaded file name (mirrors the engagement helper).
+function racmNameFromFilename(filename: string): string {
+  const base = filename
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\bSOP\b/ig, '')
+    .replace(/\bRACM\b/ig, '')
+    .replace(/\bv?\d+(\.\d+)?\b/gi, '')
+    .trim();
+  return base ? base.replace(/\b\w/g, c => c.toUpperCase()) : '';
+}
+
+// Roll up generated RACM rows into the counts the RACM list card needs.
+function racmStatsFromRows(rows: RACMRow[]) {
+  const risks = new Set(rows.map(r => r.riskId)).size;
+  const controls = new Set(rows.map(r => r.controlId)).size;
+  const keyControls = new Set(rows.filter(r => r.isKey).map(r => r.controlId)).size;
+  const withAttrs = rows.filter(r => r.attributes.length > 0).length;
+  const attributesCoverage = rows.length ? Math.round((withAttrs / rows.length) * 100) : 0;
+  return { risks, controls, keyControls, attributesCoverage };
+}
 
 interface Props {
   selectedBPId: string | null;
@@ -741,7 +858,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
   );
 }
 
-// ─── Upload SOP Drawer ────────────────────────────────────────────────────
+// ─── Upload SOP Modal ────────────────────────────────────────────────────
 
 interface UploadSOPData {
   name: string;
@@ -750,13 +867,17 @@ interface UploadSOPData {
   fileName: string;
 }
 
-function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }: {
+function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onSaveAsDraft }: {
   bpAbbr: string;
+  // When set, the modal is retrying a failed SOP: the name is fixed to the
+  // original SOP (the new file does not rename it) and the copy reflects a retry.
+  retrySopName?: string;
   onClose: () => void;
   onUploadAndProcess: (data: UploadSOPData) => void;
   onSaveAsDraft: (data: UploadSOPData) => void;
 }) {
-  const [name, setName] = useState('');
+  const isRetry = !!retrySopName;
+  const [name, setName] = useState(retrySopName ?? '');
   const [description, setDescription] = useState('');
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -774,7 +895,11 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
   const isValid = name.trim() && fileName;
   // Drawer is dirty as soon as the user touches any field — close attempts go through confirm.
-  const isDirty = !!(name.trim() || description.trim() || fileName);
+  // Retry pre-fills the name; only flag dirty if the user changed it, picked a
+  // file, or typed a description.
+  const isDirty = isRetry
+    ? (name.trim() !== (retrySopName ?? '').trim() || !!fileName || !!description.trim())
+    : !!(name.trim() || description.trim() || fileName);
 
   const buildData = (): UploadSOPData => ({ name: name.trim(), version: 'v1.0', description: description.trim(), fileName });
 
@@ -787,12 +912,12 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
   const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
 
   return (
-    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
+      <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
         {showDiscardConfirm && (
@@ -806,8 +931,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900">Upload SOP</h2>
-            <p className="text-[12px] text-ink-500 mt-0.5">Upload a process document and define metadata.</p>
+            <h2 className="font-display text-[18px] font-semibold text-ink-900">{isRetry ? 'Retry RACM generation' : 'Upload SOP'}</h2>
+            <p className="text-[12px] text-ink-500 mt-0.5">{isRetry ? 'Re-upload a document to retry. The SOP keeps its name.' : 'Upload a process document and define metadata.'}</p>
           </div>
           <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
         </div>
@@ -847,10 +972,11 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
             </div>
           </div>
 
-          {/* SOP Name */}
+          {/* SOP Name — editable. On retry it's pre-filled with the SOP's current
+              name (so it isn't lost); for a fresh upload it auto-fills from the file. */}
           <div>
             <label className={labelCls}>SOP Name <span className="text-risk">*</span></label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Auto-filled from file name" className={fieldCls} />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder={isRetry ? 'SOP name' : 'Auto-filled from file name'} className={fieldCls} />
           </div>
 
           {/* Business Process (read-only) */}
@@ -875,32 +1001,8 @@ function UploadSOPDrawer({ bpAbbr, onClose, onUploadAndProcess, onSaveAsDraft }:
             Upload & Process
           </Button>
         </div>
-      </motion.aside>
-    </>
-  );
-}
-
-// ─── SOP Preview Drawer ──────────────────────────────────────────────────
-
-function SOPPreviewDrawer({ sop, onClose }: { sop: LocalSOP; onClose: () => void; onGoToRacm?: () => void }) {
-  const { addToast } = useToast();
-  return (
-    <SopDetailDrawer
-      subProcess={sop.businessProcess}
-      title={sop.name}
-      version={sop.version}
-      uploadedAgo={sop.uploadedAt}
-      summary={sop.racmId ? {
-        controls: sop.controls,
-        risks: sop.risks,
-        attributes: sop.controls * 3,
-        racmName: sop.racmName || sop.racmId,
-      } : undefined}
-      sections={DEFAULT_SOP_SECTIONS}
-      controls={sop.extractedControls.map(c => ({ id: c.id, description: c.description }))}
-      onDownload={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
-      onClose={onClose}
-    />
+      </motion.div>
+    </div>
   );
 }
 
@@ -1318,8 +1420,12 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   );
 
   const [reviewingSopId, setReviewingSopId] = useState<string | null>(null);
-  const [previewingSopId, setPreviewingSopId] = useState<string | null>(null);
-  const [showUploadDrawer, setShowUploadDrawer] = useState(false);
+  const [viewingSopId, setViewingSopId] = useState<string | null>(null);
+  const [confirmDeleteSop, setConfirmDeleteSop] = useState<{ id: string; name: string } | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  // When set, the Upload SOP modal is in "retry" mode — the re-uploaded file
+  // replaces this failed SOP in place instead of creating a new SOP row.
+  const [retryingSopId, setRetryingSopId] = useState<string | null>(null);
   const [showCreateRacmForSopId, setShowCreateRacmForSopId] = useState<string | null>(null);
   const [versionConflict, setVersionConflict] = useState<{ data: UploadSOPData; startProcessing: boolean; existing: LocalSOP } | null>(null);
   const [sopStatusFilter, setSopStatusFilter] = useState<string[]>([]);
@@ -1331,18 +1437,6 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // Inline SOP rename — the pencil action puts a card's title into edit mode.
-  const [editingSopNameId, setEditingSopNameId] = useState<string | null>(null);
-  const [editingSopName, setEditingSopName] = useState('');
-  const saveSopName = (id: string) => {
-    const name = editingSopName.trim();
-    const current = localSops.find(s => s.id === id);
-    if (name && current && name !== current.name) {
-      setLocalSops(prev => prev.map(s => s.id === id ? { ...s, name } : s));
-      addToast({ message: `SOP renamed to "${name}".`, type: 'success' });
-    }
-    setEditingSopNameId(null);
-  };
 
   // URL sync — ?sop=sop-001
   useEffect(() => {
@@ -1371,6 +1465,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   }, []);
 
   const reviewingSop = reviewingSopId ? localSops.find(s => s.id === reviewingSopId) : null;
+  const retryingSop = retryingSopId ? localSops.find(s => s.id === retryingSopId) ?? null : null;
 
   // Derive a friendly file type label from the filename extension (e.g. "PDF").
   const getFileType = useCallback((sop: LocalSOP) => {
@@ -1393,7 +1488,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ section?: string }>;
-      if (ce.detail?.section === 'sop') setShowUploadDrawer(true);
+      if (ce.detail?.section === 'sop') setShowUploadModal(true);
     };
     window.addEventListener('process-hub-create', handler);
     return () => window.removeEventListener('process-hub-create', handler);
@@ -1456,7 +1551,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     };
 
     setLocalSops(prev => [newSop, ...prev]);
-    setShowUploadDrawer(false);
+    setShowUploadModal(false);
 
     if (!startProcessing) {
       addToast({ message: `"${data.name}" saved as draft. Start processing when ready.`, type: 'success' });
@@ -1491,6 +1586,65 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       addToast({ message: `"${data.name}" processed: ${risks.length} risks and ${controls.length} controls extracted. Review to create draft RACM.`, type: 'success' });
     }, 4500);
   }, [addToast, bpAbbr]);
+
+  // Retry a failed SOP — replace the failed record in place with the re-uploaded
+  // document and re-run RACM generation, instead of adding a new SOP row.
+  const handleRetrySOP = useCallback((data: UploadSOPData) => {
+    const sopId = retryingSopId;
+    if (!sopId) return;
+    setShowUploadModal(false);
+    setRetryingSopId(null);
+
+    const { risks, controls } = buildMockExtractions();
+    const uploadDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // Swap in the new file + metadata, clear the failure, and restart processing.
+    // racmId is cleared for now so the card reads "Processing", not "RACM Ready".
+    setLocalSops(prev => prev.map(s => s.id === sopId ? {
+      ...s,
+      name: data.name || s.name,  // retry saves the (editable) name from the modal
+      fileName: data.fileName,
+      version: s.version,  // and its original version
+      description: data.description,
+      uploadedBy: 'Current User',
+      uploadedAt: uploadDate,
+      status: 'Processing' as SOPStatus,
+      progress: 0, processingStep: 0,
+      failureReason: null,
+      racmId: null, racmName: null,
+      risks: 0, controls: 0,
+      extractedRisks: risks, extractedControls: controls,
+    } : s));
+
+    addToast({ message: `Retrying "${data.name}"…`, type: 'info' });
+
+    const stepDelays = [500, 1000, 1800, 2500, 3200, 3800, 4200];
+    stepDelays.forEach((delay, stepIdx) => {
+      setTimeout(() => {
+        setLocalSops(prev => prev.map(s => s.id === sopId
+          ? { ...s, processingStep: stepIdx, progress: Math.round((stepIdx / 6) * 100) }
+          : s));
+      }, delay);
+    });
+
+    // Success — RACM generated: attach a RACM so the card flips to "RACM Ready".
+    setTimeout(() => {
+      setLocalSops(prev => prev.map(s => {
+        if (s.id !== sopId) return s;
+        return {
+          ...s,
+          progress: 100, processingStep: 6,
+          risks: risks.filter(r => r.accepted).length,
+          controls: controls.filter(c => c.accepted).length,
+          racmId: `RACM-${Date.now()}`,
+          racmName: `FY26 ${bpAbbr} — ${(data.name || s.name).replace(/\s*SOP\s*/i, '').trim()}`,
+          failureReason: null,
+          status: 'Linked' as SOPStatus,
+        };
+      }));
+      addToast({ message: `"${data.name}" retried — RACM generated with ${risks.length} risks and ${controls.length} controls.`, type: 'success' });
+    }, 4500);
+  }, [retryingSopId, bpAbbr, addToast]);
 
   // Start processing for a draft SOP
   const handleStartProcessing = useCallback((sopId: string) => {
@@ -1558,7 +1712,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       case 'Create RACM':       setShowCreateRacmForSopId(sop.id); break;
       case 'Edit RACM Draft':   if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
       case 'Configure RACM':    if (sop.racmId && onViewRacm) onViewRacm(sop.racmId); break;
-      case 'View SOP':          setPreviewingSopId(sop.id); break;
+      case 'View SOP':          setViewingSopId(sop.id); break;
     }
   };
 
@@ -1574,11 +1728,11 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           onUpdateControls={(controls) => handleUpdateControls(reviewingSop.id, controls)}
         />
 
-        {/* Upload SOP Drawer (keep available even in review) */}
+        {/* Upload SOP Modal (keep available even in review) */}
         <AnimatePresence>
-          {showUploadDrawer && (
-            <UploadSOPDrawer bpAbbr={bpAbbr} onClose={() => setShowUploadDrawer(false)}
-              onUploadAndProcess={(data) => handleUploadIntent(data, true)} onSaveAsDraft={(data) => handleUploadIntent(data, false)} />
+          {showUploadModal && (
+            <UploadSOPModal bpAbbr={bpAbbr} retrySopName={retryingSop?.name} onClose={() => { setShowUploadModal(false); setRetryingSopId(null); }}
+              onUploadAndProcess={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, true)} onSaveAsDraft={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, false)} />
           )}
         </AnimatePresence>
       </div>
@@ -1779,7 +1933,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           </div>
           <h3 className="text-[15px] font-display text-ink-800 mb-1">No SOPs yet</h3>
           <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Upload an SOP doc to map controls automatically.</p>
-          <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadDrawer(true)}>
+          <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)}>
             Upload SOP
           </Button>
         </div>
@@ -1811,7 +1965,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="Status" options={sopStatusOptions as string[]} value={sopStatusFilter} onChange={setSopStatusFilter} />
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
-              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadDrawer(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
+              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowUploadModal(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
             </div>
@@ -1904,34 +2058,32 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className={`flex items-start gap-4 px-6 py-5 rounded-xl border bg-white transition-all cursor-default ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
+                    className={`rounded-xl border bg-white transition-all cursor-default ${sop.status === 'Archived' ? 'border-border-light opacity-60' : 'border-border-light'}`}
                   >
+                    <div className="flex items-start gap-4 px-6 py-5">
                     {/* Main — name + status badge inline, failure message, uploader · date.
                         Card layout per the Risk-card reference (image #21); same data as the table. */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-                        {editingSopNameId === sop.id ? (
-                          <input
-                            autoFocus
-                            value={editingSopName}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => setEditingSopName(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); saveSopName(sop.id); }
-                              else if (e.key === 'Escape') { setEditingSopNameId(null); }
-                            }}
-                            onBlur={() => saveSopName(sop.id)}
-                            className="text-[15px] font-semibold text-ink-900 leading-snug border border-primary/40 rounded-[6px] px-2 py-0.5 outline-none focus:border-primary min-w-[220px]"
-                          />
-                        ) : (
-                          <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
-                        )}
+                        <span className="text-[15px] font-semibold text-ink-900 leading-snug">{sop.name}</span>
                         <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${statusCls}`}>
                           {statusLabel}
                         </span>
+                        <span className="text-[11px] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-[4px]">{sop.version}</span>
                       </div>
                       {sop.failureReason && (
-                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">{sop.failureReason}</p>
+                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">
+                          {sop.failureReason}
+                          <button
+                            type="button"
+                            onClick={() => { setRetryingSopId(sop.id); setShowUploadModal(true); }}
+                            aria-label={`Retry RACM generation for ${sop.name}`}
+                            title="Retry"
+                            className="inline-flex items-center align-middle ml-1.5 text-risk-700 hover:text-risk-800 cursor-pointer"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        </p>
                       )}
                       <div className="text-[12px] text-ink-400">
                         {sop.uploadedBy}
@@ -1940,73 +2092,38 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       </div>
                     </div>
 
-                    {/* Actions — Edit RACM Draft pill + preview + delete. */}
+                    {/* Actions — view + download + delete (retry is the inline icon at the end of the error message). */}
                     <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
-                      {editingSopNameId === sop.id ? (
-                        <>
-                          {/* onMouseDown preventDefault keeps the input focused so its
-                              onBlur doesn't fire before these click handlers run. */}
-                          <div className="relative group/cancel">
-                            <button
-                              type="button"
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => setEditingSopNameId(null)}
-                              aria-label="Cancel rename"
-                              className="w-7 h-7 rounded-[6px] border border-ink-300/20 inline-flex items-center justify-center text-ink-500 hover:bg-paper-100 cursor-pointer transition-colors"
-                            >
-                              <X size={15} />
-                            </button>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/cancel:opacity-100 pointer-events-none transition-opacity z-50">
-                              Cancel
-                            </span>
-                          </div>
-                          <div className="relative group/save">
-                            <button
-                              type="button"
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => saveSopName(sop.id)}
-                              aria-label="Save name"
-                              className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center bg-brand-600 text-paper-0 hover:bg-brand-500 cursor-pointer transition-colors"
-                            >
-                              <Check size={15} strokeWidth={2.5} />
-                            </button>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity z-50">
-                              Save
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                      <div className="relative group/edit">
-                        <button
-                          type="button"
-                          onClick={() => { setEditingSopNameId(sop.id); setEditingSopName(sop.name); }}
-                          aria-label="Edit SOP"
-                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">
-                          Edit SOP
-                        </span>
-                      </div>
-                      )}
                       <div className="relative group/view">
                         <button
                           type="button"
-                          onClick={() => setPreviewingSopId(sop.id)}
+                          onClick={() => setViewingSopId(sop.id)}
                           aria-label={`View ${sop.name}`}
                           className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
                         >
                           <Eye size={15} />
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/view:opacity-100 pointer-events-none transition-opacity z-50">
-                          View
+                          View SOP
+                        </span>
+                      </div>
+                      <div className="relative group/download">
+                        <button
+                          type="button"
+                          onClick={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
+                          aria-label="Download SOP"
+                          className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                        >
+                          <Download size={15} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/download:opacity-100 pointer-events-none transition-opacity z-50">
+                          Download SOP
                         </span>
                       </div>
                       <div className="relative group/delete">
                         <button
                           type="button"
-                          onClick={() => archiveSop(sop.id)}
+                          onClick={() => setConfirmDeleteSop({ id: sop.id, name: sop.name })}
                           aria-label={`Delete ${sop.name}`}
                           className="w-7 h-7 rounded-[6px] inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors"
                         >
@@ -2017,6 +2134,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         </span>
                       </div>
                     </div>
+                    </div>
                   </motion.div>
                 );
               })
@@ -2025,22 +2143,15 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         </>
       )}
 
-      {/* SOP Preview Drawer */}
+      {/* Upload SOP Modal */}
       <AnimatePresence>
-        {previewingSopId && (() => {
-          const pSop = localSops.find(s => s.id === previewingSopId);
-          return pSop ? <SOPPreviewDrawer sop={pSop} onClose={() => setPreviewingSopId(null)} onGoToRacm={pSop.racmId ? onGoToRacm : undefined} /> : null;
-        })()}
-      </AnimatePresence>
-
-      {/* Upload SOP Drawer */}
-      <AnimatePresence>
-        {showUploadDrawer && (
-          <UploadSOPDrawer
+        {showUploadModal && (
+          <UploadSOPModal
             bpAbbr={bpAbbr}
-            onClose={() => setShowUploadDrawer(false)}
-            onUploadAndProcess={(data) => handleUploadIntent(data, true)}
-            onSaveAsDraft={(data) => handleUploadIntent(data, false)}
+            retrySopName={retryingSop?.name}
+            onClose={() => { setShowUploadModal(false); setRetryingSopId(null); }}
+            onUploadAndProcess={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, true)}
+            onSaveAsDraft={(data) => retryingSopId ? handleRetrySOP(data) : handleUploadIntent(data, false)}
           />
         )}
       </AnimatePresence>
@@ -2066,6 +2177,37 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           />;
         })()}
       </AnimatePresence>
+
+      {/* Delete-SOP confirmation */}
+      <ConfirmationModal
+        open={!!confirmDeleteSop}
+        title="Delete this SOP?"
+        description={confirmDeleteSop
+          ? <>This removes <span className="font-semibold text-ink-700">{confirmDeleteSop.name}</span> from this process. You can&apos;t undo this here.</>
+          : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={() => { if (confirmDeleteSop) archiveSop(confirmDeleteSop.id); setConfirmDeleteSop(null); }}
+        onClose={() => setConfirmDeleteSop(null)}
+      />
+
+      {/* SOP document viewer */}
+      {(() => {
+        const viewingSop = localSops.find(s => s.id === viewingSopId);
+        return (
+          <SopDocumentModal
+            open={!!viewingSop}
+            sopName={viewingSop?.name ?? ''}
+            subProcess={viewingSop?.businessProcess}
+            version={viewingSop?.version}
+            uploadedBy={viewingSop?.uploadedBy}
+            uploadedAgo={viewingSop?.uploadedAt}
+            sections={DEFAULT_SOP_SECTIONS}
+            onDownload={() => viewingSop && addToast({ message: `Downloading ${viewingSop.name}…`, type: 'info' })}
+            onClose={() => setViewingSopId(null)}
+          />
+        );
+      })()}
 
       {/* Version Conflict Modal */}
       <AnimatePresence>
@@ -2142,11 +2284,57 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 // ─── Control Design Tab ──────────────────────────────────────────────────────
 
 interface BoundWorkflow { name: string; type: 'Automated' | 'Manual'; status: 'Ready' | 'Draft' | 'Completed'; lastRun: string; runs: number; }
+// A linked workflow chip on an attribute (engagement-style: code + full name).
+interface AttrWorkflow { code: string; name: string; }
+type AttrResult = 'Pass' | 'Fail' | 'Pending';
+// Test attribute under a control — mirrors the engagement Controls model so the
+// per-control KPIs (Tested / Effective / Failed / Pending) and the control↔workflow
+// mapping have something to count.
+interface ControlAttribute { id: string; description: string; result: AttrResult; workflows: AttrWorkflow[]; }
 interface DesignControl {
   id: string; name: string; description: string; classification: 'Key' | 'Non-Key';
   nature: string; automation: string; frequency: string;
   mappedRisks: string[]; workflows: BoundWorkflow[];
   usedInRACMs: number; assertions: string[];
+  attributes: ControlAttribute[];
+  /** Set on controls created from the engagement-style "New control" modal. */
+  subProcess?: string; custom?: boolean; inRacm?: boolean;
+}
+
+// ── Control test status (derived from a control's attribute results) ──────────
+type CtrlStatus = 'Effective' | 'In Test' | 'Failed' | 'Pending';
+function deriveControlStatus(attrs: ControlAttribute[]): CtrlStatus {
+  if (attrs.length === 0) return 'Pending';
+  if (attrs.some(a => a.result === 'Fail')) return 'Failed';
+  if (attrs.every(a => a.result === 'Pass')) return 'Effective';
+  if (attrs.some(a => a.result === 'Pass')) return 'In Test';
+  return 'Pending';
+}
+const CTRL_STATUS_CLS: Record<CtrlStatus, string> = {
+  Effective: 'bg-compliant-50 text-compliant-700 border-compliant-50',
+  'In Test': 'bg-evidence-50 text-evidence-700 border-evidence-100',
+  Failed:    'bg-risk-50 text-risk-700 border-risk-50',
+  Pending:   'bg-draft-50 text-draft-700 border-canvas-border',
+};
+const CTRL_STATUS_DOT: Record<CtrlStatus, string> = {
+  Effective: 'bg-compliant', 'In Test': 'bg-evidence-600', Failed: 'bg-risk', Pending: 'bg-draft',
+};
+// KPI-as-filter keys for the Controls list — each maps to a status bucket; 'total' = show all.
+type StatusKpi = 'total' | 'tested' | 'effective' | 'failed' | 'pending';
+
+// Pill style for control Nature — shared by the Controls list card and the
+// control detail header. Falls back to a neutral pill for unknown values.
+function naturePillCls(nature: string): string {
+  if (nature === 'Preventive') return 'bg-compliant-50 text-compliant-700 border-compliant-50';
+  if (nature === 'Detective') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-50';
+  if (nature === 'Corrective') return 'bg-high-50 text-high-700 border-high-50';
+  return 'bg-paper-100 text-ink-600 border-canvas-border';
+}
+// Pill style for control Automation (Automated / Manual / IT-dependent).
+function automationPillCls(automation: string): string {
+  if (automation === 'Automated') return 'bg-evidence-50 text-evidence-700 border-evidence-100';
+  if (automation === 'IT-dependent') return 'bg-brand-50 text-brand-700 border-brand-100';
+  return 'bg-paper-100 text-ink-600 border-canvas-border';
 }
 
 const SEED_DESIGN_CONTROLS: DesignControl[] = [
@@ -2154,50 +2342,159 @@ const SEED_DESIGN_CONTROLS: DesignControl[] = [
     { name: 'PO Validation Workflow', type: 'Automated', status: 'Completed', lastRun: 'Apr 28, 2026', runs: 14 },
     { name: 'GRN Matching Workflow', type: 'Automated', status: 'Completed', lastRun: 'Apr 28, 2026', runs: 12 },
     { name: 'Invoice Match Workflow', type: 'Automated', status: 'Ready', lastRun: 'Apr 26, 2026', runs: 10 },
-  ], usedInRACMs: 4, assertions: ['Completeness', 'Accuracy', 'Authorization'] },
+  ], usedInRACMs: 4, assertions: ['Completeness', 'Accuracy', 'Authorization'], attributes: [
+    { id: 'C-001-A1', description: 'PO, GRN and invoice quantities reconcile before payment is released.', result: 'Pass', workflows: [{ code: 'WF-P2P-001', name: 'PO Validation Workflow' }, { code: 'WF-P2P-002', name: 'GRN Matching Workflow' }] },
+    { id: 'C-001-A2', description: 'Unit price variance stays within the approved tolerance band.', result: 'Pass', workflows: [{ code: 'WF-P2P-003', name: 'Invoice Match Workflow' }] },
+    { id: 'C-001-A3', description: 'Matching exceptions are routed for manual approval and cleared.', result: 'Pass', workflows: [] },
+  ] },
   { id: 'C-002', name: 'Vendor Master Change Approval', description: 'Multi-level approval for vendor master data changes.', classification: 'Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-003', 'RSK-004'], workflows: [
     { name: 'Vendor Change Monitor', type: 'Automated', status: 'Ready', lastRun: 'Apr 20, 2026', runs: 8 },
-  ], usedInRACMs: 2, assertions: ['Authorization', 'Occurrence'] },
+  ], usedInRACMs: 2, assertions: ['Authorization', 'Occurrence'], attributes: [
+    { id: 'C-002-A1', description: 'Every vendor master change carries dual approval before activation.', result: 'Pass', workflows: [{ code: 'WF-P2P-004', name: 'Vendor Change Monitor' }] },
+    { id: 'C-002-A2', description: 'Supporting documents are attached to each change request.', result: 'Fail', workflows: [] },
+  ] },
   { id: 'C-003', name: 'Duplicate Invoice Detection', description: 'Automated scanning to flag potential duplicate invoices.', classification: 'Key', nature: 'Detective', automation: 'Automated', frequency: 'Per transaction', mappedRisks: ['RSK-002'], workflows: [
     { name: 'Duplicate Invoice Detector', type: 'Automated', status: 'Completed', lastRun: 'Apr 26, 2026', runs: 12 },
     { name: 'Invoice Reconciliation Check', type: 'Manual', status: 'Draft', lastRun: '—', runs: 0 },
-  ], usedInRACMs: 3, assertions: ['Accuracy', 'Occurrence'] },
+  ], usedInRACMs: 3, assertions: ['Accuracy', 'Occurrence'], attributes: [
+    { id: 'C-003-A1', description: 'Duplicate scan runs on every invoice batch at intake.', result: 'Pass', workflows: [{ code: 'WF-P2P-005', name: 'Duplicate Invoice Detector' }] },
+    { id: 'C-003-A2', description: 'Flagged duplicates are investigated and dispositioned within SLA.', result: 'Pass', workflows: [] },
+  ] },
   { id: 'C-004', name: 'High-Value Payment Review', description: 'Additional approval for payments above threshold.', classification: 'Key', nature: 'Preventive', automation: 'IT-dependent', frequency: 'Per transaction', mappedRisks: ['RSK-001'], workflows: [
     { name: 'Payment Approval Review', type: 'Manual', status: 'Ready', lastRun: 'Apr 10, 2026', runs: 3 },
-  ], usedInRACMs: 2, assertions: ['Authorization', 'Accuracy'] },
-  { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'] },
+  ], usedInRACMs: 2, assertions: ['Authorization', 'Accuracy'], attributes: [
+    { id: 'C-004-A1', description: 'Payments above the threshold receive a documented second approval.', result: 'Pass', workflows: [{ code: 'WF-P2P-006', name: 'Payment Approval Review' }] },
+  ] },
+  { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'], attributes: [
+    { id: 'C-014-A1', description: 'Dual authorization is captured on every PO above the limit.', result: 'Pending', workflows: [] },
+  ] },
+];
+
+// Persist the live controls list (seed + created + edits) so a control opened in a
+// real new browser tab can resolve its data. Keyed per business process.
+const controlsStoreKey = (bpAbbr: string) => `irame.processhub.controls.${bpAbbr || 'P2P'}`;
+function loadStoredControls(bpAbbr: string): DesignControl[] | null {
+  try {
+    const raw = localStorage.getItem(controlsStoreKey(bpAbbr));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    // Backfill `attributes` for any control persisted by an older shape, pulling
+    // from the seed by id so the detail page always has mapping data to show.
+    return (parsed as DesignControl[]).map(c => {
+      if (Array.isArray(c.attributes) && c.attributes.length > 0) return c;
+      const seed = SEED_DESIGN_CONTROLS.find(s => s.id === c.id);
+      return { ...c, attributes: c.attributes ?? seed?.attributes ?? [] };
+    });
+  } catch { return null; }
+}
+function saveStoredControls(bpAbbr: string, controls: DesignControl[]) {
+  try { localStorage.setItem(controlsStoreKey(bpAbbr), JSON.stringify(controls)); } catch { /* ignore */ }
+}
+
+// Workflow pool used by the attribute "Map" picker on the control detail page.
+const WORKFLOW_POOL: AttrWorkflow[] = [
+  { code: 'WF-P2P-001', name: 'PO Validation Workflow' },
+  { code: 'WF-P2P-002', name: 'GRN Matching Workflow' },
+  { code: 'WF-P2P-003', name: 'Invoice Match Workflow' },
+  { code: 'WF-P2P-004', name: 'Vendor Change Monitor' },
+  { code: 'WF-P2P-005', name: 'Duplicate Invoice Detector' },
+  { code: 'WF-P2P-006', name: 'Payment Approval Review' },
+  { code: 'WF-P2P-007', name: 'Three-Way Match Reconciliation' },
+  { code: 'WF-P2P-008', name: 'Payment Run Approval' },
 ];
 
 // ─── Control Detail Page (Step 4) ────────────────────────────────────────
-function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
+const ATTR_RESULT_CLS: Record<AttrResult, string> = {
+  Pass:    'bg-compliant-50 text-compliant-700 border-compliant-100',
+  Fail:    'bg-risk-50 text-risk-700 border-risk-100',
+  Pending: 'bg-draft-50 text-draft-700 border-canvas-border',
+};
+
+function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
   ctrl: DesignControl;
   bpAbbr: string;
   onBack: () => void;
-  onGoToRacm?: () => void;
 }) {
   const bp = BUSINESS_PROCESSES.find(b => b.abbr === bpAbbr);
   const risks = bp ? RISKS.filter(r => ctrl.mappedRisks.includes(r.id) && r.bpId === bp.id) : RISKS.filter(r => ctrl.mappedRisks.includes(r.id));
   const racms = bp ? RACMS.filter(r => r.bpId === bp.id) : [];
 
+  // Open a risk / RACM in a new tab on the Process Hub BP detail (deep-linked to
+  // the right section + entity; the BP detail restores section/risk/racm from URL).
+  const bpId = bp?.id ?? '';
+  const openInHub = (section: 'risks' | 'racm', key: 'risk' | 'racm', id: string) => {
+    const params = new URLSearchParams({ view: 'bp-detail', bp: bpId, section });
+    if (id) params.set(key, id); // no id (unresolved RACM) → land on the section list
+    window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank');
+  };
+  // The control's "Found in RACMs" uses mockData ids (RACM-001), but the hub's RACM
+  // summary page is keyed differently (racm-001) — resolve case-insensitively to a
+  // real hub RACM id so the summary opens; '' when there's no match.
+  const resolveRacmId = (id: string): string =>
+    [...RACM_SEED_DATA, ...P2P_RACM_READY_RACMS]
+      .filter(r => r.process === bpAbbr)
+      .find(r => r.id.toLowerCase() === id.toLowerCase())?.id ?? '';
+
+  // Attributes are editable here (workflow Map / unlink), so they live in local
+  // state and write back to the per-BP store the list reads from.
+  const [attributes, setAttributes] = useState<ControlAttribute[]>(ctrl.attributes ?? []);
+  const [mapAttrId, setMapAttrId] = useState<string | null>(null);
+  const [showAiMap, setShowAiMap] = useState(false);
+  const [draftAttr, setDraftAttr] = useState('');
+  const { addToast } = useToast();
+
+  useEffect(() => {
+    const stored = loadStoredControls(bpAbbr) ?? SEED_DESIGN_CONTROLS;
+    const next = stored.map(c => (c.id === ctrl.id ? { ...c, attributes } : c));
+    saveStoredControls(bpAbbr, next);
+  }, [attributes, bpAbbr, ctrl.id]);
+
+  const status = deriveControlStatus(attributes);
+  const workflowsLinked = new Set(attributes.flatMap(a => a.workflows.map(w => w.code))).size;
+
+  const linkWf = (attrId: string, wf: AttrWorkflow) =>
+    setAttributes(prev => prev.map(a => (a.id === attrId && !a.workflows.some(w => w.code === wf.code) ? { ...a, workflows: [...a.workflows, wf] } : a)));
+  const unlinkWf = (attrId: string, code: string) =>
+    setAttributes(prev => prev.map(a => (a.id === attrId ? { ...a, workflows: a.workflows.filter(w => w.code !== code) } : a)));
+  // Add-attribute flow (engagement-style): user-added attributes get an -X<n> id.
+  const submitAddAttr = () => {
+    const desc = draftAttr.trim();
+    if (!desc) return;
+    const xCount = attributes.filter(a => /-X\d+$/.test(a.id)).length;
+    setAttributes(prev => [...prev, { id: `${ctrl.id}-X${xCount + 1}`, description: desc, result: 'Pending', workflows: [] }]);
+    setDraftAttr('');
+    addToast({ message: 'Attribute added', type: 'success' });
+  };
+
+  // Classification / Nature / Automation are surfaced as header pills now, so the
+  // grid keeps only the remaining facts (shown once).
   const fields = [
-    { label: 'Classification', value: ctrl.classification },
-    { label: 'Nature', value: ctrl.nature },
-    { label: 'Automation', value: ctrl.automation },
-    { label: 'Frequency', value: ctrl.frequency },
+    { label: 'Frequency', value: ctrl.frequency || '—' },
     { label: 'Assertions', value: ctrl.assertions.length > 0 ? ctrl.assertions.join(', ') : '—' },
     { label: 'Used in RACMs', value: String(ctrl.usedInRACMs), mono: true },
   ];
+  const mapAttr = mapAttrId ? attributes.find(a => a.id === mapAttrId) ?? null : null;
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="bg-white border border-canvas-border rounded-[12px] p-6">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
               <span className="font-mono text-[11px] text-ink-500">{ctrl.id}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
+          </div>
+          {/* Status + Nature + Automation tags */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <span className={`px-2.5 h-7 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1.5 ${CTRL_STATUS_CLS[status]}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
+            </span>
+            <span className={`px-2.5 h-7 rounded-full text-[11px] font-semibold border inline-flex items-center ${naturePillCls(ctrl.nature)}`}>{ctrl.nature || '—'}</span>
+            <span className={`px-2.5 h-7 rounded-full text-[11px] font-semibold border inline-flex items-center ${automationPillCls(ctrl.automation)}`}>{ctrl.automation || '—'}</span>
           </div>
         </div>
 
@@ -2213,129 +2510,433 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack, onGoToRacm }: {
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <AlertTriangle size={13} className="text-ink-500" />
-              Mapped Risks
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{risks.length}</span>
-          </div>
-          {risks.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No risks mapped yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {risks.map(r => (
-                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
-                      <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {/* Per-control KPI strip — coverage mix. Same count-up + spring + hover
+          effect as the BP Overview KPIs. */}
+      <div className="grid grid-cols-4 gap-3">
+        <KpiTile label="Attributes"      value={String(attributes.length)} index={0} />
+        <KpiTile label="Workflows Linked" value={String(workflowsLinked)}  index={1} />
+        <KpiTile label="Risks Mapped"    value={String(risks.length)}      index={2} />
+        <KpiTile label="Used in RACMs"   value={String(ctrl.usedInRACMs)}  index={3} />
+      </div>
 
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Workflow size={13} className="text-ink-500" />
-              Linked Workflows
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.workflows.length}</span>
+      {/* Control & workflow mapping — attributes with their linked workflows */}
+      <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+            <Workflow size={13} className="text-ink-500" />
+            Attributes
+          </h2>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{attributes.length} attribute{attributes.length !== 1 ? 's' : ''}</span>
+            <button
+              onClick={() => setShowAiMap(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 cursor-pointer transition-colors"
+            >
+              <Sparkles size={13} /> AI Map
+            </button>
           </div>
-          {ctrl.workflows.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
-          ) : (
-            <ul className="space-y-2">
-              {ctrl.workflows.map((w, i) => (
-                <li key={i} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
-                  </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">Type: {w.type} · Status: {w.status} · Last run: {w.lastRun}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
+        {attributes.length === 0 ? (
+          <p className="text-[12px] text-ink-400 italic">No attributes on this control yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-canvas-border">
+                  <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Attribute</th>
+                  <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider w-[90px]">Result</th>
+                  <th className="py-2 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Linked Workflows</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attributes.map(attr => (
+                  <tr key={attr.id} className="border-b border-canvas-border/60 last:border-0 align-top">
+                    <td className="py-3 pr-4">
+                      <div className="font-mono text-[10.5px] font-semibold text-brand-700">{attr.id}</div>
+                      <div className="text-[12.5px] text-ink-800 leading-snug">{attr.description}</div>
+                    </td>
+                    <td className="py-3 pr-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold border ${ATTR_RESULT_CLS[attr.result]}`}>{attr.result}</span>
+                    </td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {attr.workflows.map(w => (
+                          <span key={w.code} title={w.name} className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                            <Workflow size={10} className="shrink-0" />
+                            <span className="font-mono">{w.code}</span>
+                            <button onClick={() => unlinkWf(attr.id, w.code)} className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors" aria-label={`Unlink ${w.code}`}>
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                        <button
+                          onClick={() => setMapAttrId(attr.id)}
+                          className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md border border-dashed border-canvas-border bg-white text-[10.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 cursor-pointer transition-colors"
+                        >
+                          <Link2 size={11} className="shrink-0" />
+                          Workflow
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {/* Add attribute — engagement-style input + button (new ids get an -X<n> suffix) */}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            value={draftAttr}
+            onChange={e => setDraftAttr(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submitAddAttr(); }}
+            placeholder="Add an attribute to this control..."
+            className="flex-1 px-3 py-2 rounded-lg border border-dashed border-canvas-border bg-white text-[12.5px] text-ink-700 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+          />
+          <button
+            onClick={submitAddAttr}
+            disabled={!draftAttr.trim()}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold cursor-pointer transition-colors"
+          >
+            <Plus size={13} /> Attribute
+          </button>
+        </div>
+      </div>
 
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <FileText size={13} className="text-ink-500" />
-              Found in RACMs
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.usedInRACMs}</span>
-          </div>
-          {racms.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
-          ) : (
-            <ul className="space-y-2">
-              {racms.map(r => (
-                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
-                  </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+      {/* Mapped Risks */}
+      <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+            <AlertTriangle size={13} className="text-ink-500" />
+            Mapped Risks
+          </h2>
+          <span className="text-[12px] font-mono text-ink-400 tabular-nums">{risks.length}</span>
         </div>
+        {risks.length === 0 ? (
+          <p className="text-[12px] text-ink-400 italic">No risks mapped yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {risks.map(r => (
+              <li
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openInHub('risks', 'risk', r.id)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInHub('risks', 'risk', r.id); } }}
+                title="Open risk in a new tab"
+                className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5 cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors"
+              >
+                <div className="flex items-start gap-2.5">
+                  <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
+                    <span className="text-[11px] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Found in RACMs */}
+      <div className="bg-white border border-canvas-border rounded-[12px] p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
+            <FileText size={13} className="text-ink-500" />
+            Found in RACMs
+          </h2>
+          <span className="text-[12px] font-mono text-ink-400 tabular-nums">{ctrl.usedInRACMs}</span>
+        </div>
+        {racms.length === 0 ? (
+          <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+        ) : (
+          <ul className="space-y-2">
+            {racms.map(r => (
+              <li
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openInHub('racm', 'racm', resolveRacmId(r.id))}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInHub('racm', 'racm', resolveRacmId(r.id)); } }}
+                title="Open RACM in a new tab"
+                className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5 cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
+                  <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                </div>
+                <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {mapAttr && (
+        <AttrWorkflowMapModal
+          attr={mapAttr}
+          onClose={() => setMapAttrId(null)}
+          onLink={wf => linkWf(mapAttr.id, wf)}
+          onUnlink={code => unlinkWf(mapAttr.id, code)}
+        />
+      )}
+      {showAiMap && (
+        <AiMapPanel
+          attributes={attributes}
+          onClose={() => setShowAiMap(false)}
+          onAccept={(attrId, wf) => linkWf(attrId, wf)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── AI Map — suggested attribute → workflow pairings (review panel) ──────────
+function AiMapPanel({ attributes, onClose, onAccept }: {
+  attributes: ControlAttribute[];
+  onClose: () => void;
+  onAccept: (attrId: string, wf: AttrWorkflow) => void;
+}) {
+  type Sugg = { attrId: string; attrDesc: string; wf: AttrWorkflow };
+  const { addToast } = useToast();
+  // One plausible workflow per attribute that isn't already linked (offset by
+  // index for variety). Stands in for an AI suggestion engine.
+  const [pending, setPending] = useState<Sugg[]>(() =>
+    attributes
+      .map((attr, i): Sugg | null => {
+        const linked = new Set(attr.workflows.map(w => w.code));
+        const pool = WORKFLOW_POOL.filter(w => !linked.has(w.code));
+        const wf = pool.length ? pool[i % pool.length] : null;
+        return wf ? { attrId: attr.id, attrDesc: attr.description, wf } : null;
+      })
+      .filter((s): s is Sugg => !!s),
+  );
+  const accept = (s: Sugg) => {
+    onAccept(s.attrId, s.wf);
+    setPending(prev => prev.filter(p => p !== s));
+    addToast({ message: `Linked ${s.wf.code} to ${s.attrId}`, type: 'success' });
+  };
+  const dismiss = (s: Sugg) => setPending(prev => prev.filter(p => p !== s));
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[520px] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[82vh]"
+        role="dialog" aria-label="AI workflow suggestions"
+      >
+        <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-brand-600" />
+            <h2 className="font-display text-[15px] font-semibold text-ink-900">AI workflow suggestions</h2>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer" aria-label="Close"><X size={15} /></button>
+        </header>
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+          {pending.length === 0 ? (
+            <div className="text-center py-10">
+              <Sparkles size={20} className="text-ink-300 mx-auto mb-2" />
+              <p className="text-[13px] font-semibold text-ink-700">All caught up</p>
+              <p className="text-[12px] text-ink-400">No more workflow suggestions for these attributes.</p>
+            </div>
+          ) : pending.map((s, i) => (
+            <div key={`${s.attrId}-${i}`} className="rounded-lg border border-canvas-border bg-white px-3 py-2.5">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10.5px] font-semibold text-brand-700">{s.attrId}</span>
+                  <p className="text-[12px] text-ink-700 leading-snug">{s.attrDesc}</p>
+                  <div className="mt-1.5 inline-flex items-center gap-1 pl-1.5 pr-2 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                    <Sparkles size={10} className="shrink-0" />
+                    <span className="font-mono">{s.wf.code}</span>
+                    <span className="text-brand-500 font-normal">· {s.wf.name}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => accept(s)} className="px-2.5 h-7 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[11.5px] font-semibold cursor-pointer transition-colors">Accept</button>
+                  <button onClick={() => dismiss(s)} className="px-2.5 h-7 rounded-md border border-canvas-border text-ink-600 hover:bg-canvas text-[11.5px] font-medium cursor-pointer transition-colors">Dismiss</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <footer className="shrink-0 px-5 py-3 border-t border-canvas-border flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold cursor-pointer transition-colors">Done</button>
+        </footer>
+      </motion.div>
+    </>
+  );
+}
+
+// ─── Attribute → workflow map picker ─────────────────────────────────────────
+function AttrWorkflowMapModal({ attr, onClose, onLink, onUnlink }: {
+  attr: ControlAttribute;
+  onClose: () => void;
+  onLink: (wf: AttrWorkflow) => void;
+  onUnlink: (code: string) => void;
+}) {
+  const [q, setQ] = useState('');
+  const linked = new Set(attr.workflows.map(w => w.code));
+  const options = WORKFLOW_POOL.filter(w =>
+    w.name.toLowerCase().includes(q.trim().toLowerCase()) || w.code.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[460px] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[80vh]"
+        role="dialog" aria-label="Map workflows"
+      >
+        <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Workflow size={16} className="text-brand-600" />
+            <h2 className="font-display text-[15px] font-semibold text-ink-900">Map workflows</h2>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer" aria-label="Close"><X size={15} /></button>
+        </header>
+        <div className="px-5 pt-3 pb-2 shrink-0">
+          <p className="text-[11.5px] text-ink-500 mb-2"><span className="font-mono text-brand-700">{attr.id}</span> · {attr.description}</p>
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search workflows..."
+              className="w-full pl-9 pr-3 py-2 border border-canvas-border rounded-lg text-[12.5px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15" />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-2 space-y-1.5">
+          {options.length === 0 ? (
+            <p className="text-[12px] text-ink-400 italic py-4 text-center">No workflows match.</p>
+          ) : options.map(w => {
+            const on = linked.has(w.code);
+            return (
+              <button key={w.code} onClick={() => (on ? onUnlink(w.code) : onLink(w))}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left cursor-pointer transition-colors ${on ? 'border-brand-200 bg-brand-50/60' : 'border-canvas-border bg-white hover:bg-canvas/50'}`}>
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-brand-600 border-brand-600' : 'border-ink-300'}`}>
+                  {on && <Check size={11} className="text-white" />}
+                </span>
+                <span className="font-mono text-[11px] font-semibold text-brand-700 shrink-0">{w.code}</span>
+                <span className="text-[12.5px] text-ink-800 flex-1 min-w-0 truncate">{w.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <footer className="shrink-0 px-5 py-3 border-t border-canvas-border flex items-center justify-between gap-3">
+          <button
+            onClick={() => window.open(`${window.location.origin}${window.location.pathname}?view=chat`, '_blank')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-brand-200 bg-brand-50/50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-50 cursor-pointer transition-colors"
+          >
+            <Plus size={13} /> Create workflow
+          </button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold cursor-pointer transition-colors">Done</button>
+        </footer>
+      </motion.div>
+    </>
+  );
+}
+
+// ─── Standalone control detail (opened in a real new browser tab) ────────────
+// Wired in App.tsx at ?view=control-detail&controlId=…&bp=…. Resolves the control
+// from the per-BP store (so seeded AND just-created controls open correctly).
+export function ControlDetailStandalone() {
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const controlId = params.get('controlId') ?? '';
+  const bpAbbr = params.get('bp') ?? 'P2P';
+  const controls = loadStoredControls(bpAbbr) ?? SEED_DESIGN_CONTROLS;
+  const ctrl = controls.find(c => c.id === controlId);
+  const back = () => { if (window.opener && !window.opener.closed) window.close(); else window.history.back(); };
+  // Exactly the RACM detail takeover layout: same scroll container, the same
+  // px-[124px] gutters, and the same white back-trail bar above the content.
+  return (
+    <div className="h-full overflow-y-auto bg-canvas">
+      <div className="px-[124px] py-8">
+        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4">
+          <button
+            type="button"
+            onClick={back}
+            className="font-mono text-[12px] tracking-tight text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <ArrowLeft size={12} />Back to controls
+          </button>
+        </div>
+        {ctrl ? (
+          <ControlDetailPage ctrl={ctrl} bpAbbr={bpAbbr} onBack={back} />
+        ) : (
+          <div className="text-center py-20">
+            <p className="text-[14px] font-semibold text-ink-800 mb-1">Control not found</p>
+            <p className="text-[12px] text-ink-500">This control isn’t available in this tab. Reopen it from the Controls list.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// Map a wizard-created control (shared-store shape) into the Controls-tab shape.
+function toDesignControl(c: CreatedControl): DesignControl {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    classification: c.classification,
+    nature: c.nature,
+    automation: c.automation,
+    frequency: c.frequency,
+    mappedRisks: c.mappedRisks,
+    workflows: [],
+    usedInRACMs: 0,
+    assertions: c.assertions,
+    attributes: [],
+    subProcess: c.subProcess,
+    custom: true,
+    inRacm: false,
+  };
+}
+
 function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seeded: boolean; onGoToRacm?: () => void }) {
-  // `onGoToRacm` powers the empty-state "Open RACM" CTA; `bpAbbr` is part of the
-  // public tab signature ("Map in RACM" was removed from the cards intentionally).
-  void bpAbbr;
+  // `onGoToRacm` powers the empty-state "Open RACM" CTA.
   const { addToast } = useToast();
-  const [controls, setControls] = useState<DesignControl[]>(seeded ? SEED_DESIGN_CONTROLS : []);
+  // Hydrate from the per-BP store so edits made in a detail tab (workflow Map /
+  // unlink) and just-created controls survive across the list and the new tab.
+  const [controls, setControls] = useState<DesignControl[]>(() => {
+    const base = loadStoredControls(bpAbbr) ?? (seeded ? SEED_DESIGN_CONTROLS : []);
+    // Merge in wizard-created controls for this process (newest first), deduped by
+    // id so one already persisted into this store on a prior visit isn't doubled.
+    const seen = new Set(base.map(c => c.id));
+    const createdForBp = getCreatedControls()
+      .filter(c => c.businessProcess === bpAbbr && !seen.has(c.id))
+      .map(toDesignControl);
+    return [...createdForBp, ...base];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
   const [automationFilter, setAutomationFilter] = useState<string[]>([]);
   const [frequencyFilter, setFrequencyFilter] = useState<string[]>([]);
+  // KPI-as-filter: clicking a KPI tile narrows the list below by control status.
+  // 'total' = show all (default); 'tested' = Effective + In Test + Failed.
+  const [statusKpi, setStatusKpi] = useState<StatusKpi>('total');
 
-  // Detail-page state synced with ?control= URL param so deep links + browser
-  // back/forward work, and so the BP-level breadcrumb knows a detail is open.
-  const [detailControlId, setDetailControlId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('control');
-  });
+  // Persist whenever the list changes, and re-hydrate when this tab regains focus
+  // (a control detail opened in another browser tab may have edited workflow links).
+  useEffect(() => { saveStoredControls(bpAbbr, controls); }, [bpAbbr, controls]);
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const current = params.get('control');
-    if (detailControlId && current !== detailControlId) {
-      params.set('control', detailControlId);
-      window.history.pushState({ ...window.history.state, control: detailControlId }, '', `?${params.toString()}`);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } else if (!detailControlId && current) {
-      params.delete('control');
-      const qs = params.toString();
-      window.history.pushState({ ...window.history.state, control: null }, '', qs ? `?${qs}` : window.location.pathname);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }
-  }, [detailControlId]);
-  useEffect(() => {
-    const onPop = () => {
-      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('control') : null;
-      setDetailControlId(param);
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+    const rehydrate = () => { const s = loadStoredControls(bpAbbr); if (s) setControls(s); };
+    window.addEventListener('focus', rehydrate);
+    return () => window.removeEventListener('focus', rehydrate);
+  }, [bpAbbr]);
+
+  // Clicking a control opens its detail in a real new browser tab. We persist the
+  // list first so the new tab resolves the control (incl. just-created ones), and
+  // intentionally omit `noopener` so the detail tab's "Back" can close itself.
+  const openControlInNewTab = (id: string) => {
+    saveStoredControls(bpAbbr, controls);
+    const params = new URLSearchParams({ view: 'control-detail', controlId: id, bp: bpAbbr });
+    window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank');
+  };
 
   // Local data is ready immediately; only reveal a skeleton if loading genuinely
   // exceeds ~150ms (e.g. a future remote source). For today's local data it never shows.
@@ -2358,8 +2959,27 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     );
   };
 
+  // Per-control derived status — drives the KPI tiles, the KPI status filter, and
+  // each card's status pill. Declared above the filter so the list can read it.
+  const controlStatuses = useMemo(
+    () => new Map(controls.map(c => [c.id, deriveControlStatus(c.attributes ?? [])])),
+    [controls],
+  );
+
+  // Clicking a KPI tile filters by status. 'total' = all; 'tested' = every tested
+  // control (status ≠ Pending), so the list size matches the Tested count exactly.
+  const matchesKpi = (c: DesignControl) => {
+    if (statusKpi === 'total') return true;
+    const s = controlStatuses.get(c.id) ?? 'Pending';
+    if (statusKpi === 'tested') return s !== 'Pending';
+    if (statusKpi === 'effective') return s === 'Effective';
+    if (statusKpi === 'failed') return s === 'Failed';
+    return s === 'Pending'; // 'pending'
+  };
+
   const filteredControls = controls.filter(c => {
     if (!matchesSearch(c)) return false;
+    if (!matchesKpi(c)) return false;
     if (classificationFilter.length > 0 && !classificationFilter.includes(c.classification)) return false;
     if (natureFilter.length > 0 && !natureFilter.includes(c.nature)) return false;
     if (automationFilter.length > 0 && !automationFilter.includes(c.automation)) return false;
@@ -2371,10 +2991,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   // the data — current seed values are 'Key' | 'Non-Key'. The remaining three
   // pull unique values from the controls list so filters always reflect what
   // can actually appear in the cards below.
-  const classificationOptions = Array.from(new Set(controls.map(c => c.classification))).sort();
-  const natureOptions = Array.from(new Set(controls.map(c => c.nature))).sort();
-  const automationOptions = Array.from(new Set(controls.map(c => c.automation))).sort();
-  const frequencyOptions = Array.from(new Set(controls.map(c => c.frequency))).sort();
+  const classificationOptions = Array.from(new Set(controls.map(c => c.classification).filter(Boolean))).sort();
+  const natureOptions = Array.from(new Set(controls.map(c => c.nature).filter(Boolean))).sort();
+  const automationOptions = Array.from(new Set(controls.map(c => c.automation).filter(Boolean))).sort();
+  const frequencyOptions = Array.from(new Set(controls.map(c => c.frequency).filter(Boolean))).sort();
 
   // Bulk select + bulk archive (in-memory archive — removes from list, no API).
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -2400,8 +3020,6 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   };
   // Delete-control confirmation (the trash action on a control card).
   const [confirmDeleteCtrl, setConfirmDeleteCtrl] = useState<{ id: string; name: string } | null>(null);
-  // Inline card expansion + Create-control drawer.
-  const [expandedCtrlId, setExpandedCtrlId] = useState<string | null>(null);
   const [showCreateControl, setShowCreateControl] = useState(false);
   const handleDeleteOne = (id: string) => {
     setControls(prev => prev.filter(c => c.id !== id));
@@ -2411,15 +3029,27 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const handleCancelOne = (id: string) => {
     setSelectedIds(prev => prev.filter(s => s !== id));
   };
-  const handleOpenDetail = (id: string) => {
-    setDetailControlId(id);
-  };
+
+  // The 5 list KPIs (Image 1) — counted over ALL controls, independent of the
+  // active KPI filter, so the totals stay put while the list narrows.
+  const kpis = useMemo(() => {
+    let tested = 0, effective = 0, failed = 0, pending = 0;
+    controls.forEach(c => {
+      const s = controlStatuses.get(c.id) ?? 'Pending';
+      if (s !== 'Pending') tested++;
+      if (s === 'Effective') effective++;
+      else if (s === 'Failed') failed++;
+      else if (s === 'Pending') pending++;
+    });
+    return { total: controls.length, tested, effective, failed, pending };
+  }, [controls, controlStatuses]);
 
   const hasActiveFilter =
     classificationFilter.length > 0 ||
     natureFilter.length > 0 ||
     automationFilter.length > 0 ||
     frequencyFilter.length > 0 ||
+    statusKpi !== 'total' ||
     searchQuery.length > 0;
 
   const clearAll = () => {
@@ -2427,17 +3057,12 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setNatureFilter([]);
     setAutomationFilter([]);
     setFrequencyFilter([]);
+    setStatusKpi('total');
     setSearchQuery('');
   };
 
-  // Pill style helper for the Nature column (Col 3). Falls back to a neutral
-  // paper pill for any nature value outside the three documented ones.
-  const naturePillCls = (nature: string): string => {
-    if (nature === 'Preventive') return 'bg-compliant-50 text-compliant-700 border-compliant-50';
-    if (nature === 'Detective') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-50';
-    if (nature === 'Corrective') return 'bg-high-50 text-high-700 border-high-50';
-    return 'bg-paper-100 text-ink-600 border-canvas-border';
-  };
+  // Single-select toggle — clicking the highlighted tile (or Total) returns to all.
+  const handleKpiClick = (k: StatusKpi) => setStatusKpi(prev => (prev === k ? 'total' : k));
 
   if (!isLoading && loadError) {
     return <ListLoadError label="controls" onRetry={() => setLoadError(false)} />;
@@ -2458,24 +3083,21 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     );
   }
 
-  // Detail-page takeover — when ?control= is in URL, render the full-page
-  // ControlDetailPage instead of the list. Matches the Risk-detail pattern.
-  const detailControlFromUrl = detailControlId ? controls.find(c => c.id === detailControlId) : null;
-  if (detailControlFromUrl) {
-    return (
-      <ControlDetailPage
-        ctrl={detailControlFromUrl}
-        bpAbbr={bpAbbr}
-        onBack={() => setDetailControlId(null)}
-      />
-    );
-  }
-
   return (
     <div className="space-y-5 -mt-4 pt-5">
 
-      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right.
-          -mt-4 cancels the shared header's mb-4 → 20px above; space-y-5 → 20px below. */}
+      {/* KPI strip (5 tiles) — each is a status filter for the list below. Total =
+          show all; Tested = Effective + In Test + Failed; click the highlighted tile
+          again to clear. Same count-up + spring + hover as the BP Overview KPIs. */}
+      <div className="grid grid-cols-5 gap-3">
+        <KpiTile label="Total Controls" value={String(kpis.total)}     index={0} onClick={() => handleKpiClick('total')}     selected={statusKpi === 'total'} />
+        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} />
+        <KpiTile label="Effective"      value={String(kpis.effective)} index={2} onClick={() => handleKpiClick('effective')} selected={statusKpi === 'effective'} valueClassName="text-compliant-700" />
+        <KpiTile label="Failed"         value={String(kpis.failed)}    index={3} onClick={() => handleKpiClick('failed')}    selected={statusKpi === 'failed'} valueClassName="text-risk-700" />
+        <KpiTile label="Pending"        value={String(kpis.pending)}   index={4} onClick={() => handleKpiClick('pending')}   selected={statusKpi === 'pending'} valueClassName="text-mitigated-700" />
+      </div>
+
+      {/* Filter row — search on the left, CTA-pill filters + Clear all on the right. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative shrink-0">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -2557,182 +3179,121 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
             )}
           </div>
         ) : filteredControls.map((ctrl, i) => {
-          const isChecked = selectedIds.includes(ctrl.id);
-          const isExpanded = expandedCtrlId === ctrl.id;
           const isKey = ctrl.classification === 'Key';
-          const riskCount = ctrl.mappedRisks.length;
           const wfCount = ctrl.workflows.length;
-          const extraAssertions = ctrl.assertions.length > 1 ? ctrl.assertions.length - 1 : 0;
+          const status = controlStatuses.get(ctrl.id) ?? 'Pending';
           return (
             <motion.div
               key={ctrl.id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.02 }}
-              className={`rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
-                isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
-              }`}
+              className="rounded-xl border border-border-light bg-white hover:border-primary/40 transition-all"
             >
-              <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 items-start">
-              {/* Col 1 — chevron toggles the inline expanded panel. */}
-              <div className="flex items-center pt-0.5">
-                <button
-                  type="button"
-                  aria-label={isExpanded ? `Collapse ${ctrl.id}` : `Expand ${ctrl.id}`}
-                  aria-expanded={isExpanded}
-                  onClick={() => setExpandedCtrlId(prev => prev === ctrl.id ? null : ctrl.id)}
-                  className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
-                >
-                  <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-                </button>
-              </div>
-
-              {/* Col 2 — title + classification pill, id, tags.
-                  Description / automation / frequency intentionally live only in
-                  the expanded panel to avoid duplicating them here. */}
+              {/* Grid lanes mirror the Risk & RACM list cards (grid-cols-[2.6fr_1fr_1.7fr_…])
+                  so all three process-hub cards share one structure: name+status headline,
+                  a grouped tag lane, a numbers lane, then actions. */}
+              <div className="grid grid-cols-[2.6fr_1fr_1.7fr_auto] gap-5 px-6 py-5 items-start">
+              {/* Lane 1 — Control: id + name (click opens detail in a new tab) + status
+                  pill on the headline; first assertion grouped beneath. */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
+                  <h3 className="text-[0.9375rem] font-semibold leading-snug">
                     <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{ctrl.id}</span>
-                    {ctrl.name}
+                    <button
+                      type="button"
+                      onClick={() => openControlInNewTab(ctrl.id)}
+                      title="Open control"
+                      className="text-left text-text hover:text-brand-700 hover:underline decoration-brand-600 underline-offset-2 cursor-pointer transition-colors"
+                    >
+                      {ctrl.name}
+                    </button>
                   </h3>
-                  <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${
-                    isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
-                  }`}>
-                    {isKey ? 'Key' : 'Standard'}
+                  <span className={`inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[10px] font-semibold border ${CTRL_STATUS_CLS[status]}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
                   </span>
                 </div>
-                {/* Classification is already shown by the Key/Standard chip above, so no
-                    redundant text line here. */}
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold border ${naturePillCls(ctrl.nature)}`}>
-                    {ctrl.nature}
-                  </span>
                   <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
                     {ctrl.assertions[0] || 'No assertions'}
                   </span>
-                  {extraAssertions > 0 && (
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-paper-100 text-ink-500 border border-border-light">
-                      +{extraAssertions} more
-                    </span>
-                  )}
                 </div>
               </div>
 
-              {/* Col 3 — nature type badge (coloured) */}
-              <div className="flex flex-col items-start gap-1.5">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${naturePillCls(ctrl.nature)}`}>
-                  {ctrl.nature}
+              {/* Lane 2 — Type: Nature + Frequency grouped (mirrors RACM's process +
+                  framework tag lane). Frequency now shows on the card, aligned per row. */}
+              <div className="flex flex-wrap items-start gap-1.5">
+                <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold border ${naturePillCls(ctrl.nature)}`}>
+                  {ctrl.nature || '—'}
+                </span>
+                <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
+                  {ctrl.frequency || '—'}
                 </span>
               </div>
 
-              {/* Col 4 — usage stats: risks mapped + workflows / RACMs */}
-              <div className="flex flex-col gap-1.5 min-w-0">
-                {riskCount === 0 ? (
-                  <div className="text-[11px] text-high-700 italic inline-flex items-center gap-1">
-                    <AlertTriangle size={11} className="text-high-700" /> Not mapped
-                  </div>
-                ) : (
-                  <div className="flex items-baseline gap-2 min-w-0">
-                    <span className="text-[15px] font-bold tabular-nums leading-none text-text">{riskCount}</span>
-                    <span className="text-[11px] text-text-secondary">
-                      risk{riskCount !== 1 ? 's' : ''} mapped
-                    </span>
-                  </div>
-                )}
-                <div className="text-[11px] text-text-muted">
-                  <span className="font-semibold text-text">{wfCount}</span> workflow{wfCount !== 1 ? 's' : ''}
-                  <span className="text-border mx-1">·</span>
-                  used in {ctrl.usedInRACMs} RACM{ctrl.usedInRACMs !== 1 ? 's' : ''}
+              {/* Lane 3 — numbers + Key tag, left-aligned together on the workflows side.
+                  Workflow count (mirrors RACM's risks·controls·key line) then the Key /
+                  Non-Key badge (RACM card style: filled mitigated for Key, neutral grey
+                  for Non-Key). */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-[12px] text-text-muted leading-relaxed whitespace-nowrap"><span className="font-semibold text-text">{wfCount}</span> workflow{wfCount !== 1 ? 's' : ''}</span>
+                <span className={`inline-flex items-center px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold shrink-0 ${
+                  isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
+                }`}>
+                  {isKey ? 'Key' : 'Non-Key'}
+                </span>
+              </div>
+
+              {/* Lane 4 — Actions: delete only. Always-visible hover tooltip (matches the
+                  Workflow/RACM rows) + the "Delete this control?" confirmation modal. */}
+              <div className="flex items-start justify-end gap-1">
+                <div className="relative group/del">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteCtrl({ id: ctrl.id, name: ctrl.name })}
+                    aria-label="Delete control"
+                    className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
+                    Delete control
+                  </span>
                 </div>
               </div>
-
-              {/* Col 5 — row actions. While selected: archive + cancel. Default: open + delete. */}
-              <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
-                {isChecked ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleArchiveOne(ctrl.id)}
-                      title="Archive"
-                      className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                    >
-                      <Archive size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCancelOne(ctrl.id)}
-                      title="Cancel selection"
-                      className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                    >
-                      <X size={14} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteCtrl({ id: ctrl.id, name: ctrl.name })}
-                      title="Delete control"
-                      className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </>
-                )}
               </div>
-              </div>
-
-              {/* Inline expanded panel — Description / fields / Workflows */}
-              <AnimatePresence initial={false}>
-                {isExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                    className="overflow-hidden border-t border-canvas-border bg-canvas/40"
-                  >
-                    <ControlExpandedPanel
-                      description={ctrl.description}
-                      linkedRisks={ctrl.mappedRisks}
-                      usedInRACMs={ctrl.usedInRACMs}
-                      automation={ctrl.automation}
-                      frequency={ctrl.frequency}
-                      workflows={ctrl.workflows}
-                      bpAbbr={bpAbbr}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </motion.div>
           );
         })}
       </div>
 
-      {/* Create control button lives in the filter toolbar above; drawer renders here. */}
+      {/* Create control — engagement-style modal (description, sub-process, Key?, attributes, add-to-RACM). */}
       <AnimatePresence>
         {showCreateControl && (
-          <CreateControlDrawer
+          <DesignControlAddModal
+            subProcesses={Array.from(new Set(controls.map(c => c.subProcess).filter((s): s is string => !!s)))}
             onClose={() => setShowCreateControl(false)}
-            defaultProcess={bpAbbr}
-            onSave={(data: NewControlData) => {
+            onCreate={({ description, isKey, subProcess, attributes, inRacm }) => {
               const newId = `C-${String(controls.length + 1).padStart(3, '0')}`;
+              const attrs: ControlAttribute[] = attributes
+                .map(a => a.trim())
+                .filter(Boolean)
+                .map((desc, idx) => ({ id: `${newId}-A${idx + 1}`, description: desc, result: 'Pending' as AttrResult, workflows: [] }));
               setControls(prev => [{
                 id: newId,
-                name: data.name,
-                description: data.description,
-                classification: data.classification,
-                nature: data.nature,
-                automation: data.automation,
-                frequency: data.frequency,
-                mappedRisks: data.mappedRisks,
+                name: description.trim(),
+                description: description.trim(),
+                classification: isKey ? 'Key' : 'Non-Key',
+                nature: '', automation: '', frequency: '',
+                mappedRisks: [],
                 workflows: [],
-                usedInRACMs: 0,
-                assertions: data.assertions,
+                usedInRACMs: inRacm ? 1 : 0,
+                assertions: [],
+                attributes: attrs,
+                subProcess, custom: true, inRacm,
               }, ...prev]);
               setShowCreateControl(false);
-              addToast({ message: `Control "${data.name}" created`, type: 'success' });
+              addToast({ message: `Control "${description.trim()}" created`, type: 'success' });
             }}
           />
         )}
@@ -2751,6 +3312,115 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
         onClose={() => setConfirmDeleteCtrl(null)}
       />
     </div>
+  );
+}
+
+// ─── DesignControlAddModal ───────────────────────────────────────────────────
+// Exact mirror of the engagement Controls "New control" modal: description,
+// sub-process, Key?, attribute list, and "Also add to RACM".
+function DesignControlAddModal({ subProcesses, onClose, onCreate }: {
+  subProcesses: string[];
+  onClose: () => void;
+  onCreate: (input: { description: string; isKey: boolean; subProcess: string; attributes: string[]; inRacm: boolean }) => void;
+}) {
+  const [description, setDescription] = useState('');
+  const [subProcess, setSubProcess] = useState(subProcesses[0] ?? 'New controls');
+  const [isKey, setIsKey] = useState(true);
+  const [inRacm, setInRacm] = useState(true);
+  const [attrs, setAttrs] = useState<string[]>(['']);
+
+  const setAttr = (i: number, v: string) => setAttrs(prev => prev.map((a, idx) => (idx === i ? v : a)));
+  const addAttrRow = () => setAttrs(prev => [...prev, '']);
+  const removeAttrRow = (i: number) => setAttrs(prev => prev.filter((_, idx) => idx !== i));
+  const valid = description.trim().length > 0;
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[520px] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
+        role="dialog" aria-label="Add control"
+      >
+        <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield size={16} className="text-brand-600" />
+            <h2 className="font-display text-[16px] font-semibold text-ink-900">New control</h2>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer" aria-label="Close"><X size={15} /></button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Control description</label>
+            <textarea
+              autoFocus value={description} onChange={e => setDescription(e.target.value)} rows={2}
+              placeholder="e.g. Bank account changes require independent verification before payment."
+              className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[13px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Sub-process</label>
+              <input
+                value={subProcess} onChange={e => setSubProcess(e.target.value)} list="design-control-subprocesses"
+                className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[13px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+              />
+              <datalist id="design-control-subprocesses">{subProcesses.map(s => <option key={s} value={s} />)}</datalist>
+            </div>
+            <div className="flex items-end gap-4 pb-0.5">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-[12.5px] text-ink-700 font-medium">
+                <input type="checkbox" checked={isKey} onChange={e => setIsKey(e.target.checked)} className="accent-brand-600 w-4 h-4" />
+                Key control
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Attributes</label>
+            <div className="space-y-2">
+              {attrs.map((a, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" />
+                  <input
+                    value={a} onChange={e => setAttr(i, e.target.value)}
+                    placeholder={`Attribute ${i + 1}`}
+                    className="flex-1 px-3 py-1.5 border border-canvas-border rounded-lg text-[12.5px] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+                  />
+                  {attrs.length > 1 && (
+                    <button onClick={() => removeAttrRow(i)} className="w-7 h-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer" aria-label="Remove attribute"><X size={13} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={addAttrRow} className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">
+              <Plus size={12} /> Add attribute
+            </button>
+          </div>
+        </div>
+
+        <footer className="shrink-0 px-5 py-3.5 border-t border-canvas-border flex items-center justify-between gap-3">
+          <label className="inline-flex items-center gap-2 cursor-pointer text-[12.5px] text-ink-700 font-medium">
+            <input type="checkbox" checked={inRacm} onChange={e => setInRacm(e.target.checked)} className="accent-brand-600 w-4 h-4" />
+            Also add to RACM
+          </label>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas cursor-pointer">Cancel</button>
+            <button
+              onClick={() => onCreate({ description, isKey, subProcess, attributes: attrs, inRacm })}
+              disabled={!valid}
+              className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-ink-300 disabled:cursor-not-allowed text-white text-[13px] font-semibold cursor-pointer transition-colors"
+            >
+              Create control
+            </button>
+          </div>
+        </footer>
+      </motion.div>
+    </>
   );
 }
 
@@ -2855,33 +3525,57 @@ function ControlFilterPill({ label, options, value, onChange }: {
 // ─── Workflow Cockpit Tab ────────────────────────────────────────────────────
 
 // ─── Workflow Types for BP-scoped view ─────────────────────────────────────
+type RunStatus = 'Success' | 'Error';
+// Why the last run failed. 'technical' = server/connectivity/transient — safe to
+// re-run as-is in place. 'data' = file/data/mapping problem — the input must be
+// fixed in the executor first, so Retry opens the executor instead.
+type RunErrorKind = 'technical' | 'data';
+
 interface BPWorkflow {
   id: string; name: string; description: string;
   type: 'Automated' | 'Manual';
   nature: 'Preventive' | 'Detective';
   status: 'Draft' | 'Ready' | 'Active' | 'Archived';
   linkedControls: string[]; // control IDs
+  owner: string;
+  lastRun: string | null;            // formatted date/time; null = never run
+  lastRunStatus: RunStatus | null;   // result of the last run; null = never run
+  lastRunError: string | null;       // failure reason, shown when lastRunStatus === 'Error'
+  lastRunErrorKind: RunErrorKind | null; // drives Retry behaviour (in-place vs executor)
+  tags: string[];                    // functional/domain tags shown on the card
+  isSql: boolean;                    // SQL-based workflow → shows the green "Live" tag
 }
 
+// Run-status dot colour + pill styling for the run-status tag.
+const RUN_STATUS_DOT: Record<RunStatus, string> = { Success: 'bg-compliant', Error: 'bg-risk' };
+// Pill (bg + text + border) for the run-status tag that sits beside the type tag.
+const RUN_STATUS_PILL: Record<RunStatus, string> = {
+  Success: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  Error: 'bg-risk-50 text-risk-700 border-risk-100',
+};
+
 const SEED_BP_WF: BPWorkflow[] = [
-  { id: 'wf-c1', name: 'Three-Way PO Match', description: 'Automated matching of PO, GRN, and Invoice before payment release.', type: 'Automated', nature: 'Preventive', status: 'Active', linkedControls: ['C-001', 'C-006'] },
-  { id: 'wf-c2', name: 'Vendor Change Monitor', description: 'Monitors vendor master data changes and validates approval chain.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-002'] },
-  { id: 'wf-c3', name: 'Duplicate Invoice Detector', description: 'Scans invoices against historical data to flag duplicates.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-003'] },
-  { id: 'wf-c4', name: 'Payment Approval Review', description: 'Manual review of high-value payment approvals.', type: 'Manual', nature: 'Preventive', status: 'Active', linkedControls: ['C-004'] },
-  { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [] },
+  { id: 'wf-c1', name: 'Three-Way PO Match', description: 'Automated matching of PO, GRN, and Invoice before payment release.', type: 'Automated', nature: 'Preventive', status: 'Active', linkedControls: ['C-001', 'C-004'], owner: 'Karan Mehta', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Matching'], isSql: false },
+  { id: 'wf-c2', name: 'Vendor Change Monitor', description: 'Monitors vendor master data changes and validates approval chain.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-002'], owner: 'Tushar Goel', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Error', lastRunError: 'Vendor master feed unavailable — connection timed out after 30s.', lastRunErrorKind: 'technical', tags: ['Vendor', 'Master Data'], isSql: true },
+  { id: 'wf-c3', name: 'Duplicate Invoice Detector', description: 'Scans invoices against historical data to flag duplicates.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-003'], owner: 'Deepak Bansal', lastRun: 'May 17, 2026 · 2:00 AM', lastRunStatus: 'Error', lastRunError: "Source file 'invoice_register_apr.csv' could not be parsed — column 'Invoice Date' is missing.", lastRunErrorKind: 'data', tags: ['Duplicates', 'Fraud'], isSql: true },
+  { id: 'wf-c4', name: 'Payment Approval Review', description: 'Manual review of high-value payment approvals.', type: 'Manual', nature: 'Preventive', status: 'Active', linkedControls: ['C-004'], owner: 'Neha Joshi', lastRun: 'May 16, 2026 · 11:30 AM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Payments'], isSql: false },
+  { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [], owner: 'Tushar Goel', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: ['Authorization'], isSql: false },
 ];
 
-function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void }) {
+function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [natureFilter, setNatureFilter] = useState<string[]>([]);
-  const [usageFilter2, setUsageFilter2] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Bulk-run config modal (shared with the Workflow Library flow).
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  // Workflows currently re-running in place after a technical error.
+  const [retryingIds, setRetryingIds] = useState<string[]>([]);
   // Per-row filter dropdown state (which filter button is open, if any).
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
 
@@ -2913,26 +3607,19 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
       || w.description.toLowerCase().includes(q);
   }) : workflows;
   const filtered = searched
-    .filter(w => statusFilter.length === 0 || statusFilter.includes(w.status))
     .filter(w => typeFilter.length === 0 || typeFilter.includes(w.type))
     .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature))
-    .filter(w => {
-      if (usageFilter2.length === 0) return true;
-      const usage = w.linkedControls.length > 0 ? 'Used' : 'Unused';
-      return usageFilter2.includes(usage);
-    });
-  const statusOptions = Array.from(new Set(workflows.map(w => w.status))).sort();
+    .filter(w => ownerFilter.length === 0 || ownerFilter.includes(w.owner));
   const typeOptions = Array.from(new Set(workflows.map(w => w.type))).sort();
   const natureOptions = Array.from(new Set(workflows.map(w => w.nature))).sort();
-  const usageOptions = ['Used', 'Unused'];
+  const ownerOptions = Array.from(new Set(workflows.map(w => w.owner))).sort();
 
-  const anyFilterActive = searchQuery.trim().length > 0 || statusFilter.length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || usageFilter2.length > 0;
+  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || ownerFilter.length > 0;
   const clearAllFilters = () => {
     setSearchQuery('');
-    setStatusFilter([]);
     setTypeFilter([]);
     setNatureFilter([]);
-    setUsageFilter2([]);
+    setOwnerFilter([]);
   };
 
   const handleDelete = (id: string) => {
@@ -2956,9 +3643,25 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   };
 
   const handleCreate = (data: { name: string; type: 'Automated' | 'Manual'; nature: 'Preventive' | 'Detective'; desc: string }) => {
-    setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [] }, ...prev]);
+    setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [], owner: 'You', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: [], isSql: false }, ...prev]);
     setShowCreateDrawer(false);
     addToast({ message: `Workflow "${data.name}" created.`, type: 'success' });
+  };
+
+  // Retry a failed run. A technical/server error re-runs in place (the input is
+  // unchanged); a data/file error needs fixing first, so it opens the executor.
+  const handleRetry = (wf: BPWorkflow) => {
+    if (wf.lastRunErrorKind === 'data') { onRunWorkflow?.(wf.id); return; }
+    if (retryingIds.includes(wf.id)) return;
+    setRetryingIds(prev => [...prev, wf.id]);
+    addToast({ message: `Re-running "${wf.name}"…`, type: 'info' });
+    setTimeout(() => {
+      setWorkflows(prev => prev.map(w => w.id === wf.id
+        ? { ...w, lastRunStatus: 'Success', lastRun: 'Just now', lastRunError: null, lastRunErrorKind: null }
+        : w));
+      setRetryingIds(prev => prev.filter(id => id !== wf.id));
+      addToast({ message: `"${wf.name}" re-ran successfully.`, type: 'success' });
+    }, 1600);
   };
 
   // Bulk-select helpers — mirrors RiskRegister pattern.
@@ -2981,6 +3684,39 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     }
   };
   const clearSelection = () => setSelectedIds([]);
+
+  // Selected workflows mapped to the Library's shape so the shared BulkExecuteModal
+  // can drive the same bulk-run flow from the Process Hub.
+  const selectedBulkWorkflows: LibraryWorkflow[] = workflows
+    .filter(w => selectedIds.includes(w.id))
+    .map(w => ({
+      id: w.id,
+      name: w.name,
+      description: w.description,
+      tags: [bpAbbr],
+      businessProcess: bpAbbr,
+      controlId: w.id.toUpperCase(),
+      live: w.lastRunStatus != null,
+    }));
+
+  // Same hand-off as WorkflowLibraryView.handleModalContinue: build the run result
+  // and surface the shared AuditLogsView (rendered by BPDetailView).
+  const handleBulkRunContinue = (data: { auditName: string }) => {
+    setBulkModalOpen(false);
+    const results: BulkRunWorkflowResult[] = selectedBulkWorkflows.map(w => ({
+      id: w.id,
+      code: w.controlId,
+      name: w.name,
+      casesFlagged: deterministicCaseCount(w.controlId + w.id),
+    }));
+    onBulkRunComplete?.({
+      name: data.auditName || 'BulkRun',
+      workflows: results,
+      skippedCount: 0,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    clearSelection();
+  };
 
   const handleArchiveOne = (id: string) => {
     const wf = workflows.find(w => w.id === id);
@@ -3103,9 +3839,20 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
               Clear all
             </button>
           )}
-          <FilterPill filterKey="status" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+          {/* Bulk run — appears once ≥1 workflow is selected; single runs go via the
+              card's Execute button. Same button + flow as the Workflow Library. */}
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setBulkModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-9 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold transition-colors cursor-pointer hover:bg-[#6a12cd] hover:text-white hover:border-[#6a12cd] shrink-0"
+            >
+              <Play size={14} />
+              Bulk Run
+            </button>
+          )}
+          <FilterPill filterKey="owner"  label="User"   options={ownerOptions}  value={ownerFilter}  onChange={setOwnerFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
-          <FilterPill filterKey="usage"  label="Usage"  options={usageOptions}  value={usageFilter2} onChange={setUsageFilter2} />
           <Button variant="primary" size="sm" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
@@ -3172,11 +3919,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         <div className="space-y-2.5">
           {filtered.map((wf, i) => {
             const isSelected = selectedIds.includes(wf.id);
-            const statusStyle =
-              wf.status === 'Active'   ? 'bg-compliant-50 text-compliant-700 border border-compliant-100'
-              : wf.status === 'Ready'  ? 'bg-evidence-50 text-evidence-700 border border-evidence-100'
-              : wf.status === 'Archived' ? 'bg-paper-50 text-ink-400 border border-canvas-border'
-              :                          'bg-paper-100 text-ink-500 border border-canvas-border';
+            const isRetrying = retryingIds.includes(wf.id);
             // Workflow "type" badge styling — Preventive uses compliant; Detective uses mitigated.
             const natureStyle =
               wf.nature === 'Preventive' ? 'bg-compliant-50 text-compliant-700 border-compliant-100'
@@ -3192,44 +3935,95 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className={`group grid grid-cols-[28px_2.6fr_1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
+                className={`group grid grid-cols-[28px_1.8fr_2.1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Col 1 — select checkbox (fades in on hover, stays while selected) */}
-                <div onClick={e => e.stopPropagation()} className="pt-0.5">
+                {/* Select checkbox — its own column on the left, always visible. */}
+                <div onClick={e => e.stopPropagation()} className="pt-[2px]">
                   <input
                     type="checkbox"
                     aria-label={`Select ${wf.name}`}
                     checked={isSelected}
                     onChange={() => toggleSelect(wf.id)}
-                    className={`w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    className="w-4 h-4 rounded-[4px] border border-ink-300 cursor-pointer accent-brand-600"
                   />
                 </div>
 
-                {/* Col 2 — title + status, description, meta, tag pills */}
+                {/* Col 2 — id + title, description, run meta, error/retry. */}
                 <div className="min-w-0">
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[12px] font-semibold text-brand-700 shrink-0">{wf.id.toUpperCase()}</span>
                     <button type="button" onClick={openDetail} className="text-[14px] font-semibold text-text leading-snug truncate text-left hover:text-brand-700 hover:underline cursor-pointer">{wf.name}</button>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 mt-0.5 ${statusStyle}`}>
-                      {wf.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-compliant" />}
-                      {wf.status}
-                    </span>
+                    {/* Live tag — only for SQL-based workflows (matches the Workflow Library pill) */}
+                    {wf.isSql && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" style={{ backgroundColor: '#ECFEF3', color: '#047A48' }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#047A48' }} />
+                        Live
+                      </span>
+                    )}
                   </div>
                   {wf.description && (
                     <p className="mt-1 line-clamp-2 text-[12px] text-text-secondary leading-snug">{wf.description}</p>
                   )}
-                  <div className="mt-1.5 text-[11px] text-text-muted">
-                    <span className="font-mono">{wf.id.toUpperCase()}</span>
-                    <span className="mx-1.5">·</span>
-                    <span>linked to {wf.linkedControls.length} control{wf.linkedControls.length !== 1 ? 's' : ''}</span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
+                    <span className="inline-flex items-center gap-1" title="Last run">
+                      <Clock size={11} className="text-ink-400 shrink-0" />
+                      {wf.lastRun ? `Last run ${wf.lastRun}` : 'Not run yet'}
+                    </span>
                   </div>
+                  {wf.lastRunStatus === 'Error' && wf.lastRunError && (
+                    <div className="mt-1.5 flex items-start gap-2 text-[11px] text-risk-700">
+                      <AlertTriangle size={12} className="shrink-0 mt-px" />
+                      <span className="line-clamp-2 leading-snug min-w-0">{wf.lastRunError}</span>
+                      <button
+                        type="button"
+                        aria-label={isRetrying ? `Retrying ${wf.name}` : `Retry ${wf.name}`}
+                        title="Retry"
+                        disabled={isRetrying}
+                        onClick={(e) => { e.stopPropagation(); handleRetry(wf); }}
+                        className="shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                      >
+                        <RotateCcw size={13} className={isRetrying ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Col 3 — workflow type (automation · nature) */}
-                <div className="pt-0.5">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${natureStyle}`}>
-                    {wf.type} · {wf.nature}
+                {/* Col 3 — run status pill + workflow type (automation · nature) + linked controls + owner.
+                    The status pill sits in a fixed-width slot so the type tags stay
+                    left-aligned across every card, even when a workflow never ran. */}
+                <div className="pt-0.5 flex flex-wrap items-center gap-2">
+                  <div className="w-[92px] shrink-0">
+                    {isRetrying ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[6px] border text-[11px] font-semibold bg-paper-100 text-ink-500 border-canvas-border">
+                        <Loader2 size={11} className="animate-spin" />
+                        Running…
+                      </span>
+                    ) : wf.lastRunStatus ? (
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${RUN_STATUS_PILL[wf.lastRunStatus]}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${RUN_STATUS_DOT[wf.lastRunStatus]}`} />
+                        {wf.lastRunStatus}
+                      </span>
+                    ) : null}
+                  </div>
+                  {/* type tag slot — fixed width keeps the control chips aligned across cards */}
+                  <div className="w-[144px] shrink-0">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-[6px] border text-[11px] font-semibold ${natureStyle}`}>
+                      {wf.type} · {wf.nature}
+                    </span>
+                  </div>
+                  {/* controls slot — fixed width (reserved even when empty) keeps the owner aligned across cards */}
+                  <div className="w-[100px] shrink-0 flex items-center gap-1.5 ml-4">
+                    {wf.linkedControls.map(c => (
+                      <span key={c} className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[11px] font-mono font-semibold shrink-0">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="inline-flex items-center gap-1 ml-4 text-[11px] text-text-muted shrink-0" title="Owner">
+                    <User size={11} className="text-ink-400 shrink-0" />
+                    {wf.owner}
                   </span>
                 </div>
 
@@ -3250,16 +4044,26 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                     </>
                   ) : (
                     <>
-                      <button type="button" aria-label="Run workflow" title="Run workflow"
-                        onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
-                        <Play size={14} />
-                      </button>
-                      <button type="button" aria-label="Delete" title="Delete"
-                        onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="relative group/run">
+                        <button type="button" aria-label="Execute workflow"
+                          onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
+                          className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
+                          <Play size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/run:opacity-100 pointer-events-none transition-opacity z-50">
+                          Execute workflow
+                        </span>
+                      </div>
+                      <div className="relative group/del">
+                        <button type="button" aria-label="Delete workflow"
+                          onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
+                          className="w-8 h-8 rounded-[6px] flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
+                          Delete
+                        </span>
+                      </div>
                     </>
                   )}
                 </div>
@@ -3281,6 +4085,17 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         onConfirm={() => { if (confirmDeleteWf) handleDelete(confirmDeleteWf.id); setConfirmDeleteWf(null); }}
         onClose={() => setConfirmDeleteWf(null)}
       />
+
+      {/* Bulk-run config modal — shared with the Workflow Library bulk-run flow */}
+      {bulkModalOpen && (
+        <BulkExecuteModal
+          selectedWorkflows={selectedBulkWorkflows}
+          onClose={() => setBulkModalOpen(false)}
+          onContinue={handleBulkRunContinue}
+          defaultAuditName={`${bpAbbr} Bulk Run`}
+          defaultAuditDescription=""
+        />
+      )}
 
       {/* Create Workflow Drawer */}
       <AnimatePresence>
@@ -4084,97 +4899,7 @@ function SectionEntryCard({ data }: { data: EntryData }) {
   );
 }
 
-// Section row in the engagement-table format:
-//   [chevron] [title + meta + (expanded: entries list)]    [health text]
-// When expanded, the data panel below lists every entry in this section as
-// an engagement-style sub-card. Clicking the centre area drills into the section.
-function SectionCard({
-  title, count, locked, lockedReason, onClick,
-  ratio, healthRatioText, icon: Icon, iconCls, attention, fixLabel,
-}: {
-  title: string;
-  count: number;
-  locked?: boolean;
-  lockedReason?: string;
-  onClick: () => void;
-  ratio?: number | null;
-  openCount?: number;
-  openLabel?: string;
-  healthRatioText?: string;
-  entries?: EntryData[];
-  emptyEntriesLabel?: string;
-  icon?: React.ElementType;
-  iconCls?: string;
-  attention?: boolean;
-  fixLabel?: string | null;
-}) {
-  if (locked) {
-    return (
-      <div className="flex items-center gap-3 py-2.5 px-2 -mx-2 opacity-60">
-        <span className="w-8 h-8 rounded-lg bg-paper-100 grid place-items-center text-ink-300 shrink-0">
-          {Icon ? <Icon size={15} /> : <Lock size={15} />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="text-[13px] font-semibold text-ink-400">{title}</span>
-          <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 mt-0.5"><Lock size={9} aria-hidden />{lockedReason ?? 'Locked'}</div>
-        </div>
-      </div>
-    );
-  }
-
-  const hasHealth = ratio !== null && ratio !== undefined && healthRatioText;
-  const pct = hasHealth ? Math.round((ratio as number) * 100) : 0;
-  // The numeric token ("5/6") wears JetBrains Mono, the word ("mapped") stays in the body face.
-  const ratioNum = healthRatioText ? healthRatioText.split(' ')[0] : '';
-  const ratioWord = healthRatioText ? healthRatioText.split(' ').slice(1).join(' ') : '';
-
-  // Health-tier colour, matching the Engagements overview (compliant / mitigated / risk).
-  const tier = pct >= 85
-    ? { bar: 'bg-compliant', text: 'text-compliant-700' }
-    : pct >= 65
-      ? { bar: 'bg-mitigated', text: 'text-mitigated-700' }
-      : { bar: 'bg-risk', text: 'text-risk-700' };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`Open ${title}`}
-      className="group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer text-left"
-    >
-      {/* identity icon chip — coloured by the section's GRC semantic, in the Engagements
-          event-icon style (bg-{sem}-50 / text-{sem}-700) */}
-      <span className={`w-8 h-8 rounded-md grid place-items-center shrink-0 ${iconCls ?? 'bg-brand-50 text-brand-700'}`}>
-        {Icon ? <Icon size={20} /> : null}
-      </span>
-
-      {/* name + the count fraction */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[13px] font-semibold text-ink-800 truncate group-hover:text-brand-700 transition-colors">{title}</span>
-          <span className="text-[11px] text-ink-400 tabular-nums shrink-0">· {count}</span>
-        </div>
-        {hasHealth && (
-          <div className="text-[11px] text-ink-400 mt-0.5">
-            <span className="font-mono tabular-nums">{ratioNum}</span> {ratioWord}
-          </div>
-        )}
-      </div>
-
-      {/* health bar + tier percentage */}
-      {hasHealth && (
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:block w-24 h-1.5 bg-paper-100 rounded-full overflow-hidden" role="img" aria-label={`${pct}% coverage`}>
-            <div className={`h-full rounded-full ${tier.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className={`text-[13px] font-bold tabular-nums w-10 text-right ${tier.text}`}>{pct}%</span>
-        </div>
-      )}
-
-      <ChevronRight size={15} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" aria-hidden />
-    </button>
-  );
-}
+// (SectionCard removed — the BP-detail landing is now the BPOverviewDashboard.)
 
 // Exponential ease-out (≈ expo) for the overview's first-paint reveal. Typed as a
 // bezier tuple so it satisfies motion's Easing type without casts.
@@ -4191,8 +4916,55 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   onRunWorkflow?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
+  // Completed bulk-run from the Workflows tab — when set, the shared AuditLogsView
+  // takes over the page (same results view as the Workflow Library bulk run).
+  const [bulkAuditRun, setBulkAuditRun] = useState<BulkAuditRun | null>(null);
   const [createdRacms, setCreatedRacms] = useState<import('./RacmListTable').RacmEntry[]>([]);
   const [showCreateRacm, setShowCreateRacm] = useState(false);
+  // Two-card "New RACM" flow (ported from the engagement RACM tab): pick a file,
+  // then either import the matrix straight in or run the SOP→RACM extraction overlay.
+  const racmFileRef = useRef<HTMLInputElement | null>(null);
+  const sopFileRef = useRef<HTMLInputElement | null>(null);
+  const [extractingFile, setExtractingFile] = useState<string | null>(null);
+  // Add a newly created RACM to the list (frozen/active — the review step is dropped).
+  const addCreatedRacm = (rows: RACMRow[], name: string, sourceFileName: string) => {
+    const s = racmStatsFromRows(rows);
+    setCreatedRacms(prev => [{
+      id: `racm-${Date.now()}`, name, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
+      risks: s.risks, controls: s.controls, mappedRisks: s.risks, unmappedRisks: 0,
+      keyControls: s.keyControls, workflowCoverage: 0, attributesCoverage: s.attributesCoverage,
+      isValidated: true, linkedToEngagement: false, isFrozen: true, sourceFileName,
+    }, ...prev]);
+  };
+  const triggerRacmUpload = () => { setShowCreateRacm(false); racmFileRef.current?.click(); };
+  const triggerSopUpload = () => { setShowCreateRacm(false); sopFileRef.current?.click(); };
+  const onRacmFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const rows = generateRacmForProcess(bp.abbr as ProcessCode);
+      const name = racmNameFromFilename(file.name) || `${bp.abbr} — Imported RACM`;
+      addCreatedRacm(rows, name, file.name);
+      const areas = new Set(rows.map(r => r.subProcess)).size;
+      addToast({ type: 'success', message: `Imported "${file.name}" — ${rows.length} rows · ${areas} sub-process${areas === 1 ? '' : 'es'}` });
+    }
+    e.target.value = '';
+  };
+  const onSopFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const filename = file.name;
+    e.target.value = '';
+    setExtractingFile(filename);
+    // Simulate the SOP → RACM extraction pipeline (matches the engagement overlay timing).
+    window.setTimeout(() => {
+      const rows = generateRacmForProcess(bp.abbr as ProcessCode).slice(0, 5);
+      const label = racmNameFromFilename(filename);
+      addCreatedRacm(rows, label ? `${label} RACM` : `${bp.abbr} RACM`, filename);
+      const s = racmStatsFromRows(rows);
+      setExtractingFile(null);
+      addToast({ type: 'success', message: `Extracted ${s.controls} controls · ${s.risks} risks from "${filename}"` });
+    }, 1600);
+  };
   /** Tracks which RACM is open in the Excel review editor. Stores the racmId. */
   const [reviewingRacmId, setReviewingRacmId] = useState<string | null>(null);
   const reviewingRacm = reviewingRacmId ? createdRacms.find(r => r.id === reviewingRacmId) : null;
@@ -4211,14 +4983,22 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
 
   // Built-in (seed) processes keep their demo Controls/Workflows; newly-created processes start empty.
   const isSeedProcess = BUSINESS_PROCESSES.some(b => b.id === bp.id);
-  // 2-column side-by-side experiment is P2P-only for now.
-  const isP2P = bp.id === 'p2p';
 
   // No separate status logic — RACM uses racmStateEngine, risks use RiskRegister lifecycle,
   // controls use ControlLibraryView status, workflows use WorkflowLibraryView status.
 
   // DRILL-IN state + per-section metadata
   // Seed from URL on first render so deep links + back/forward navigation work.
+  // Consume the new-tab deep link (see BP_DEEPLINK) ~2s after mount — long enough
+  // to outlast StrictMode's async effect cleanups (which would otherwise strip the
+  // URL). While it's live the section-strip cleanup below is skipped; afterwards
+  // returning to this BP behaves normally.
+  useEffect(() => {
+    if (!BP_DEEPLINK || BP_DEEPLINK.bp !== bp.id) return;
+    const t = setTimeout(() => { BP_DEEPLINK = null; }, 2000);
+    return () => clearTimeout(t);
+  }, [bp.id]);
+
   const VALID_SECTIONS: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
   const readSectionFromUrl = (): SectionKey | null => {
     if (typeof window === 'undefined') return null;
@@ -4273,7 +5053,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
-      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('section')) {
+      // Skip the strip while a new-tab deep link is live, otherwise StrictMode's
+      // mount→unmount→mount wipes ?section=/?risk= before the remount can read it.
+      if (!BP_DEEPLINK && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('section')) {
         window.history.replaceState({ section: null }, '', window.location.pathname);
       }
     };
@@ -4319,9 +5101,22 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
+  // The RACM cards rendered in this tab come from <RacmListTable>: RACM_SEED_DATA
+  // merged with the same `racmExtra` we pass below, filtered by this process. Mirror
+  // that exact logic here so the tab badge equals the number of cards shown (the two
+  // previously read different mock arrays). createdRacms are already part of racmExtra.
+  const racmExtra = bp.id === 'p2p'
+    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
+    : createdRacms;
+  const racmExtraIds = new Set(racmExtra.map(r => r.id));
+  const racmCardsForBp = [
+    ...RACM_SEED_DATA.filter(r => !racmExtraIds.has(r.id)),
+    ...racmExtra,
+  ].filter(r => r.process === bp.abbr);
+
   const sectionMeta: Record<SectionKey, { title: string; count: number; countLabel: string; warning?: string }> = {
     sop: { title: 'SOPs', count: bpSops.length, countLabel: 'documents', warning: bpSops.length === 0 ? 'no SOPs uploaded' : undefined },
-    racm: { title: 'RACMs', count: bpRacms.length + createdRacms.length, countLabel: 'matrices', warning: (bpRacms.length + createdRacms.length) === 0 ? 'no RACMs yet' : undefined },
+    racm: { title: 'RACMs', count: racmCardsForBp.length, countLabel: 'matrices', warning: racmCardsForBp.length === 0 ? 'no RACMs yet' : undefined },
     risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
     controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
     workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
@@ -4593,22 +5388,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
   const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
 
-  // Section render order on the index view: rows with open work float to the top,
-  // locked rows sink to the bottom. Within each bucket, canonical order is preserved.
-  const lockedFor = (key: SectionKey) =>
-    isFreshBP && key !== 'sop'
-      ? true
-      : (key === 'racm' && bpRacms.length === 0 && createdRacms.length === 0 && bpSops.length === 0);
-  const sortedIndexSections = [...sectionOrder].sort((a, b) => {
-    const aLocked = lockedFor(a);
-    const bLocked = lockedFor(b);
-    if (aLocked !== bLocked) return aLocked ? 1 : -1;
-    const aOpen = (sectionInsights[a].openCount ?? 0) > 0;
-    const bOpen = (sectionInsights[b].openCount ?? 0) > 0;
-    if (aOpen !== bOpen) return aOpen ? -1 : 1;
-    return 0;
-  });
-
   // Section switcher pill labels (shorter than full section titles where useful).
   const sectionPillLabel: Record<SectionKey, string> = {
     sop: 'SOP',
@@ -4681,14 +5460,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     }
   };
 
-  // Dropdown menu — used in the BP detail INDEX header. Picks a section,
-  // navigates to it, then fires triggerSectionCreate.
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  // Horizontal expand/collapse for the P2P 2-column experiment: the setup
-  // checklist and the coverage panel sit side-by-side and each folds to a slim
-  // rail on its own (both can be open, or either one closed).
-  const [setupOpen, setSetupOpen] = useState(true);
-  const [coverageOpen, setCoverageOpen] = useState(true);
   // When a create/upload flow is requested for a section we aren't viewing yet,
   // we navigate there first and remember the intent. The effect below fires the
   // trigger once that section is mounted — child effects (which register the
@@ -4696,7 +5467,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // reliably instead of racing a fixed timeout.
   const [pendingCreate, setPendingCreate] = useState<SectionKey | null>(null);
   const handleDropdownPick = (section: SectionKey) => {
-    setCreateMenuOpen(false);
     if (section === drilledSection) {
       // Already viewing the section — open its flow immediately.
       triggerSectionCreate(section);
@@ -4713,31 +5483,106 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drilledSection, pendingCreate]);
 
-  // Slim folded rail shown when a side-by-side panel is collapsed (P2P layout).
-  // Clicking anywhere on the rail re-opens the panel.
-  const renderCollapsedStrip = ({ title, icon: Icon, gradient, expandDir, onExpand }: {
-    title: string;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
-    gradient?: boolean;
-    expandDir: 'right' | 'left';
-    onExpand: () => void;
-  }) => (
-    <motion.section
-      {...revealProps(0)}
-      role="button"
-      tabIndex={0}
-      onClick={onExpand}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onExpand(); } }}
-      aria-label={`Expand ${title}`}
-      className="self-stretch shrink-0 rounded-xl border border-canvas-border bg-white p-2.5 flex items-start gap-2 cursor-pointer hover:border-brand-200 transition-colors"
-    >
-      <span className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${gradient ? 'bg-gradient-to-r from-brand-400 to-brand-600 text-paper-0' : 'bg-brand-50 text-brand-700'}`}>
-        <Icon size={16} />
-      </span>
-      <span className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400">
-        {expandDir === 'right' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </span>
-    </motion.section>
+
+  // Top tab bar — Overview + the five sections. Shown on the index (Overview active)
+  // and on every drilled section, so navigation is identical everywhere.
+  const renderTabBar = (active: 'overview' | SectionKey) => (
+    <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
+      {(['overview', ...sectionOrder] as ('overview' | SectionKey)[]).map((key) => {
+        const isActive = active === key;
+        const isOverview = key === 'overview';
+        const TabIcon = isOverview ? LayoutGrid : sectionTabIcon[key as SectionKey];
+        const label = isOverview ? 'Overview' : sectionPillLabel[key as SectionKey];
+        const count = isOverview ? 0 : sectionMeta[key as SectionKey].count;
+        return (
+          <button
+            type="button"
+            key={key}
+            title={isOverview ? undefined : sectionTabTooltip[key as SectionKey]}
+            aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
+            aria-current={isActive ? 'page' : undefined}
+            onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
+            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
+              isActive
+                ? 'border-brand-600 text-brand-700 font-semibold'
+                : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
+            }`}
+          >
+            <TabIcon size={15} className={isActive ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
+            <span>{label}</span>
+            {!isOverview && count > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
+                isActive ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
+              }`}>{count}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // The process masthead — breadcrumb, title, tab bar, and the process-meta row —
+  // rendered identically on the Overview index and on every drilled section tab, so
+  // the header stays constant as you move between tabs. (Deep detail / RACM-takeover
+  // pages swap this for a collapsed back-trail header so the detail owns the screen.)
+  const renderProcessHeader = (active: 'overview' | SectionKey) => (
+    <>
+      <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border relative overflow-hidden">
+        {/* Ambient FloatingLines — same recipe as the Knowledge Hub header.
+            Top/bottom waves only (no middle wave under the H1), low opacity so
+            the lines read as texture. The absolute canvas paints behind the
+            header content, which stays in normal flow above it. */}
+        <FloatingLines
+          enabledWaves={['top', 'bottom']}
+          lineCount={3}
+          lineDistance={10}
+          bendRadius={5}
+          bendStrength={-0.3}
+          interactive
+          parallax
+          color="#6a12cd"
+          opacity={0.05}
+        />
+        <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
+          <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+            <ArrowLeft size={12} />Process Hub
+          </button>
+          <span className="text-ink-300">/</span>
+          <span className="text-ink-700 truncate">{bp.name}</span>
+        </div>
+        <div className="pb-5 flex items-end justify-between gap-4 flex-wrap">
+          <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          {/* Process-meta (code · owner · status) — moved up onto the title row,
+              right-aligned at the BP-name level. Overview only. */}
+          {active === 'overview' && (
+            <div className="flex items-center gap-4 text-[12px] flex-wrap pb-1.5">
+              <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
+              <span className="w-px h-3 bg-canvas-border" aria-hidden />
+              <span className="flex items-center gap-1.5">
+                <span className="text-ink-400">Owner</span>
+                <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
+              </span>
+              <span className="w-px h-3 bg-canvas-border" aria-hidden />
+              {(() => {
+                const s = bp.status ?? 'Active';
+                const tone =
+                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+                return (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                    {s}
+                  </span>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+        <div className="pt-1">{renderTabBar(active)}</div>
+      </div>
+    </>
   );
 
   // RACM editor takeover — full-screen replaces all views while editing
@@ -4775,84 +5620,52 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     );
   }
 
+  // Bulk-run results take over the page (shared with the Workflow Library flow).
+  // Back returns to the Workflows tab (drilledSection is preserved).
+  if (bulkAuditRun) {
+    return <AuditLogsView run={bulkAuditRun} onBack={() => setBulkAuditRun(null)} />;
+  }
+
   // Drilled view — full-screen content for one section with updated breadcrumb
   if (drilledSection) {
     const info = sectionMeta[drilledSection];
     return (
       <div className="h-full overflow-y-auto bg-canvas">
         <div className="px-[124px] py-8">
-          <div className={`bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 ${(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? '' : 'border-b border-border'}`}>
-            <div className="font-mono text-[12px] mb-3 tracking-tight flex items-center gap-1.5 min-w-0">
-              {drilledSection === 'racm' && racmTakeover === 'detail' ? (
-                /* On the RACM detail page, the full trail collapses to a single back
-                   button that returns to the RACM list (the RACM tab). */
-                <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-                  <ArrowLeft size={12} />Back to RACMs
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-                    <ArrowLeft size={12} />Process Hub
+          {(detailIsOpen || (drilledSection === 'racm' && racmTakeover)) ? (
+            /* Detail / RACM-takeover pages own the screen — collapse to a back trail, no tabs. */
+            <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4">
+              <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0">
+                {drilledSection === 'racm' && racmTakeover === 'detail' ? (
+                  <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                    <ArrowLeft size={12} />Back to RACMs
                   </button>
-                  <span className="text-ink-300">/</span>
-                  <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
-                  <span className="text-ink-300">/</span>
-                  {detailIsOpen ? (
-                    <>
-                      <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
-                      <span className="text-ink-300">/</span>
-                      <span className="text-ink-700 truncate">
-                        {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-ink-700 truncate">{info.title}</span>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Section switcher pills + section-specific create button — share one row.
-                Hidden when a risk/control detail page is open so the detail owns the screen. */}
-            {!detailIsOpen && !(drilledSection === 'racm' && racmTakeover) && (
-              <div className="flex items-end justify-between gap-3 -mb-4">
-                <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
-                {sectionOrder.map(key => {
-                  const m = sectionMeta[key];
-                  const active = drilledSection === key;
-                  const TabIcon = sectionTabIcon[key];
-                  return (
-                    <button
-                      type="button"
-                      key={key}
-                      title={sectionTabTooltip[key]}
-                      aria-label={`Switch to ${m.title}`}
-                      aria-current={active ? 'page' : undefined}
-                      onClick={() => switchDrilledSection(key)}
-                      className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
-                        active
-                          ? 'border-brand-600 text-brand-700 font-semibold'
-                          : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
-                      }`}
-                    >
-                      <TabIcon size={15} className={active ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
-                      <span>{sectionPillLabel[key]}</span>
-                      {m.count > 0 && (
-                        <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11px] font-semibold tabular-nums ${
-                          active ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
-                        }`}>{m.count}</span>
-                      )}
+                ) : (
+                  <>
+                    <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                      <ArrowLeft size={12} />Process Hub
                     </button>
-                  );
-                })}
-                </div>
-                {/* Per-section create buttons now live in each section's own filter row
-                    (SOP / RACM / Risks / Workflows) or toolbar (Controls "New control"),
-                    not in this shared header. */}
+                    <span className="text-ink-300">/</span>
+                    <button type="button" onClick={closeDrilledSection} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
+                    <span className="text-ink-300">/</span>
+                    {detailIsOpen ? (
+                      <>
+                        <button type="button" onClick={closeOpenDetail} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{info.title}</button>
+                        <span className="text-ink-300">/</span>
+                        <span className="text-ink-700 truncate">
+                          {openDetailRisk?.name ?? openDetailControl?.name ?? openDetailRacm?.name ?? openDetailSop?.name}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-ink-700 truncate">{info.title}</span>
+                    )}
+                  </>
+                )}
               </div>
-            )}
-
-          </div>
+            </div>
+          ) : (
+            renderProcessHeader(drilledSection)
+          )}
 
           {drilledSection === 'sop' && (
             <SOPTabContent
@@ -4887,14 +5700,10 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             />
           )}
           {drilledSection === 'racm' && (
-            <div className="space-y-4 -mt-4 pt-5">
+            <div className="space-y-4">
               <RacmListTable
                 processFilter={bp.abbr}
-                extraRacms={
-                  bp.id === 'p2p'
-                    ? [...P2P_RACM_READY_RACMS, ...createdRacms.filter(c => !P2P_RACM_READY_IDS.has(c.id))]
-                    : createdRacms
-                }
+                extraRacms={racmExtra}
                 onCreate={() => setShowCreateRacm(true)}
                 onEditDraft={(racm) => {
                   const exists = createdRacms.some(r => r.id === racm.id);
@@ -4906,41 +5715,25 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                 onOpenInEditor={onOpenRacmEditor}
                 onTakeoverChange={setRacmTakeover}
               />
+              <input ref={racmFileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={onRacmFile} />
+              <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} />
               <AnimatePresence>
                 {showCreateRacm && (
-                  <CreateRacmFromSOPModal
-                    sopName=""
-                    bpAbbr={bp.abbr}
+                  <NewRacmModal
                     onClose={() => setShowCreateRacm(false)}
-                    onStartReview={(racmName, fileName) => {
-                      const racmId = `racm-${Date.now()}`;
-                      setCreatedRacms(prev => [...prev, {
-                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework: 'SOX ICFR',
-                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                        isFrozen: false, sourceFileName: fileName,
-                      }]);
-                      setReviewingRacmId(racmId);
-                      setShowCreateRacm(false);
-                    }}
-                    onCreate={(racmName, framework) => {
-                      const racmId = `racm-${Date.now()}`;
-                      setCreatedRacms(prev => [...prev, {
-                        id: racmId, name: racmName, version: 'v1.0', process: bp.abbr, framework,
-                        risks: 0, controls: 0, mappedRisks: 0, unmappedRisks: 0, keyControls: 0,
-                        workflowCoverage: 0, attributesCoverage: 0, isValidated: false, linkedToEngagement: false,
-                        isFrozen: true,
-                      }]);
-                      setShowCreateRacm(false);
-                    }}
+                    onUploadRacm={triggerRacmUpload}
+                    onUploadSop={triggerSopUpload}
                   />
                 )}
               </AnimatePresence>
+              <AnimatePresence>
+                {extractingFile && <RacmExtractionOverlay filename={extractingFile} />}
+              </AnimatePresence>
             </div>
           )}
-          {drilledSection === 'risks' && <div className="-mt-4 pt-5"><RiskRegister processFilter={bp.abbr} /></div>}
+          {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
-          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} />}
+          {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} onBulkRunComplete={setBulkAuditRun} />}
         </div>
       </div>
     );
@@ -4950,91 +5743,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-[124px] py-8">
-        <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 mb-4 border-b border-border">
-          {/* breadcrumb on its own line; Quick add now lives on the byline row below */}
-          <div className="font-mono text-[12px] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
-            <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
-              <ArrowLeft size={12} />Process Hub
-            </button>
-            <span className="text-ink-300">/</span>
-            <span className="text-ink-700 truncate">{bp.name}</span>
-          </div>
-
-          {/* Masthead body — the process title and byline set the page; the rolled-up
-              health now lives in the Process Health Score card just below. */}
-          <div className="flex items-start justify-between gap-10 pb-6">
-            <div className="min-w-0 flex-1">
-              <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15] mb-4">{bp.name}</h1>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-4 text-[12px] flex-wrap">
-                  <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
-                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-ink-400">Owner</span>
-                    <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
-                  </span>
-                  <span className="w-px h-3 bg-canvas-border" aria-hidden />
-                  {(() => {
-                    const s = bp.status ?? 'Active';
-                    const tone =
-                      s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                      s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                      s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                         { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                    return (
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${tone.wrap}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                        {s}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                {/* Quick add dropdown — shortcut to any of the five section create flows. */}
-                <div className="shrink-0">
-                  <div className="relative">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    shape="lg"
-                    onClick={() => setCreateMenuOpen(v => !v)}
-                    aria-haspopup="menu"
-                    aria-expanded={createMenuOpen}
-                    rightIcon={<ChevronDown size={13} />}
-                  >
-                    Quick add
-                  </Button>
-                  {createMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} aria-hidden />
-                      <div role="menu" className="absolute right-0 top-full mt-1 z-50 bg-paper-0 border border-canvas-border rounded-[8px] shadow-lg min-w-[180px] overflow-hidden">
-                        {([
-                          { key: 'sop' as const,        label: 'SOP' },
-                          { key: 'racm' as const,       label: 'RACM' },
-                          { key: 'risks' as const,      label: 'Risk' },
-                          { key: 'controls' as const,   label: 'Control' },
-                          { key: 'workflows' as const,  label: 'Workflow' },
-                        ]).map(item => (
-                          <button
-                            type="button"
-                            key={item.key}
-                            role="menuitem"
-                            onClick={() => handleDropdownPick(item.key)}
-                            className="w-full px-4 py-2 text-left text-[12px] text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer"
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
+        {renderProcessHeader('overview')}
 
         {/* Fresh-BP onboarding banner — only when nothing's set up yet. */}
         {isFreshBP && (
@@ -5108,19 +5817,24 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           );
         })()}
 
-        {/* Setup checklist + Coverage by section. On the P2P process these sit
-            side-by-side in a 2-column layout where each panel folds to a slim rail
-            independently; every other process keeps the stacked layout. */}
-        <div className={isP2P ? 'flex items-stretch gap-5 mb-5' : 'contents'}>
-
+        {/* Engagement-style overview widgets — risk/control health, coverage funnel,
+            workflows, and (placeholder) activity. Populated processes only. */}
         {!isFreshBP && (
-          isP2P && !setupOpen ? renderCollapsedStrip({
-            title: 'Set up this business process',
-            icon: Zap,
-            gradient: true,
-            expandDir: 'right',
-            onExpand: () => setSetupOpen(true),
-          }) : (() => {
+          <BPOverviewDashboard
+            bp={bp}
+            risks={bpRisks}
+            controls={bpControls}
+            workflows={bpWfs}
+            sops={bpSops}
+            racms={bpRacms}
+            attention={attentionItems}
+            onOpenSection={switchDrilledSection}
+          />
+        )}
+
+        {/* Setup checklist — onboarding for processes that aren't fully built out.
+            Hidden once every section has content (the dashboard above covers it). */}
+        {!sectionOrder.every(k => isSectionComplete(k)) && (() => {
           const SETUP_STEPS = [
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
             { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: FileText },
@@ -5134,7 +5848,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
           const pct = Math.round((completed / SETUP_STEPS.length) * 100);
           return (
-            <motion.section className={`rounded-xl border border-canvas-border bg-white p-5 ${isP2P ? 'flex-1 min-w-0' : 'mb-5'}`} {...revealProps(0)}>
+            <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-400 to-brand-600 grid place-items-center shrink-0">
@@ -5151,16 +5865,6 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                   <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
-                  {isP2P && (
-                    <button
-                      type="button"
-                      onClick={() => setSetupOpen(false)}
-                      aria-label="Collapse setup checklist"
-                      className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -5198,78 +5902,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
               </div>
             </motion.section>
           );
-        })())}
-
-        {/* Coverage by section — a bordered panel with one clickable row per area, matching
-            the Engagements overview's SectionCard + Row pattern. Locked rows show on a fresh
-            process so the path ahead stays visible. */}
-        {isP2P && !coverageOpen ? renderCollapsedStrip({
-          title: 'Coverage by section',
-          icon: LayoutGrid,
-          gradient: false,
-          expandDir: 'left',
-          onExpand: () => setCoverageOpen(true),
-        }) : (
-        <motion.section className={`rounded-xl border border-canvas-border bg-white p-4 ${isP2P ? 'flex-1 min-w-0' : ''}`} {...revealProps(0)}>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[13px] font-semibold text-ink-800">Coverage by section</h3>
-            {isP2P && (
-              <button
-                type="button"
-                onClick={() => setCoverageOpen(false)}
-                aria-label="Collapse coverage by section"
-                className="w-7 h-7 grid place-items-center rounded-[8px] text-ink-400 hover:text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
-              >
-                <ChevronRight size={18} />
-              </button>
-            )}
-          </div>
-          <div className="space-y-0.5">
-            {sortedIndexSections.map((key) => {
-              // Stay in sync with the setup checklist: a section that reads
-              // "not done" there must show its 0/empty state here too.
-              const incomplete = !isSectionComplete(key);
-              const m = incomplete ? { ...sectionMeta[key], count: 0 } : sectionMeta[key];
-              const ins = incomplete
-                ? { ...sectionInsights[key], ratio: null, healthRatioText: '', openCount: 0 }
-                : sectionInsights[key];
-              // Linear unlock: when BP is fresh, only SOP is enabled. RACM unlocks once an SOP exists.
-              const locked = lockedFor(key);
-              const lockedReason = key === 'sop'
-                ? undefined
-                : key === 'racm'
-                  ? 'Available after the first SOP is uploaded.'
-                  : 'Available after the first RACM is created.';
-              const SECTION_ICON = { sop: Upload, racm: FileText, risks: AlertTriangle, controls: Shield, workflows: Workflow } as const;
-              const SECTION_ICON_CLS = {
-                sop: 'bg-brand-50 text-brand-700',
-                racm: 'bg-brand-50 text-brand-700',
-                risks: 'bg-brand-50 text-brand-700',
-                controls: 'bg-brand-50 text-brand-700',
-                workflows: 'bg-brand-50 text-brand-700',
-              } as const;
-              const attention = (ins.openCount ?? 0) > 0;
-              return (
-                <SectionCard
-                  key={key}
-                  title={m.title}
-                  count={m.count}
-                  ratio={ins.ratio}
-                  healthRatioText={ins.healthRatioText}
-                  locked={locked}
-                  lockedReason={lockedReason}
-                  icon={SECTION_ICON[key]}
-                  iconCls={SECTION_ICON_CLS[key]}
-                  attention={attention}
-                  onClick={() => switchDrilledSection(key)}
-                />
-              );
-            })}
-          </div>
-        </motion.section>
-        )}
-
-        </div>
+        })()}
       </div>
     </div>
   );

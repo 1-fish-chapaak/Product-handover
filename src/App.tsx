@@ -11,7 +11,7 @@ import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
-import BusinessProcesses from './components/audit/BusinessProcesses';
+import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
@@ -231,6 +231,25 @@ function AppInner() {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
+  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
+  // "Open in editor" new tab), restore the editor context and show it. Back goes
+  // to the Process Hub.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'racm-full-editor') {
+      setRacmEditorContext({
+        racmId: params.get('racmId') ?? '',
+        racmName: params.get('racmName') ?? 'RACM',
+        processLabel: params.get('processLabel') ?? '',
+        backView: 'business-processes',
+      });
+      setView('racm-full-editor');
+    } else if (params.get('view') === 'audit-risk-register') {
+      // Deep-link: "open risk detail in a new tab" lands here with ?risk=RSK-xxx.
+      // RiskRegister reads the risk param itself and shows its full detail page.
+      setView('audit-risk-register');
+    }
+  }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
@@ -575,7 +594,20 @@ function AppInner() {
         return (
           <WorkflowExecutor
             workflowId={state.selectedWorkflowId!}
-            onBack={() => setSelectedWorkflow(null)}
+            onBack={() => {
+              if (state.workflowExecutorBackView === 'business-processes') {
+                // Launched from the Process Hub Workflows tab — return there. The BP
+                // detail reads ?section= on remount; selectedBPId is still set, so the
+                // P2P Workflows tab is restored. (Library/other launches keep default.)
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
+                }
+                setSelectedWorkflow(null);
+                setView('business-processes' as any);
+              } else {
+                setSelectedWorkflow(null);
+              }
+            }}
             onFollowUp={(query, seed) => openChatWithWorkflowRun(query, seed)}
             onRunComplete={(workflowId) => {
               // Phase 3 producer: push a notification when a workflow run
@@ -632,7 +664,16 @@ function AppInner() {
               setSelectedWorkflow(wfId);
             }}
             onCreateWorkflow={() => enterWorkflowMode()}
-            onRunWorkflow={(id) => openWorkflowExecutor(id)}
+            onRunWorkflow={(id) => openWorkflowExecutor(id, 'business-processes')}
+            onOpenRacmEditor={(racm) => {
+              const params = new URLSearchParams({
+                view: 'racm-full-editor',
+                racmId: racm.id,
+                racmName: racm.name,
+                processLabel: racm.process,
+              });
+              window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+            }}
           />
         );
 
@@ -833,6 +874,9 @@ function AppInner() {
             processLabel={racmEditorContext?.processLabel}
           />
         );
+
+      case 'control-detail':
+        return <ControlDetailStandalone />;
 
       case 'governance-controls':
       case 'governance-control-detail':

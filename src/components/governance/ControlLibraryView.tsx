@@ -17,6 +17,7 @@ import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
+import { useCreatedControls } from '../../data/createdControlsStore';
 import ControlDetailView from './ControlDetailView';
 import { LinkWorkflowToControlDrawer, type ControlWorkflow } from '../audit/RacmMappingWorkspace';
 import {
@@ -55,6 +56,32 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   // Stateful controls list
   const [controls, setControls] = useState<ControlRow[]>(SEED_CONTROLS);
 
+  // Controls created via the wizard (e.g. a risk's Link Control → Create Control)
+  // are merged in — newest first — so they appear in the global library too.
+  const created = useCreatedControls();
+  const createdRows: ControlRow[] = created.map(c => {
+    const linkedWorkflows: string[] = [];
+    const linkedWorkflowIds: string[] = [];
+    if (c.workflowChoice === 'link' && c.linkedWorkflowId) {
+      const wf = WORKFLOWS.find(w => w.id === c.linkedWorkflowId);
+      if (wf) { linkedWorkflows.push(wf.name); linkedWorkflowIds.push(wf.id); }
+    }
+    return {
+      id: c.id, controlId: c.id,
+      name: c.name, description: c.description, objective: c.objective,
+      businessProcess: c.businessProcess as ControlRow['businessProcess'],
+      subProcess: c.subProcess,
+      classification: c.classification, nature: c.nature, automation: c.automation,
+      frequency: c.frequency, owner: c.owner,
+      assertions: c.assertions, mappedRisks: c.mappedRisks,
+      linkedWorkflows, linkedWorkflowIds,
+      usedInRACMs: 0,
+      status: (c.workflowChoice === 'link' && c.linkedWorkflowId) ? 'Active' : 'Draft',
+      createdAt: c.createdAt, updatedAt: c.createdAt,
+    };
+  });
+  const allControls = [...createdRows, ...controls];
+
   // Detail view state. On mount, honour a sessionStorage hand-off so
   // deep-links from elsewhere (e.g. the homepage Control Breaks chip) can
   // land directly on a specific control's detail page. The flag is consumed
@@ -80,7 +107,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   const [workflowStatusFilter, setWorkflowStatusFilter] = useState<string>('all');
 
   // Selected control for detail view
-  const selectedControl = selectedControlId ? controls.find(c => c.id === selectedControlId) : null;
+  const selectedControl = selectedControlId ? allControls.find(c => c.id === selectedControlId) : null;
 
   // If detail view is open, render it
   if (selectedControl) {
@@ -96,7 +123,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   }
 
   // Base controls (process-scoped when embedded)
-  const baseControls = processFilter ? controls.filter(c => c.businessProcess === processFilter) : controls;
+  const baseControls = processFilter ? allControls.filter(c => c.businessProcess === processFilter) : allControls;
 
   // Filtered data
   const filtered = baseControls.filter(c => {

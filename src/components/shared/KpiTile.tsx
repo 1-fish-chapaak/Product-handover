@@ -74,15 +74,20 @@ export interface KpiTileProps {
   editing?: React.ReactNode;
   /** Optional supplementary footer (e.g. dashboard "Source: field"). */
   footer?: React.ReactNode;
+  /** Override the value colour (defaults to ink-900). e.g. "text-compliant-700". */
+  valueClassName?: string;
+  /** When true, renders an active/selected brand outline (used for KPI-as-filter tiles). */
+  selected?: boolean;
   className?: string;
 }
 
-export function KpiTile({ label, value, index = 0, onClick, editing, footer, className = '' }: KpiTileProps) {
+export function KpiTile({ label, value, index = 0, onClick, editing, footer, valueClassName = 'text-ink-900', className = '', selected = false }: KpiTileProps) {
   const prefersReducedMotion = useReducedMotion();
   return (
     <motion.div
       role={onClick ? 'button' : 'listitem'}
       aria-label={editing ? undefined : `${label}: ${value}`}
+      aria-pressed={onClick ? selected : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
@@ -95,14 +100,14 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, cla
       }
       whileHover={prefersReducedMotion ? undefined : { y: -3, scale: 1.015, transition: { type: 'spring', stiffness: 420, damping: 22 } }}
       whileTap={onClick && !prefersReducedMotion ? { scale: 0.985 } : undefined}
-      className={`glass-card rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)] transition-[border-color,box-shadow] duration-300 ${onClick ? 'cursor-pointer' : 'cursor-default'} ${className}`}
+      className={`glass-card rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)] transition-[border-color,box-shadow] duration-300 ${selected ? '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]' : ''} ${onClick ? 'cursor-pointer' : 'cursor-default'} ${className}`}
     >
       {editing ?? (
         <>
           <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate" aria-hidden="true">
             {label}
           </p>
-          <p className="text-[1.625rem] font-bold text-ink-900 leading-none tabular-nums" aria-hidden="true">
+          <p className={`text-[1.625rem] font-bold leading-none tabular-nums ${valueClassName}`} aria-hidden="true">
             <KpiCountUp value={value} delay={120 + index * 80} />
           </p>
           {footer && <div className="mt-2">{footer}</div>}
