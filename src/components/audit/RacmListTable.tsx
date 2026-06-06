@@ -1829,9 +1829,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     });
   };
   const unmapPair = (riskId: string, controlId: string) => {
+    logEvent({ action: 'Update', description: `Unmapped control ${controlId} from risk ${riskId}`, module: 'Governance', entity: 'RACM' });
     setUnmappedPairs(prev => new Set(prev).add(`${riskId}:${controlId}`));
   };
   const deleteRow = (racmId: string, riskId: string) => {
+    logEvent({ action: 'Delete', description: `Removed risk ${riskId} from RACM ${racmId}`, module: 'Governance', entity: 'RACM' });
     setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
   };
   const handleBulkArchive = () => {
@@ -2333,6 +2335,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               racmName={dr.name}
               onCancel={() => setConfirmDeleteRacm(null)}
               onConfirm={() => {
+                logEvent({ action: 'Delete', description: `Deleted RACM "${dr.name}" (${dr.id})`, module: 'Governance', entity: 'RACM' });
                 setDeletedIds(prev => prev.includes(dr.id) ? prev : [...prev, dr.id]);
                 addToast({ message: `RACM "${dr.name}" deleted.`, type: 'success' });
                 setConfirmDeleteRacm(null);
