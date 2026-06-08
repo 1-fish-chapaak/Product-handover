@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,8 +14,8 @@ async function openUploadPicker(page: Page) {
   await page.getByRole('button', { name: 'Knowledge Hub' }).first().click();
   await page.waitForTimeout(900);
   await page.getByRole('button', { name: 'Add source' }).first().click();
-  await expect(page.getByText('Add data source')).toBeVisible();
-  return page.getByRole('dialog').locator('input[accept=".pdf,.csv,.xlsx"]').first();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
+  return page.getByRole('dialog').locator('input[type="file"][accept]').first();
 }
 
 // A minimal, valid PDF — pdf.js parses it without a password.
@@ -59,12 +59,12 @@ test('U1: validation matrix — empty / corrupt rejected, good file goes Ready',
 test('U2: unsupported type is skipped with feedback; duplicate is skipped', async ({ page }) => {
   const input = await openUploadPicker(page);
   await input.setInputFiles([
-    { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+    { name: 'notes.xml', mimeType: 'application/xml', buffer: Buffer.from('<x/>') },
     { name: 'report.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n') },
   ]);
-  await expect(page.getByText(/skipped — only PDF, CSV, XLSX/)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText(/skipped — supported types/)).toBeVisible({ timeout: 5000 });
   const dlg = page.getByRole('dialog');
-  await expect(dlg.getByText('photo.png')).toHaveCount(0);
+  await expect(dlg.getByText('notes.xml')).toHaveCount(0);
   await expect(dlg.getByText('report.csv')).toBeVisible();
   await expect(dlg.getByText(/^Ready$/)).toBeVisible({ timeout: 10000 });
 
@@ -97,12 +97,12 @@ test('U3: closing mid-upload confirms, then cancels cleanly (no errors)', async 
   await page.getByRole('button', { name: 'Close picker' }).click();
   await expect(page.getByText('Uploads still in progress')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel uploads' }).click();
-  await expect(page.getByText('Add data source')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.waitForTimeout(2000); // let any leaked interval fire
   expect(errors, errors.join('\n')).toHaveLength(0);
   // Reopening starts clean (no carry-over rows).
   await page.getByRole('button', { name: 'Add source' }).first().click();
-  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('inflight.csv')).toHaveCount(0);
 });
 
@@ -134,7 +134,7 @@ test('U7: attaching while a file is still uploading confirms first, Continue pro
   await expect(page.getByText('Uploads still in progress')).toBeVisible();
   // Continue proceeds (attaches the ready file, closes the picker).
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Add data source')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('U8: attaching mid-upload — Wait keeps the picker open', async ({ page }) => {
@@ -147,7 +147,7 @@ test('U8: attaching mid-upload — Wait keeps the picker open', async ({ page })
   await expect(page.getByText('Uploads still in progress')).toBeVisible();
   await page.getByRole('button', { name: 'Wait' }).click();
   await expect(page.getByText('Uploads still in progress')).toHaveCount(0);
-  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
 });
 
 test('U9: detail-view "Add files to this folder" rejects unsupported types (e.g. .xml)', async ({ page }) => {
@@ -159,13 +159,13 @@ test('U9: detail-view "Add files to this folder" rejects unsupported types (e.g.
   await page.getByText('FY26_Q2_Workpapers').first().click();
   await page.waitForTimeout(700);
   // The detail-view upload input shares the picker's accept filter.
-  const input = page.locator('input[accept=".pdf,.csv,.xlsx"]').first();
+  const input = page.locator('input[type="file"][accept]').first();
   await input.setInputFiles([
     { name: 'data_4.xml', mimeType: 'application/xml', buffer: Buffer.from('<root><a>1</a></root>') },
     { name: 'extra_evidence.csv', mimeType: 'text/csv', buffer: Buffer.from('id,v\n1,2\n') },
   ]);
   // The .xml is rejected with feedback and never becomes a row; the CSV uploads.
-  await expect(page.getByText(/skipped — only PDF, CSV, XLSX/)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText(/skipped — supported types/)).toBeVisible({ timeout: 5000 });
   await expect(page.getByText('data_4.xml')).toHaveCount(0);
   await expect(page.getByText('extra_evidence.csv')).toBeVisible({ timeout: 8000 });
 });
@@ -179,6 +179,6 @@ test('U5: "Keep uploading" dismisses the confirm and leaves the modal open', asy
   // Keep uploading → confirm dismisses, modal stays open with the file.
   await page.getByRole('button', { name: 'Keep uploading' }).click();
   await expect(page.getByText('Uploads still in progress')).toHaveCount(0);
-  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('keep.csv')).toBeVisible();
 });

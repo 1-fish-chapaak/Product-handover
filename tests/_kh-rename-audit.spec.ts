@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { test, type Page } from './_helpers';
 
 // Temp audit spec — drives the Knowledge Hub to verify the shared InlineRename
 // reuse (grid tile + file row) and capture a production-readiness sweep.
@@ -50,7 +50,7 @@ test('A3 file-row rename uses shared InlineRename', async ({ page }) => {
       localStorage.clear(); sessionStorage.clear();
       const now = new Date().toISOString();
       const src = [{ id: 'multi-1', name: 'Evidence_Bundle', type: 'file', subtype: 'Bundle · 2 files', createdAt: now }];
-      localStorage.setItem('kh:sources:v3', JSON.stringify(src));
+      localStorage.setItem('kh:sources:v5', JSON.stringify(src));
       const files = {
         'multi-1': [
           { id: 'mf-1', name: 'Sampling_Workbook.csv', format: 'CSV', sizeBytes: 482000, uploadedAt: now, rows: 1240, status: 'processed' },
