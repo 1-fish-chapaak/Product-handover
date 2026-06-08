@@ -421,7 +421,7 @@ function AppInner() {
           <EmptyState
             icon={Lock}
             title="Access restricted"
-            body="Your current role doesn't have permission to view this area. Switch roles from the sidebar, or contact an administrator."
+            body="Your current role doesn't have permission to view this area. Sign in with a different account, or contact an administrator."
           />
         </div>
       );

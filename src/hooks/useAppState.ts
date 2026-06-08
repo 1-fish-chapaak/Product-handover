@@ -123,7 +123,7 @@ export interface AppState {
   showEmailPreviewModal: boolean;
   showShareModal: boolean;
   showPowerBIWizard: boolean;
-  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process' | 'risk' | 'control' | 'engagement'; id: string } | null;
+  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process' | 'risk' | 'control' | 'engagement' | 'racm'; id: string } | null;
   /** Bounding rect of the element that opened the share popover, so it can
    *  anchor itself next to the trigger (Notion-style). Null → falls back to a
    *  top-right viewport position. */

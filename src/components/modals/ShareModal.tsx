@@ -454,6 +454,10 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
     });
   };
 
+  // Human-readable noun for the dialog label ("Share this RACM"). The link slug
+  // keeps the raw lowercase scope; only the visible/aria wording is prettified.
+  const SCOPE_LABELS: Record<string, string> = { racm: 'RACM', 'workflow-output': 'workflow output' };
+  const scopeLabel = scope ? (SCOPE_LABELS[scope] ?? scope) : null;
   const shareLink = `join.irame.ai/${scope ?? 'workspace'}`;
   const handleCopyLink = async () => {
     try {
@@ -488,7 +492,7 @@ export default function ShareModal({ onClose, onShare, scope, anchor }: Props) {
         transition={{ type: 'spring', stiffness: 460, damping: 34, mass: 0.7 }}
         role="dialog"
         aria-modal="true"
-        aria-label={scope ? `Share this ${scope}` : 'Share'}
+        aria-label={scopeLabel ? `Share this ${scopeLabel}` : 'Share'}
         onClick={e => e.stopPropagation()}
         style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
         className="fixed z-[61] origin-top-left bg-canvas-elevated rounded-xl border border-canvas-border shadow-lg flex flex-col max-h-[82vh] overflow-hidden"
