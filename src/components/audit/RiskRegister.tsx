@@ -4,13 +4,14 @@ import {
   Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye, ArrowLeft,
   ArrowRight, FileText, HelpCircle, Shield, Workflow as WorkflowIcon, Grid3x3,
-  Play, Trash2, ArchiveRestore,
+  Play, Trash2, ArchiveRestore, Share2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ColumnFilter from '../shared/ColumnFilter';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
@@ -500,6 +501,7 @@ interface Props {
 export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const { openShare } = useShare();
   const logEvent = useAuditLog();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1024,6 +1026,16 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       >
                         <Play size={14} />
                       </button>
+                      {can('risk_share') && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }}
+                        title="Share risk"
+                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                      )}
                       {can('ctrl_link') && (
                       <button
                         type="button"

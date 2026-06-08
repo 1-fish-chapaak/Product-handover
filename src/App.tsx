@@ -986,7 +986,6 @@ function AppInner() {
             unreadNotifications={unreadNotifications}
             notificationDrawerOpen={state.notificationDrawerOpen}
             onOpenNotifications={openNotificationDrawer}
-            onOpenShare={(anchor) => setShowShareModal(true, { type: 'workspace', id: 'workspace' }, anchor)}
           />
         )}
         <main ref={mainScrollRef} className="flex-1 flex flex-col overflow-hidden">

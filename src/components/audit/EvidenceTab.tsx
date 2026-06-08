@@ -26,6 +26,7 @@ import {
   Check, Lock, Paperclip, MessageSquare,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, attrCode, type RACMRow, type ControlAttribute } from '../../data/racm';
 import { CURRENT_USER } from '../../data/grc-domain';
@@ -321,6 +322,7 @@ function seedFor(controls: DistinctControl[]): SeedBundle {
 
 export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openControlId, onOpened }: Props): JSX.Element {
   const { addToast } = useToast();
+  const { can } = useCan();
   const ws = useEngagementWorkspace();
   const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
   const groupsBySub = useMemo(() => buildControlGroups(allRows), [allRows]);
@@ -556,6 +558,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const onUploadPopulation = (ctrl: DistinctControl) => {
+    if (!can('ds_upload')) return;
     const popSize = sampleBasedAttrs(ctrl).reduce((max, a) => Math.max(max, a.populationSize), 100);
     const filename = `population_${ctrl.controlId.toLowerCase()}_FY26.xlsx`;
     setPopulationsByCtrl(prev => ({ ...prev, [ctrl.controlId]: { rows: popSize, filename, uploadedAgo: 'just now' } }));
@@ -598,6 +601,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
   };
 
   const onUploadSampleEvidence = (ctrl: DistinctControl, attr: ControlAttribute, sampleId: string, evidenceType: string) => {
+    if (!can('ds_upload')) return;
     const filename = mockFilename(evidenceType, sampleId);
     setSamplesByCtrl(prev => ({
       ...prev,
@@ -704,6 +708,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
   };
 
   const onUploadGenericEvidence = (ctrl: DistinctControl, attr: ControlAttribute, evidenceType: string) => {
+    if (!can('ds_upload')) return;
     const filename = mockFilename(evidenceType, `${ctrl.controlId}-${attr.id}`);
     setGenericByCtrl(prev => {
       const ctrlMap = { ...(prev[ctrl.controlId] || {}) };

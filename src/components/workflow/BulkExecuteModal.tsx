@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { useBulkRunProgress } from '../shared/BulkRunProgress';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import { LIBRARY_WORKFLOWS, type LibraryWorkflow } from './WorkflowLibraryView';
@@ -332,6 +334,7 @@ export function BulkExecuteModal({
   defaultAuditDescription?: string;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const { startBulkRun } = useBulkRunProgress();
   const [modalDeselected, setModalDeselected] = useState<Set<string>>(new Set());
   // Workflows added via the in-modal catalog search (on top of the pre-selected set).
@@ -458,6 +461,7 @@ export function BulkExecuteModal({
   };
 
   const handleStep3Execute = () => {
+    if (!can('wf_run')) { addToast({ type: 'error', message: 'You do not have permission to run workflows.' }); return; }
     const activeRunWorkflows = reviewWorkflows
       .filter(rw =>
         rw.status === 'mapped' ||
@@ -482,6 +486,7 @@ export function BulkExecuteModal({
   const handleFileDrop = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!can('ds_upload')) return;
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       setUploadedFiles(prev => [...prev, ...makeUploaded(files)]);
@@ -490,6 +495,7 @@ export function BulkExecuteModal({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!can('ds_upload')) { e.target.value = ''; return; }
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length > 0) {
       setUploadedFiles(prev => [...prev, ...makeUploaded(files)]);
@@ -2187,6 +2193,7 @@ function Step3ReviewExecute({
           Back
         </button>
         <div className="flex items-center gap-2">
+          <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
           <button
             type="button"
             onClick={onExecute}
@@ -2198,6 +2205,7 @@ function Step3ReviewExecute({
             Execute Bulk Run
             <ArrowRight size={14} />
           </button>
+          </Gated>
         </div>
       </div>
     </>

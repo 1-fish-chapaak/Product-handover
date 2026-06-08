@@ -227,7 +227,9 @@ function RoleControl({
 /** Skeleton placeholder for a member row while collaborators load.
  *  Pulse conveys the loading state; it goes static under reduced-motion. */
 function MemberRowSkeleton({ pulse, widths }: { pulse: boolean; widths: [string, string] }) {
-  const block = `bg-canvas rounded ${pulse ? 'animate-pulse' : ''}`;
+  // Match the platform skeleton tint (shared Skeleton uses bg-paper-100) —
+  // bg-canvas was near-white and read as washed-out / barely visible.
+  const block = `bg-paper-100 rounded ${pulse ? 'animate-pulse' : ''}`;
   return (
     <div className="flex items-center gap-3 px-2 py-2">
       <div className={`w-8 h-8 rounded-full shrink-0 ${block}`} />

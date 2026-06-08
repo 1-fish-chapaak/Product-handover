@@ -58,18 +58,18 @@ export type PermissionKey =
   // Reports (existing)
   | 'rp_view' | 'rp_edit' | 'rp_comment' | 'rp_share' | 'rp_delete'
   // Dashboard (existing)
-  | 'db_view' | 'db_add' | 'db_share' | 'db_delete' | 'db_comment'
+  | 'db_view' | 'db_add' | 'db_share' | 'db_delete'
   // Datasource (existing 2 + new 3)
   | 'ds_live' | 'ds_upload' | 'ds_connect' | 'ds_rename' | 'ds_delete'
   // Engagements (new)
-  | 'eng_view' | 'eng_create' | 'eng_edit' | 'eng_delete' | 'eng_assign' | 'eng_close'
+  | 'eng_view' | 'eng_create' | 'eng_edit' | 'eng_delete' | 'eng_assign' | 'eng_close' | 'eng_share'
   // Controls (new)
-  | 'ctrl_view' | 'ctrl_create' | 'ctrl_edit' | 'ctrl_delete' | 'ctrl_link' | 'ctrl_export'
+  | 'ctrl_view' | 'ctrl_create' | 'ctrl_edit' | 'ctrl_delete' | 'ctrl_link' | 'ctrl_export' | 'ctrl_share'
   // RACM (existing + new linking/unmap/archive)
   | 'racm_view' | 'racm_edit' | 'racm_generate'
   | 'racm_link_risk' | 'racm_link_control' | 'racm_link_workflow' | 'racm_unmap' | 'racm_archive'
   // Risk register (new)
-  | 'risk_view' | 'risk_create' | 'risk_edit' | 'risk_archive' | 'risk_delete'
+  | 'risk_view' | 'risk_create' | 'risk_edit' | 'risk_archive' | 'risk_delete' | 'risk_share'
   // Exceptions / findings (new)
   | 'exc_view' | 'exc_classify' | 'exc_triage' | 'exc_resolve' | 'exc_assign'
   // Audit planning (new)
@@ -108,7 +108,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'db_add',     name: 'Add Queries',        desc: 'Add queries and widgets to dashboards' },
     { key: 'db_share',   name: 'Share Queries',      desc: 'Share dashboards for team access' },
     { key: 'db_delete',  name: 'Delete Queries',     desc: 'Delete dashboards and widgets' },
-    { key: 'db_comment', name: 'Comment on Queries', desc: 'Comment on dashboard outputs and insights' },
   ]},
   { group: 'Datasource', module: 'datasource', perms: [
     { key: 'ds_live',    name: 'Live Datasource List', desc: 'View active data sources' },
@@ -124,6 +123,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'eng_delete', name: 'Delete',          desc: 'Delete engagements' },
     { key: 'eng_assign', name: 'Assign',          desc: 'Assign owner and reviewer' },
     { key: 'eng_close',  name: 'Close/Finalize',  desc: 'Close or finalize engagements' },
+    { key: 'eng_share',  name: 'Share',           desc: 'Share an engagement with users and teams' },
   ]},
   { group: 'Controls', module: 'controls', perms: [
     { key: 'ctrl_view',   name: 'View',          desc: 'View the control library' },
@@ -132,6 +132,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'ctrl_delete', name: 'Delete',        desc: 'Delete controls' },
     { key: 'ctrl_link',   name: 'Link Workflow', desc: 'Link a control to a workflow' },
     { key: 'ctrl_export', name: 'Export',        desc: 'Export the control library' },
+    { key: 'ctrl_share',  name: 'Share',         desc: 'Share the control library with users and teams' },
   ]},
   { group: 'RACM', module: 'racm', perms: [
     { key: 'racm_view',     name: 'View',     desc: 'View RACM matrices' },
@@ -149,6 +150,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'risk_edit',    name: 'Edit',    desc: 'Edit existing risks' },
     { key: 'risk_archive', name: 'Archive', desc: 'Archive risks (retire from the active list)' },
     { key: 'risk_delete',  name: 'Delete',  desc: 'Permanently delete an archived risk' },
+    { key: 'risk_share',   name: 'Share',   desc: 'Share the risk register with users and teams' },
   ]},
   { group: 'Exceptions', module: 'exceptions', perms: [
     { key: 'exc_view',     name: 'View',     desc: 'View exceptions and findings' },
@@ -212,27 +214,27 @@ const VIEW_ALL = VIEW_ONLY_KEYS.filter(k => k !== 'ad_logs');
 const AUDITOR_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
   'wf_run', 'wf_output', 'wf_create',
-  'eng_create', 'eng_edit', 'eng_assign',
+  'eng_create', 'eng_edit', 'eng_assign', 'eng_share',
   'ctrl_edit', 'ctrl_link', 'ctrl_export',
   'racm_edit', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
   'bp_edit', 'sop_archive',
   'exc_classify', 'exc_triage',
   'rp_edit', 'rp_comment',
-  'db_add', 'db_comment',
+  'db_add',
   'ds_upload',
   'plan_edit',
 ];
 
 const RISK_OWNER_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
-  'risk_create', 'risk_edit', 'risk_archive',
+  'risk_create', 'risk_edit', 'risk_archive', 'risk_share',
   'exc_classify', 'exc_resolve', 'exc_assign',
-  'rp_comment', 'db_comment',
+  'rp_comment',
 ];
 
 const REVIEWER_KEYS: PermissionKey[] = [
   ...VIEW_ALL,
-  'rp_comment', 'db_comment',
+  'rp_comment',
   'exc_triage',
 ];
 
@@ -242,12 +244,12 @@ const ENABLER_KEYS: PermissionKey[] = [
   'bp_create', 'bp_edit', 'bp_share', 'sop_archive',
   'wf_create', 'wf_update_delete', 'wf_output', 'wf_run', 'wf_upload',
   'rp_edit', 'rp_comment', 'rp_share',
-  'db_add', 'db_share', 'db_comment',
+  'db_add', 'db_share',
   'ds_upload', 'ds_connect', 'ds_rename',
-  'eng_create', 'eng_edit', 'eng_assign',
-  'ctrl_create', 'ctrl_edit', 'ctrl_link', 'ctrl_export',
+  'eng_create', 'eng_edit', 'eng_assign', 'eng_share',
+  'ctrl_create', 'ctrl_edit', 'ctrl_link', 'ctrl_export', 'ctrl_share',
   'racm_edit', 'racm_generate', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
-  'risk_create', 'risk_edit', 'risk_archive',
+  'risk_create', 'risk_edit', 'risk_archive', 'risk_share',
   'exc_classify', 'exc_triage', 'exc_resolve',
   'plan_edit',
 ];

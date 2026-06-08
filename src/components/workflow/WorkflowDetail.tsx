@@ -12,6 +12,7 @@ import {
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 
 type StepType = 'INGESTION' | 'TRANSFORM' | 'COMPARISON' | 'VALIDATION' | 'SCORING' | 'ACTION';
 
@@ -1090,6 +1091,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <History size={13} />
               Version history
             </button>
+            <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to edit workflows">
             <button
               onClick={() => onEditInChat ? onEditInChat() : addToast({ message: 'Opening workflow in chat...', type: 'info' })}
               className="flex items-center gap-1.5 px-3 h-9 rounded-md bg-white border border-border text-[12px] font-semibold text-text hover:bg-surface-2 transition-colors cursor-pointer ml-1"
@@ -1097,6 +1099,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <MessageSquare size={13} />
               Edit in Chat
             </button>
+            </Gated>
           </div>
         </div>
 
@@ -1129,6 +1132,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <span className="truncate">Next run May 19, 6:00 PM</span>
             </span>
           </div>
+          <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
           <button
             onClick={() => onOpenExecutor ? onOpenExecutor() : addToast({ message: 'Opening executor...', type: 'info' })}
             className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
@@ -1136,6 +1140,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
             <ExternalLink size={13} />
             Open Executor
           </button>
+          </Gated>
         </div>
 
         {/* Last-run error — only when the most recent run failed */}
@@ -1143,6 +1148,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-risk-100 bg-risk-50 px-3.5 py-2.5 text-[12px] text-risk-700">
             <AlertTriangle size={14} className="shrink-0" />
             <span className="leading-snug flex-1 min-w-0"><span className="font-semibold">Last run failed:</span> {effError}</span>
+            <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
             <button
               type="button"
               disabled={retryingRun}
@@ -1152,6 +1158,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <RotateCcw size={13} className={retryingRun ? 'animate-spin' : ''} />
               {retryingRun ? 'Retrying…' : 'Retry'}
             </button>
+            </Gated>
           </div>
         )}
       </div>
@@ -1540,6 +1547,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               })}
             </div>
 
+            <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to edit workflows">
             <AddToleranceMenu
               onAddPreconfigured={(p) => {
                 if (tolerances.some(t => t.id === p.id)) {
@@ -1564,6 +1572,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               }}
               onOpenBuilder={() => setBuilderOpen(true)}
             />
+            </Gated>
 
             {/* Impact preview */}
             <div className="mt-5 pt-5 border-t border-border-light">

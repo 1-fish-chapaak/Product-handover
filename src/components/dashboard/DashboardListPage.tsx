@@ -8,6 +8,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
@@ -975,12 +976,14 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                             <Database size={14} /> Change data source
                           </button>
                         )}
+                        <Gated permission="db_delete" mode="disable" title="You don't have permission to delete dashboards">
                         <button
                           onClick={e => { e.stopPropagation(); setDeleteConfirmId(dashboard.id); setOpenMenuId(null); }}
                           className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-risk-50 text-risk-700 text-[0.8125rem] transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} /> {activeTab === 'shared' ? 'Remove' : 'Delete'}
                         </button>
+                        </Gated>
                       </div>
                     </>
                   )}

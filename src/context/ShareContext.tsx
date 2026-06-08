@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode, type MouseEvent } from 'react';
 
 /** What is being shared — drives the modal title ("Share this <kind>"). */
-export type ShareKind = 'workspace' | 'report' | 'dashboard' | 'workflow-output' | 'process';
+export type ShareKind = 'workspace' | 'report' | 'dashboard' | 'workflow-output' | 'process' | 'risk' | 'control' | 'engagement';
 
 export type ShareAnchorRect = {
   top: number; left: number; right: number; bottom: number; width: number; height: number;

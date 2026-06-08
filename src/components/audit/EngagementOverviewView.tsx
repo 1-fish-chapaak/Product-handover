@@ -6,11 +6,13 @@ import {
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
-  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
   PROCESS_COLORS,
@@ -223,6 +225,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 
 export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onCreateWorkflowForEngagement }: Props) {
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
 
   // Default the tab to overview; pick the first tab for the type once we know the engagement.
@@ -435,13 +438,15 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         )}
 
-        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide) */}
+        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide).
+            Share sits on the right of the tab line, sharing the same divider. */}
+        <div className="flex items-center gap-3 border-b border-border-light mb-5">
         <Reorder.Group
           as="div"
           axis="x"
           values={visibleTabIds}
           onReorder={reorderVisibleTabs}
-          className="flex items-center border-b border-border-light mb-5 overflow-x-auto"
+          className="flex items-center flex-1 min-w-0 overflow-x-auto"
         >
           {visibleTabs.map(tab => {
             const Icon = tab.icon;
@@ -470,6 +475,15 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             );
           })}
         </Reorder.Group>
+          <Gated permission="eng_share">
+            <button
+              onClick={(e) => { e.stopPropagation(); openShare({ type: 'engagement', id: eng.id, anchor: rectFromEvent(e) }); }}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[0.8125rem] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+            >
+              <Share2 size={14} /> Share
+            </button>
+          </Gated>
+        </div>
 
         {/* Tab content */}
         <AnimatePresence mode="wait">
@@ -685,7 +699,7 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        {dirty && <span className="text-[12px] text-text-muted">Unsaved changes</span>}
+        <Gated permission="eng_edit" mode="disable" title="You don't have permission to edit this engagement">
         <button
           onClick={() => { setSaved(form); onSaved(); }}
           disabled={!dirty}
@@ -693,6 +707,7 @@ function EngagementConfigTab({ eng, onSaved, tabs, hiddenTabs, onToggleTab }: {
         >
           <CheckCircle2 size={14} /> Save changes
         </button>
+        </Gated>
       </div>
     </div>
   );
@@ -2075,12 +2090,14 @@ function WorkflowConfigDrawer({
           >
             Cancel
           </button>
+          <Gated permission="eng_edit" mode="disable" title="You don't have permission to edit this engagement">
           <button
             onClick={onSaved}
             className="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer"
           >
             Save configuration
           </button>
+          </Gated>
         </footer>
       </motion.aside>
     </>

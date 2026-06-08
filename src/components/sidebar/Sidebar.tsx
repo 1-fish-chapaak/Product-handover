@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, FlaskConical, Share2,
+  Inbox, FlaskConical,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -23,7 +23,6 @@ interface SidebarProps {
   unreadNotifications: number;
   notificationDrawerOpen: boolean;
   onOpenNotifications: () => void;
-  onOpenShare: (anchor?: { top: number; left: number; right: number; bottom: number; width: number; height: number }) => void;
 }
 
 /* ── Flat nav item ── */
@@ -105,7 +104,7 @@ function Divider({ label, expanded }: { label?: string; expanded: boolean }) {
 // Workspace switcher options — shared with the login chooser.
 const TEAMS = WORKSPACES.map(w => ({ id: w.id, name: w.name }));
 
-export default function Sidebar({ view, setView, expanded, toggleSidebar, unreadNotifications, notificationDrawerOpen, onOpenNotifications, onOpenShare }: SidebarProps) {
+export default function Sidebar({ view, setView, expanded, toggleSidebar, unreadNotifications, notificationDrawerOpen, onOpenNotifications }: SidebarProps) {
   const prefersReducedMotion = useReducedMotion();
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -365,12 +364,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
-
-          {/* Global workspace share — opens the Share modal from anywhere. */}
-          <NavItem icon={Share2} label="Share" active={false} expanded={isExpanded} onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            onOpenShare({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
-          }} />
 
         </div>
       </nav>

@@ -1,15 +1,14 @@
 /**
  * Ambient background FX for the dark brand panel — a slow drifting particle
- * field (canvas) plus draw-in hairline accents. Sits behind content,
- * pointer-events: none, aria-hidden. Honors prefers-reduced-motion.
- *
- * Adapted from a 21st.dev community background (particle canvas + animated
- * accent lines), recolored to brand/lavender and scoped to its parent box
- * instead of the viewport.
+ * field (canvas) layered with a 21st.dev / Aceternity Spotlight beam. Sits
+ * behind content, pointer-events: none, aria-hidden. Honors
+ * prefers-reduced-motion (particles stop).
  */
 
 import { useEffect, useRef } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { useReducedMotion } from 'motion/react';
+import Spotlight from './Spotlight';
+import FloatingPaths from './FloatingPaths';
 
 export default function BrandPanelFX() {
   const reduce = useReducedMotion();
@@ -74,26 +73,16 @@ export default function BrandPanelFX() {
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, [reduce]);
 
-  /** Hairline accent that draws in (scale) on first paint. */
-  const line = (delay: number, vertical: boolean) =>
-    reduce
-      ? { initial: false as const }
-      : {
-          initial: { scaleX: vertical ? 1 : 0, scaleY: vertical ? 0 : 1, opacity: 0 },
-          animate: { scaleX: 1, scaleY: 1, opacity: 1 },
-          transition: { delay, duration: 0.8, ease: [0.22, 0.61, 0.36, 1] as const },
-        };
-
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      {/* flowing background paths (21st.dev / Aceternity) */}
+      <FloatingPaths />
+
+      {/* spotlight beam (21st.dev / Aceternity) */}
+      <Spotlight className="-top-40 -left-24" fill="#C393FA" />
+
       {/* drifting particle field */}
       <canvas ref={canvasRef} className="absolute inset-0 mix-blend-screen opacity-60" />
-
-      {/* draw-in hairline accents */}
-      <motion.div className="absolute inset-x-0 top-[20%] h-px bg-white/10 origin-center" {...line(0.3, false)} />
-      <motion.div className="absolute inset-x-0 top-[78%] h-px bg-white/10 origin-center" {...line(0.45, false)} />
-      <motion.div className="absolute inset-y-0 left-[24%] w-px bg-white/[0.09] origin-top" {...line(0.55, true)} />
-      <motion.div className="absolute inset-y-0 left-[72%] w-px bg-white/[0.07] origin-top" {...line(0.66, true)} />
     </div>
   );
 }

@@ -12,11 +12,13 @@ import {
   Pencil,
   Trash2,
   Workflow,
+  Share2,
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
 import { useCreatedControls } from '../../data/createdControlsStore';
@@ -55,6 +57,7 @@ interface ControlLibraryProps {
 export default function ControlLibraryView({ processFilter }: ControlLibraryProps) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const { openShare } = useShare();
 
   // Stateful controls list
   const [controls, setControls] = useState<ControlRow[]>(SEED_CONTROLS);
@@ -457,7 +460,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             {
               key: 'actions',
               label: 'Action',
-              width: '120px',
+              width: '150px',
               sortable: false,
               align: 'center',
               render: (item) => {
@@ -471,6 +474,15 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     >
                       <Eye size={13} />
                     </button>
+                    {can('ctrl_share') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openShare({ type: 'control', id: ctrl.id, anchor: rectFromEvent(e) }); }}
+                        title="Share Control"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <Share2 size={13} />
+                      </button>
+                    )}
                     {can('ctrl_edit') && (
                       <button
                         onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}

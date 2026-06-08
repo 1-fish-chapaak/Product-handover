@@ -19,6 +19,7 @@ import {
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
@@ -631,11 +632,6 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
             <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
             <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           </button>
-          {can('db_comment') && (
-            <button onClick={() => addToast({ message: 'Comment thread opened on this dashboard.', type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-text-secondary bg-canvas border border-canvas-border hover:bg-surface-2 transition-colors cursor-pointer">
-              <MessageSquare size={11} /> Comment
-            </button>
-          )}
           {can('db_share') && (
             <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
               <Send size={11} /> Share with Team
@@ -4657,6 +4653,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <div className="w-px h-5 bg-canvas-border" />
 
                   {/* + Add Widget — primary CTA */}
+                  <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                   <button
                     onClick={() => setAddWidgetOpen(true)}
                     className="flex items-center gap-1.5 px-5 h-9 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-full text-[0.75rem] font-semibold shadow-sm transition-colors cursor-pointer"
@@ -4664,6 +4661,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     <Plus size={14} />
                     Add Widget
                   </button>
+                  </Gated>
 
                   {/* Connect Tables — hidden for static file dashboards */}
                   {!isStaticFileDashboard && (
@@ -4856,6 +4854,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 </div>
                 <h3 className="text-[0.9375rem] font-semibold text-ink-700 mb-1">No widgets yet</h3>
                 <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-xs">Add your first widget to start building this dashboard.</p>
+                <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                 <button
                   onClick={() => setAddWidgetOpen(true)}
                   className="flex items-center gap-1.5 px-5 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
@@ -4863,6 +4862,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <Plus size={15} />
                   Add Widget
                 </button>
+                </Gated>
               </motion.div>
             )}
 

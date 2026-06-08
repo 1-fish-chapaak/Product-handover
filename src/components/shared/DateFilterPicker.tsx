@@ -118,12 +118,14 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
         className={`flex items-center gap-2 px-3 ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-            : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
+            : open
+              ? 'border-brand-600 bg-canvas text-brand-700'
+              : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
         }`}
       >
         <Calendar size={14} />
         {label}
-        <ChevronDown size={14} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-ink-400 transition-transform ${open ? 'rotate-180 text-brand-600' : ''}`} />
       </button>
 
       <AnimatePresence>

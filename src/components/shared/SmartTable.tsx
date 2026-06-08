@@ -45,6 +45,10 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   className?: string;
   headerExtra?: ReactNode;
   animateRows?: boolean;
+  /** Row entrance style when animateRows is on. 'fade' (default) is a quiet
+   *  opacity stagger; 'rise' adds a slide-up with the admin cascade timing
+   *  (matches the Roles permission matrix). */
+  rowReveal?: 'fade' | 'rise';
   // 'modern' = minimal AI-SaaS chrome: subtle outer edge, no header fill,
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
@@ -97,6 +101,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   className = '',
   headerExtra,
   animateRows = true,
+  rowReveal = 'fade',
   variant = 'default',
   hideResultCount = false,
   searchBg = 'bg-white',
@@ -171,9 +176,11 @@ export default function SmartTable<T extends Record<string, unknown>>({
       className={
         isModern
           ? `${className}`
-          // When the header is pinned, drop `overflow-hidden` — it would clip the
-          // sticky context and trap the header inside the card.
-          : `bg-white border border-border-light rounded-xl ${stickyHeader ? '' : 'overflow-hidden'} ${className}`
+          // `overflow-clip` rounds the corners (so the sticky header's square
+          // top corners can't poke past the card's rounded border) WITHOUT
+          // becoming a scroll container — which `overflow-hidden` does, trapping
+          // the sticky header inside the card instead of pinning it to the page.
+          : `bg-white border border-border-light rounded-xl overflow-clip ${className}`
       }
     >
       {/* Toolbar */}
@@ -198,7 +205,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
               )}
             </div>
           )}
-          {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
+          {headerExtra && <div className="flex items-center gap-2 flex-1 min-w-0">{headerExtra}</div>}
           {paginated && !hideResultCount && (
             <div className="text-[12px] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
@@ -272,11 +279,19 @@ export default function SmartTable<T extends Record<string, unknown>>({
               const totalCols = columns.length + (expandable ? 1 : 0);
 
               const Wrapper = animate ? motion.tbody : 'tbody';
-              const wrapperProps = animate ? {
-                initial: { opacity: 0 },
-                animate: { opacity: 1 },
-                transition: { delay: i * 0.02 },
-              } : {};
+              const wrapperProps = animate ? (
+                rowReveal === 'rise'
+                  ? {
+                      initial: { opacity: 0, y: 6 },
+                      animate: { opacity: 1, y: 0 },
+                      transition: { duration: 0.22, delay: i * 0.04, ease: [0.2, 0, 0, 1] as const },
+                    }
+                  : {
+                      initial: { opacity: 0 },
+                      animate: { opacity: 1 },
+                      transition: { delay: i * 0.02 },
+                    }
+              ) : {};
 
               const selected = isRowSelected?.(item, safePage * pageSize + i) ?? false;
 

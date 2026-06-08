@@ -31,6 +31,8 @@ import ClarificationCard from './ClarificationCard';
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
+import Gated from '../shared/Gated';
+import { useCan } from '../../context/CurrentUserContext';
 import {
   SectionHeader as WidgetSectionHeader,
   KpiPreviewRow,
@@ -2846,6 +2848,7 @@ ${transcriptHtml}
 
 export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   // Workflow-build seed handoff. Non-empty string = the chat starts in
   // workflow mode and auto-pushes the prompt as a user message (kicking
@@ -3761,11 +3764,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   const handleAuditAction = (action: 'workflow' | 'report' | 'dashboard', msgId?: string) => {
     if (action === 'dashboard') {
+      if (!can('db_add')) return; // chat is open to all roles — guard the write
       setActiveAddMsgId(msgId || null);
       setShowDashboardModal(true);
       return;
     }
     if (action === 'report') {
+      if (!can('rp_edit')) return; // chat is open to all roles — guard the write
       setActiveAddMsgId(msgId || null);
       setShowReportModal(true);
       return;
@@ -5144,6 +5149,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
                 <button
                   onClick={() => {
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
@@ -5154,6 +5160,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <BarChart3 size={12} />
                   Add to Dashboard
                 </button>
+                </Gated>
                 <button
                   onClick={onDismissPendingDashboard}
                   className="p-1 rounded-md text-brand-400 hover:text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
@@ -5617,6 +5624,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
               <Button
                 variant="primary"
                 size="sm"
@@ -5628,6 +5636,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               >
                 Add to Dashboard
               </Button>
+              </Gated>
               <Button
                 variant="ghost"
                 size="sm"
@@ -5785,6 +5794,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
+                                <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
                                 <Button
                                   variant="outline"
                                   size="md"
@@ -5799,6 +5809,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       : `In ${dashLinks.length} dashboards`
                                     : 'Add to dashboard'}
                                 </Button>
+                                </Gated>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
@@ -5837,6 +5848,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
+                                <Gated permission="rp_edit" mode="disable" title="You don't have permission to add to reports">
                                 <Button
                                   variant="outline"
                                   size="md"
@@ -5851,6 +5863,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       : `In ${rptLinks.length} reports`
                                     : 'Add to report'}
                                 </Button>
+                                </Gated>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />

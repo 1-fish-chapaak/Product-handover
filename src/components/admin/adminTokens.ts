@@ -17,9 +17,9 @@ export const FIELD_TEXTAREA =
 
 /* ── Modal-footer buttons (h-9) ── */
 export const BTN_CANCEL =
-  'h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-lg hover:bg-canvas transition-colors cursor-pointer';
+  'h-9 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas transition-colors cursor-pointer';
 export const BTN_PRIMARY =
-  'h-9 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer';
+  'h-9 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer';
 
 /* ── Page CTAs — flat, h-10, rounded-md (the spine actions). ── */
 export const BTN_CTA_PRIMARY =
@@ -34,12 +34,23 @@ export const BTN_CTA_OUTLINE =
 export const BTN_ROW =
   'inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-600 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer';
 
-/* ── Preset chip (Roles / Create Role) ── */
+/* ── Preset chip (Roles / Create Role) — a quick-set button: hairline border at
+      rest so it reads as actionable, brand wash when it matches the selection. ── */
 export const presetChip = (active: boolean) =>
-  `px-2.5 py-1 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer ${
-    active ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-canvas'
+  `inline-flex items-center px-3 h-7 rounded-full text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+    active
+      ? 'bg-brand-50 text-brand-700 border-brand-200'
+      : 'bg-canvas-elevated text-ink-600 border-canvas-border hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50/50'
   }`;
 
 /* ── Stat-ledger cell shape ── */
 import type { LucideIcon } from 'lucide-react';
-export interface Stat { key: string; label: string; value: number | string; hint?: string; icon?: LucideIcon; }
+export interface Stat {
+  key: string;
+  label: string;
+  value: number | string;
+  hint?: string;
+  icon?: LucideIcon;
+  /** 'attention' tints the KPI card amber (mitigated) to flag an actionable gap. */
+  tone?: 'attention';
+}

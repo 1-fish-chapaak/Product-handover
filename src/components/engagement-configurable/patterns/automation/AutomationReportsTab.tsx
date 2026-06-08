@@ -12,6 +12,7 @@ import type { AutomationProjectWorkspaceState } from './automationInputData';
 import type { AutomationRunOutput, AutomationRunException, AutomationRun } from './automationRunsData';
 import { EX_SEVERITY_CLS, EX_CAT_LABELS } from './automationRunsData';
 import { useShare, rectFromEvent } from '../../../../context/ShareContext';
+import Gated from '../../../shared/Gated';
 import {
   generateDraftReport, deriveReportReadiness, REPORT_STATUS_CLS,
   type AutomationReportsState, type AutomationReport, type ReportStatus,
@@ -353,9 +354,11 @@ export default function AutomationReportsTab({ engagement, automationState, repo
           <button onClick={() => alert('Apply Template — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Layout size={13} /> Apply Template
           </button>
+          <Gated permission="rp_share" mode="disable" title="You don't have permission to share reports">
           <button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: selectedReportId, anchor: rectFromEvent(e) }); }} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Share2 size={13} /> Share
           </button>
+          </Gated>
           <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Download size={13} /> Download
           </button>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import Gated from '../shared/Gated';
 import {
   X, BarChart3, Plus, Check, LayoutGrid,
   ChevronRight, Search, Users, ShieldOff,
@@ -676,6 +677,7 @@ export function AddToDashboardModal({
               Next <ChevronRight size={13} />
             </button>
           ) : (
+            <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
             <button
               type="button"
               disabled={totalSelected === 0 || submitting}
@@ -685,6 +687,7 @@ export function AddToDashboardModal({
               {submitting ? <ButtonSpinner /> : <BarChart3 size={13} />}
               {submitError && !submitting ? 'Retry' : submitting ? 'Adding…' : 'Add to Dashboard'}
             </button>
+            </Gated>
           )}
         </div>
       </div>

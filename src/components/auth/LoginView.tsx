@@ -71,14 +71,32 @@ export default function LoginView() {
 
         {/* hero — optically centered in the remaining space */}
         <div className="flex-1 flex flex-col justify-center relative z-10">
-          <motion.div className="h-px w-12 bg-white/25 mb-7 origin-left" {...rise(1)} />
-          <motion.h1 className="font-display text-[2.75rem] leading-[1.08] tracking-tight mb-5" {...rise(2)}>
-            Audit intelligence,<br />secured by role.
+          <motion.div className="flex items-center gap-3 mb-7" {...rise(1)}>
+            {/* animated shimmer line */}
+            <div className="relative h-px w-10 overflow-hidden bg-white/20">
+              <motion.div
+                aria-hidden
+                className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/90 to-transparent"
+                animate={reduce ? undefined : { x: ['-120%', '260%'] }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', repeatDelay: 0.8 }}
+              />
+            </div>
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-white/45">
+              Auditify · Ask IRA
+            </span>
+          </motion.div>
+
+          <motion.h1
+            className="text-shimmer font-display text-[2.75rem] leading-[1.08] tracking-tight mb-5"
+            {...rise(2)}
+          >
+            Ask your evidence.<br />Audit the answer.
           </motion.h1>
-          <motion.p className="text-white/65 text-[0.9375rem] leading-relaxed max-w-[400px]" {...rise(3)}>
-            Each workspace is a dedicated audit environment with its own
-            engagements, evidence, and findings. What you see and do depends
-            on your role.
+
+          <motion.p className="text-shimmer-dim text-[0.9375rem] leading-relaxed max-w-[400px]" {...rise(3)}>
+            Ask a data question or build a workflow you can re-run every quarter
+            — in one thread. Every answer shows its plan, its code, and its
+            sources.
           </motion.p>
         </div>
 

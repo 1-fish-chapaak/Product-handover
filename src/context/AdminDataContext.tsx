@@ -54,20 +54,21 @@ function deriveTeams(users: AdminUser[]): AdminTeam[] {
   const map: Record<string, AdminUser[]> = {};
   users.forEach(u => { if (u.team !== '—') { (map[u.team] ??= []).push(u); } });
   return Object.entries(map).map(([name, mem]) => {
-    // Strict: a team is owned by a System Admin member only — otherwise it starts
-    // Unassigned (matches the deletion-reconcile rule; never auto-assign a
-    // non-admin as team admin).
+    // Every team must have an owner: prefer a System Admin member, else fall back
+    // to the first member. A team is never Unassigned while it has members.
     const admin = mem.find(m => m.roleId === 'role-admin');
     return {
       id: `team-${name.toLowerCase().replace(/\s+/g, '-')}`,
       name,
       members: mem.map(m => m.name),
-      owner: admin?.name,
+      owner: (admin ?? mem[0])?.name,
     };
   });
 }
 
 export interface AuditLog {
+  /** Stable unique key — many events can share a timestamp (same second). */
+  id: string;
   timestamp: string;
   user: string;
   action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export';
@@ -77,8 +78,15 @@ export interface AuditLog {
   status: 'Success' | 'Failed';
 }
 
-/** Seed history shown before the session produces its own entries. */
-export const SEED_LOGS: AuditLog[] = [
+/** Collision-proof id (crypto.randomUUID when available, else a random fallback). */
+function uid(prefix = 'id'): string {
+  const rnd = (globalThis.crypto as Crypto | undefined)?.randomUUID?.();
+  return `${prefix}-${rnd ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+}
+
+/** Seed history shown before the session produces its own entries. Ids are
+ *  assigned at provider init so every row has a stable, unique key. */
+export const SEED_LOGS: Omit<AuditLog, 'id'>[] = [
   { timestamp: '2026-04-19 10:30:50', user: 'Abhinav Sharma', action: 'Update', description: 'Updated business process "Procure to Pay" status to Active', module: 'Process Hub', entity: 'Business Process', status: 'Success' },
   { timestamp: '2026-04-19 09:14:22', user: 'Abhinav Sharma', action: 'Login', description: 'User logged in via SSO', module: 'Admin', entity: 'Session', status: 'Success' },
   { timestamp: '2026-04-18 14:22:11', user: 'Tushar Goel', action: 'Create', description: 'Created new role "test manik role" with 8 permissions', module: 'Admin', entity: 'Role', status: 'Success' },
@@ -89,6 +97,19 @@ export const SEED_LOGS: AuditLog[] = [
   { timestamp: '2026-04-16 15:20:41', user: 'Tushar Goel', action: 'Update', description: 'Changed user "Chulbul Pandey" status from Active to Suspended', module: 'Admin', entity: 'User', status: 'Success' },
   { timestamp: '2026-04-16 10:05:33', user: 'Unknown', action: 'Login', description: 'Failed login attempt with email admin@irame.ai', module: 'Admin', entity: 'Session', status: 'Failed' },
   { timestamp: '2026-04-15 14:12:09', user: 'Ajay Mudhai', action: 'Create', description: 'Connected new data source "SAP ERP Production"', module: 'Knowledge Hub', entity: 'Data Source', status: 'Success' },
+  { timestamp: '2026-04-15 11:47:55', user: 'Ayushi Narang', action: 'Update', description: 'Updated RACM mapping for "Order to Cash" — linked 3 controls', module: 'RACM', entity: 'RACM Mapping', status: 'Success' },
+  { timestamp: '2026-04-15 09:02:14', user: 'Karan Mehta', action: 'Login', description: 'User logged in via SSO', module: 'Admin', entity: 'Session', status: 'Success' },
+  { timestamp: '2026-04-14 17:33:48', user: 'Aditya Thakur', action: 'Create', description: 'Created engagement "FY26 Q1 SOX Walkthrough"', module: 'Engagements', entity: 'Engagement', status: 'Success' },
+  { timestamp: '2026-04-14 13:19:27', user: 'Tushar Goel', action: 'Update', description: 'Reassigned exception "Duplicate vendor payment" to Risk Owner', module: 'Exceptions', entity: 'Exception', status: 'Success' },
+  { timestamp: '2026-04-14 08:51:06', user: 'Unknown', action: 'Login', description: 'Failed login attempt with email contractor@external.com', module: 'Admin', entity: 'Session', status: 'Failed' },
+  { timestamp: '2026-04-13 16:08:39', user: 'Ayushi Narang', action: 'Export', description: 'Exported audit log as CSV (142 events)', module: 'Admin', entity: 'Audit Log', status: 'Success' },
+  { timestamp: '2026-04-13 12:40:11', user: 'Abhinav Sharma', action: 'Update', description: 'Edited working paper "P2P-WP-007" and marked for review', module: 'Engagement Execution', entity: 'Working Paper', status: 'Success' },
+  { timestamp: '2026-04-13 10:22:53', user: 'Ajay Mudhai', action: 'Delete', description: 'Removed data source "Legacy Oracle EBS"', module: 'Knowledge Hub', entity: 'Data Source', status: 'Success' },
+  { timestamp: '2026-04-12 15:55:30', user: 'Tushar Goel', action: 'Create', description: 'Added control "Three-way match enforcement" to P2P library', module: 'Control Library', entity: 'Control', status: 'Success' },
+  { timestamp: '2026-04-12 09:37:18', user: 'Karan Mehta', action: 'Update', description: 'Updated dashboard "Risk Heatmap" layout and shared with team', module: 'Dashboard', entity: 'Dashboard', status: 'Success' },
+  { timestamp: '2026-04-11 14:48:02', user: 'Aditya Thakur', action: 'Export', description: 'Exported RACM matrix for "Procure to Pay" as XLSX', module: 'RACM', entity: 'RACM Matrix', status: 'Success' },
+  { timestamp: '2026-04-11 11:14:44', user: 'Abhinav Sharma', action: 'Create', description: 'Invited user "priya.singh@irame.ai" as Risk Owner', module: 'Admin', entity: 'Invitation', status: 'Success' },
+  { timestamp: '2026-04-10 16:29:57', user: 'Ayushi Narang', action: 'Update', description: 'Closed exception "Missing PO approval" with remediation note', module: 'Exceptions', entity: 'Exception', status: 'Success' },
 ];
 
 /** Fields a caller supplies; actor + timestamp are filled in automatically. */
@@ -111,11 +132,22 @@ interface AdminDataContextValue {
   inviteUser: (user: AdminUser) => void;
   updateUser: (email: string, patch: Partial<AdminUser>) => void;
   removeUser: (email: string) => void;
-  // Teams
+  // Teams — membership is single-sourced on AdminUser.team; `members` here is
+  // derived live from the user list (see the `teams` memo). A team entity only
+  // stores identity + owner.
   teams: AdminTeam[];
   addTeam: (name: string, members: string[], owner?: string) => void;
-  updateTeam: (id: string, patch: Partial<Omit<AdminTeam, 'id'>>) => void;
+  updateTeam: (id: string, patch: Partial<Omit<AdminTeam, 'id' | 'members'>>) => void;
   removeTeam: (id: string) => void;
+  /** Set exactly which users belong to a team (by name) — the membership write. */
+  setTeamMembership: (teamName: string, memberNames: string[]) => void;
+}
+
+/** Stored team entity — identity + owner only. Members are derived from users. */
+interface TeamBase {
+  id: string;
+  name: string;
+  owner?: string;
 }
 
 const AdminDataContext = createContext<AdminDataContextValue | null>(null);
@@ -128,14 +160,31 @@ function nowStamp(): string {
 
 export function AdminDataProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useCurrentUser();
-  const [logs, setLogs] = useState<AuditLog[]>(() => [...SEED_LOGS]);
+  const [logs, setLogs] = useState<AuditLog[]>(() => SEED_LOGS.map(l => ({ ...l, id: uid('log') })));
   const [users, setUsers] = useState<AdminUser[]>(() => SEED_USERS.map(u => ({ ...u })));
-  const [teams, setTeams] = useState<AdminTeam[]>(() => deriveTeams(SEED_USERS));
+  const [teamsBase, setTeamsBase] = useState<TeamBase[]>(
+    () => deriveTeams(SEED_USERS).map(t => ({ id: t.id, name: t.name, owner: t.owner })),
+  );
   const [defaultRoleId, setDefaultRoleId] = useState<string>('role-viewer');
+
+  // Teams with live-derived membership: a team's members are exactly the users
+  // whose `team` field matches its name. Owner is the stored preference if that
+  // person is still a member, otherwise it self-heals to a System Admin member,
+  // else the first member — so a populated team always shows a valid owner and
+  // membership/owner can never drift out of sync with the People list.
+  const teams = useMemo<AdminTeam[]>(() => teamsBase.map(t => {
+    const members = users.filter(u => u.team === t.name).map(u => u.name);
+    const ownerValid = !!t.owner && members.includes(t.owner);
+    const owner = ownerValid
+      ? t.owner
+      : members.find(m => users.find(u => u.name === m)?.roleId === 'role-admin') ?? members[0];
+    return { id: t.id, name: t.name, members, owner };
+  }), [teamsBase, users]);
 
   const logEvent = useCallback((input: LogInput) => {
     setLogs(prev => [
       {
+        id: uid('log'),
         timestamp: nowStamp(),
         user: currentUser?.name ?? 'Unknown',
         action: input.action,
@@ -148,79 +197,99 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     ]);
   }, [currentUser]);
 
-  // ── Users ──
+  // ── Users ── (membership lives here: AdminUser.team is the single source)
   const inviteUser = useCallback((user: AdminUser) => {
-    setUsers(prev => [user, ...prev]);
+    // Email is the identity key (and the SmartTable row key) — never allow two
+    // rows with the same email, or row identity (select/edit/remove) collides.
+    // The new user's `team` field is enough to make them a member of that team;
+    // no separate team write is needed (membership is derived from users).
+    setUsers(prev => (
+      prev.some(u => u.email.toLowerCase() === user.email.trim().toLowerCase())
+        ? prev
+        : [user, ...prev]
+    ));
   }, []);
   const updateUser = useCallback((email: string, patch: Partial<AdminUser>) => {
     setUsers(prevUsers => {
       const before = prevUsers.find(u => u.email === email);
-      // Keep team member/owner references in sync when a person is renamed —
-      // teams store members + owner by name, so a stale name would orphan them.
+      // A rename only needs to follow the stored owner *preference* (members are
+      // derived, so they re-derive the new name automatically).
       if (before && patch.name && patch.name !== before.name) {
         const oldName = before.name;
         const newName = patch.name;
-        setTeams(prevTeams => prevTeams.map(t => ({
-          ...t,
-          members: t.members.map(m => (m === oldName ? newName : m)),
-          owner: t.owner === oldName ? newName : t.owner,
-        })));
+        setTeamsBase(prev => prev.map(t => (t.owner === oldName ? { ...t, owner: newName } : t)));
       }
-      // A suspended/locked person can't actively own a team — transfer ownership
-      // to another System Admin member, else leave it Unassigned. (Strict.)
+      // A suspended/locked person can't actively own a team — hand ownership to
+      // another active System Admin member, else the first other member, so the
+      // stored preference points at someone who can act. (A team they still
+      // belong to keeps them as a member; they just stop being owner.)
       if (before && (patch.status === 'Suspended' || patch.status === 'Locked') && before.status !== patch.status) {
         const name = before.name;
-        setTeams(prevTeams => prevTeams.map(t => {
+        setTeamsBase(prev => prev.map(t => {
           if (t.owner !== name) return t;
-          const adminMember = t.members.find(mn => mn !== name && prevUsers.find(u => u.name === mn)?.roleId === 'role-admin');
-          return { ...t, owner: adminMember };
+          const otherMembers = prevUsers.filter(u => u.team === t.name && u.name !== name);
+          const next = otherMembers.find(u => u.roleId === 'role-admin')?.name ?? otherMembers[0]?.name;
+          return { ...t, owner: next };
         }));
       }
       return prevUsers.map(u => (u.email === email ? { ...u, ...patch } : u));
     });
   }, []);
   const removeUser = useCallback((email: string) => {
-    setUsers(prevUsers => {
-      const removed = prevUsers.find(u => u.email === email);
-      // Reconcile teams: drop the removed person from members, and if they were
-      // the owner, transfer ONLY to a System Admin member. Never auto-promote a
-      // non-admin (Viewer/Enabler/etc.) to team admin — leave it Unassigned so
-      // an admin makes the call deliberately.
-      if (removed) {
-        const name = removed.name;
-        const remaining = prevUsers.filter(u => u.email !== email);
-        setTeams(prevTeams => prevTeams.map(t => {
-          if (!t.members.includes(name)) return t;
-          const members = t.members.filter(m => m !== name);
-          let owner = t.owner;
-          if (t.owner === name) {
-            // undefined → Unassigned when no System Admin member remains.
-            owner = members.find(mn => remaining.find(u => u.name === mn)?.roleId === 'role-admin');
-          }
-          return { ...t, members, owner };
-        }));
-      }
-      return prevUsers.filter(u => u.email !== email);
-    });
+    // Membership + owner self-heal from the derived `teams` memo once the user is
+    // gone, so we only have to drop the user record here.
+    setUsers(prevUsers => prevUsers.filter(u => u.email !== email));
   }, []);
 
-  // ── Teams ──
+  // ── Teams ── (identity + owner only; membership is a user-side write)
   const addTeam = useCallback((name: string, members: string[], owner?: string) => {
-    setTeams(prev => [...prev, { id: `team-${Date.now()}`, name, members, owner: owner ?? members[0] }]);
+    setTeamsBase(prev => [...prev, { id: uid('team'), name, owner: owner ?? members[0] }]);
+    // Make the selected people members by pointing their `team` at the new team.
+    if (members.length > 0) {
+      const set = new Set(members);
+      setUsers(prev => prev.map(u => (set.has(u.name) ? { ...u, team: name } : u)));
+    }
   }, []);
-  const updateTeam = useCallback((id: string, patch: Partial<Omit<AdminTeam, 'id'>>) => {
-    setTeams(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
+  const updateTeam = useCallback((id: string, patch: Partial<Omit<AdminTeam, 'id' | 'members'>>) => {
+    setTeamsBase(prev => {
+      const t = prev.find(x => x.id === id);
+      if (!t) return prev;
+      // Renaming a team cascades to every member's `team` field so membership
+      // follows the rename (members are matched to teams by name).
+      if (patch.name && patch.name !== t.name) {
+        const oldName = t.name;
+        const newName = patch.name;
+        setUsers(prevU => prevU.map(u => (u.team === oldName ? { ...u, team: newName } : u)));
+      }
+      return prev.map(x => (x.id === id
+        ? { ...x, ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.owner !== undefined ? { owner: patch.owner } : {}) }
+        : x));
+    });
   }, []);
   const removeTeam = useCallback((id: string) => {
-    setTeams(prev => prev.filter(t => t.id !== id));
+    setTeamsBase(prev => {
+      const t = prev.find(x => x.id === id);
+      // Unassign its members (the confirm copy promises this) — set anyone on the
+      // team back to '—' so no user is left pointing at a deleted team.
+      if (t) setUsers(prevU => prevU.map(u => (u.team === t.name ? { ...u, team: '—' } : u)));
+      return prev.filter(x => x.id !== id);
+    });
+  }, []);
+  const setTeamMembership = useCallback((teamName: string, memberNames: string[]) => {
+    const set = new Set(memberNames);
+    setUsers(prev => prev.map(u => {
+      if (set.has(u.name) && u.team !== teamName) return { ...u, team: teamName };   // added
+      if (!set.has(u.name) && u.team === teamName) return { ...u, team: '—' };        // removed
+      return u;
+    }));
   }, []);
 
   const value = useMemo<AdminDataContextValue>(() => ({
     logs, logEvent,
     defaultRoleId, setDefaultRoleId,
     users, inviteUser, updateUser, removeUser,
-    teams, addTeam, updateTeam, removeTeam,
-  }), [logs, logEvent, defaultRoleId, users, inviteUser, updateUser, removeUser, teams, addTeam, updateTeam, removeTeam]);
+    teams, addTeam, updateTeam, removeTeam, setTeamMembership,
+  }), [logs, logEvent, defaultRoleId, users, inviteUser, updateUser, removeUser, teams, addTeam, updateTeam, removeTeam, setTeamMembership]);
 
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;
 }

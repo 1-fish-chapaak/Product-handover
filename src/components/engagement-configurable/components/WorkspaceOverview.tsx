@@ -16,6 +16,8 @@ import { getEngagementPatternDefinition } from '../engagementPatterns';
 import type { AutomationProjectWorkspaceState } from '../patterns/automation/automationInputData';
 import type { AutomationScheduleState } from '../patterns/automation/automationScheduleData';
 import { calculateNextRun } from '../patterns/automation/automationScheduleData';
+import Gated from '../../shared/Gated';
+import { useShare, rectFromEvent } from '../../../context/ShareContext';
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -205,7 +207,7 @@ function ContinuousMonitoringDashboard({ engagement, state, onNavigateTab }: {
       <DashboardHeader engagement={engagement} schedule={schedule} />
 
       {/* Alerts bar */}
-      <AlertsDigestBar state={state} allExceptions={allExceptions} schedule={schedule} onNavigateTab={onNavigateTab} />
+      <AlertsDigestBar engagementId={engagement.id} state={state} allExceptions={allExceptions} schedule={schedule} onNavigateTab={onNavigateTab} />
 
       {/* Schedule warning */}
       {!scheduleActive && (
@@ -375,9 +377,10 @@ function MonitoringStatusBar({ schedule, lastRun, nextRun, wfCount }: { schedule
   );
 }
 
-function AlertsDigestBar({ state, allExceptions, schedule, onNavigateTab }: {
-  state: AutomationProjectWorkspaceState; allExceptions: any[]; schedule: AutomationScheduleState; onNavigateTab?: (tabId: string) => void;
+function AlertsDigestBar({ engagementId, state, allExceptions, schedule, onNavigateTab }: {
+  engagementId: string; state: AutomationProjectWorkspaceState; allExceptions: any[]; schedule: AutomationScheduleState; onNavigateTab?: (tabId: string) => void;
 }) {
+  const { openShare } = useShare();
   const [expanded, setExpanded] = useState(true);
   const openEx = allExceptions.filter((e: any) => e.status === 'OPEN').length;
   const highCrit = allExceptions.filter((e: any) => e.severity === 'HIGH' || e.severity === 'CRITICAL').length;
@@ -406,9 +409,14 @@ function AlertsDigestBar({ state, allExceptions, schedule, onNavigateTab }: {
           <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
           <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-          <Send size={11} /> Share with Team
-        </button>
+        <Gated permission="eng_share">
+          <button
+            onClick={(e) => { e.stopPropagation(); openShare({ type: 'engagement', id: engagementId, anchor: rectFromEvent(e) }); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
+          >
+            <Send size={11} /> Share with Team
+          </button>
+        </Gated>
       </div>
       <AnimatePresence>
         {expanded && (

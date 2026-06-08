@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Filter, Check, ChevronDown, Search, X } from 'lucide-react';
+import Checkbox from './Checkbox';
 
 interface Props {
   label: string;
@@ -14,9 +15,16 @@ interface Props {
   /** Custom left content per option (e.g. an avatar + name for people filters).
       Receives the option string; defaults to a plain truncated label. */
   renderOption?: (opt: string) => React.ReactNode;
+  /** Selection affordance. `check` (default) shows a trailing check on selected
+      rows. `checkbox` puts a leading checkbox in front of each row instead —
+      the explicit multi-select look (no trailing check). */
+  selectIndicator?: 'check' | 'checkbox';
+  /** Force the inline search on (or off) regardless of option count. Defaults to
+      auto: shown when there are more than 5 options. */
+  searchable?: boolean;
 }
 
-export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption }: Props) {
+export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption, selectIndicator = 'check', searchable }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   // Snapshot of what was selected when the menu opened — used to float those
@@ -29,7 +37,8 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
   const reduce = useReducedMotion();
 
   // Long lists get an inline search; short ones (Status, Result…) stay clean.
-  const showSearch = options.length > 5;
+  // `searchable` overrides the auto threshold either way.
+  const showSearch = searchable ?? options.length > 5;
   const ordered = pinned.length
     ? [...options].sort((a, b) => Number(pinned.includes(b)) - Number(pinned.includes(a)))
     : options;
@@ -68,7 +77,9 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           className={`no-focus-ring inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-[12px] font-medium cursor-pointer transition-colors ${
             hasFilter
               ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-50/80'
-              : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200 hover:bg-canvas'
+              : open
+                ? 'border-brand-600 bg-canvas text-brand-700'
+                : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200 hover:bg-canvas'
           }`}
           aria-haspopup="true"
           aria-expanded={open}
@@ -161,10 +172,13 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
                       checked ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-canvas'
                     }`}
                   >
+                    {selectIndicator === 'checkbox' && <Checkbox checked={checked} />}
                     <span className="flex items-center gap-2.5 min-w-0 flex-1">
                       {renderOption ? renderOption(opt) : <span className="truncate">{opt}</span>}
                     </span>
-                    <Check size={14} strokeWidth={2.5} className={`shrink-0 transition-opacity ${checked ? 'text-brand-600 opacity-100' : 'opacity-0'}`} />
+                    {selectIndicator === 'check' && (
+                      <Check size={14} strokeWidth={2.5} className={`shrink-0 transition-opacity ${checked ? 'text-brand-600 opacity-100' : 'opacity-0'}`} />
+                    )}
                   </button>
                 </motion.li>
               );

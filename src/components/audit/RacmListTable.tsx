@@ -10,6 +10,7 @@ import SopDocumentModal from './SopDocumentModal';
 import ConfirmDeleteRacmModal from './ConfirmDeleteRacmModal';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
@@ -520,6 +521,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         action={
           <div className="flex items-center gap-2">
             <div ref={downloadRef} className="relative">
+              <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
               <Button
                 variant="outline"
                 size="md"
@@ -528,6 +530,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               >
                 Download
               </Button>
+              </Gated>
               {downloadOpen && (
                 <div className="absolute right-0 mt-1.5 w-[200px] bg-white border border-border-light rounded-[8px] shadow-lg z-50">
                   <button type="button" onClick={() => triggerDownload('xlsx')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as XLSX</button>

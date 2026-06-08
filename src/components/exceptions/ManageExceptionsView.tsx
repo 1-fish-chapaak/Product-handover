@@ -19,6 +19,7 @@ import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
@@ -475,6 +476,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
                 </div>
                 <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
+                <Gated permission="exc_resolve" mode="disable" title="You don't have permission to generate an ATR">
                 <button
                   onClick={() => setAtrModalOpen(true)}
                   className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
@@ -482,6 +484,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <FileText size={14} />
                   Generate ATR
                 </button>
+                </Gated>
               </div>
             )}
           </div>

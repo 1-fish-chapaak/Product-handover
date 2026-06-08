@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Gated from '../shared/Gated';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, CloudUpload, Paperclip, FileText, FileSpreadsheet, Loader2,
@@ -474,6 +475,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
             >
               Cancel
             </button>
+            <Gated permission="rp_comment" mode="disable" title="You don't have permission to add observations">
             <button
               onClick={handleSave}
               disabled={isSaving}
@@ -487,6 +489,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                   ? 'Update observation'
                   : 'Save observation'}
             </button>
+            </Gated>
           </div>
           {showDiscardConfirm && createPortal(
             <motion.div

@@ -16,6 +16,7 @@ import {
   FileSpreadsheet, ChevronDown, Clock, ListFilter, ArrowDownUp,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import { ENGAGEMENTS, type Engagement } from '../../data/engagements';
 import {
   exceptionsForEngagement, groupByWorkflow,
@@ -282,10 +283,12 @@ function BulkAssign({ onApply, count }: { onApply: (names: string[], primary: st
           );
         })}
       </div>
+      <Gated permission="exc_assign" mode="disable" title="You don't have permission to assign exceptions">
       <button disabled={picked.length === 0} onClick={() => onApply(picked, picked[0])}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply to {count} exception{count === 1 ? '' : 's'}
       </button>
+      </Gated>
     </div>
   );
 }
@@ -305,10 +308,12 @@ function BulkDue({ onApply, count }: { onApply: (label: string) => void; count: 
         <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Custom date</label>
         <DatePicker value={custom} onChange={(e) => setCustom(e.target.value)} className={INPUT_CLS} />
       </div>
+      <Gated permission="exc_triage" mode="disable" title="You don't have permission to update exceptions">
       <button disabled={!custom} onClick={() => onApply(custom)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply custom date
       </button>
+      </Gated>
     </div>
   );
 }
@@ -359,10 +364,12 @@ function BulkClassify({ onApply, count }: { onApply: (cls: Classification, ratio
         <textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Explain the reasoning…"
           className={INPUT_CLS + ' resize-none'} />
       </div>
+      <Gated permission="exc_classify" mode="disable" title="You don't have permission to classify exceptions">
       <button disabled={!cls} onClick={() => cls && onApply(cls, body)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Apply classification
       </button>
+      </Gated>
     </div>
   );
 }
@@ -382,10 +389,12 @@ function BulkSnooze({ onApply, count }: { onApply: (label: string) => void; coun
         <label className="text-[0.6875rem] font-semibold text-ink-600 block mb-1">Until date</label>
         <DatePicker value={date} onChange={(e) => setDate(e.target.value)} className={INPUT_CLS} />
       </div>
+      <Gated permission="exc_resolve" mode="disable" title="You don't have permission to snooze exceptions">
       <button disabled={!date} onClick={() => onApply(`until ${date}`)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Snooze until date
       </button>
+      </Gated>
     </div>
   );
 }
@@ -414,10 +423,12 @@ function BulkClose({ onApply, count }: { onApply: (cls: Classification | null, n
         <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was done to resolve this?"
           className={INPUT_CLS + ' resize-none'} />
       </div>
+      <Gated permission="exc_resolve" mode="disable" title="You don't have permission to close exceptions">
       <button disabled={!cls} onClick={() => onApply(cls, note)}
         className="w-full px-3 py-2 rounded-lg bg-compliant text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-[0.75rem] font-semibold cursor-pointer">
         Close cases
       </button>
+      </Gated>
     </div>
   );
 }
@@ -438,10 +449,12 @@ function BulkReassign({ onApply, count }: { onApply: (name: string) => void; cou
           </button>
         ))}
       </div>
+      <Gated permission="exc_assign" mode="disable" title="You don't have permission to reassign exceptions">
       <button disabled={!pick} onClick={() => onApply(pick)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Reassign
       </button>
+      </Gated>
     </div>
   );
 }
@@ -453,10 +466,12 @@ function BulkComment({ onApply, count }: { onApply: (body: string) => void; coun
       <div className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-500">Comment on {count} exception{count === 1 ? '' : 's'}</div>
       <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment will be tagged [bulk]…"
         className={INPUT_CLS + ' resize-none'} />
+      <Gated permission="exc_triage" mode="disable" title="You don't have permission to comment on exceptions">
       <button disabled={!body.trim()} onClick={() => onApply(body)}
         className="w-full px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold cursor-pointer">
         Post comment
       </button>
+      </Gated>
     </div>
   );
 }

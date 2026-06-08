@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import DatePicker from '../shared/DatePicker';
+import Gated from '../shared/Gated';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, ClipboardCheck, Plus, Search, Calendar, Users, ChevronRight,
@@ -1338,9 +1339,11 @@ function IAIDRTab() {
               <p className="text-[10px] text-blue-600">{totalRequests} document requests across {Object.keys(IDR_MAPPINGS).length} controls</p>
             </div>
           </div>
+          <Gated permission="eng_close" mode="disable" title="You don't have permission to issue the final report">
           <button onClick={() => setShowSendModal(true)} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
             <Send size={12} />Send Consolidated IDR
           </button>
+          </Gated>
         </div>
       ) : (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 flex items-center gap-2">

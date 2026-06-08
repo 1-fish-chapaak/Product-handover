@@ -6,6 +6,7 @@ import {
   Clock, User, FileText, Eye, Paperclip, FileCheck, XCircle, SlidersHorizontal,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
 import { WORKFLOWS } from '../../data/mockData';
 import { computeRacmStateFromRisks, RACM_STATUS_STYLES, RACM_READINESS_STYLES, type ComputedRacmState, type RiskDetailInput } from './racmStateEngine';
@@ -510,10 +511,12 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             ) : racmComputed.status === 'Active' ? (
               <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-semibold"><CheckCircle2 size={12} />Validated</span>
             ) : racmComputed.readiness === 'Ready' ? (
+              <Gated permission="racm_edit" mode="disable" title="You don't have permission to validate a RACM">
               <button onClick={() => setShowValidateModal(true)}
                 className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-[11px] font-semibold transition-colors cursor-pointer">
                 <FileCheck size={11} />Validate RACM
               </button>
+              </Gated>
             ) : (
               <button disabled className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-semibold cursor-not-allowed">
                 <FileCheck size={11} />Validate
@@ -538,10 +541,12 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             {racmComputed.status === 'Active' ? (
               <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[12px] font-semibold"><CheckCircle2 size={14} />Validated</span>
             ) : racmComputed.readiness === 'Ready' ? (
+              <Gated permission="racm_edit" mode="disable" title="You don't have permission to validate a RACM">
               <button onClick={() => setShowValidateModal(true)}
                 className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
                 <FileCheck size={13} />Validate RACM
               </button>
+              </Gated>
             ) : (
               <button disabled
                 className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-[12px] font-semibold cursor-not-allowed">
@@ -1204,10 +1209,14 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                     })()}
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    <Gated permission="racm_link_control" mode="disable" title="You don't have permission to link controls">
                                     <button onClick={e => { e.stopPropagation(); onLinkControl(risk.id); }}
                                       className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-primary/30 text-[10px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors"><Link2 size={10} />Link Existing Control</button>
+                                    </Gated>
+                                    <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
                                     <button onClick={e => { e.stopPropagation(); onCreateControl(risk.id); }}
                                       className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 text-[10px] font-semibold text-primary hover:bg-primary/15 cursor-pointer transition-colors"><Plus size={10} />Create New Control</button>
+                                    </Gated>
                                   </div>
                                 </div>
                                 {risk.controls.length === 0 ? (
@@ -1237,17 +1246,21 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                             </div>
                                             <span className={`px-2 h-5 rounded-full text-[9px] font-semibold inline-flex items-center shrink-0 ${READINESS_CLS[rd]}`}>{rd}</span>
                                             {wfs.length === 0 && onLinkWorkflow && (
+                                              <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
                                               <button onClick={e => { e.stopPropagation(); onLinkWorkflow(ctrl.id); }}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors shrink-0"><Link2 size={10} />Link Workflow</button>
+                                              </Gated>
                                             )}
                                             {wfs.length > 0 && (
                                               <button onClick={e => { e.stopPropagation(); setWfDrawerRiskId(risk.id); }}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors shrink-0"><SlidersHorizontal size={10} />Manage Control</button>
                                             )}
+                                            <Gated permission="racm_unmap" mode="disable" title="You don't have permission to unmap controls">
                                             <button onClick={e => { e.stopPropagation(); setConfirmRemoveCtrl({ riskId: risk.id, ctrl }); }}
                                               className="p-1 rounded text-ink-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors shrink-0" title="Remove control">
                                               <X size={11} />
                                             </button>
+                                            </Gated>
                                           </div>
                                           {/* Confirm remove control */}
                                           {confirmRemoveCtrl && confirmRemoveCtrl.riskId === risk.id && confirmRemoveCtrl.ctrl.id === ctrl.id && (
@@ -1512,14 +1525,18 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
                   <div className="pt-2 border-t border-border/30 space-y-2">
                     <div className="text-[9px] font-semibold text-ink-400 uppercase tracking-wider">Workflow Actions</div>
                     <div className="flex items-center gap-2">
+                      <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
                       <button onClick={() => { onLinkWorkflow(ctrl.id); addToast({ message: 'Opening workflow linker in Split View', type: 'info' }); }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[11px] font-semibold text-primary hover:bg-primary/5 cursor-pointer transition-colors">
                         <Link2 size={11} />Link Workflow
                       </button>
+                      </Gated>
+                      <Gated permission="wf_create" mode="disable" title="You don't have permission to create workflows">
                       <button onClick={() => { onCreateWorkflow(ctrl.id); addToast({ message: 'Opening workflow builder in Split View', type: 'info' }); }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
                         <Plus size={11} />Create Workflow
                       </button>
+                      </Gated>
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-ink-400">
                       <span>{wfs.length} workflow{wfs.length !== 1 ? 's' : ''}</span>

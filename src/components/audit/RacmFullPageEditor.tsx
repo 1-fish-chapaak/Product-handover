@@ -21,6 +21,7 @@ import {
   groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
   type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef,
 } from '../../data/procurement-racm';
+import Gated from '../shared/Gated';
 
 interface Props {
   onBack: () => void;
@@ -264,10 +265,12 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
             <Upload size={11} />Import
           </button>
+          <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
           <button onClick={() => setShowImportToast(true)}
             className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
             <Download size={11} />Export
           </button>
+          </Gated>
           <button onClick={addRow}
             className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
             <Plus size={11} />Add Risk-Control

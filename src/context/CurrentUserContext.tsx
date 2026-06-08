@@ -58,9 +58,32 @@ interface CurrentUserContextValue {
   /** Roles editor write-back — keeps enforcement in sync with the matrix. */
   updateRolePermissions: (roleId: string, permissions: PermissionKey[]) => void;
   addRole: (role: Role) => void;
+  /** Delete a custom role. Callers must guard system / default / assigned roles. */
+  removeRole: (roleId: string) => void;
 }
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
+
+// Persist the prototype session so deep-links opened in a NEW browser tab
+// (e.g. Process Hub → a control opens ?view=control-detail in window.open) stay
+// signed in and land on the target view, instead of re-showing the login/
+// workspace screen. Without this, every new tab boots signed-out and the
+// deep-linked page never appears.
+const AUTH_USER_KEY = 'auth.currentUserId';
+const AUTH_WS_KEY = 'auth.activeWorkspaceId';
+
+const readPersistedUser = (): AuthUser | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const id = window.localStorage.getItem(AUTH_USER_KEY);
+    return id ? (DEMO_USERS.find(d => d.id === id) ?? null) : null;
+  } catch { return null; }
+};
+
+const readPersistedWorkspace = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try { return window.localStorage.getItem(AUTH_WS_KEY); } catch { return null; }
+};
 
 interface ProviderProps {
   children: ReactNode;
@@ -70,8 +93,19 @@ interface ProviderProps {
 
 export function CurrentUserProvider({ children, startSignedOut = false }: ProviderProps) {
   const [roles, setRoles] = useState<Role[]>(() => SEED_ROLES.map(r => ({ ...r, permissions: [...r.permissions] })));
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(startSignedOut ? null : DEFAULT_USER);
-  const [activeWorkspaceId, setActiveWorkspace] = useState<string>(DEFAULT_WORKSPACE.id);
+  // Hydrate from a persisted session first; only fall back to the login gate
+  // (startSignedOut) when there's nothing stored.
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(
+    () => readPersistedUser() ?? (startSignedOut ? null : DEFAULT_USER),
+  );
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(
+    () => readPersistedWorkspace() ?? DEFAULT_WORKSPACE.id,
+  );
+
+  const setActiveWorkspace = useCallback((id: string) => {
+    setActiveWorkspaceId(id);
+    try { window.localStorage.setItem(AUTH_WS_KEY, id); } catch { /* ignore */ }
+  }, []);
 
   const activeRole = useMemo(
     () => (currentUser ? roles.find(r => r.id === currentUser.roleId) ?? null : null),
@@ -86,9 +120,13 @@ export function CurrentUserProvider({ children, startSignedOut = false }: Provid
   const signIn = useCallback((userId: string) => {
     const u = DEMO_USERS.find(d => d.id === userId) ?? DEFAULT_USER;
     setCurrentUser(u);
+    try { window.localStorage.setItem(AUTH_USER_KEY, u.id); } catch { /* ignore */ }
   }, []);
 
-  const signOut = useCallback(() => setCurrentUser(null), []);
+  const signOut = useCallback(() => {
+    setCurrentUser(null);
+    try { window.localStorage.removeItem(AUTH_USER_KEY); } catch { /* ignore */ }
+  }, []);
 
   const updateRolePermissions = useCallback((roleId: string, permissions: PermissionKey[]) => {
     setRoles(prev => prev.map(r => (r.id === roleId ? { ...r, permissions: [...permissions] } : r)));
@@ -98,10 +136,14 @@ export function CurrentUserProvider({ children, startSignedOut = false }: Provid
     setRoles(prev => [...prev, role]);
   }, []);
 
+  const removeRole = useCallback((roleId: string) => {
+    setRoles(prev => prev.filter(r => r.id !== roleId));
+  }, []);
+
   const value = useMemo<CurrentUserContextValue>(() => ({
     currentUser, activeWorkspaceId, setActiveWorkspace, roles, activeRole,
-    can, canAny, signIn, signOut, updateRolePermissions, addRole,
-  }), [currentUser, activeWorkspaceId, roles, activeRole, can, canAny, signIn, signOut, updateRolePermissions, addRole]);
+    can, canAny, signIn, signOut, updateRolePermissions, addRole, removeRole,
+  }), [currentUser, activeWorkspaceId, roles, activeRole, can, canAny, signIn, signOut, updateRolePermissions, addRole, removeRole]);
 
   return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>;
 }
