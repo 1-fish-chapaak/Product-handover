@@ -40,6 +40,9 @@ export type LibraryWorkflow = {
   businessProcess: string;
   controlId: string;
   live?: boolean;
+  /** Single-execution-only workflows are hidden from the Bulk Run picker and
+   *  cannot be bulk-selected — they run through their own dedicated executor. */
+  singleRunOnly?: boolean;
 };
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
@@ -51,6 +54,16 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
     businessProcess: 'Sandbox',
     controlId: 'CTRL-PDF',
     live: true,
+  },
+  {
+    id: 'lw-consolidated-file',
+    name: 'Consolidated file testing',
+    description: 'Sandbox workflow that takes a single consolidated workbook (multiple datasets in one file) and runs the dedicated consolidated-file execution journey. Single-run only — not available for bulk execution.',
+    tags: ['consolidated', 'sandbox'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-CFT',
+    live: true,
+    singleRunOnly: true,
   },
   {
     id: 'lw-001',
@@ -189,10 +202,15 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     });
   }, [search, bpFilter, tagFilter]);
 
-  const allVisibleSelected = filtered.length > 0 && filtered.every(w => selectedIds.has(w.id));
-  const someVisibleSelected = filtered.some(w => selectedIds.has(w.id));
+  // Single-run-only workflows can't take part in bulk runs, so they're
+  // excluded from select-all and ignored by individual selection.
+  const bulkEligible = useMemo(() => filtered.filter(w => !w.singleRunOnly), [filtered]);
+  const allVisibleSelected = bulkEligible.length > 0 && bulkEligible.every(w => selectedIds.has(w.id));
+  const someVisibleSelected = bulkEligible.some(w => selectedIds.has(w.id));
 
   const toggleSelect = (id: string) => {
+    const wf = LIBRARY_WORKFLOWS.find(w => w.id === id);
+    if (wf?.singleRunOnly) return; // not bulk-selectable
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -205,9 +223,9 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        filtered.forEach(w => next.delete(w.id));
+        bulkEligible.forEach(w => next.delete(w.id));
       } else {
-        filtered.forEach(w => next.add(w.id));
+        bulkEligible.forEach(w => next.add(w.id));
       }
       return next;
     });
@@ -437,11 +455,17 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                     >
                       {bulkMode && (
                         <td className="pl-4 pr-2 py-4 align-top">
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={() => toggleSelect(wf.id)}
-                            ariaLabel={`Select ${wf.name}`}
-                          />
+                          {wf.singleRunOnly ? (
+                            <span title="Single-run only — not available for bulk execution">
+                              <Checkbox checked={false} disabled onChange={() => {}} ariaLabel={`${wf.name} is not available for bulk execution`} />
+                            </span>
+                          ) : (
+                            <Checkbox
+                              checked={isSelected}
+                              onChange={() => toggleSelect(wf.id)}
+                              ariaLabel={`Select ${wf.name}`}
+                            />
+                          )}
                         </td>
                       )}
                       <td className="px-4 py-4 align-top w-[320px]">
