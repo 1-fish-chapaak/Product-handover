@@ -10,6 +10,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 import { Button } from '../shared/Button';
+import ListPlaceholder from '../shared/ListPlaceholder';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -113,14 +114,30 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
 
         {/* ── Process Grid ── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
-          {filteredProcesses.length === 0 ? (
-            <div className="bg-canvas-elevated border border-canvas-border rounded-md p-10 text-center"><Building2 size={32} className="text-text-muted mx-auto mb-3" /><p className="text-[0.875rem] font-semibold text-text mb-1">No processes found</p><p className="text-[0.75rem] text-text-muted">Try adjusting your search.</p></div>
+          {filteredProcesses.length === 0 && !search ? (
+            <ListPlaceholder
+              icon={Building2}
+              title="No processes yet"
+              body="Create your first business process to start tracking risk, controls, and coverage."
+              action={can('bp_create') ? (
+                <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>
+                  <Plus size={14} className="mr-1" />New Process
+                </Button>
+              ) : undefined}
+            />
+          ) : filteredProcesses.length === 0 ? (
+            <ListPlaceholder
+              icon={Search}
+              title="No matching processes"
+              body="Try adjusting your search term."
+            />
           ) : (
-            <ChromaGrid className="grid grid-cols-1 md:grid-cols-2 gap-5" radius={320} damping={0.45} fadeOut={0.6}>
+            <ChromaGrid className={`grid gap-5 ${filteredProcesses.length === 1 ? 'grid-cols-1 max-w-[520px]' : 'grid-cols-1 md:grid-cols-2'}`} radius={320} damping={0.45} fadeOut={0.6}>
               {filteredProcesses.map((bp, i) => {
                 const coverage = coverageForProcess(bp);
                 return (
                   <motion.button type="button" key={bp.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.04 }}
+                    aria-label={`Open ${bp.name}`}
                     onClick={() => handleProcessClick(bp)}
                     onMouseMove={handleChromaCardMove}
                     className="chroma-card-lite text-left bg-canvas-elevated border border-canvas-border rounded-lg p-6 hover:border-brand-200 transition-colors cursor-pointer group">
@@ -140,11 +157,15 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     <div className="flex items-end justify-between gap-4 mb-3">
                       <div>
                         <div className={`font-mono text-[1.625rem] font-semibold tabular-nums leading-none ${coverage === 0 ? 'text-ink-400' : 'text-ink-900'}`}>{coverage}<span className="text-[0.9375rem] text-ink-400">%</span></div>
-                        <span className="inline-flex items-center gap-1 group/tip relative text-[0.65625rem] uppercase tracking-wide text-ink-400 mt-2">
+                        <span className="inline-flex items-center gap-1 text-[0.65625rem] uppercase tracking-wide text-ink-400 mt-2">
                           Coverage
-                          <HelpCircle className="w-3 h-3 text-ink-300" aria-label="What is Coverage?" />
-                          <span className="absolute bottom-full left-0 mb-1.5 w-[220px] p-2.5 rounded-md bg-ink-800 text-paper-0 text-[0.75rem] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                            Percent of identified risks that have at least one linked control.
+                          <span
+                            title="Percent of identified risks that have at least one linked control."
+                            aria-label="Coverage: percent of identified risks that have at least one linked control."
+                            className="inline-flex cursor-help"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <HelpCircle className="w-3 h-3 text-ink-300" aria-hidden="true" />
                           </span>
                         </span>
                       </div>
@@ -234,9 +255,9 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2"><Building2 size={18} className="text-brand-600" /><h2 className="text-[1rem] font-bold text-ink-900 tracking-tight">Create Business Process</h2></div>
-              <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new business process as a taxonomy object.</p>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Name and describe the process, then save it as a draft or publish it right away.</p>
             </div>
-            <button type="button" aria-label="Close drawer" onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+            <button type="button" aria-label="Close drawer" onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
           </div>
         </header>
 

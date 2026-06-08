@@ -70,7 +70,7 @@ export default function ControlExpandedPanel({
       <div className="mt-6">
         <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-2.5">Workflows ({wfs.length})</span>
         {wfs.length === 0 ? (
-          <p className="text-[0.75rem] text-mitigated-700">No workflows linked. Create a workflow to enable testing.</p>
+          <p className="text-[0.75rem] text-ink-400">No workflows linked. Create a workflow to enable testing.</p>
         ) : (
           <div className="space-y-1.5">
             {wfs.map(w => (
@@ -88,7 +88,7 @@ export default function ControlExpandedPanel({
                   onClick={() => removeWf(w.code)}
                   aria-label={`Remove ${w.code}`}
                   title={`Remove ${w.code}`}
-                  className="shrink-0 p-0.5 rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
                 >
                   <X size={12} />
                 </button>

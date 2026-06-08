@@ -39,7 +39,7 @@ export default function ConfirmDeleteRacmModal({ racmName, onCancel, onConfirm }
       >
         <div className="flex items-center gap-2.5 mb-3">
           <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
-          <h2 className="text-[1rem] font-bold text-ink-900">Delete this RACM?</h2>
+          <h2 className="text-[1.0625rem] font-bold text-ink-900">Delete this RACM?</h2>
         </div>
         <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-5">
           This permanently deletes <span className="font-semibold text-ink-700">“{racmName}”</span> along with its risk and control mappings. This action is permanent and cannot be undone.

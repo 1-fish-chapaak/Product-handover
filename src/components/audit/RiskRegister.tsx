@@ -28,10 +28,7 @@ import { BUSINESS_PROCESSES } from '../../data/mockData';
 type RiskLifecycleStatus = 'Draft' | 'Active' | 'Under Review' | 'Archived';
 type RiskPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 type RiskCategory = 'Financial' | 'Operational' | 'Compliance' | 'IT' | 'Fraud' | 'Reporting' | 'Other';
-// Slim "Status" dropdown options. The four lifecycle statuses (Draft / Active /
-// Under Review / Archived) are now driven by the clickable KPI tiles, so the
-// dropdown keeps only the two derived presets.
-const STATUS_FILTER_OPTIONS = ['High Priority', 'Unreviewed'];
+// (STATUS_FILTER_OPTIONS removed — no UI control consumed it; dead code.)
 
 export interface RiskEntry {
   id: string;
@@ -90,17 +87,6 @@ const PRIORITY_STYLES: Record<RiskPriority, string> = {
   Medium: 'text-ink-600 font-medium',
   Low: 'text-ink-400 font-medium',
 };
-
-// ─── Action derivation ─────────────────────────────────────────────────────
-
-function getRiskRegisterAction(status: RiskLifecycleStatus): { label: string; cls: string } {
-  switch (status) {
-    case 'Draft': return { label: 'Complete Setup', cls: 'bg-primary/10 text-primary hover:bg-primary/20' };
-    case 'Active': return { label: 'View', cls: 'bg-paper-100 text-ink-600 hover:bg-paper-200' };
-    case 'Under Review': return { label: 'Review', cls: 'bg-high-50 text-high-700 hover:bg-high-50/70' };
-    case 'Archived': return { label: 'View', cls: 'bg-paper-50 text-ink-400 hover:bg-paper-100' };
-  }
-}
 
 // ─── Create / Edit Risk Drawer ──────────────────────────────────────────────
 
@@ -189,6 +175,16 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
   const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
+  // Fix #10: Escape-to-close for both modal and drawer presentations
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') requestClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
+
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
@@ -198,7 +194,7 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
         animate={isModal ? { opacity: 1 } : { x: 0 }}
         exit={isModal ? { opacity: 0 } : { x: '100%' }}
         transition={isModal ? { duration: 0.16 } : { type: 'spring', damping: 30, stiffness: 300 }}
-        role={isModal ? 'dialog' : undefined} aria-label={isModal ? (isEdit ? 'Edit Risk' : 'Create Risk') : undefined}
+        role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit Risk' : 'Create Risk'}
         className={isModal
           ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden'
           : 'fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
@@ -209,7 +205,7 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
             <h2 className="text-[1rem] font-bold text-ink-900">{isEdit ? 'Edit Risk' : 'Create Risk'}</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">{isEdit ? 'Update risk definition and metadata.' : 'Define a reusable risk for RACM mapping.'}</p>
           </div>
-          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </div>
 
         {/* Discard confirm strip — appears at top of body when user tries to close with unsaved changes */}
@@ -275,9 +271,10 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
           {/* Priority */}
           <div className="space-y-3 pt-2">
             <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Priority</h3>
-            <div className="flex gap-2">
+            <div className="flex gap-2" role="radiogroup" aria-label="Priority">
               {PRIORITIES.map(p => (
                 <button type="button" key={p} onClick={() => setPriority(p)}
+                  role="radio" aria-checked={priority === p}
                   className={`px-3 py-2 rounded-md text-[0.75rem] font-medium border transition-all cursor-pointer ${
                     priority === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-text-muted hover:border-primary/30'
                   }`}>{p}</button>
@@ -289,6 +286,11 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" size="md" onClick={requestClose}>Cancel</Button>
+          {!isEdit && (
+            <Button variant="outline" size="md" onClick={() => { if (isValid) onSave(buildRisk('Draft')); }} disabled={!isValid}>
+              Save as Draft
+            </Button>
+          )}
           <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}>
             Save
           </Button>
@@ -411,14 +413,14 @@ function RiskDetailPage({
               </button>
               <button type="button" onClick={onLinkWorkflow} aria-label="Link workflow"
                 className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
-                <Link2 size={12} className="shrink-0" /> Link workflow
+                <WorkflowIcon size={12} className="shrink-0" /> Link workflow
               </button>
               <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums ml-1">{controls.length}</span>
             </div>
           </div>
           {controls.length === 0 ? (
-            <div className="text-[0.75rem] text-high-700 italic inline-flex items-center gap-1.5">
-              <AlertTriangle size={12} className="text-high-700 shrink-0" /> No controls mapped to this risk yet.
+            <div className="text-[0.75rem] text-ink-400 italic">
+              No controls mapped to this risk yet.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -523,7 +525,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { openShare } = useShare();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   // Lifecycle-status filter driven by the clickable KPI tiles (single-select;
   // null = show all). Kept separate from the slim High Priority / Unreviewed dropdown.
   const [activeStatusTile, setActiveStatusTile] = useState<RiskLifecycleStatus | null>(null);
@@ -628,17 +629,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       result = result.filter(r => r.status === activeStatusTile);
     }
 
-    // Slim "Status" dropdown — the two derived presets (multi-select).
-    if (statusFilter.length > 0) {
-      result = result.filter(r => statusFilter.some(s => {
-        switch (s) {
-          case 'High Priority': return r.priority === 'Critical' || r.priority === 'High';
-          case 'Unreviewed': return r.lastReviewed === '—';
-          default: return false;
-        }
-      }));
-    }
-
     // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -655,7 +645,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
 
     return result;
-  }, [baseRisks, activeStatusTile, statusFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+  }, [baseRisks, activeStatusTile, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
 
   const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
   const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
@@ -667,10 +657,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Single source of truth for "is any filter on" + a reset that clears every
   // filter (the KPI tile, the slim Status dropdown, the other dropdowns, search).
-  const hasActiveFilters = !!activeStatusTile || statusFilter.length > 0 || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
+  const hasActiveFilters = !!activeStatusTile || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
   const clearAllFilters = () => {
     setActiveStatusTile(null);
-    setStatusFilter([]);
     setSubProcessFilter([]);
     setCategoryFilter([]);
     setPriorityFilter([]);
@@ -704,7 +693,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const openLinkWorkflow = (r: RiskEntry) => {
     const ctls = controlsForRisk(r).map(c => ({ id: c.id, name: c.name, isKey: c.isKey }));
     if (ctls.length === 0) {
-      addToast({ message: 'Map a control to this risk first — workflows link to a control.', type: 'info' });
+      addToast({ message: 'Map a control to this risk first. Workflows link to a control.', type: 'info' });
       return;
     }
     setLinkWfTarget({ riskId: r.id, riskName: r.name, controls: ctls });
@@ -854,6 +843,27 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Spike C: detail page takeover when ?risk= is in URL
   const detailRiskFromUrl = detailRiskId ? risks.find(r => r.id === detailRiskId) : null;
+
+  // Fix #1: deep-link to a non-existent risk ID → show "Risk not found" instead of silently falling through
+  if (detailRiskId && !detailRiskFromUrl) {
+    return (
+      <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
+        <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
+          <ListPlaceholder
+            icon={HelpCircle}
+            title="Risk not found"
+            body={`No risk with ID "${detailRiskId}" exists in the register.`}
+            action={
+              <Button variant="outline" size="md" onClick={() => setDetailRiskId(null)} leftIcon={<ArrowLeft size={14} />}>
+                Back to register
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (detailRiskFromUrl) {
     return (
       <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
@@ -901,16 +911,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
-        {/* KPI strip (4 tiles) — Process Hub risk tab only; mirrors the Controls tab's strip.
+        {/* KPI strip (4 tiles) — shown in both embedded (Process Hub) and standalone modes.
             Each tile is a single-select lifecycle-status filter; Total clears. */}
-        {embedded && (
-          <div className="grid grid-cols-4 gap-3">
-            <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
-            <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
-            <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-mitigated-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
-            <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
-          </div>
-        )}
+        <div className="grid grid-cols-4 gap-3">
+          <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
+          <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
+          <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-high-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
+          <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
+        </div>
         {/* Toolbar — when embedded inside Process Hub, the create button lives in the
             Process Hub header. Standalone Risk Register keeps its own title + CTA. */}
         {!embedded && (
@@ -965,7 +973,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 Clear all
               </button>
             )}
-            <ColumnFilter variant="button" label="Severity" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
+            <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             <ColumnFilter variant="button" label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} align="end" />
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             {embedded && (
@@ -977,8 +985,8 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           </div>
         </div>
 
-        {/* Bulk-select strip — appears only once the user has selected at least one card. */}
-        {!isLoading && selectedRiskIds.length > 0 && (
+        {/* Bulk-select strip — always visible so select-all is reachable from the start. */}
+        {!isLoading && filteredRisks.length > 0 && (
           <div className="flex items-center gap-2 text-[0.6875rem] text-text-muted">
             <input
               ref={selectAllRef}
@@ -1045,15 +1053,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-[0.9375rem] font-semibold leading-snug">
                           <span className="font-mono text-[0.75rem] font-semibold text-brand-700 mr-2">{risk.id}</span>
-                          <button type="button"
-                            onClick={() => {
-                              const params = new URLSearchParams({ view: 'audit-risk-register', risk: risk.id });
-                              window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
-                            }}
+                          <a
+                            href={`${window.location.origin}${window.location.pathname}?${new URLSearchParams({ view: 'audit-risk-register', risk: risk.id }).toString()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             title="Open detail in a new tab"
                             className="text-left text-text hover:text-brand-700 hover:underline underline-offset-2 transition-colors cursor-pointer">
                             {risk.name}
-                          </button>
+                          </a>
                         </h3>
                         <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_STYLES[risk.status]}`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
@@ -1083,12 +1090,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       ))}
                       {isChecked ? (
                         <>
-                          <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive"
-                            className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                          <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive" aria-label="Archive risk"
+                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
                             <Archive size={14} />
                           </button>
-                          <button type="button" onClick={() => handleCancelOne(risk.id)} title="Cancel selection"
-                            className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                          <button type="button" onClick={() => handleCancelOne(risk.id)} title="Cancel selection" aria-label="Cancel selection"
+                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
                             <X size={14} />
                           </button>
                         </>
@@ -1096,19 +1103,19 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <>
                           <div className="relative group/lcontrol">
                             <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
-                              className="shrink-0 inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                              className="shrink-0 inline-flex items-center gap-1 px-2 min-h-[40px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
                               <Link2 size={12} className="shrink-0" /> Control
                             </button>
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
                           </div>
                           {can('risk_share') && (
-                            <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk"
-                              className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk" aria-label="Share risk"
+                              className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
                               <Share2 size={14} />
                             </button>
                           )}
-                          <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk"
-                            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                          <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk" aria-label="Delete risk"
+                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
                             <Trash2 size={14} />
                           </button>
                         </>

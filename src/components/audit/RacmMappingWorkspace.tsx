@@ -9,6 +9,7 @@ import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
+import ListLoadError from '../shared/ListLoadError';
 import CreateControlDrawer, { type NewControlData } from '../governance/CreateControlDrawer';
 import { WORKFLOWS } from '../../data/mockData';
 import { computeRacmStateFromRisks, RACM_STATUS_STYLES, RACM_READINESS_STYLES, type ComputedRacmState, type RiskDetailInput } from './racmStateEngine';
@@ -231,11 +232,9 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
 
   // Simulate loading RACM data based on racmId
   useEffect(() => {
-    console.log('[RACM] Loading mapping workspace — racmId:', racmId, 'racmName:', racmName);
     setIsLoading(true);
     const timer = setTimeout(() => {
       if (isEmptyRacm) {
-        console.log('[RACM] Empty RACM — no risks to load');
         setRisks([]);
       } else {
         // Load risks for this RACM (in prototype, all RACMs share seed data filtered by process)
@@ -243,7 +242,6 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
           ? INITIAL_RISKS.filter(r => r.process === racmProcess || racmProcess === 'Cross')
           : INITIAL_RISKS;
         const loaded = filtered.length > 0 ? filtered : INITIAL_RISKS;
-        console.log('[RACM] Loaded', loaded.length, 'risks for racmId:', racmId);
         setRisks(loaded);
         setSelectedRiskId(loaded[0]?.id || '');
       }
@@ -401,7 +399,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     if (!allValPassed) return;
     setRacmValidated(true);
     setShowValidateModal(false);
-    addToast({ message: 'RACM validated — status Active, ready for execution', type: 'success' });
+    addToast({ message: 'RACM validated. Status Active, ready for execution', type: 'success' });
   };
 
   // Create new risk and add to RACM
@@ -454,11 +452,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             <ArrowLeft size={14} />Back to RACM
           </button>
         )}
-        <div className={`${inline ? 'rounded-lg p-6' : 'glass-card rounded-xl p-12'} text-center space-y-3`}>
-          <AlertTriangle size={inline ? 24 : 32} className="mx-auto text-mitigated" />
-          <h3 className={`${inline ? 'text-[0.8125rem]' : 'text-[0.9375rem]'} font-semibold text-text`}>Unable to load RACM</h3>
-          <p className="text-[0.75rem] text-text-muted max-w-sm mx-auto">No RACM context was provided. Please go back and retry.</p>
-        </div>
+        <ListLoadError label="RACM" onRetry={onBack} />
       </div>
     );
   }
@@ -473,15 +467,19 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
               <ArrowLeft size={14} />Back to RACM
             </button>
           )}
-          <div className="h-5 w-48 bg-paper-100 rounded-sm animate-pulse" />
+          {/* Primary title bar — slightly darker to stand out */}
+          <div className="h-5 w-48 bg-paper-200 rounded-sm animate-pulse" />
           <div className="h-3 w-64 bg-paper-100 rounded-sm animate-pulse mt-2" />
         </div>
         <div className="glass-card rounded-xl p-8">
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(n => (
               <div key={n} className="flex items-center gap-4">
+                {/* ID column — secondary weight */}
                 <div className="h-4 w-16 bg-paper-100 rounded-sm animate-pulse" />
-                <div className="h-4 flex-1 bg-paper-100 rounded-sm animate-pulse" />
+                {/* Name — primary weight, slightly darker */}
+                <div className="h-4 flex-1 bg-paper-200 rounded-sm animate-pulse" />
+                {/* Status chips — secondary */}
                 <div className="h-4 w-20 bg-paper-100 rounded-sm animate-pulse" />
                 <div className="h-4 w-24 bg-paper-100 rounded-sm animate-pulse" />
               </div>
@@ -534,7 +532,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
             </button>
             <h3 className="text-[1.125rem] font-bold text-text">
               Risk-Control Mapping
-              {racmName && <span className="text-[0.8125rem] font-medium text-text-muted ml-2">— {racmName}</span>}
+              {racmName && <span className="text-[0.8125rem] font-medium text-text-muted ml-2">({racmName})</span>}
             </h3>
             <p className="text-[0.75rem] text-text-muted mt-0.5">Map risks to controls and prepare for execution.</p>
           </div>
@@ -558,18 +556,16 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
 
       {/* Empty RACM state */}
       {risks.length === 0 && !isLoading && (
-        <div className="glass-card rounded-xl">
-          <ListPlaceholder
-            icon={Shield}
-            title="No risks added yet"
-            body="This RACM has no risks. Import from a file or go back to the setup workspace to add risks."
-            action={
-              <Button variant="outline" size="sm" onClick={onBack}>
-                Back to Setup
-              </Button>
-            }
-          />
-        </div>
+        <ListPlaceholder
+          icon={Shield}
+          title="No risks added yet"
+          body="This RACM has no risks. Import from a file or go back to the setup workspace to add risks."
+          action={
+            <Button variant="outline" size="sm" onClick={onBack}>
+              Back to Setup
+            </Button>
+          }
+        />
       )}
 
       {/* ══ GRID — primary workspace ══ */}
@@ -694,7 +690,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
                 {/* Blocking errors */}
                 {!allValPassed && (
                   <div className="rounded-lg border border-risk/40 bg-risk-50/40 px-3 py-2.5 mb-4">
-                    <p className="text-[0.75rem] font-semibold text-risk-700 mb-1">Validation blocked — {racmComputed.readiness}</p>
+                    <p className="text-[0.75rem] font-semibold text-risk-700 mb-1">Validation blocked: {racmComputed.readiness}</p>
                     <ul className="space-y-0.5">
                       {valChecks.filter(c => !c.done).map((c, i) => (
                         <li key={i} className="text-[0.6875rem] text-risk-700/80 flex items-center gap-1.5">
@@ -840,7 +836,8 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Filtering
-  const q = gridSearch.toLowerCase();
+  const q = gridSearch.trim().toLowerCase();
+  const isFiltered = q !== '' || gridFilter !== 'All';
   const filteredRisks = risks.filter(r => {
     if (q && !r.name.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q) && !r.process.toLowerCase().includes(q)) return false;
     if (gridFilter === 'Unmapped' && r.controls.length > 0) return false;
@@ -1020,7 +1017,30 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
             </thead>
             <tbody>
               {filteredRisks.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-[0.75rem] text-text-muted">No risks match search or filters</td></tr>
+                <tr>
+                  <td colSpan={10} className="py-0">
+                    {isFiltered ? (
+                      <ListPlaceholder
+                        icon={Search}
+                        title="No matching risks"
+                        body={q ? `No risks match "${q}"${gridFilter !== 'All' ? ` with the "${gridFilter}" filter` : ''}. Try a different search or clear the filter.` : `No risks match the "${gridFilter}" filter. Try a different filter.`}
+                        action={
+                          <button
+                            onClick={() => { setGridSearch(''); setGridFilter('All'); }}
+                            className="text-[0.75rem] font-semibold text-primary hover:underline cursor-pointer">
+                            Clear filters
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <ListPlaceholder
+                        icon={Shield}
+                        title="No risks in this RACM yet"
+                        body="Add risks to start building the risk-control matrix."
+                      />
+                    )}
+                  </td>
+                </tr>
               ) : filteredRisks.map((risk, i) => {
                 const keyCount = risk.controls.filter(c => c.isKey).length;
                 const mappingStatus = getRowMappingStatus(risk);
@@ -1112,7 +1132,9 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                             </div>
                             <div className="max-h-[180px] overflow-y-auto">
                               {pickerFiltered.length === 0 ? (
-                                <div className="px-3 py-4 text-center text-[0.625rem] text-ink-400">No controls available</div>
+                                <div className="px-3 py-4 text-center text-[0.6875rem] text-ink-500">
+                                  {controlSearch.trim() ? 'No controls match your search.' : 'All controls are already mapped.'}
+                                </div>
                               ) : pickerFiltered.slice(0, 6).map(ctrl => (
                                 <button key={ctrl.id} onClick={() => { linkControlFromGrid(risk.id, ctrl.id); }}
                                   className="w-full text-left px-3 py-2 hover:bg-brand-50/30 transition-colors cursor-pointer border-b border-border/20 last:border-0">
@@ -1222,12 +1244,12 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
                                     </Gated>
                                     <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
                                     <button onClick={e => { e.stopPropagation(); onCreateControl(risk.id); }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 text-[0.625rem] font-semibold text-primary hover:bg-primary/15 cursor-pointer transition-colors"><Plus size={10} />Create New Control</button>
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 text-[0.625rem] font-semibold text-primary hover:bg-primary/15 cursor-pointer transition-colors"><Plus size={10} />Create Control</button>
                                     </Gated>
                                   </div>
                                 </div>
                                 {risk.controls.length === 0 ? (
-                                  <p className="text-[0.6875rem] text-ink-400">No controls mapped. Use the actions above to start.</p>
+                                  <p className="text-[0.6875rem] text-ink-500 italic">No controls mapped yet. Use the actions above to link or create one.</p>
                                 ) : (
                                   <div className="space-y-2">
                                     {risk.controls.map(ctrl => {
@@ -1435,11 +1457,11 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {risk.controls.length === 0 ? (
-            <div className="text-center py-8">
-              <Shield size={28} className="mx-auto text-ink-300 mb-2" />
-              <p className="text-[0.8125rem] font-semibold text-ink-600 mb-1">No controls mapped</p>
-              <p className="text-[0.6875rem] text-ink-400">Map controls first, then link workflows.</p>
-            </div>
+            <ListPlaceholder
+              icon={Shield}
+              title="No controls mapped"
+              body="Map controls to this risk first, then come back to link workflows."
+            />
           ) : (
             risk.controls.map(ctrl => {
               const readiness = getControlReadiness(ctrl);
@@ -1558,7 +1580,7 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
           {/* Notice */}
           <div className="rounded-lg border border-canvas-border bg-canvas px-3 py-2 flex items-start gap-2">
             <Shield size={11} className="text-ink-400 mt-0.5 shrink-0" />
-            <span className="text-[0.59375rem] text-ink-400">Workflow readiness only — no execution or testing data shown here. Link or create workflows to move controls toward Ready status.</span>
+            <span className="text-[0.59375rem] text-ink-400">Workflow readiness only. No execution or testing data shown here. Link or create workflows to move controls toward Ready status.</span>
           </div>
         </div>
 
@@ -1603,7 +1625,7 @@ function NewRiskDrawer({ defaultProcess, onClose, onSave }: {
         className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
-            <h2 className="text-[1rem] font-bold text-ink-900">New Risk</h2>
+            <h2 className="text-[1rem] font-bold text-ink-900">Create Risk</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">Create a risk and add it to this RACM.</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
@@ -1773,7 +1795,11 @@ function LinkControlDrawer({ alreadyLinkedIds, onClose, onLink }: {
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {filtered.length === 0 ? (
-            <div className="text-center py-10 text-[0.75rem] text-ink-400">No controls available</div>
+            <ListPlaceholder
+              icon={search.trim() ? Search : Shield}
+              title={search.trim() ? 'No matching controls' : 'All controls already mapped'}
+              body={search.trim() ? `No controls match "${search.trim()}". Try a different search term.` : 'Every control in the library is already linked to this risk.'}
+            />
           ) : filtered.map(ctrl => (
             <button key={ctrl.id} onClick={() => onLink(ctrl.id)}
               className="w-full text-left px-4 py-3 rounded-xl border border-canvas-border bg-white hover:bg-canvas hover:border-primary/20 transition-all cursor-pointer">
@@ -1832,7 +1858,7 @@ function CreateControlMiniDrawer({ onClose, onCreate, defaultProcess }: {
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2"><Shield size={18} className="text-brand-600" /><h2 className="text-[1rem] font-bold text-ink-900">Create New Control</h2></div>
+              <div className="flex items-center gap-2"><Shield size={18} className="text-brand-600" /><h2 className="text-[1rem] font-bold text-ink-900">Create Control</h2></div>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Create and map to selected risk ({defaultProcess}).</p>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
@@ -1965,15 +1991,17 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {filtered.length === 0 ? (
-            <div className="text-center py-10">
-              <Workflow size={28} className="mx-auto text-ink-300 mb-2" />
-              <p className="text-[0.8125rem] font-semibold text-ink-600 mb-1">No workflows found</p>
-              <p className="text-[0.6875rem] text-ink-400 mb-3">No matching workflows available in the Control Library.</p>
-              <button onClick={() => { onClose(); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                <Plus size={11} />Create Workflow
-              </button>
-            </div>
+            <ListPlaceholder
+              icon={search.trim() ? Search : Workflow}
+              title={search.trim() ? 'No matching workflows' : 'All workflows already linked'}
+              body={search.trim() ? `No workflows match "${search.trim()}". Try a different search or create a new one.` : 'Every available workflow is already linked to this control.'}
+              action={
+                <button onClick={() => { onClose(); }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                  <Plus size={11} />Create Workflow
+                </button>
+              }
+            />
           ) : filtered.map(wf => (
             <div key={wf.id} className="rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all">
               <div className="px-4 py-3">
@@ -2105,7 +2133,7 @@ function CreateWorkflowBuilderDrawer({ control, onClose, onCreate }: {
                   <button onClick={() => setMode('builder')} className="w-full text-left px-4 py-4 rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
                     <div className="flex items-center gap-3"><div className="p-2 rounded-lg bg-brand-50"><Workflow size={18} className="text-brand-600" /></div><div><div className="text-[0.8125rem] font-semibold text-text">Workflow Builder</div><div className="text-[0.6875rem] text-text-muted mt-0.5">Define settings and attributes inline.</div></div><ChevronRight size={16} className="text-ink-300 ml-auto shrink-0" /></div>
                   </button>
-                  <button onClick={() => { setMode('builder'); addToast({ message: 'Q&A flow — same builder with guided questions', type: 'info' }); }} className="w-full text-left px-4 py-4 rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
+                  <button onClick={() => { setMode('builder'); addToast({ message: 'Q&A flow: same builder with guided questions', type: 'info' }); }} className="w-full text-left px-4 py-4 rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
                     <div className="flex items-center gap-3"><div className="p-2 rounded-lg bg-evidence-50"><FileText size={18} className="text-evidence-700" /></div><div><div className="text-[0.8125rem] font-semibold text-text">Q&A Flow</div><div className="text-[0.6875rem] text-text-muted mt-0.5">Answer guided questions step by step.</div></div><ChevronRight size={16} className="text-ink-300 ml-auto shrink-0" /></div>
                   </button>
                 </div>

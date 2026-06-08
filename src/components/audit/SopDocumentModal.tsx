@@ -105,7 +105,7 @@ export default function SopDocumentModal({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="p-1.5 rounded-lg bg-brand-50"><BookOpen size={14} className="text-brand-600" /></div>
-                    <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-text-muted">SOP · {subProcess}</span>
+                    <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-text-muted">SOP{subProcess ? ` · ${subProcess}` : ''}</span>
                   </div>
                   <h2 className="text-[1rem] font-bold text-ink-900 leading-snug truncate">{sopName}</h2>
                   {metaParts.length > 0 && (
@@ -116,7 +116,7 @@ export default function SopDocumentModal({
                   onClick={onClose}
                   aria-label="Close"
                   title="Close"
-                  className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                  className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
                 >
                   <X size={16} />
                 </button>

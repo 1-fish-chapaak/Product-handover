@@ -366,18 +366,33 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   // ─── Empty state ───────────────────────────────────────────────────────────
   if (controls.length === 0) {
     return (
-      <div className="glass-card rounded-xl">
-        <ListPlaceholder
-          icon={Shield}
-          title="No controls in scope yet"
-          body="Upload a RACM or add controls to start testing. Once controls are mapped, they’ll appear here grouped by sub-process."
-          action={can('ctrl_create') ? (
-            <Button variant="primary" size="md" leftIcon={<Plus size={14} />} onClick={() => setAddControlOpen(true)}>
-              Create control
-            </Button>
-          ) : undefined}
-        />
-      </div>
+      <>
+        <div className="glass-card rounded-xl">
+          <ListPlaceholder
+            icon={Shield}
+            title="No controls in scope yet"
+            body="Upload a RACM or add controls to start testing. Once controls are mapped, they’ll appear here grouped by sub-process."
+            action={can('ctrl_create') ? (
+              <Button variant="primary" size="md" leftIcon={<Plus size={14} />} onClick={() => setAddControlOpen(true)}>
+                Create control
+              </Button>
+            ) : undefined}
+          />
+        </div>
+        <AnimatePresence>
+          {addControlOpen && (
+            <AddControlModal
+              subProcesses={subProcesses}
+              onClose={() => setAddControlOpen(false)}
+              onCreate={(input) => {
+                ws.addControl(input);
+                setAddControlOpen(false);
+                addToast({ type: 'success', message: input.inRacm ? 'Control added & pushed to RACM' : 'Control added' });
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </>
     );
   }
 
@@ -763,7 +778,7 @@ function WorkflowMapModal({
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[0.84375rem] font-semibold text-ink-800">Create a new workflow</div>
-              <div className="text-[0.71875rem] text-ink-500 mt-0.5">Build one with Ask IRA — opens the workflow builder with this attribute's context.</div>
+              <div className="text-[0.71875rem] text-ink-500 mt-0.5">Build one with Ask IRA. Opens the workflow builder with this attribute's context.</div>
             </div>
             <Plus size={16} className="text-brand-600 shrink-0 group-hover:scale-110 transition-transform" />
           </button>
@@ -872,9 +887,9 @@ function AddControlModal({
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-brand-600" />
-            <h2 className="text-[1rem] font-bold text-ink-900">New control</h2>
+            <h2 className="text-[1rem] font-bold text-ink-900">Create Control</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -1094,7 +1109,7 @@ function WorkflowsCard(p: WorkflowsCardProps): JSX.Element {
             Link manually
           </button>
           <button
-            onClick={() => alert('Create Workflow — will open Workflow Builder.')}
+            onClick={() => alert('Create Workflow: will open Workflow Builder.')}
             className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[0.625rem] font-medium border transition-colors cursor-pointer bg-white text-ink-600 border-canvas-border hover:bg-canvas"
           >
             <Plus size={10} />
@@ -1219,7 +1234,7 @@ function WorkflowsCard(p: WorkflowsCardProps): JSX.Element {
       <div className="flex flex-wrap gap-1.5 min-h-[24px]">
         {p.linked.length === 0 && !p.aiOpen && !p.linkOpen && (
           <span className="text-[0.71875rem] italic text-ink-400">
-            No workflows linked yet — try <span className="text-brand-700 font-medium not-italic">✨ AI Map</span>
+            No workflows linked yet. Try <span className="text-brand-700 font-medium not-italic">✨ AI Map</span>
           </span>
         )}
         {p.linked.map(w => (
@@ -1388,7 +1403,7 @@ function SampleCard(p: SampleCardProps): JSX.Element {
 
       <ul className="space-y-1.5 max-h-[280px] overflow-y-auto pr-0.5">
         {p.samples.length === 0 && (
-          <li className="text-[0.71875rem] italic text-ink-400 py-1">No samples yet — generate or upload above.</li>
+          <li className="text-[0.71875rem] italic text-ink-400 py-1">No samples yet. Generate or upload above.</li>
         )}
         {p.samples.map(s => (
           <li key={s.id} className="rounded-md border border-canvas-border bg-white px-2 py-1.5">

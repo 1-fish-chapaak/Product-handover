@@ -24,6 +24,7 @@ import {
 } from '../../data/procurement-racm';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
+import ListPlaceholder from '../shared/ListPlaceholder';
 
 interface Props {
   onBack: () => void;
@@ -256,7 +257,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {racmId && <span className="font-mono text-[0.75rem] font-semibold text-brand-700">{racmId.toUpperCase()}</span>}
-              <h1 className="text-[0.9375rem] font-bold text-text truncate">{racmName ?? 'Procurement SOP — Budget to Payment RACM'}</h1>
+              <h1 className="text-[0.9375rem] font-bold text-text truncate">{racmName ?? 'Procurement SOP: Budget to Payment RACM'}</h1>
               {processLabel && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-primary/10 text-primary">{processLabel}</span>}
               <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700">DRAFT</span>
               <span className="text-[0.625rem] text-text-muted font-mono">v0.1</span>
@@ -357,24 +358,39 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
 
       {/* Grid container */}
       <div className="flex-1 overflow-auto bg-white">
-        <RacmGrid
-          grouped={grouped}
-          collapsedGroups={collapsedGroups}
-          onToggleGroup={toggleGroup}
-          visibleColumns={visibleColumns}
-          pinnedKeys={pinnedKeys}
-          stickyOffsets={stickyOffsets}
-          selectedRowIds={selectedRowIds}
-          onToggleRowSelected={toggleRowSelected}
-          onOpenDetail={setDetailRowId}
-          onUpdateCell={updateCell}
-          showGroupHeaders={groupBy !== 'none'}
-          columnFilters={columnFilters}
-          columnFilterOptions={columnFilterOptions}
-          onColumnFilterChange={setColumnFilter}
-          keyOnly={showOnlyKey}
-          onKeyOnlyChange={setShowOnlyKey}
-        />
+        {filteredRows.length === 0 ? (
+          <ListPlaceholder
+            icon={Search}
+            title="No matching rows"
+            body="Adjust your search, column filters, or key-control toggle."
+            action={
+              <button
+                onClick={() => { setSearch(''); setShowOnlyKey(false); setColumnFilters({}); }}
+                className="text-[0.75rem] font-semibold text-primary hover:underline cursor-pointer">
+                Clear filters
+              </button>
+            }
+          />
+        ) : (
+          <RacmGrid
+            grouped={grouped}
+            collapsedGroups={collapsedGroups}
+            onToggleGroup={toggleGroup}
+            visibleColumns={visibleColumns}
+            pinnedKeys={pinnedKeys}
+            stickyOffsets={stickyOffsets}
+            selectedRowIds={selectedRowIds}
+            onToggleRowSelected={toggleRowSelected}
+            onOpenDetail={setDetailRowId}
+            onUpdateCell={updateCell}
+            showGroupHeaders={groupBy !== 'none'}
+            columnFilters={columnFilters}
+            columnFilterOptions={columnFilterOptions}
+            onColumnFilterChange={setColumnFilter}
+            keyOnly={showOnlyKey}
+            onKeyOnlyChange={setShowOnlyKey}
+          />
+        )}
       </div>
 
       {/* Pagination footer */}
@@ -419,8 +435,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
             onAnimationComplete={() => setTimeout(() => setShowImportToast(false), 2200)}
             className="fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-text text-white text-[0.6875rem] shadow-lg z-50 flex items-center gap-2">
-            <AlertTriangle size={11} className="text-mitigated" />
-            Import / export wired in production — this prototype uses the in-memory dataset.
+            <AlertTriangle size={11} className="text-mitigated" aria-hidden="true" />
+            Import / export wired in production. This prototype uses the in-memory dataset.
           </motion.div>
         )}
       </AnimatePresence>

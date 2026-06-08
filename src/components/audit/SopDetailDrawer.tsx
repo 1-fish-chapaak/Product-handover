@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { BookOpen, X, Sparkles, Download } from 'lucide-react';
 import { Button } from '../shared/Button';
@@ -36,6 +37,15 @@ export default function SopDetailDrawer({
   subProcess, title, version, uploadedAgo, summary, sections, controls, onDownload, onClose,
 }: SopDetailDrawerProps) {
   const outline = sections && sections.length > 0 ? sections : DEFAULT_SOP_SECTIONS;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
@@ -44,7 +54,7 @@ export default function SopDetailDrawer({
         initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
         className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
-        role="dialog" aria-label="SOP preview"
+        role="dialog" aria-modal="true" aria-label="SOP preview"
       >
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -59,7 +69,7 @@ export default function SopDetailDrawer({
               </div>
             )}
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">

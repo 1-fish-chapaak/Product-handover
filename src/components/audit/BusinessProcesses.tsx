@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, LayoutGrid,
   ArrowLeft, ArrowRight,
   Building2,
-  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
+  FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Pencil, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
   HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock, Share2,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
@@ -71,8 +71,13 @@ let BP_DEEPLINK: { bp: string; qs: string } | null = (() => {
 // extract the RACM. Mirrors RACMTab's NewRacmModal so the Process Hub create-
 // RACM flow is identical to the engagement one.
 function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => void; onUploadRacm: () => void; onUploadSop: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="New RACM">
       <motion.div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -81,10 +86,10 @@ function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => v
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
-            <h2 className="text-[1rem] font-bold text-text">New RACM</h2>
+            <h2 className="text-[1rem] font-bold text-text">Create RACM</h2>
             <p className="text-[0.78125rem] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 flex items-center justify-center rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><X size={16} /></button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-3">
           <button onClick={onUploadRacm} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
@@ -140,7 +145,7 @@ function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCan
           <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
         </div>
         {slow && (
-          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working — this is taking longer than usual…</p>
+          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working. This is taking longer than usual…</p>
         )}
         {onCancel && (
           <div className="mt-4 flex justify-center">
@@ -417,7 +422,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
   const [partialConfirmed, setPartialConfirmed] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const defaultRacmName = `FY26 ${sop.businessProcess} — ${sop.name.replace(/\s*SOP\s*/i, '').trim()}`;
+  const defaultRacmName = `FY26 ${sop.businessProcess}: ${sop.name.replace(/\s*SOP\s*/i, '').trim()}`;
   const [racmName, setRacmName] = useState(defaultRacmName);
 
   const [summary, setSummary] = useState(
@@ -650,9 +655,9 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                     </td>
                     <td className="px-4 py-2.5 align-top">
                       <div className="flex items-center gap-1">
-                        <button type="button" aria-label="Edit" onClick={() => setEditingRiskId(editingRiskId === risk.id ? null : risk.id)}
-                          className="p-1 rounded-xs hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title="Edit">
-                          <Eye size={11} />
+                        <button type="button" aria-label={editingRiskId === risk.id ? 'Save edit' : 'Edit'} onClick={() => setEditingRiskId(editingRiskId === risk.id ? null : risk.id)}
+                          className="p-1 rounded-xs hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title={editingRiskId === risk.id ? 'Save edit' : 'Edit'}>
+                          {editingRiskId === risk.id ? <Check size={11} /> : <Pencil size={11} />}
                         </button>
                         <button type="button" aria-label="Remove" onClick={() => handleRemoveRisk(risk.id)}
                           className="p-1 rounded-xs hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer" title="Remove">
@@ -732,9 +737,9 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                       </td>
                       <td className="px-4 py-2.5 align-top">
                         <div className="flex items-center gap-1">
-                          <button type="button" aria-label="Edit" onClick={() => setEditingCtrlId(editingCtrlId === ctrl.id ? null : ctrl.id)}
-                            className="p-1 rounded-xs hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title="Edit">
-                            <Eye size={11} />
+                          <button type="button" aria-label={editingCtrlId === ctrl.id ? 'Save edit' : 'Edit'} onClick={() => setEditingCtrlId(editingCtrlId === ctrl.id ? null : ctrl.id)}
+                            className="p-1 rounded-xs hover:bg-paper-100 text-ink-400 hover:text-primary cursor-pointer" title={editingCtrlId === ctrl.id ? 'Save edit' : 'Edit'}>
+                            {editingCtrlId === ctrl.id ? <Check size={11} /> : <Pencil size={11} />}
                           </button>
                           <button type="button" aria-label="Remove" onClick={() => handleRemoveControl(ctrl.id)}
                             className="p-1 rounded-xs hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer" title="Remove">
@@ -793,7 +798,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
                     <h2 className="text-[1rem] font-bold text-text">Create Draft RACM from SOP</h2>
                     <p className="text-[0.75rem] text-text-muted mt-0.5">Review the summary below before creating the draft RACM.</p>
                   </div>
-                  <button type="button" aria-label="Close" title="Close" onClick={() => setShowConfirmModal(false)} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+                  <button type="button" aria-label="Close" title="Close" onClick={() => setShowConfirmModal(false)} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><X size={16} /></button>
                 </div>
 
                 {/* Summary */}
@@ -924,6 +929,14 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
 
   // Discard-aware close handlers.
   const requestClose = () => { if (isDirty) setShowDiscardConfirm(true); else onClose(); };
+
+  // Escape key closes (via requestClose so discard-confirm fires when dirty).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') requestClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
   const discardAndClose = () => { setName(''); setDescription(''); setFileName(''); setShowDiscardConfirm(false); onClose(); };
   const cancelClose = () => setShowDiscardConfirm(false);
 
@@ -931,7 +944,7 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
   const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={isRetry ? 'Retry RACM generation' : 'Upload SOP'}>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
         className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -953,7 +966,7 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
             <h2 className="text-[1rem] font-bold text-ink-900">{isRetry ? 'Retry RACM generation' : 'Upload SOP'}</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">{isRetry ? 'Re-upload a document to retry. The SOP keeps its name.' : 'Upload a process document and define metadata.'}</p>
           </div>
-          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -1001,7 +1014,7 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
           {/* Business Process (read-only) */}
           <div>
             <label className={labelCls}>Business Process</label>
-            <div className="px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-paper-50 cursor-not-allowed">{bpAbbr}</div>
+            <div className="px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-canvas-elevated cursor-not-allowed">{bpAbbr}</div>
           </div>
 
 
@@ -1016,6 +1029,9 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
 
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" size="md" shape="lg" onClick={requestClose}>Cancel</Button>
+          <Button variant="outline" size="md" shape="lg" onClick={() => { if (isValid) onSaveAsDraft(buildData()); }} disabled={!isValid}>
+            Save as Draft
+          </Button>
           <Button variant="primary" size="md" shape="lg" onClick={() => { if (isValid) onUploadAndProcess(buildData()); }} disabled={!isValid}>
             Upload & Process
           </Button>
@@ -1049,7 +1065,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
 
   // Form state
   const sopLabel = sopName.replace(/\s*SOP\s*/i, '').trim();
-  const initialName = sopLabel ? `FY26 ${bpAbbr} — ${sopLabel}` : '';
+  const initialName = sopLabel ? `FY26 ${bpAbbr}: ${sopLabel}` : '';
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState('');
   const [framework, setFramework] = useState('');
@@ -1072,13 +1088,22 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
     onClose();
   };
   const cancelClose = () => setShowDiscardConfirm(false);
+
+  // Escape key closes the drawer (respects discard-confirm when dirty).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') requestClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
+
   const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
   const handleFileUpload = (fileName: string) => {
     setUploadedFile(fileName);
     setUploadParsing(true);
-    if (!name) setName(`FY26 ${bpAbbr} — ${fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')}`);
+    if (!name) setName(`FY26 ${bpAbbr}: ${fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')}`);
     // Simulate parsing delay
     setTimeout(() => {
       setUploadParsing(false);
@@ -1124,7 +1149,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
             <h2 className="text-[1rem] font-bold text-ink-900">Create RACM</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new Risk &amp; Control Matrix for audit governance.</p>
           </div>
-          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><X size={16} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -1134,7 +1159,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
             <h3 className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">Basic Info</h3>
             <div>
               <label className={labelCls}>RACM Name <span className="text-risk">*</span></label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P — Vendor Payment" className={fieldCls} autoFocus />
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. FY26 P2P: Vendor Payment" className={fieldCls} autoFocus />
             </div>
             <div>
               <label className={labelCls}>Framework <span className="font-normal text-ink-400">(optional)</span></label>
@@ -1433,7 +1458,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
       uploadedBy: s.by, uploadedAt: s.at,
       status: (s.racmId ? 'Linked' : idx % 3 === 0 ? 'Processed' : 'Draft') as SOPStatus,
       progress: s.racmId ? 100 : 0, processingStep: s.racmId ? 6 : 0,
-      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr} — ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null,
+      risks: s.risks, controls: s.controls, racmId: s.racmId, racmName: s.racmId ? `FY26 ${bpAbbr}: ${s.name.replace(/\s*SOP\s*/i, '').trim()}` : null,
       failureReason: s.status === 'failed' ? 'RACM generation timed out. No progress for over 15 minutes. Please re-upload the SOP to retry.' : null,
       extractedRisks: s.racmId ? [] : buildMockExtractions().risks,
       extractedControls: s.racmId ? [] : buildMockExtractions().controls,
@@ -1658,12 +1683,12 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           risks: risks.filter(r => r.accepted).length,
           controls: controls.filter(c => c.accepted).length,
           racmId: `RACM-${Date.now()}`,
-          racmName: `FY26 ${bpAbbr} — ${(data.name || s.name).replace(/\s*SOP\s*/i, '').trim()}`,
+          racmName: `FY26 ${bpAbbr}: ${(data.name || s.name).replace(/\s*SOP\s*/i, '').trim()}`,
           failureReason: null,
           status: 'Linked' as SOPStatus,
         };
       }));
-      addToast({ message: `"${data.name}" retried — RACM generated with ${risks.length} risks and ${controls.length} controls.`, type: 'success' });
+      addToast({ message: `"${data.name}" retried. RACM generated with ${risks.length} risks and ${controls.length} controls.`, type: 'success' });
     }, 4500);
   }, [retryingSopId, bpAbbr, addToast]);
 
@@ -1715,7 +1740,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     const racmId = `RACM-DRAFT-${Date.now().toString(36).toUpperCase().slice(-4)}`;
     const acceptedRisks = (sop.extractedRisks || []).filter(r => r.accepted).length;
     const acceptedControls = (sop.extractedControls || []).filter(c => c.accepted).length;
-    const name = racmName || `FY26 ${sop.businessProcess} — ${sop.name.replace(/\s*SOP\s*/i, '').trim()}`;
+    const name = racmName || `FY26 ${sop.businessProcess}: ${sop.name.replace(/\s*SOP\s*/i, '').trim()}`;
 
     setLocalSops(prev => prev.map(s => s.id === sopId ? {
       ...s, status: 'Linked' as SOPStatus, racmId, racmName: name, risks: acceptedRisks, controls: acceptedControls,
@@ -1952,7 +1977,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         <ListPlaceholder
           icon={FileText}
           title="No SOPs yet"
-          body="Upload an SOP doc to map controls automatically."
+          body="Upload a process document. IRA drafts a RACM from it for your review."
           action={can('bp_create') && (
             <Button variant="primary" size="md" onClick={() => setShowUploadModal(true)}>Upload SOP</Button>
           )}
@@ -2090,18 +2115,18 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                         <span className="text-[0.6875rem] font-mono text-ink-500 bg-paper-50 px-1.5 py-0.5 rounded-xs">{sop.version}</span>
                       </div>
                       {sop.failureReason && (
-                        <p className="text-[0.8125rem] text-risk-700 mb-1.5 leading-snug">
-                          {sop.failureReason}
+                        <div className="mb-1.5">
+                          <p className="text-[0.8125rem] text-risk-700 leading-snug">{sop.failureReason}</p>
                           <button
                             type="button"
                             onClick={() => { setRetryingSopId(sop.id); setShowUploadModal(true); }}
                             aria-label={`Retry RACM generation for ${sop.name}`}
                             title="Retry"
-                            className="inline-flex items-center align-middle ml-1.5 text-risk-700 hover:text-risk-800 cursor-pointer"
+                            className="mt-1 inline-flex items-center gap-1 text-[0.75rem] font-medium text-risk-700 hover:text-risk-800 cursor-pointer"
                           >
-                            <RotateCcw size={13} />
+                            <RotateCcw size={13} />Retry
                           </button>
-                        </p>
+                        </div>
                       )}
                       <div className="text-[0.75rem] text-ink-400">
                         {sop.uploadedBy}
@@ -2117,7 +2142,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           type="button"
                           onClick={() => setViewingSopId(sop.id)}
                           aria-label={`View ${sop.name}`}
-                          className="w-7 h-7 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                          className="w-10 h-10 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                         >
                           <Eye size={15} />
                         </button>
@@ -2130,7 +2155,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           type="button"
                           onClick={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
                           aria-label="Download SOP"
-                          className="w-7 h-7 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors"
+                          className="w-10 h-10 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                         >
                           <Download size={15} />
                         </button>
@@ -2144,7 +2169,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                           type="button"
                           onClick={() => setConfirmDeleteSop({ id: sop.id, name: sop.name })}
                           aria-label={`Delete ${sop.name}`}
-                          className="w-7 h-7 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors"
+                          className="w-10 h-10 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-risk-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -2728,7 +2753,7 @@ function AiMapPanel({ attributes, onClose, onAccept }: {
             <Sparkles size={16} className="text-brand-600" />
             <h2 className="text-[1rem] font-bold text-ink-900">AI workflow suggestions</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60" aria-label="Close"><X size={16} /></button>
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {pending.length === 0 ? (
@@ -2791,7 +2816,7 @@ function AttrWorkflowMapModal({ attr, onClose, onLink, onUnlink }: {
             <Workflow size={16} className="text-brand-600" />
             <h2 className="text-[1rem] font-bold text-ink-900">Map workflows</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60" aria-label="Close"><X size={16} /></button>
         </header>
         <div className="px-5 pt-3 pb-2 shrink-0">
           <p className="text-[0.71875rem] text-ink-500 mb-2"><span className="font-mono text-brand-700">{attr.id}</span> · {attr.description}</p>
@@ -3133,7 +3158,9 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           body="Create a control for this process, or open a RACM to map risks to controls."
           action={(
             <div className="flex items-center gap-3">
-              <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)}>Create Control</Button>
+              {can('ctrl_create') && (
+                <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)}>Create Control</Button>
+              )}
               <button type="button" onClick={() => onGoToRacm?.()} className="text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer transition-colors">Open RACM</button>
             </div>
           )}
@@ -3151,7 +3178,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           again to clear. Same count-up + spring + hover as the BP Overview KPIs. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiTile label="Total Controls" value={String(kpis.total)}     index={0} onClick={() => handleKpiClick('total')}     selected={statusKpi === 'total'} />
-        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} />
+        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} valueClassName="text-brand-700" />
         <KpiTile label="Effective"      value={String(kpis.effective)} index={2} onClick={() => handleKpiClick('effective')} selected={statusKpi === 'effective'} valueClassName="text-compliant-700" />
         <KpiTile label="Failed"         value={String(kpis.failed)}    index={3} onClick={() => handleKpiClick('failed')}    selected={statusKpi === 'failed'} valueClassName="text-risk-700" />
         <KpiTile label="Pending"        value={String(kpis.pending)}   index={4} onClick={() => handleKpiClick('pending')}   selected={statusKpi === 'pending'} valueClassName="text-mitigated-700" />
@@ -3397,9 +3424,9 @@ function DesignControlAddModal({ subProcesses, onClose, onCreate }: {
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield size={16} className="text-brand-600" />
-            <h2 className="text-[1rem] font-bold text-ink-900">New control</h2>
+            <h2 className="text-[1rem] font-bold text-ink-900">Create Control</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60" aria-label="Close"><X size={16} /></button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -3609,7 +3636,6 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
-  const [natureFilter, setNatureFilter] = useState<string[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -3649,17 +3675,14 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   }) : workflows;
   const filtered = searched
     .filter(w => typeFilter.length === 0 || typeFilter.includes(w.type))
-    .filter(w => natureFilter.length === 0 || natureFilter.includes(w.nature))
     .filter(w => ownerFilter.length === 0 || ownerFilter.includes(w.owner));
   const typeOptions = Array.from(new Set(workflows.map(w => w.type))).sort();
-  const natureOptions = Array.from(new Set(workflows.map(w => w.nature))).sort();
   const ownerOptions = Array.from(new Set(workflows.map(w => w.owner))).sort();
 
-  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || natureFilter.length > 0 || ownerFilter.length > 0;
+  const anyFilterActive = searchQuery.trim().length > 0 || typeFilter.length > 0 || ownerFilter.length > 0;
   const clearAllFilters = () => {
     setSearchQuery('');
     setTypeFilter([]);
-    setNatureFilter([]);
     setOwnerFilter([]);
   };
 
@@ -3778,8 +3801,8 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         icon={Workflow}
         title="No workflows yet"
         body="Connect approval steps and evidence collection."
-        action={can('wf_create') && (
-          <Button variant="primary" size="md" onClick={() => onCreateWorkflow?.()}>Create Workflow</Button>
+        action={can('wf_create') && onCreateWorkflow && (
+          <Button variant="primary" size="md" onClick={onCreateWorkflow}>Create Workflow</Button>
         )}
       />
     );
@@ -4156,7 +4179,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 )}
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
                   <div><h2 className="text-[1rem] font-bold text-ink-900">Create Workflow</h2><p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new workflow for this business process.</p></div>
-                  <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+                  <button type="button" aria-label="Close" title="Close" onClick={requestClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                   <div><label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Name <span className="text-risk">*</span></label><input value={n} onChange={e => setN(e.target.value)} placeholder="e.g. Three-Way PO Match" className={fCls} autoFocus /></div>
@@ -4980,10 +5003,10 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     const file = e.target.files?.[0];
     if (file) {
       const rows = generateRacmForProcess(bp.abbr as ProcessCode);
-      const name = racmNameFromFilename(file.name) || `${bp.abbr} — Imported RACM`;
+      const name = racmNameFromFilename(file.name) || `${bp.abbr}: Imported RACM`;
       addCreatedRacm(rows, name, file.name);
       const areas = new Set(rows.map(r => r.subProcess)).size;
-      addToast({ type: 'success', message: `Imported "${file.name}" — ${rows.length} rows · ${areas} sub-process${areas === 1 ? '' : 'es'}` });
+      addToast({ type: 'success', message: `Imported "${file.name}": ${rows.length} rows · ${areas} sub-process${areas === 1 ? '' : 'es'}` });
     }
     e.target.value = '';
   };
@@ -5427,19 +5450,19 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // A brand-new BP has no SOPs and no RACMs yet — drive the linear-unlock onboarding.
   const isFreshBP = bpSops.length === 0 && bpRacms.length === 0 && createdRacms.length === 0;
 
-  // Section switcher pill labels (shorter than full section titles where useful).
+  // Section switcher pill labels.
   const sectionPillLabel: Record<SectionKey, string> = {
-    sop: 'SOP',
-    racm: 'RACM',
+    sop: 'SOPs',
+    racm: 'RACMs',
     risks: 'Risks',
     controls: 'Controls',
     workflows: 'Workflows',
   };
 
-  // Native tooltips only for the two acronym tabs; the rest read fine on their own.
+  // Tooltips for the tab buttons (all tabs for completeness).
   const sectionTabTooltip: Partial<Record<SectionKey, string>> = {
-    sop: 'Standard Operating Procedure',
-    racm: 'Risk & Control Matrix',
+    sop: 'Standard Operating Procedures',
+    racm: 'Risk & Control Matrices',
   };
   // Tab icons — SOP upload, RACM document, risk triangle, control shield, workflow nodes.
   const sectionTabIcon: Record<SectionKey, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -5537,7 +5560,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
-            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer ${
+            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded-sm ${
               isActive
                 ? 'border-brand-600 text-brand-700 font-semibold'
                 : 'border-transparent text-ink-500 font-medium hover:text-ink-800'
@@ -5545,9 +5568,11 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           >
             <TabIcon size={15} className={isActive ? 'text-brand-600' : 'text-ink-400 group-hover:text-ink-600'} />
             <span>{label}</span>
-            {!isOverview && count > 0 && (
+            {!isOverview && (
               <span className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-semibold tabular-nums ${
-                isActive ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
+                count === 0
+                  ? 'bg-paper-100 text-ink-400'
+                  : isActive ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500'
               }`}>{count}</span>
             )}
           </button>
@@ -5579,7 +5604,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           opacity={0.05}
         />
         <div className="font-mono text-[0.75rem] tracking-tight flex items-center gap-1.5 min-w-0 mb-3">
-          <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+          <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded-sm">
             <ArrowLeft size={12} />Process Hub
           </button>
           <span className="text-ink-300">/</span>
@@ -5588,33 +5613,31 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
         <div className="pb-5 flex items-end justify-between gap-4 flex-wrap">
           <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
           <div className="flex items-center gap-3 flex-wrap pb-1.5">
-          {/* Process-meta (code · owner · status) — moved up onto the title row,
-              right-aligned at the BP-name level. Overview only. */}
-          {active === 'overview' && (
-            <div className="flex items-center gap-4 text-[0.75rem] flex-wrap">
-              <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
-              <span className="w-px h-3 bg-canvas-border" aria-hidden />
-              <span className="flex items-center gap-1.5">
-                <span className="text-ink-400">Owner</span>
-                <span className="font-medium text-ink-700">{bp.owner ?? 'Tushar Goel'}</span>
-              </span>
-              <span className="w-px h-3 bg-canvas-border" aria-hidden />
-              {(() => {
-                const s = bp.status ?? 'Active';
-                const tone =
-                  s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
-                  s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
-                  s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
-                                     { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
-                return (
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${tone.wrap}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                    {s}
-                  </span>
-                );
-              })()}
-            </div>
-          )}
+          {/* Process-meta (code · owner · status) — shown on all tabs for orientation.
+              Full size on Overview; compact/quieter on section tabs. */}
+          <div className={`flex items-center gap-4 flex-wrap ${active !== 'overview' ? 'opacity-70' : ''}`} style={{ fontSize: active !== 'overview' ? '0.6875rem' : '0.75rem' }}>
+            <span className="font-mono tabular-nums text-ink-500">{bp.abbr}</span>
+            <span className="w-px h-3 bg-canvas-border" aria-hidden />
+            <span className="flex items-center gap-1.5">
+              <span className="text-ink-400">Owner</span>
+              <span className="font-medium text-ink-700">{bp.owner ?? 'Unassigned'}</span>
+            </span>
+            <span className="w-px h-3 bg-canvas-border" aria-hidden />
+            {(() => {
+              const s = bp.status ?? 'Active';
+              const tone =
+                s === 'Active'   ? { wrap: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-700' } :
+                s === 'Draft'    ? { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' } :
+                s === 'Archived' ? { wrap: 'bg-paper-100 text-ink-500',          dot: 'bg-ink-300' } :
+                                   { wrap: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' };
+              return (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold ${tone.wrap}`} style={{ fontSize: 'inherit' }}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} aria-hidden />
+                  {s}
+                </span>
+              );
+            })()}
+          </div>
           {can('bp_share') && (
             <button
               onClick={(e) => { e.stopPropagation(); openShare({ type: 'process', id: bp.abbr, anchor: rectFromEvent(e) }); }}
@@ -5634,7 +5657,21 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   if (reviewingRacm) {
     return (
       <div className="h-full overflow-y-auto bg-canvas">
-        <div className="px-8 py-8">
+        <div className="px-[124px] py-8">
+          {/* Collapsed back-bar breadcrumb — keeps orientation while the takeover owns the screen */}
+          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 border-b border-border">
+            <div className="font-mono text-[0.75rem] tracking-tight flex items-center gap-1.5 min-w-0">
+              <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                <ArrowLeft size={12} />Process Hub
+              </button>
+              <span className="text-ink-300">/</span>
+              <button type="button" onClick={() => setReviewingRacmId(null)} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
+              <span className="text-ink-300">/</span>
+              <button type="button" onClick={() => setReviewingRacmId(null)} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">RACMs</button>
+              <span className="text-ink-300">/</span>
+              <span className="text-ink-700 truncate">{reviewingRacm.name}</span>
+            </div>
+          </div>
           <ReviewImportWorkspace
             racmName={reviewingRacm.name}
             bpAbbr={bp.abbr}
@@ -5668,7 +5705,27 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // Bulk-run results take over the page (shared with the Workflow Library flow).
   // Back returns to the Workflows tab (drilledSection is preserved).
   if (bulkAuditRun) {
-    return <AuditLogsView run={bulkAuditRun} onBack={() => setBulkAuditRun(null)} />;
+    return (
+      <div className="h-full overflow-y-auto bg-canvas">
+        <div className="px-[124px] py-8">
+          {/* Collapsed back-bar breadcrumb — keeps orientation during bulk-run results */}
+          <div className="bg-white -mx-[124px] px-[124px] -mt-8 pt-8 pb-4 mb-4 border-b border-border">
+            <div className="font-mono text-[0.75rem] tracking-tight flex items-center gap-1.5 min-w-0">
+              <button type="button" onClick={onBack} className="text-ink-500 hover:text-primary transition-colors cursor-pointer flex items-center gap-1.5">
+                <ArrowLeft size={12} />Process Hub
+              </button>
+              <span className="text-ink-300">/</span>
+              <button type="button" onClick={() => setBulkAuditRun(null)} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">{bp.name}</button>
+              <span className="text-ink-300">/</span>
+              <button type="button" onClick={() => setBulkAuditRun(null)} className="text-ink-500 hover:text-primary transition-colors cursor-pointer truncate">Workflows</button>
+              <span className="text-ink-300">/</span>
+              <span className="text-ink-700 truncate">{bulkAuditRun.name}</span>
+            </div>
+          </div>
+          <AuditLogsView run={bulkAuditRun} onBack={() => setBulkAuditRun(null)} />
+        </div>
+      </div>
+    );
   }
 
   // Drilled view — full-screen content for one section with updated breadcrumb
@@ -5813,7 +5870,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                 }
               />
               <KpiTile
-                label="Open items"
+                label="Sections to fix"
                 value={String(atRisk)}
                 index={1}
                 onClick={firstFixSection ? () => switchDrilledSection(firstFixSection) : undefined}
@@ -5859,7 +5916,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             { key: 'sop' as const,       title: 'Upload SOP',      desc: 'Upload a Standard Operating Procedure to help generate risks, controls, and RACM.', cta: 'Upload SOP',             icon: Upload },
             { key: 'racm' as const,      title: 'Create RACM',     desc: 'Create a Risk and Control Matrix to map risks and controls for this process.',       cta: 'Create RACM',            icon: FileText },
             { key: 'risks' as const,     title: 'Create Risks',    desc: 'Identify and document risks relevant to this business process.',                      cta: 'Create Risk',            icon: AlertTriangle },
-            { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls from the Control Library to this process.',                           cta: 'Create Control',         icon: Shield },
+            { key: 'controls' as const,  title: 'Create Controls', desc: 'Create controls to mitigate the risks on this process.',                            cta: 'Create Control',         icon: Shield },
             { key: 'workflows' as const, title: 'Link Workflows',  desc: 'Link test workflows to define how controls will be tested.',                          cta: 'Link existing workflow', icon: Workflow },
           ];
           // Done-state comes from the shared isSectionComplete helper, so the
@@ -5882,7 +5939,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="hidden sm:block w-32 h-2 bg-paper-100 rounded-full overflow-hidden">
+                  <div className="hidden sm:block w-32 h-2 bg-paper-200 rounded-full overflow-hidden">
                     <div className="h-full bg-brand-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
                 </div>

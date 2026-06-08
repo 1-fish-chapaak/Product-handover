@@ -214,7 +214,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       const rows = generateRacmForProcess(engagement.process);
       setUploadedRows(rows);
       const areas = new Set(rows.map(r => r.subProcess)).size;
-      addToast({ type: 'success', message: `Imported \`${file.name}\` — ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
+      addToast({ type: 'success', message: `Imported \`${file.name}\`: ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
     }
     e.target.value = '';
   };
@@ -368,7 +368,7 @@ function RacmLibraryList({
             onClick={onNew}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-border-light text-[0.78125rem] font-medium text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer"
           >
-            <Plus size={14} /> Start a new RACM — upload a RACM or an SOP to extract from
+            <Plus size={14} /> Start a new RACM: upload a RACM or an SOP to extract from
           </button>
           </Gated>
         </div>
@@ -638,7 +638,7 @@ function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => v
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
-            <h2 className="text-[1rem] font-bold text-text">New RACM</h2>
+            <h2 className="text-[1rem] font-bold text-text">Create RACM</h2>
             <p className="text-[0.78125rem] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
@@ -779,7 +779,7 @@ function ExtractionOverlay({ filename, onCancel }: { filename: string; onCancel?
           <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
         </div>
         {slow && (
-          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working — this is taking longer than usual…</p>
+          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working. This is taking longer than usual…</p>
         )}
         {onCancel && (
           <div className="mt-4 flex justify-center">
