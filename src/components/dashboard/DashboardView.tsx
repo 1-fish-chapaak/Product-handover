@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
 import { AddDataModal } from './AddDataModal';
@@ -567,6 +570,7 @@ function EmptyAlertsPanel() {
 
 function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [expanded, setExpanded] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [emailGenerating, setEmailGenerating] = useState(false);
@@ -628,9 +632,11 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
             <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
             <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           </button>
-          <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-            <Send size={11} /> Share with Team
-          </button>
+          {can('db_share') && (
+            <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+              <Send size={11} /> Share with Team
+            </button>
+          )}
         </div>
 
         <AnimatePresence>
@@ -1600,6 +1606,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
   isExcelDashboard?: boolean;
   dataSourceInfo?: { type: 'sql' | 'excel' | 'csv' | 'query'; name: string; meta: string };
 }) {
+  const { can } = useCan();
   const [activeTab, setActiveTab] = useState<'visualization' | 'records' | 'summary'>(isTable ? 'records' : 'visualization');
   const [timePeriod, setTimePeriod] = useState('30D');
   const [chartType, setChartType] = useState<'line' | 'bar' | 'area'>('bar');
@@ -1815,7 +1822,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               Edit Widget
                             </button>
                           )}
-                          {onDelete && (
+                          {onDelete && can('db_delete') && (
                             <button
                               onClick={() => { setShowExpandMenu(false); setShowExpandDeleteConfirm(true); }}
                               className="w-full flex items-center gap-3 px-4 py-2.5 text-[0.8125rem] text-ink-700 hover:bg-red-50 hover:text-red-600 transition-colors text-left cursor-pointer"
@@ -4286,8 +4293,10 @@ function ConnectTablesModal({ open, onClose, addToast, links, setLinks, sources 
   );
 }
 
-export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI, onShare }: DashboardProps = {}) {
+export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI }: DashboardProps = {}) {
   const { addToast } = useToast();
+  const { openShare } = useShare();
+  const { can } = useCan();
   const [loading, setLoading] = useState(true);
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
   const [activeId, setActiveId] = useState<DashboardId>(
@@ -4644,6 +4653,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <div className="w-px h-5 bg-canvas-border" />
 
                   {/* + Add Widget — primary CTA */}
+                  <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                   <button
                     onClick={() => setAddWidgetOpen(true)}
                     className="flex items-center gap-1.5 px-5 h-9 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-full text-[0.75rem] font-semibold shadow-sm transition-colors cursor-pointer"
@@ -4651,6 +4661,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     <Plus size={14} />
                     Add Widget
                   </button>
+                  </Gated>
 
                   {/* Connect Tables — hidden for static file dashboards */}
                   {!isStaticFileDashboard && (
@@ -4704,14 +4715,16 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   </button>
 
                   {/* Share */}
+                  {can('db_share') && (
                   <button
-                    onClick={() => onShare ? onShare() : addToast({ message: 'Share dialog opening.', type: 'info' })}
+                    onClick={(e) => { e.stopPropagation(); openShare({ type: 'dashboard', id: activeId, anchor: rectFromEvent(e) }); }}
                     className="flex items-center gap-1.5 px-2.5 h-9 border border-canvas-border bg-canvas-elevated rounded-lg text-ink-500 hover:text-brand-600 hover:border-brand-200 transition-colors cursor-pointer text-[0.75rem] font-medium"
                     title="Share"
                   >
                     <Share2 size={15} />
                     <span className="hidden sm:inline">Share</span>
                   </button>
+                  )}
 
                   {/* Fullscreen */}
                   <button
@@ -4841,6 +4854,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 </div>
                 <h3 className="text-[0.9375rem] font-semibold text-ink-700 mb-1">No widgets yet</h3>
                 <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-xs">Add your first widget to start building this dashboard.</p>
+                <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                 <button
                   onClick={() => setAddWidgetOpen(true)}
                   className="flex items-center gap-1.5 px-5 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
@@ -4848,6 +4862,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <Plus size={15} />
                   Add Widget
                 </button>
+                </Gated>
               </motion.div>
             )}
 

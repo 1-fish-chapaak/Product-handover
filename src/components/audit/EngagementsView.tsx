@@ -3,11 +3,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
+  Pencil, UserPlus, CheckCircle2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
+import { useCan } from '../../context/CurrentUserContext';
+import { useToast } from '../shared/Toast';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -66,6 +69,8 @@ function healthTier(pct: number): { bar: string; text: string } {
 }
 
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
+  const { can } = useCan();
+  const { addToast } = useToast();
   const [mode, setMode] = useState<'overview' | 'list'>('overview');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>('All');
@@ -140,12 +145,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
               Audit Planning Timeline
               <ArrowUpRight size={12} />
             </button>
-            <button
-              onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
-            >
-              <Plus size={14} />New Engagement
-            </button>
+            {can('eng_create') && (
+              <button
+                onClick={() => setWizardOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              >
+                <Plus size={14} />New Engagement
+              </button>
+            )}
           </div>
         </div>
 
@@ -302,13 +309,42 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
                     >
                       <Play size={14} />
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); }}
-                      className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {can('eng_edit') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${eng.name}`, type: 'info' }); }}
+                        className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-gray-100 transition-colors cursor-pointer"
+                        title="Edit"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                    {can('eng_assign') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Assign owner & reviewer for ${eng.name}`, type: 'info' }); }}
+                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        title="Assign"
+                      >
+                        <UserPlus size={14} />
+                      </button>
+                    )}
+                    {can('eng_close') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `${eng.name} closed`, type: 'success' }); }}
+                        className="p-1.5 rounded-md text-text-muted hover:text-evidence-700 hover:bg-evidence-50 transition-colors cursor-pointer"
+                        title="Close / finalize"
+                      >
+                        <CheckCircle2 size={14} />
+                      </button>
+                    )}
+                    {can('eng_delete') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); }}
+                        className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               );

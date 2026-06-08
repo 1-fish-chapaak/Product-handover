@@ -15,6 +15,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, UserCheck, FilePlus2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { ENGAGEMENTS, PROCESS_COLORS } from '../../data/engagements';
 import {
   ENGAGEMENT_EXCEPTIONS,
@@ -181,6 +182,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
   const [classFilter, setClassFilter] = useState<ClassFilter>('All');
   const [sampleSize, setSampleSize] = useState(10);
 
+  const { can } = useCan();
   // Sample state
   const [sample, setSample] = useState<SampleCase[]>([]);
   const [decisions, setDecisions] = useState<Record<string, CaseDecision>>({});
@@ -244,6 +246,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
   }
 
   function recordDecision(caseId: string, decision: Decision, extra?: Partial<CaseDecision>) {
+    if (!can('exc_triage')) return; // sampling decisions are a triage action
     setDecisions(prev => ({ ...prev, [caseId]: { decision, ...extra } }));
     if (decision !== 'disagree') {
       setDisagreeOpen(prev => ({ ...prev, [caseId]: false }));

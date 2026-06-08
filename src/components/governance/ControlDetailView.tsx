@@ -5,10 +5,12 @@ import {
   FileText, AlertTriangle, Workflow, Link2, Unlink, Search,
   Check, X, LayoutGrid, History, ClipboardList, Plus, Trash2,
   Info, Lock, Paperclip, CheckCircle2, Zap, ArrowRight, Play,
-  Settings, Eye, Repeat,
+  Settings, Eye, Repeat, Share2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { RISKS, WORKFLOWS, RACMS } from '../../data/mockData';
 import LinkWorkflowDrawer from './LinkWorkflowDrawer';
 import {
@@ -44,6 +46,8 @@ const labelClass = 'block text-[0.75rem] font-semibold text-ink-700 mb-1.5';
 /* ─── Component ─── */
 export default function ControlDetailView({ control, onBack, onUpdate }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const { openShare } = useShare();
   const [activeTab, setActiveTab] = useState<TabId>('definition');
   const [showLinkDrawer, setShowLinkDrawer] = useState(false);
   const [showLinkDrawerFromAttrs, setShowLinkDrawerFromAttrs] = useState(false);
@@ -267,12 +271,22 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
               Used in: {controlRACMs.length} RACM{controlRACMs.length !== 1 ? 's' : ''} · {control.linkedWorkflowIds.length} Workflow{control.linkedWorkflowIds.length !== 1 ? 's' : ''}
             </div>
           </div>
-          <button
-            onClick={() => addToast({ message: `Editing ${control.name}`, type: 'info' })}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
-          >
-            <Pencil size={14} />Edit Control
-          </button>
+          <div className="flex items-center gap-3">
+            {can('ctrl_share') && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openShare({ type: 'control', id: control.id, anchor: rectFromEvent(e) }); }}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white hover:border-primary/30 hover:text-primary transition-colors cursor-pointer"
+              >
+                <Share2 size={14} />Share
+              </button>
+            )}
+            <button
+              onClick={() => addToast({ message: `Editing ${control.name}`, type: 'info' })}
+              className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+            >
+              <Pencil size={14} />Edit Control
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}

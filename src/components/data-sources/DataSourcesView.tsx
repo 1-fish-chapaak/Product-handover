@@ -4,10 +4,11 @@ import {
   Database, FileText, Layers, FolderOpen,
   Search, Upload, MoreHorizontal, Plus, X,
   Pencil, Trash2, Unplug, Check,
-  AlertTriangle,
+  AlertTriangle, ArrowRight,
   LayoutGrid, Rows3, ChevronDown,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { Button } from '../shared/Button';
 import {
   DateFilterPicker, dateInFilter, isDateFilterActive, dateFilterLabel,
@@ -551,7 +552,10 @@ interface SourceMenuProps {
 }
 
 function SourceMenu({ source, onClose, onRequestRemove, onRename }: SourceMenuProps) {
+  const { can } = useCan();
   const isIntegrated = INTEGRATED_TYPES.includes(source.type);
+  const canRename = can('ds_rename');
+  const canRemove = can('ds_delete');
 
   // Wraps a handler so it always closes the menu after firing.
   const handle = (fn: () => void) => () => { fn(); onClose(); };
@@ -565,12 +569,15 @@ function SourceMenu({ source, onClose, onRequestRemove, onRename }: SourceMenuPr
         className="absolute right-2 top-11 z-40 w-32 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_32px_rgb(15_8_30_/_0.15)] py-1"
         onClick={(e) => e.stopPropagation()}
       >
-        <MenuItem icon={Pencil} label="Rename" onClick={handle(onRename)} />
-        <MenuSeparator />
-        {isIntegrated ? (
+        {canRename && <MenuItem icon={Pencil} label="Rename" onClick={handle(onRename)} />}
+        {canRename && canRemove && <MenuSeparator />}
+        {canRemove && (isIntegrated ? (
           <MenuItem icon={Unplug} label="Disconnect" onClick={handle(onRequestRemove)} destructive />
         ) : (
           <MenuItem icon={Trash2} label="Remove" onClick={handle(onRequestRemove)} destructive />
+        ))}
+        {!canRename && !canRemove && (
+          <div className="px-3 py-2 text-[0.75rem] text-ink-400">No actions available</div>
         )}
       </div>
     </>
@@ -635,12 +642,16 @@ interface PerTabEmptyStateProps {
   dateLabel: string;
   onOpenPicker: (tab?: 'upload' | 'connect') => void;
   onRequestIntegration: () => void;
+  onClearFilters: () => void;
 }
 
 function PerTabEmptyState({
   isFiltered, tab, search, dateActive, dateLabel,
-  onOpenPicker, onRequestIntegration,
+  onOpenPicker, onRequestIntegration, onClearFilters,
 }: PerTabEmptyStateProps) {
+  const { can } = useCan();
+  const canUpload = can('ds_upload');
+  const canConnect = can('ds_connect');
   if (isFiltered) {
     return (
       <EmptyShell icon={Search}>
@@ -650,6 +661,12 @@ function PerTabEmptyState({
           {dateActive && <>Date "<span className="font-semibold">{dateLabel}</span>" · </>}
           Try widening the range or clearing filters.
         </p>
+        {/* Co-locate the fix with the instruction: the active-filter chips sit
+            in the toolbar above, but echoing a one-click reset here closes the
+            gulf of execution for a user staring at the empty result. */}
+        <div className="mt-4">
+          <Button variant="secondary" leftIcon={<X size={14} />} onClick={onClearFilters}>Clear filters</Button>
+        </div>
       </EmptyShell>
     );
   }
@@ -664,9 +681,11 @@ function PerTabEmptyState({
         <p className="text-[0.75rem] text-ink-500 mt-1 max-w-md mx-auto">
           Drop a folder via Add source, and IRA bundles its files into one card.
         </p>
-        <div className="mt-4">
-          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
-        </div>
+        {canUpload && (
+          <div className="mt-4">
+            <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
+          </div>
+        )}
       </EmptyShell>
     );
   }
@@ -679,9 +698,11 @@ function PerTabEmptyState({
           Connect PostgreSQL, MySQL, Snowflake, Oracle, SQL Server, and BigQuery
           from the Add source picker.
         </p>
-        <div className="mt-4">
-          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker('connect')}>Connect database</Button>
-        </div>
+        {canConnect && (
+          <div className="mt-4">
+            <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker('connect')}>Connect database</Button>
+          </div>
+        )}
       </EmptyShell>
     );
   }
@@ -691,9 +712,11 @@ function PerTabEmptyState({
     <EmptyShell icon={Upload}>
       <p className="text-[0.875rem] text-ink-700 font-medium">No sources yet.</p>
       <p className="text-[0.75rem] text-ink-500 mt-1">Upload a file or connect a database to get started.</p>
-      <div className="mt-4">
-        <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
-      </div>
+      {(canUpload || canConnect) && (
+        <div className="mt-4">
+          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onOpenPicker()}>Add source</Button>
+        </div>
+      )}
     </EmptyShell>
   );
 }
@@ -795,6 +818,7 @@ interface DataSourcesViewProps {
 
 const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded', onDetailChange }, ref) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   const [tab, setTab] = useState<TabId>('all');
   const [search, setSearch] = useState('');
@@ -1454,14 +1478,21 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           })}
         </div>
         {/* Primary CTA — matches the DashboardListPage "Create Dashboard"
-            button: solid brand-600, no gradient, simple color-shift hover. */}
+            button: solid brand-600, no gradient, simple color-shift hover.
+            The trailing "N" kbd hint surfaces the otherwise-hidden add-source
+            shortcut (window keydown in KnowledgeHubView); translucent-white so
+            it reads as a quiet hint on the brand fill, not a second action. */}
         <button
           type="button"
           onClick={() => openPickerOn()}
-          className="shrink-0 flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+          title="Add source (N)"
+          className="shrink-0 flex items-center gap-2 pl-4 pr-2.5 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
         >
           <Plus size={14} />
           Add source
+          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white/20 text-white/95 font-mono text-[10px] leading-none">
+            N
+          </kbd>
         </button>
       </div>
 
@@ -1595,6 +1626,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
               dateLabel={dateLabel}
               onOpenPicker={(t) => openPickerOn(t)}
               onRequestIntegration={() => addToast({ type: 'info', message: 'Opening email…' })}
+              onClearFilters={clearAllFilters}
             />
           )}
 
@@ -1712,7 +1744,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
           (verb adapts to whether every selected source is an integration),
           and a quiet Cancel/×. */}
       <AnimatePresence>
-        {isSelecting && (() => {
+        {isSelecting && can('ds_delete') && (() => {
           const selected = sources.filter(s => selectedIds.has(s.id));
           const allIntegrated = selected.length > 0 && selected.every(s => INTEGRATED_TYPES.includes(s.type));
           return (

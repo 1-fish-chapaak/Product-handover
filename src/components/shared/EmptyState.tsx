@@ -35,7 +35,7 @@ export default function EmptyState({
         <Icon size={compact ? 18 : 20} className="text-brand-700" strokeWidth={1.75} />
       </div>
       <h3
-        className={`font-display ${compact ? 'text-[16px]' : 'text-[20px]'} leading-tight text-ink-900 tracking-tight mb-2`}
+        className={`font-semibold ${compact ? 'text-[16px]' : 'text-[20px]'} leading-tight text-ink-900 tracking-tight mb-2`}
       >
         {title}
       </h3>

@@ -5,10 +5,11 @@ import {
   X, ChevronDown, FileCode, PanelRightClose,
   Database, BarChart3, Sparkles, Copy, Download,
   AlertTriangle, LayoutDashboard, Wand2, HelpCircle,
-  Check, Pencil, Search, ListChecks, MessageSquare,
+  Check, Pencil, Search, ListChecks, MessageSquare, Share2,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import OutputConfigTab from './OutputConfigTab';
+import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { KpiTile } from '../shared/KpiTile';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
@@ -1097,7 +1098,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <motion.div
@@ -1178,14 +1179,28 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             toggle only shows when the panel is closed (to open it),
             then this button takes over while open. Single icon per
             state, no duplication. */}
-        <button
-          onClick={onClose}
-          aria-label="Close panel"
-          title="Close panel"
-          className="size-8 mb-1 inline-flex items-center justify-center shrink-0 text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-        >
-          <PanelRightClose size={14} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {onShareResults && (
+            <Gated permission="wf_output" mode="disable" title="You don't have permission to share results">
+              <button
+                onClick={onShareResults}
+                aria-label="Share results"
+                title="Share results"
+                className="size-8 mb-1 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <Share2 size={14} />
+              </button>
+            </Gated>
+          )}
+          <button
+            onClick={onClose}
+            aria-label="Close panel"
+            title="Close panel"
+            className="size-8 mb-1 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <PanelRightClose size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Content — wrapped in a relative ref'd container so the

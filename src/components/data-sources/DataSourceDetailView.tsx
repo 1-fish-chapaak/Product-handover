@@ -9,6 +9,7 @@ import {
   Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, List,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { Button } from '../shared/Button';
 import InlineRename from '../shared/InlineRename';
 import FloatingLines from '../shared/FloatingLines';
@@ -95,6 +96,7 @@ function suffixedName(name: string, taken: Set<string>): string {
 
 export default function DataSourceDetailView({ source, onBack, onRename, startRenaming, onStartRenamingConsumed }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('uploaded');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -196,6 +198,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   const startRename = () => { setDraftName(source.name); setEditingName(true); };
   const cancelRename = () => { setEditingName(false); setDraftName(source.name); };
   const commitRename = () => {
+    if (!can('ds_rename')) { cancelRename(); return; }
     const trimmed = draftName.trim();
     if (!trimmed || trimmed === source.name) {
       cancelRename();
@@ -216,6 +219,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   // the change so it survives a reload (it also materialises a synthesised
   // listing into DATASET_FILES on first edit).
   const renameFile = (fileId: string, newName: string) => {
+    if (!can('ds_rename')) return;
     const name = newName.trim();
     if (!name) return;
     setRecentlyAdded(curr => curr.map(f => (f.id === fileId ? { ...f, name } : f)));
@@ -301,6 +305,7 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
   };
 
   const handleFiles = async (fileList: FileList | null) => {
+    if (!can('ds_upload')) return;
     if (!fileList || fileList.length === 0) return;
 
     // Only PDF/CSV/XLSX, and each must pass content validation before it adds.

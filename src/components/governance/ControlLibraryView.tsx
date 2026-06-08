@@ -10,11 +10,15 @@ import {
   AlertTriangle,
   Eye,
   Pencil,
+  Trash2,
   Workflow,
+  Share2,
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
 import { useCreatedControls } from '../../data/createdControlsStore';
@@ -52,6 +56,8 @@ interface ControlLibraryProps {
 
 export default function ControlLibraryView({ processFilter }: ControlLibraryProps) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const { openShare } = useShare();
 
   // Stateful controls list
   const [controls, setControls] = useState<ControlRow[]>(SEED_CONTROLS);
@@ -218,20 +224,24 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
-              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
-            >
-              <Download size={14} />
-              Export
-            </button>
-            <button
-              onClick={() => setShowCreateDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-            >
-              <Plus size={14} />
-              Create Control
-            </button>
+            {can('ctrl_export') && (
+              <button
+                onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+              >
+                <Download size={14} />
+                Export
+              </button>
+            )}
+            {can('ctrl_create') && (
+              <button
+                onClick={() => setShowCreateDrawer(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                Create Control
+              </button>
+            )}
           </div>
         </div>
 
@@ -450,7 +460,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             {
               key: 'actions',
               label: 'Action',
-              width: '120px',
+              width: '150px',
               sortable: false,
               align: 'center',
               render: (item) => {
@@ -464,20 +474,42 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     >
                       <Eye size={13} />
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}
-                      title="Edit Control"
-                      className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setLinkWfControlId(ctrl.id); }}
-                      title="Link Workflow"
-                      className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
-                    >
-                      <Workflow size={13} />
-                    </button>
+                    {can('ctrl_share') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openShare({ type: 'control', id: ctrl.id, anchor: rectFromEvent(e) }); }}
+                        title="Share Control"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <Share2 size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_edit') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}
+                        title="Edit Control"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_link') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setLinkWfControlId(ctrl.id); }}
+                        title="Link Workflow"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <Workflow size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_delete') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Deleted ${ctrl.name}`, type: 'success' }); }}
+                        title="Delete Control"
+                        className="p-1.5 rounded-md hover:bg-risk-50 text-text-muted hover:text-risk-700 transition-colors cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 );
               },

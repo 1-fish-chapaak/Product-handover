@@ -6,6 +6,7 @@ import {
 import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 
@@ -45,6 +46,7 @@ function coverageForProcess(bp: { id: string }) {
 
 export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [search, setSearch] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
 
@@ -100,10 +102,12 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
               aria-label="Search processes"
               className="pl-9 pr-3 py-2 text-[12px] border border-canvas-border rounded-[8px] bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
           </div>
+          {can('bp_create') && (
           <button type="button" onClick={() => setShowCreateDrawer(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer shrink-0">
             <Plus size={14} />New Process
           </button>
+          )}
         </div>
 
         {/* ── Process Grid ── */}

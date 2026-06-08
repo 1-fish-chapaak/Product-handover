@@ -6,6 +6,9 @@ import {
   Star, Layers, FileText, GripVertical, BarChart3
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
@@ -795,7 +798,9 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DashboardListPage({ onDashboardClick, onImportPowerBI, createdDashboards = [], onCreateDashboard, onDeleteDashboard, onUpdateDashboardSource, onOpenChat, focusedDashboardId }: DashboardListPageProps) {
+  const { can } = useCan();
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const [activeTab, setActiveTab] = useState<'my' | 'shared'>('my');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recently');
@@ -850,13 +855,15 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
               <p className="text-[0.8125rem] text-ink-500 mt-1">Manage and access all analytics dashboards</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-              >
-                <Plus size={14} />
-                Create Dashboard
-              </button>
+              {can('db_add') && (
+                <button
+                  onClick={() => setCreateModalOpen(true)}
+                  className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus size={14} />
+                  Create Dashboard
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -947,7 +954,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                       <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setOpenMenuId(null); }} />
                       <div className="absolute right-0 top-full mt-1 bg-canvas-elevated border border-canvas-border rounded-lg shadow-sm py-1 z-20 min-w-[140px]">
                         <button
-                          onClick={e => { e.stopPropagation(); addToast({ message: 'Share modal opening.', type: 'info' }); setOpenMenuId(null); }}
+                          onClick={e => { e.stopPropagation(); openShare({ type: 'dashboard', id: dashboard.id, anchor: rectFromEvent(e) }); setOpenMenuId(null); }}
                           className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
                         >
                           <Share2 size={14} /> Share
@@ -969,12 +976,14 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                             <Database size={14} /> Change data source
                           </button>
                         )}
+                        <Gated permission="db_delete" mode="disable" title="You don't have permission to delete dashboards">
                         <button
                           onClick={e => { e.stopPropagation(); setDeleteConfirmId(dashboard.id); setOpenMenuId(null); }}
                           className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-risk-50 text-risk-700 text-[0.8125rem] transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} /> {activeTab === 'shared' ? 'Remove' : 'Delete'}
                         </button>
+                        </Gated>
                       </div>
                     </>
                   )}
@@ -1075,7 +1084,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                   ? 'Try a different search term or create a new dashboard.'
                   : 'Create your first dashboard to start visualizing your data.'}
             </p>
-            {activeTab === 'my' && (
+            {activeTab === 'my' && can('db_add') && (
               <button
                 onClick={() => setCreateModalOpen(true)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"

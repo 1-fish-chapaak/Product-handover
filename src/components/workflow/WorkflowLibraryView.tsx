@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
   Sparkles,
+  Upload,
   Play,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 
 interface Props {
@@ -139,6 +141,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
 const TOTAL_PAGES = 144;
 
 export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
+  const { can } = useCan();
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -302,14 +305,25 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
             />
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <button
-              onClick={() => onCreateWorkflow?.()}
-              className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[0.8125rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer"
-            >
-              <Sparkles size={14} />
-              Create Workflow
-            </button>
-            {bulkMode ? (
+            {can('wf_upload') && (
+              <button
+                onClick={() => addToast({ message: 'Upload a workflow file to import', type: 'info' })}
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
+              >
+                <Upload size={14} />
+                Upload
+              </button>
+            )}
+            {can('wf_create') && (
+              <button
+                onClick={() => onCreateWorkflow?.()}
+                className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[0.8125rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer"
+              >
+                <Sparkles size={14} />
+                Create Workflow
+              </button>
+            )}
+            {can('wf_run') && (bulkMode ? (
               <button
                 onClick={exitBulkMode}
                 className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
@@ -324,7 +338,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                 <Play size={14} />
                 Bulk Run
               </button>
-            )}
+            ))}
           </div>
         </div>
 
@@ -484,33 +498,48 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                       </td>
                       <td className={`px-4 py-4 align-top ${bulkMode ? 'pointer-events-none opacity-40' : ''}`}>
                         <div className="flex items-center justify-end gap-1">
-                          <ActionIconButton
-                            label="Run workflow"
-                            disabled={bulkMode}
-                            onClick={() => {
-                              if (onRunWorkflow) {
-                                onRunWorkflow(wf.id);
-                              } else {
-                                addToast({ message: `Running "${wf.name}"…`, type: 'success' });
-                              }
-                            }}
-                          >
-                            <Play size={14} />
-                          </ActionIconButton>
-                          <ActionIconButton
-                            label="Edit"
-                            disabled={bulkMode}
-                            onClick={() => addToast({ message: `Editing "${wf.name}"`, type: 'success' })}
-                          >
-                            <Pencil size={14} />
-                          </ActionIconButton>
-                          <ActionIconButton
-                            label="Delete"
-                            disabled={bulkMode}
-                            onClick={() => addToast({ message: `Deleted "${wf.name}"`, type: 'success' })}
-                          >
-                            <Trash2 size={14} />
-                          </ActionIconButton>
+                          {can('wf_output') && (
+                            <ActionIconButton
+                              label="View output"
+                              disabled={bulkMode}
+                              onClick={() => addToast({ message: `Opening latest output for "${wf.name}"…`, type: 'success' })}
+                            >
+                              <FileText size={14} />
+                            </ActionIconButton>
+                          )}
+                          {can('wf_run') && (
+                            <ActionIconButton
+                              label="Run workflow"
+                              disabled={bulkMode}
+                              onClick={() => {
+                                if (onRunWorkflow) {
+                                  onRunWorkflow(wf.id);
+                                } else {
+                                  addToast({ message: `Running "${wf.name}"…`, type: 'success' });
+                                }
+                              }}
+                            >
+                              <Play size={14} />
+                            </ActionIconButton>
+                          )}
+                          {can('wf_update_delete') && (
+                            <ActionIconButton
+                              label="Edit"
+                              disabled={bulkMode}
+                              onClick={() => addToast({ message: `Editing "${wf.name}"`, type: 'success' })}
+                            >
+                              <Pencil size={14} />
+                            </ActionIconButton>
+                          )}
+                          {can('wf_update_delete') && (
+                            <ActionIconButton
+                              label="Delete"
+                              disabled={bulkMode}
+                              onClick={() => addToast({ message: `Deleted "${wf.name}"`, type: 'success' })}
+                            >
+                              <Trash2 size={14} />
+                            </ActionIconButton>
+                          )}
                         </div>
                       </td>
                     </tr>

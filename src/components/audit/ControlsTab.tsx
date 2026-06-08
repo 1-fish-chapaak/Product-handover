@@ -13,6 +13,7 @@ import {
   CheckCircle2, Circle, FlaskConical,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
@@ -437,12 +438,14 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       {/* ─── Controls list ─── */}
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[12px] font-semibold text-ink-600">{filteredControls.length} control{filteredControls.length === 1 ? '' : 's'}</span>
+        <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
         <button
           onClick={() => setAddControlOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold cursor-pointer transition-colors"
         >
           <Plus size={13} /> New control
         </button>
+        </Gated>
       </div>
       <div className="space-y-2.5">
         {filteredControls.length === 0 && (
@@ -492,6 +495,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[12px] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
                         {onTestEvidence && (
+                          <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
                           <button
                             onClick={() => onTestEvidence(c.controlId)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50/50 hover:bg-brand-50 text-brand-700 text-[11.5px] font-semibold cursor-pointer transition-colors shrink-0"
@@ -499,6 +503,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                           >
                             <FlaskConical size={13} /> Test evidence
                           </button>
+                          </Gated>
                         )}
                       </div>
                       {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
@@ -528,6 +533,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                     >
                                       <WorkflowIcon size={10} className="shrink-0" />
                                       <span className="font-mono">{w.code}</span>
+                                      <Gated permission="racm_unmap" mode="disable" title="You don't have permission to unlink workflows">
                                       <button
                                         onClick={() => unlinkWorkflow(attr.id, w.id)}
                                         className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors"
@@ -535,8 +541,10 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                       >
                                         <X size={10} />
                                       </button>
+                                      </Gated>
                                     </span>
                                   ))}
+                                  <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
                                   <button
                                     onClick={() => setMapAttr(attr)}
                                     className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md border border-dashed border-canvas-border bg-white text-[10.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 cursor-pointer transition-colors"
@@ -544,6 +552,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                     <Link2 size={11} className="shrink-0" />
                                     {linkedWfs.length > 0 ? 'Map' : 'Link workflow'}
                                   </button>
+                                  </Gated>
                                 </div>
                                 <button
                                   onClick={() => toggleAttr(attr.id)}
@@ -602,6 +611,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                         })}
 
                         {/* Add attribute */}
+                        <Gated permission="racm_edit" mode="disable" title="You don't have permission to add attributes">
                         <div className="flex items-center gap-2 pt-0.5">
                           <input
                             value={draftAttr[c.controlId] ?? ''}
@@ -618,6 +628,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                             <Plus size={13} /> Attribute
                           </button>
                         </div>
+                        </Gated>
                       </div>
                     </div>
                   </motion.div>

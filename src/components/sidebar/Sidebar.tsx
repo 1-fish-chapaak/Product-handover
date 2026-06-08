@@ -7,9 +7,12 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, FlaskConical, TrendingUp,
+  Inbox, FlaskConical,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
+import { useCurrentUser } from '../../context/CurrentUserContext';
+import type { PermissionKey } from '../../data/rbac';
+import { WORKSPACES } from '../../data/workspaces';
 
 interface SidebarProps {
   view: View;
@@ -24,7 +27,7 @@ interface SidebarProps {
 
 /* ── Flat nav item ── */
 function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
-  icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: () => void; badge?: string; dot?: boolean;
+  icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; badge?: string; dot?: boolean;
 }) {
   return (
     <button
@@ -98,24 +101,23 @@ function Divider({ label, expanded }: { label?: string; expanded: boolean }) {
   );
 }
 
-const TEAMS = [
-  { id: 'irame-5', name: 'Irame 5' },
-  { id: 'test', name: 'test' },
-  { id: 'irame-india', name: 'Irame India' },
-];
+// Workspace switcher options — shared with the login chooser.
+const TEAMS = WORKSPACES.map(w => ({ id: w.id, name: w.name }));
 
 export default function Sidebar({ view, setView, expanded, toggleSidebar, unreadNotifications, notificationDrawerOpen, onOpenNotifications }: SidebarProps) {
   const prefersReducedMotion = useReducedMotion();
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [activeTeam, setActiveTeam] = useState('irame-5');
   const [teamSearch, setTeamSearch] = useState('');
   const teamRef = useRef<HTMLDivElement>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signOutConfirm, setSignOutConfirm] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const { currentUser, activeRole, can, canAny, signOut,
+    activeWorkspaceId: activeTeam, setActiveWorkspace: setActiveTeam } = useCurrentUser();
 
   useEffect(() => {
     if (!teamOpen) return;
@@ -139,6 +141,17 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
   const isExpanded = expanded || hoverExpanded;
 
+  // ── Permission-driven section visibility ──
+  const programsVisible = canAny(['plan_view', 'eng_view', 'bp_view']);
+  const globalVisible = canAny(['db_view', 'rp_view', 'risk_view', 'ctrl_view', 'wf_view', 'concierge_use']);
+  const adminTabPerms: { view: View; perm: PermissionKey }[] = [
+    { view: 'admin-users', perm: 'ad_users_manage' },
+    { view: 'admin-roles', perm: 'ad_roles_manage' },
+    { view: 'admin-logs', perm: 'ad_logs' },
+  ];
+  const adminVisible = adminTabPerms.some(t => can(t.perm));
+  const firstAdminView: View = (adminTabPerms.find(t => can(t.perm))?.view) ?? 'admin-users';
+
   const handleMouseEnter = () => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     if (!expanded) {
@@ -156,7 +169,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   /* View group helpers for active detection */
   const workflowViews: View[] = ['workflow-templates', 'workflow-detail', 'workflow-library', 'workflow-executor'];
   const aiConciergeViews: View[] = ['ai-concierge', 'ai-concierge-forensics', 'ai-concierge-table-extractor'];
-  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-settings', 'admin-integrations', 'admin-logs'];
+  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
   return (
     // Outer layout slot — ALWAYS the collapsed 64px width. Neither hovering nor
@@ -201,7 +214,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                   onClick={() => { setTeamOpen(p => !p); setTeamSearch(''); }}
                   className="text-[12px] text-white font-medium whitespace-nowrap flex items-center gap-1 hover:text-sidebar-text transition-colors cursor-pointer"
                 >
-                  Audit Intelligence
+                  {TEAMS.find(t => t.id === activeTeam)?.name ?? 'Workspace'}
                   <ChevronDown size={8} className={`text-white transition-transform duration-150 ${teamOpen ? 'rotate-180' : ''}`} />
                 </button>
               </div>
@@ -279,7 +292,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                   <SearchIcon size={14} className="text-white shrink-0" />
                   <input
                     type="text"
-                    placeholder="Search Team"
+                    placeholder="Search workspace"
                     value={teamSearch}
                     onChange={e => setTeamSearch(e.target.value)}
                     className="flex-1 bg-transparent outline-none text-white placeholder:text-white/60 text-[13px]"
@@ -322,37 +335,35 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
       <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${isExpanded ? 'px-2' : 'px-0'}`}>
         <div className="space-y-0.5">
 
-          {/* Top actions */}
+          {/* Top action — Ask IRA is free for everyone (no permission gate) */}
           <NavItem icon={MessageSquare} label="Ask IRA" active={view === 'chat' || view === 'chat-trash'} expanded={isExpanded} onClick={() => setView('chat')} />
 
-          {/* Primary */}
+          {/* Primary — always available */}
           <NavItem icon={Home} label="Home" active={view === 'home'} expanded={isExpanded} onClick={() => setView('home')} />
           <NavItem icon={Clock} label="Recents" active={view === 'recents'} expanded={isExpanded} onClick={() => setView('recents')} />
 
           {/* ── PROGRAMS ── */}
-          <Divider label="Programs" expanded={isExpanded} />
+          {programsVisible && <Divider label="Programs" expanded={isExpanded} />}
 
-          <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />
-          <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management'} expanded={isExpanded} onClick={() => setView('engagements')} />
-          <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />
+          {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
+          {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management'} expanded={isExpanded} onClick={() => setView('engagements')} />}
+          {can('bp_view') && <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />}
 
           {/* ── GLOBAL ── */}
-          <Divider label="Global" expanded={isExpanded} />
+          {globalVisible && <Divider label="Global" expanded={isExpanded} />}
 
-          <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />
-          <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />
-          <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />
-          <NavItem icon={Building2} label="Vendor 360" active={view === 'vendor-360'} expanded={isExpanded} onClick={() => setView('vendor-360')} />
-          <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />
-          <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />
-          <NavItem icon={Wand2} label="AI Concierge" active={aiConciergeViews.includes(view)} expanded={isExpanded} onClick={() => setView('ai-concierge')} />
+          {can('db_view') && <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />}
+          {can('rp_view') && <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />}
+          {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
+          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
+          {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
+          {can('concierge_use') && <NavItem icon={Wand2} label="AI Concierge" active={aiConciergeViews.includes(view)} expanded={isExpanded} onClick={() => setView('ai-concierge')} />}
 
           {/* ── SYSTEM ── */}
           <Divider label="System" expanded={isExpanded} />
 
-          <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />
-          <NavItem icon={TrendingUp} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />
-          <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView('admin-users')} />
+          {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
+          {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>
       </nav>
@@ -368,11 +379,11 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               className="flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg bg-sidebar-surface border border-sidebar-border cursor-pointer hover:bg-sidebar-surface-hover transition-colors"
             >
               <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-[12px] font-bold text-brand-600 shrink-0">
-                JD
+                {currentUser?.initials ?? '—'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-sidebar-accent truncate">John Doe</div>
-                <div className="text-[12px] text-white truncate">Lead Auditor</div>
+                <div className="text-[13px] font-semibold text-sidebar-accent truncate">{currentUser?.name ?? 'Signed out'}</div>
+                <div className="text-[12px] text-white truncate">{activeRole?.name ?? currentUser?.title ?? ''}</div>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
@@ -415,7 +426,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                       Cancel
                     </button>
                     <button
-                      onClick={() => { setSignOutConfirm(false); setUserMenuOpen(false); }}
+                      onClick={() => { setSignOutConfirm(false); setUserMenuOpen(false); signOut(); }}
                       className="flex-1 px-3 py-2 rounded-lg text-[13px] font-medium text-white bg-risk hover:bg-risk-700 transition-colors cursor-pointer"
                     >
                       Sign Out

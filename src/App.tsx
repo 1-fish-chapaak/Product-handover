@@ -4,6 +4,13 @@ import { Sparkles } from 'lucide-react';
 import { useAppState } from './hooks/useAppState';
 import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
+import { CurrentUserProvider, useCurrentUser } from './context/CurrentUserContext';
+import { AdminDataProvider } from './context/AdminDataContext';
+import { ShareProvider } from './context/ShareContext';
+import { VIEW_PERMISSIONS } from './data/rbac';
+import EmptyState from './components/shared/EmptyState';
+import LoginView from './components/auth/LoginView';
+import { Lock } from 'lucide-react';
 import { GENERATED_REPORTS } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
@@ -32,7 +39,6 @@ import EngagementsView from './components/audit/EngagementsView';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
-import Vendor360View from './components/audit/Vendor360View';
 import EngagementCompareView from './components/audit/EngagementCompareView';
 import { ENGAGEMENTS } from './data/engagements';
 import { exceptionsForEngagementAsGrc } from './data/engagement-exceptions';
@@ -47,8 +53,6 @@ import AIConciergeView from './components/intelligence/AIConciergeView';
 import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
-import PlatformUsageView from './components/admin/PlatformUsageView';
-import FindingsView from './components/execution/FindingsView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
 import EngagementDetailView from './components/engagement/EngagementDetailView';
@@ -162,6 +166,8 @@ function AppInner() {
     setFocusedNotificationRefId,
     addNotification,
   } = useAppState();
+
+  const { can } = useCurrentUser();
 
   const unreadNotifications = state.notifications.filter(n => !n.read).length;
 
@@ -403,6 +409,20 @@ function AppInner() {
             </motion.div>
             <span className="text-[0.8125rem] text-ink-500">Loading…</span>
           </div>
+        </div>
+      );
+    }
+
+    // Route guard — block views the active role can't access.
+    const requiredPerm = VIEW_PERMISSIONS[state.view];
+    if (requiredPerm && !can(requiredPerm)) {
+      return (
+        <div className="h-full flex items-center justify-center p-6">
+          <EmptyState
+            icon={Lock}
+            title="Access restricted"
+            body="Your current role doesn't have permission to view this area. Sign in with a different account, or contact an administrator."
+          />
         </div>
       );
     }
@@ -835,8 +855,6 @@ function AppInner() {
       case 'closed-case-sampling':
         return <ClosedCaseSamplingView onBack={() => setView('engagements')} />;
 
-      case 'vendor-360':
-        return <Vendor360View onBack={() => setView('engagements')} />;
 
       case 'engagement-compare':
         return <EngagementCompareView onBack={() => setView('engagements')} />;
@@ -916,25 +934,11 @@ function AppInner() {
           />
         );
 
-      // Execution — Findings
-      case 'findings':
-        return (
-          <FindingsView
-            onOpenWorkingPaper={(id) => openExecutionPanel('working-paper', id)}
-            onOpenWorkflow={(id) => openExecutionPanel('workflow-execution', id)}
-            onOpenTrace={(id) => openExecutionPanel('traceability', id)}
-          />
-        );
-
       // Admin
       case 'admin-users':
         return <AdminView activeTab="users" />;
       case 'admin-roles':
         return <AdminView activeTab="roles" />;
-      case 'admin-settings':
-        return <AdminView activeTab="settings" />;
-      case 'admin-integrations':
-        return <AdminView activeTab="integrations" />;
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
 
@@ -970,6 +974,7 @@ function AppInner() {
   return (
     <ToastProvider>
       <BulkRunProgressProvider>
+      <ShareProvider openShare={({ type, id, anchor }) => setShowShareModal(true, { type, id: id ?? type }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
         {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (
           <Sidebar
@@ -1015,6 +1020,8 @@ function AppInner() {
           )}
           {state.showShareModal && (
             <ShareModal
+              scope={state.shareContext?.type === 'workflow-output' ? 'result' : state.shareContext?.type}
+              anchor={state.shareAnchor}
               onClose={() => setShowShareModal(false)}
               onShare={(recipients) => {
                 // Phase 3 producer: push a notification when reports or
@@ -1099,15 +1106,27 @@ function AppInner() {
         {/* Global Cmd+K command palette */}
         <CommandPalette />
       </div>
+      </ShareProvider>
       </BulkRunProgressProvider>
     </ToastProvider>
   );
 }
 
+/** Gate the whole app behind the prototype login screen. */
+function AppGate() {
+  const { currentUser } = useCurrentUser();
+  if (!currentUser) return <LoginView />;
+  return <AppInner />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppInner />
+      <CurrentUserProvider startSignedOut>
+        <AdminDataProvider>
+          <AppGate />
+        </AdminDataProvider>
+      </CurrentUserProvider>
     </ErrorBoundary>
   );
 }

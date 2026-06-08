@@ -22,6 +22,7 @@ import type {
   UploadedFile,
 } from '../concierge-workflow-builder/types';
 import { DATA_SOURCES } from '../../data/mockData';
+import { useCan } from '../../context/CurrentUserContext';
 
 interface WorkflowExecutorProps {
   workflowId: string;
@@ -374,6 +375,7 @@ function ConfidenceChip({ value }: { value: number }) {
 // ─── Main Component ──────────────────────────────────────
 
 export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp }: WorkflowExecutorProps) {
+  const { can } = useCan();
   // Most workflow IDs resolve to the AP duplicate-detection mock. The PDF
   // tester is a dedicated sandbox whose inputs are all PDFs so the manual
   // mapping journey fires on every Execute.
@@ -538,6 +540,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   const handlePick = useCallback(
     (picked: FileList | null) => {
+      if (!can('ds_upload')) return; // uploading files requires the upload permission
       if (!picked || picked.length === 0) return;
       const filesArr = Array.from(picked);
       setFiles((prev) => {
@@ -550,7 +553,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
         return next;
       });
     },
-    [pickTargetInputId],
+    [pickTargetInputId, can],
   );
 
   // PDF executor uses per-slot uploads — one PDF per required input, picked
@@ -559,6 +562,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   // one document in this flow.
   const handlePickForInput = useCallback(
     (inputId: string, picked: FileList | null) => {
+      if (!can('ds_upload')) return; // uploading files requires the upload permission
       if (!picked || picked.length === 0) return;
       const f = picked[0];
       setFiles((prev) => ({
@@ -566,7 +570,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
         [inputId]: [{ name: f.name, size: f.size }],
       }));
     },
-    [],
+    [can],
   );
 
   const handleRemove = useCallback(
@@ -623,6 +627,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   const toggleSource = useCallback(
     (name: string) => {
+      if (!can('ds_live')) return; // linking a live data source requires data-source access
       if (linkedSourceNames.has(name)) {
         const next: JourneyFiles = {};
         for (const [inputId, arr] of Object.entries(files)) {
@@ -639,7 +644,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
         };
       });
     },
-    [files, linkedSourceNames, pickTargetInputId],
+    [files, linkedSourceNames, pickTargetInputId, can],
   );
 
   const advance = useCallback(() => {

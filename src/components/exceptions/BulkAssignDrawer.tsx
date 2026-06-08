@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { X, UserPlus, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { RISK_OWNERS, type GrcException, type GrcExceptionStatus } from '../../data/mockData';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import Gated from '../shared/Gated';
 
 // ─── Styling vocab — mirrors the table chips so the preview reads
 //     identically to the main Exceptions table. ───────────────────────────
@@ -569,6 +570,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
           >
             Cancel
           </button>
+          <Gated permission="exc_assign" mode="disable" title="You don't have permission to assign exceptions">
           <button
             type="button"
             onClick={handleConfirm}
@@ -577,6 +579,7 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
           >
             Confirm
           </button>
+          </Gated>
         </footer>
       </motion.aside>
     </>

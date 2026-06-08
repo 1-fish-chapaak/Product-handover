@@ -19,6 +19,7 @@ import {
   Loader2, FileStack, FileUp,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import {
   racmRowsForProcess,
@@ -327,12 +328,14 @@ function RacmLibraryList({
           </div>
         </div>
         <div className="flex items-center gap-2 ml-auto">
+          <Gated permission="racm_generate" mode="disable" title="You don't have permission to create a RACM">
           <button
             onClick={onNew}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={14} /> New RACM
           </button>
+          </Gated>
         </div>
       </div>
 
@@ -350,12 +353,14 @@ function RacmLibraryList({
             />
           ))}
           {/* Inline start hint at the bottom of an existing list */}
+          <Gated permission="racm_generate" mode="disable" title="You don't have permission to create a RACM">
           <button
             onClick={onNew}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-border-light text-[12.5px] font-medium text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer"
           >
             <Plus size={14} /> Start a new RACM — upload a RACM or an SOP to extract from
           </button>
+          </Gated>
         </div>
       )}
     </div>
@@ -373,16 +378,20 @@ function RacmOnboarding({ onUploadRacm, onUploadSop }: { onUploadRacm: () => voi
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 max-w-2xl mx-auto">
+        <Gated permission="racm_edit" mode="disable" title="You don't have permission to upload a RACM">
         <button onClick={onUploadRacm} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
           <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
           <div className="text-[13.5px] font-semibold text-text mb-1">Upload a RACM</div>
           <div className="text-[11.5px] text-text-muted leading-relaxed">Import an existing matrix (.xlsx). Risks, controls, and attributes load straight in.</div>
         </button>
+        </Gated>
+        <Gated permission="racm_generate" mode="disable" title="You don't have permission to extract a RACM">
         <button onClick={onUploadSop} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
           <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
           <div className="text-[13.5px] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
           <div className="text-[11.5px] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads it and drafts the RACM for you.</div>
         </button>
+        </Gated>
       </div>
     </div>
   );
@@ -437,6 +446,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
           </span>
         </button>
       ) : (
+        <Gated permission="racm_generate" mode="disable" title="You don't have permission to extract a RACM">
         <button
           onClick={onUploadSop}
           title="Upload an SOP and extract the RACM from it"
@@ -448,6 +458,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
             <div className="text-[12px] font-medium text-mitigated-700 truncate leading-tight">Upload SOP → extract</div>
           </div>
         </button>
+        </Gated>
       )}
 
       <button
@@ -525,13 +536,17 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
 
         <div className="flex items-center gap-2 ml-auto">
           {onOpenFullEditor && (
+            <Gated permission="racm_edit" mode="disable" title="You don't have permission to edit a RACM">
             <button onClick={onOpenFullEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold transition-colors cursor-pointer" title="Open the full-page editor">
               <ArrowUpRight size={12} /> Open in editor
             </button>
+            </Gated>
           )}
+          <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
           <button onClick={() => addToast({ message: `Downloading ${entry.name} as XLSX…`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
             <Download size={12} /> Download
           </button>
+          </Gated>
           <button
             onClick={() => setKeyOnly(v => !v)}
             aria-pressed={keyOnly}

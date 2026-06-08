@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ConfigurableChart, PIE_DATA } from "./ConfigurableChart";
+import Gated from "../../shared/Gated";
 import { FileTreeView, type FileTreeFile } from "./FileTreeView";
 import { ColorPicker } from "./ColorPicker";
 import { WhiteDropdown } from "./WhiteDropdown";
@@ -1304,6 +1305,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
             {/* ── ADD WIDGET BUTTON — fixed at sidebar bottom ── */}
             <div className="shrink-0 px-3 py-3 border-t border-[#e5e7eb] bg-white">
+              <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
               <button
                 onClick={() => {
                   if (isCreateDashboardMode && onNavigateToBuilder) {
@@ -1325,6 +1327,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
               >
                 {isCreateDashboardMode ? "Create Dashboard" : "Add Widget"}
               </button>
+              </Gated>
             </div>
           </div>
 
