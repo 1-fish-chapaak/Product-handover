@@ -43,6 +43,10 @@ interface Props {
   // 'kh-add'  — 2 tabs (Upload · Connect database), no search; the Connect
   //             tab renders the engine picker + credentials form.
   mode?: 'chat' | 'kh-add';
+  // Footer hint shown (in chat mode) when nothing is selected yet. Defaults to
+  // the chat-composer copy; callers embedding the picker elsewhere (e.g. a
+  // workflow executor) can override it to match their context.
+  attachHint?: React.ReactNode;
 }
 
 type TabId = 'all' | 'file' | 'integrated' | 'upload' | 'connect';
@@ -70,6 +74,7 @@ export default function DataPickerModal({
   title = 'Add data',
   confirmLabel = 'Attach',
   mode = 'chat',
+  attachHint,
 }: Props) {
   const { addToast } = useToast();
   const TABS = mode === 'kh-add' ? KH_ADD_TABS : CHAT_TABS;
@@ -351,7 +356,7 @@ export default function DataPickerModal({
                   {totalSelected === 0 && inFlightCount === 0 && (
                     mode === 'kh-add'
                       ? <>Drop files or connect a database to add to your Knowledge Hub.</>
-                      : <>Pick sources or files to attach to your message.</>
+                      : (attachHint ?? <>Pick sources or files to attach to your message.</>)
                   )}
                   {totalSelected > 0 && (
                     <span><span className="font-semibold text-ink-700">{totalSelected}</span> {totalSelected === 1 ? 'item' : 'items'} selected</span>

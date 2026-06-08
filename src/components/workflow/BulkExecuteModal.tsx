@@ -259,11 +259,13 @@ export function Checkbox({
   indeterminate,
   onChange,
   ariaLabel,
+  disabled = false,
 }: {
   checked: boolean;
   indeterminate?: boolean;
   onChange: () => void;
   ariaLabel: string;
+  disabled?: boolean;
 }) {
   const showMark = checked || indeterminate;
   return (
@@ -272,9 +274,12 @@ export function Checkbox({
       role="checkbox"
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={ariaLabel}
-      onClick={e => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-        showMark ? 'bg-primary border-primary' : 'bg-white border-border hover:border-primary/60'
+      disabled={disabled}
+      onClick={e => { e.stopPropagation(); if (!disabled) onChange(); }}
+      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+        disabled
+          ? 'bg-surface-2 border-border-light cursor-not-allowed opacity-50'
+          : `cursor-pointer ${showMark ? 'bg-primary border-primary' : 'bg-white border-border hover:border-primary/60'}`
       }`}
     >
       {checked && !indeterminate && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -395,7 +400,7 @@ export function BulkExecuteModal({
     if (!q) return [];
     const have = new Set(combinedSelected.map(w => w.id));
     return LIBRARY_WORKFLOWS
-      .filter(w => !have.has(w.id) && (w.name.toLowerCase().includes(q) || w.businessProcess.toLowerCase().includes(q) || w.controlId.toLowerCase().includes(q)))
+      .filter(w => !w.singleRunOnly && !have.has(w.id) && (w.name.toLowerCase().includes(q) || w.businessProcess.toLowerCase().includes(q) || w.controlId.toLowerCase().includes(q)))
       .slice(0, 8);
   }, [addSearch, combinedSelected]);
 

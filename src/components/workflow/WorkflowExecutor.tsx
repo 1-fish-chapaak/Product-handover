@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, X, Database, Search, Check,
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
   Link2, RefreshCw, Info, Wand2, Upload, Folder, ScanLine,
-  Sparkles, ArrowUp,
+  Sparkles, ArrowUp, Layers, Plus,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
 import PlanPanel, { type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
@@ -23,6 +23,8 @@ import type {
 } from '../concierge-workflow-builder/types';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
+import { useToast } from '../shared/Toast';
+import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
 interface WorkflowExecutorProps {
   workflowId: string;
@@ -207,6 +209,84 @@ const PDF_TESTER_WORKFLOW: WorkflowDraft = {
   },
 };
 
+// Sandbox workflow whose single required input is one *consolidated* workbook
+// — multiple datasets (AP register, vendor master, GL) packed into one file as
+// separate sheets/sections. Selected by id from the Workflow Library so we can
+// build out a dedicated "consolidated file" execution journey (split → identify
+// → map → reconcile) independent of the multi-input default executor. This
+// workflow is single-run only and never appears in Bulk Run.
+const CONSOLIDATED_FILE_WORKFLOW: WorkflowDraft = {
+  id: 'lw-consolidated-file',
+  name: 'Consolidated file testing',
+  description:
+    'Sandbox workflow that takes a single consolidated workbook (multiple datasets in one file) and runs the dedicated consolidated-file execution journey end-to-end.',
+  category: 'Sandbox',
+  tags: ['consolidated', 'sandbox'],
+  logicPrompt:
+    'The auditor uploads ONE consolidated file that bundles several datasets (AP invoice register, vendor master, GL trial balance) as separate sheets or sections. Split the consolidated file into its constituent datasets, identify and map each one to the expected schema, then reconcile across them. Built as a dedicated single-run journey — bulk execution is intentionally not supported.',
+  inputs: [
+    {
+      id: 'consolidated_workbook',
+      name: 'Consolidated Workbook',
+      type: 'csv',
+      description:
+        'A single file bundling the AP invoice register, vendor master, and GL trial balance as separate sheets/sections. The executor splits this into its datasets before mapping. Accepts multiple same-schema files — they are unioned.',
+      required: true,
+      multiple: true,
+      columns: [
+        'Invoice No',
+        'Vendor ID',
+        'Amount',
+        'GL Account',
+        'Invoice Date',
+        'Entered By',
+        'Vendor Name',
+        'Bank Account',
+        'Status',
+        'Account',
+        'Debit',
+        'Credit',
+        'Balance',
+      ],
+    },
+  ],
+  steps: [
+    {
+      id: 's1',
+      name: 'Split consolidated file',
+      description: 'Detect and separate the bundled datasets (sheets/sections) within the single uploaded file.',
+      type: 'extract',
+      dataFiles: ['consolidated_workbook'],
+    },
+    {
+      id: 's2',
+      name: 'Identify & map each dataset',
+      description: 'Match every split-out dataset to its expected schema (AP register, vendor master, GL).',
+      type: 'validate',
+      dataFiles: ['consolidated_workbook'],
+    },
+    {
+      id: 's3',
+      name: 'Reconcile across datasets',
+      description: 'Cross-check the split datasets against one another within tolerance.',
+      type: 'compare',
+      dataFiles: ['consolidated_workbook'],
+    },
+    {
+      id: 's4',
+      name: 'Flag exceptions',
+      description: 'Emit a flag for each record that fails identification, mapping, or reconciliation.',
+      type: 'flag',
+      dataFiles: ['consolidated_workbook'],
+    },
+  ],
+  output: {
+    type: 'flags',
+    title: 'Consolidated File Findings',
+    description: 'Records flagged after splitting and reconciling the consolidated workbook.',
+  },
+};
+
 const EXECUTION_STEPS: ExecutionStep[] = [
   { label: 'Loading data sources...', duration: 800 },
   { label: 'Matching records against vendor master...', duration: 900 },
@@ -222,12 +302,44 @@ const CLARIFICATION_OPTIONS = [
   'Not sure — recommend for me',
 ];
 
+// A workflow input can be satisfied by MORE THAN ONE source. When several
+// files/sources share the same schema we union them (row-wise concatenation)
+// into one logical table and column-map once against the shared schema. This
+// is what lets a "1 required file" input accept e.g. a register that arrives
+// split across twelve monthly exports.
+type MappedSource = {
+  name: string;
+  type: 'uploaded' | 'datasource';
+  rows: number; // approx row count — drives the union total + per-source provenance
+  // false => this source's columns diverge from the others in the union, so the
+  // union isn't safe until it's removed or re-mapped. undefined/true => consistent.
+  schemaOk?: boolean;
+};
+
 type FileMapping = {
   inputId: string;
-  sourceName: string | null;
-  sourceType: 'uploaded' | 'datasource';
+  // 0..N sources unioned into this input. Empty => nothing mapped yet.
+  sources: MappedSource[];
   status: 'mapped' | 'unmapped' | 'mismatch';
 };
+
+// Derive a mapping's status from its sources: nothing => unmapped; any
+// schema-divergent source => mismatch (needs review); otherwise mapped.
+function mappingStatus(sources: MappedSource[]): FileMapping['status'] {
+  if (sources.length === 0) return 'unmapped';
+  if (sources.some(s => s.schemaOk === false)) return 'mismatch';
+  return 'mapped';
+}
+
+// Deterministic pseudo row-count from a name so union totals stay stable across
+// renders (this codebase avoids Math.random/Date.now in render paths).
+function seededRows(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return 800 + (h % 4200); // 800–5,000
+}
+
+const fmtRows = (n: number) => n.toLocaleString('en-US');
 
 // Separate type for PDFs/unstructured docs — they can't be auto-mapped to an
 // input slot from filename alone, and once mapped have no columns to align
@@ -244,10 +356,61 @@ type UnstructuredMapping = {
   status: 'pending' | 'mapped' | 'skipped';
 };
 
+// Static auto-detect seed for the demo AP flow — used as a fallback when an
+// input has no actually-attached files. The AP register seeds TWO sources to
+// demonstrate the union; the GL seeds a schema-divergent source so the
+// mismatch path stays demoable.
 const AUTO_FILE_MAPPINGS: FileMapping[] = [
-  { inputId: 'ap_invoice_register', sourceName: 'SAP ERP: AP Module', sourceType: 'datasource', status: 'mapped' },
-  { inputId: 'vendor_master', sourceName: 'Invoice Archive 2026', sourceType: 'datasource', status: 'mapped' },
-  { inputId: 'gl_trial_balance', sourceName: 'Vendor Master Data', sourceType: 'datasource', status: 'mismatch' },
+  {
+    inputId: 'ap_invoice_register',
+    sources: [
+      { name: 'SAP ERP: AP Module', type: 'datasource', rows: 3120 },
+      { name: 'ap_invoice_register_jun2026.csv', type: 'uploaded', rows: 1880 },
+    ],
+    status: 'mapped',
+  },
+  {
+    inputId: 'vendor_master',
+    sources: [{ name: 'Invoice Archive 2026', type: 'datasource', rows: 4521 }],
+    status: 'mapped',
+  },
+  {
+    inputId: 'gl_trial_balance',
+    sources: [{ name: 'Vendor Master Data', type: 'datasource', rows: 2340, schemaOk: false }],
+    status: 'mismatch',
+  },
+];
+
+// Build the file→source mappings shown in the confirm step. Prefer the files
+// the user actually attached to each input (so the union reflects reality);
+// fall back to the static auto-detect seed for inputs with no attachments.
+function buildFileMappings(workflow: WorkflowDraft, files: JourneyFiles): FileMapping[] {
+  return workflow.inputs
+    .filter(i => i.type !== 'pdf')
+    .map(input => {
+      const attached = (files[input.id] ?? []).filter(f => !isPdfName(f.name));
+      if (attached.length > 0) {
+        const sources: MappedSource[] = attached.map(f => ({
+          name: f.name,
+          type: f.linkedSource ? 'datasource' : 'uploaded',
+          rows: f.size ? Math.max(1, Math.round(f.size / 2400)) : seededRows(f.name),
+        }));
+        return { inputId: input.id, sources, status: mappingStatus(sources) };
+      }
+      const seed = AUTO_FILE_MAPPINGS.find(m => m.inputId === input.id);
+      if (seed) return { inputId: input.id, sources: seed.sources.map(s => ({ ...s })), status: seed.status };
+      return { inputId: input.id, sources: [], status: 'unmapped' as const };
+    });
+}
+
+// Catalog of additional sources the "Add file or source" picker can union in
+// (workspace files + connected data sources), surfaced in the file-mapping and
+// column-mapping steps. Defined near the data layer so both surfaces share it.
+const ADDABLE_FILES: { name: string; size: number }[] = [
+  { name: 'ap_invoice_register_jul2026.csv', size: 9_400_000 },
+  { name: 'ap_invoice_register_aug2026.csv', size: 8_700_000 },
+  { name: 'vendor_master_delta.csv', size: 1_200_000 },
+  { name: 'gl_trial_balance_q4_2026.csv', size: 7_900_000 },
 ];
 
 type ExtractedField = {
@@ -376,10 +539,18 @@ function ConfidenceChip({ value }: { value: number }) {
 
 export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp }: WorkflowExecutorProps) {
   const { can } = useCan();
+  const { addToast } = useToast();
   // Most workflow IDs resolve to the AP duplicate-detection mock. The PDF
   // tester is a dedicated sandbox whose inputs are all PDFs so the manual
-  // mapping journey fires on every Execute.
-  const workflow = workflowId === 'lw-pdf-tester' ? PDF_TESTER_WORKFLOW : EXECUTOR_WORKFLOW;
+  // mapping journey fires on every Execute. The consolidated-file tester is a
+  // dedicated single-run journey driven by one bundled workbook — its own flow
+  // is built out separately from the multi-input default executor.
+  const workflow =
+    workflowId === 'lw-pdf-tester'
+      ? PDF_TESTER_WORKFLOW
+      : workflowId === 'lw-consolidated-file'
+        ? CONSOLIDATED_FILE_WORKFLOW
+        : EXECUTOR_WORKFLOW;
 
   // When the executor is opened from the Audit Logs new-tab flow, the URL
   // carries ?state=completed — boot directly into the "complete" output view
@@ -436,6 +607,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   // Chat-modal-style picker: 3 tabs share one search + one persistent Attached tray.
   const [pickerTab, setPickerTab] = useState<'upload' | 'files' | 'sources'>('upload');
+
+  // "Add Files" opens the same data picker used in chat — one shared surface for
+  // uploads, workspace files, and data sources — instead of an inline tab strip.
+  const [dataPickerOpen, setDataPickerOpen] = useState(false);
 
   // Upload-section collapse: user-controlled only
   const [uploadOpen, setUploadOpen] = useState(true);
@@ -647,6 +822,34 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     [files, linkedSourceNames, pickTargetInputId, can],
   );
 
+  // Map the chat data-picker's selections onto the executor's input slots. Each
+  // selection (an uploaded file or a linked data source) becomes an attachment,
+  // auto-routed to the first unsatisfied required input (then piling into the
+  // first input — which is how a single-input workflow accumulates its union).
+  // Deduped by name against whatever is already attached.
+  const handleAddFilesConfirm = useCallback((selections: AttachmentSelection[]) => {
+    setDataPickerOpen(false);
+    if (selections.length === 0) return;
+    let added = 0;
+    setFiles((prev) => {
+      const next = { ...prev };
+      const seen = new Set(Object.values(next).flat().map((f) => f.name));
+      for (const sel of selections) {
+        let file: UploadedFile | null = null;
+        if (sel.kind === 'source') file = { name: sel.name, size: 0, linkedSource: true };
+        else if (sel.kind === 'upload') file = { name: sel.name, size: sel.sizeBytes };
+        // 'connect-db' isn't reachable in chat mode — the Connect tab is kh-add only.
+        if (!file || seen.has(file.name)) continue;
+        seen.add(file.name);
+        const target = pickTargetInputId(next);
+        next[target] = [...(next[target] ?? []), file];
+        added++;
+      }
+      return next;
+    });
+    if (added > 0) addToast({ type: 'success', message: `Added ${added} ${added === 1 ? 'item' : 'items'} to this workflow.` });
+  }, [pickTargetInputId, addToast]);
+
   const advance = useCallback(() => {
     const totalDuration = EXECUTION_STEPS.reduce((a, s) => a + s.duration, 0);
     const stepIdx = stepRef.current;
@@ -707,7 +910,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     // Workflows whose inputs are all PDFs have no structured auto-mappings
     // to apply — everything routes through the manual journey instead.
     const isAllUnstructured = workflow.inputs.every(i => i.type === 'pdf');
-    setFileMappings(isAllUnstructured ? [] : AUTO_FILE_MAPPINGS.map(m => ({ ...m })));
+    setFileMappings(isAllUnstructured ? [] : buildFileMappings(workflow, files));
     // Sweep attached files for PDFs. Status depends on the executor:
     //   - PDF executor: each PDF was already placed in a specific slot via
     //     the per-required-file upload card, so we treat the mapping as
@@ -737,7 +940,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     } else {
       setFileMapPending(true);
     }
-  }, [files, workflow.inputs, advance]);
+  }, [files, workflow, advance]);
 
   const resolveFileMap = useCallback(() => {
     setFileMapPending(false);
@@ -748,6 +951,40 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setColumnMapPending(false);
     advance();
   }, [advance]);
+
+  // Step back from column mapping to file mapping. The file mappings are kept,
+  // so the user lands on the previous step with their sources intact and can
+  // add/remove there before returning.
+  const backToFileMap = useCallback(() => {
+    setColumnMapPending(false);
+    setFileMapPending(true);
+  }, []);
+
+  // Append a source to an input's union (or no-op if already present), then
+  // recompute the mapping's status. Creates the mapping row if it didn't exist.
+  const addSource = useCallback((inputId: string, src: MappedSource) => {
+    setFileMappings(prev => {
+      const existing = prev.find(m => m.inputId === inputId);
+      if (existing) {
+        if (existing.sources.some(s => s.name === src.name)) return prev;
+        const sources = [...existing.sources, src];
+        return prev.map(m => (m.inputId === inputId ? { ...m, sources, status: mappingStatus(sources) } : m));
+      }
+      return [...prev, { inputId, sources: [src], status: mappingStatus([src]) }];
+    });
+  }, []);
+
+  // Remove a single source from an input's union and recompute status. Used by
+  // both the file-mapping chips and the column-mapping "Mapped sources" chips.
+  const removeSource = useCallback((inputId: string, name: string) => {
+    setFileMappings(prev =>
+      prev.map(m => {
+        if (m.inputId !== inputId) return m;
+        const sources = m.sources.filter(s => s.name !== name);
+        return { ...m, sources, status: mappingStatus(sources) };
+      }),
+    );
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -992,210 +1229,35 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
                     />
 
-                    {/* Shared search bar — doubles as drop target visual */}
-                    <div className="px-5 pt-4 pb-2">
-                      <div
-                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                        onDragLeave={() => setIsDragging(false)}
-                        onDrop={handleFileDrop}
-                        className={`relative rounded-lg border transition-colors ${
-                          isDragging ? 'border-brand-500 bg-brand-50/60' : 'border-canvas-border bg-canvas-elevated'
-                        }`}
-                      >
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-                        <input
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                          placeholder={
-                            pickerTab === 'upload'
-                              ? 'Drop files below to upload…'
-                              : pickerTab === 'files'
-                                ? 'Search your workspace files…'
-                                : 'Search data sources…'
-                          }
-                          className="w-full pl-9 pr-3 h-9 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="px-5 flex items-center gap-1 border-b border-canvas-border">
-                      {(
-                        [
-                          { key: 'upload', label: 'Upload', icon: Upload, count: null as number | null },
-                          { key: 'files', label: 'Files', icon: FileIcon, count: FILES_LIBRARY.length },
-                          { key: 'sources', label: 'Data Sources', icon: Database, count: DATA_SOURCES.length },
-                        ] as const
-                      ).map((t) => {
-                        const active = pickerTab === t.key;
-                        const Icon = t.icon;
-                        return (
-                          <button
-                            key={t.key}
-                            type="button"
-                            onClick={() => { setPickerTab(t.key); setSearch(''); }}
-                            className={`inline-flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${
-                              active
-                                ? 'border-brand-600 text-brand-700'
-                                : 'border-transparent text-ink-500 hover:text-ink-800'
-                            }`}
-                          >
-                            <Icon size={13} />
-                            {t.label}
-                            {t.count !== null && (
-                              <span className={`text-[11px] ${active ? 'text-brand-700/70' : 'text-ink-400'}`}>
-                                {t.count}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Tab content */}
-                    <div className="px-5 pt-4 pb-4 min-h-[240px]">
-                      {pickerTab === 'upload' && (
-                        <div
-                          onClick={() => fileInputRef.current?.click()}
-                          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                          onDragLeave={() => setIsDragging(false)}
-                          onDrop={handleFileDrop}
-                          className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors min-h-[220px] px-4 py-6 ${
-                            isDragging
-                              ? 'border-brand-500 bg-brand-50/60'
-                              : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30'
-                          }`}
-                        >
-                          <div className="w-12 h-12 rounded-full bg-canvas-elevated border border-canvas-border flex items-center justify-center">
-                            <UploadCloud size={22} className="text-ink-500" />
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[14px] font-semibold text-ink-800">Drop files or a folder here</div>
-                            <div className="text-[12px] text-ink-500 mt-0.5">or pick from your computer</div>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
-                            >
-                              <Upload size={13} />
-                              Choose files
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
-                              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-canvas-elevated text-ink-800 border border-canvas-border text-[13px] font-semibold hover:bg-canvas transition-colors cursor-pointer"
-                            >
-                              <Folder size={13} />
-                              Choose folder
-                            </button>
+                    {/* Add Files CTA — opens the shared chat data picker
+                        (uploads · workspace files · data sources) in a modal,
+                        instead of an inline tab strip. */}
+                    <div className="px-5 pt-4 pb-4">
+                      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-canvas-border bg-canvas px-4 py-8 text-center">
+                        <div className="w-12 h-12 rounded-full bg-canvas-elevated border border-canvas-border flex items-center justify-center">
+                          <UploadCloud size={22} className="text-ink-500" />
+                        </div>
+                        <div>
+                          <div className="text-[14px] font-semibold text-ink-800">Add data to this workflow</div>
+                          <div className="text-[12px] text-ink-500 mt-0.5">
+                            Upload files, pick from your workspace, or link a data source.
                           </div>
                         </div>
-                      )}
-
-                      {pickerTab === 'files' && (() => {
-                        const q = search.trim().toLowerCase();
-                        const matches = FILES_LIBRARY.filter((f) => f.name.toLowerCase().includes(q));
-                        if (matches.length === 0) {
-                          return <div className="text-[12px] text-ink-400 text-center py-10">No files match this search.</div>;
-                        }
-                        return (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {matches.map((f) => {
-                              const attached = isLibraryAttached(f.name);
-                              return (
-                                <button
-                                  key={f.name}
-                                  type="button"
-                                  role="checkbox"
-                                  aria-checked={attached}
-                                  onClick={() => toggleLibraryFile(f)}
-                                  className={`w-full text-left relative rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
-                                    attached
-                                      ? 'border-brand-400 bg-brand-50/50 ring-1 ring-brand-200/60'
-                                      : 'border-canvas-border bg-canvas-elevated hover:bg-brand-50/40 hover:border-brand-300'
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-2 pr-6">
-                                    <div className="w-6 h-6 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
-                                      <FileIcon size={12} className="text-brand-600" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-[12.5px] font-semibold text-ink-800 truncate">{f.name}</div>
-                                      <div className="text-[11px] text-ink-400 truncate">{humanSize(f.size)}</div>
-                                    </div>
-                                  </div>
-                                  <span
-                                    className={`absolute top-2 right-2 w-4 h-4 rounded-md flex items-center justify-center transition-all ${
-                                      attached
-                                        ? 'bg-brand-600 text-white'
-                                        : 'bg-canvas border border-canvas-border text-transparent'
-                                    }`}
-                                    aria-hidden="true"
-                                  >
-                                    <Check size={10} strokeWidth={3} />
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-
-                      {pickerTab === 'sources' && (
-                        filteredSources.length === 0 ? (
-                          <div className="text-[12px] text-ink-400 text-center py-10">No data sources match this search.</div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {filteredSources.map((s) => {
-                              const selected = linkedSourceNames.has(s.name);
-                              return (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  onClick={() => toggleSource(s.name)}
-                                  className={`w-full text-left relative rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
-                                    selected
-                                      ? 'border-brand-400 bg-brand-50/50 ring-1 ring-brand-200/60'
-                                      : 'border-canvas-border bg-canvas-elevated hover:bg-brand-50/40 hover:border-brand-300'
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-2 pr-6">
-                                    <div className="w-6 h-6 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
-                                      <Database size={12} className="text-brand-600" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-[12.5px] font-semibold text-ink-800 truncate">{s.name}</div>
-                                      <div className="text-[11px] text-ink-400 truncate">
-                                        {s.records} records · last sync {s.lastSync}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <span
-                                    className={`absolute top-2 right-2 w-4 h-4 rounded-md flex items-center justify-center transition-all ${
-                                      selected
-                                        ? 'bg-brand-600 text-white'
-                                        : 'bg-canvas border border-canvas-border text-transparent'
-                                    }`}
-                                    aria-hidden="true"
-                                  >
-                                    <Check size={10} strokeWidth={3} />
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => setDataPickerOpen(true)}
+                          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                        >
+                          <Plus size={14} />
+                          Add Files
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Persistent Attached tray — one surface for everything picked across tabs */}
-                    {allAdded.length === 0 ? (
-                      <div className="px-5 py-3 border-t border-canvas-border bg-canvas/60 text-[11.5px] text-ink-400">
-                        Pick files or link a data source to attach to this run.
-                      </div>
-                    ) : (
+                    {/* Persistent Attached tray — shows everything picked via the
+                        Add Files modal. Hidden until something is attached (the
+                        CTA above already explains the empty state). */}
+                    {allAdded.length > 0 && (
                       <div className="border-t border-canvas-border bg-canvas/60">
                         <div className="px-5 py-2.5 flex items-center gap-2">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">
@@ -1691,6 +1753,9 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       const isMapped = mapping?.status === 'mapped';
                       const isMismatch = mapping?.status === 'mismatch';
                       const isUnmapped = !mapping || mapping.status === 'unmapped';
+                      const sources = mapping?.sources ?? [];
+                      const unionRows = sources.reduce((n, s) => n + s.rows, 0);
+                      const selectedNames = new Set(sources.map(s => s.name));
                       return (
                         <div
                           key={input.id}
@@ -1737,62 +1802,72 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2.5 mt-2.5">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2">
-                                <Link2 size={12} className="text-ink-400 shrink-0" />
-                                <ArrowLeft size={11} className="text-ink-300 shrink-0" />
-                                {mapping?.sourceName ? (
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <Database size={12} className="text-brand-600 shrink-0" />
-                                    <span className="text-[12.5px] font-medium text-ink-700 truncate">{mapping.sourceName}</span>
-                                    {mapping.sourceType === 'datasource' && (
-                                      <span className="text-[10px] font-semibold uppercase rounded bg-brand-50 text-brand-600 px-1.5 py-0.5 shrink-0">Source</span>
-                                    )}
-                                    {mapping.sourceType === 'uploaded' && (
-                                      <span className="text-[10px] font-semibold uppercase rounded bg-canvas text-ink-500 px-1.5 py-0.5 shrink-0 border border-canvas-border">File</span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-[12px] text-ink-400 italic">No source mapped</span>
-                                )}
-                              </div>
+                          {/* Union summary — only meaningful once >1 source is
+                              attached. Reassures the user that multiple files
+                              are concatenated, not replacing one another. */}
+                          {sources.length > 1 && (
+                            <div className="flex items-center gap-1.5 mt-1.5 mb-2 text-[11px] text-ink-500">
+                              <Layers size={11} className="text-brand-600 shrink-0" />
+                              <span>
+                                <span className="font-semibold text-ink-700">Unioned</span> · {sources.length} sources · ~{fmtRows(unionRows)} combined rows
+                              </span>
                             </div>
+                          )}
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {isMismatch && (
-                                <FileMapDropdown
-                                  inputId={input.id}
-                                  onSelect={(sourceName, sourceType) => {
-                                    setFileMappings(prev =>
-                                      prev.map(m =>
-                                        m.inputId === input.id
-                                          ? { ...m, sourceName, sourceType, status: 'mapped' }
-                                          : m
-                                      )
-                                    );
-                                  }}
-                                />
-                              )}
-                              {isUnmapped && (
-                                <FileMapDropdown
-                                  inputId={input.id}
-                                  onSelect={(sourceName, sourceType) => {
-                                    setFileMappings(prev => [
-                                      ...prev.filter(m => m.inputId !== input.id),
-                                      { inputId: input.id, sourceName, sourceType, status: 'mapped' },
-                                    ]);
-                                  }}
-                                />
-                              )}
-                            </div>
+                          {/* Mapped sources — each unioned source as a removable
+                              chip. Same-schema sources stack; a divergent one is
+                              flagged so the user can drop or re-map it. */}
+                          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                            {sources.length === 0 ? (
+                              <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-2 text-[12px] text-ink-400 italic">
+                                <Link2 size={12} className="text-ink-300" />
+                                No source mapped
+                              </span>
+                            ) : (
+                              sources.map((s) => (
+                                <span
+                                  key={s.name}
+                                  className={[
+                                    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px]',
+                                    s.schemaOk === false
+                                      ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
+                                      : 'border-canvas-border bg-canvas text-ink-700',
+                                  ].join(' ')}
+                                  title={s.schemaOk === false ? 'Schema diverges from the other sources' : undefined}
+                                >
+                                  {s.type === 'datasource' ? (
+                                    <Database size={12} className="text-brand-600 shrink-0" />
+                                  ) : (
+                                    <FileIcon size={12} className="text-ink-400 shrink-0" />
+                                  )}
+                                  <span className="font-medium truncate max-w-[200px]">{s.name}</span>
+                                  <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+                                  {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSource(input.id, s.name)}
+                                    className="text-ink-400 hover:text-risk transition-colors cursor-pointer shrink-0"
+                                    aria-label={`Remove ${s.name}`}
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              ))
+                            )}
+
+                            <AddSourceDropdown
+                              uploadedFiles={files[input.id] ?? []}
+                              selectedNames={selectedNames}
+                              onAdd={(name, type, rows) => addSource(input.id, { name, type, rows })}
+                              onRemove={(name) => removeSource(input.id, name)}
+                            />
                           </div>
 
                           {isMismatch && (
                             <div className="flex items-start gap-2 mt-2.5 px-1">
                               <AlertTriangle size={11} className="text-mitigated-700 shrink-0 mt-0.5" />
                               <span className="text-[11px] text-mitigated-700 leading-relaxed">
-                                Schema mismatch — the mapped source may not contain the expected columns. Choose a different file or data source.
+                                One source&apos;s schema diverges from the others — its columns won&apos;t line up in the union. Remove it or re-map it before continuing.
                               </span>
                             </div>
                           )}
@@ -2057,14 +2132,24 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                   />
 
                   <div className="flex items-center justify-between mt-5">
-                    <button
-                      type="button"
-                      onClick={resolveColumnMap}
-                      className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
-                    >
-                      Confirm mapping & continue
-                      <ArrowRight size={14} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={backToFileMap}
+                        className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 border border-canvas-border bg-canvas-elevated hover:bg-canvas transition-colors cursor-pointer"
+                      >
+                        <ArrowLeft size={14} />
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resolveColumnMap}
+                        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
+                      >
+                        Confirm mapping & continue
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={resolveColumnMap}
@@ -2238,6 +2323,16 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           visibleTabs={['plan']}
         />
       </div>
+
+      {/* Shared chat data picker — opened by the "Add Files" CTA. */}
+      <DataPickerModal
+        open={dataPickerOpen}
+        onClose={() => setDataPickerOpen(false)}
+        onConfirm={handleAddFilesConfirm}
+        title="Add data to this workflow"
+        confirmLabel="Add"
+        attachHint={<>Pick files or link a data source to add to this workflow.</>}
+      />
     </div>
   );
 }
@@ -2314,7 +2409,11 @@ function ColumnAlignmentView({
         const totalCount = cols.length;
         const isOpen = expanded === input.id;
         const mapping = fileMappings.find(m => m.inputId === input.id);
-        const sourceName = mapping?.sourceName ?? 'No source';
+        // Read-only here: the column step just shows the union confirmed in the
+        // file-mapping step. Changing which sources are included happens there
+        // (use the Back button), not on this screen.
+        const sources = mapping?.sources ?? [];
+        const unionRows = sources.reduce((n, s) => n + s.rows, 0);
         const isAutoExpanded = autoExpanded[input.id] ?? false;
 
         return (
@@ -2337,24 +2436,63 @@ function ColumnAlignmentView({
 
             {isOpen && (
               <div className="border-t border-canvas-border">
-                {/* Mapped sources */}
+                {/* Mapped sources — the union feeding this input. When >1
+                    source is attached we label it explicitly as a union and
+                    explain that the columns below are the shared schema while
+                    rows are concatenated across every source. */}
                 <div className="px-5 py-4 border-b border-canvas-border/60">
                   <div className="flex items-center justify-between mb-2.5">
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
-                      Mapped Sources
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-400">
+                        Mapped Sources
+                      </span>
+                      {sources.length > 1 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200">
+                          <Layers size={10} />
+                          Union of {sources.length}
+                        </span>
+                      )}
+                    </div>
                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[11px] font-bold border border-compliant/20">
                       Linked
                       <CheckCircle2 size={11} />
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas px-3 py-1.5">
-                    <FileIcon size={12} className="text-ink-400" />
-                    <span className="text-[12.5px] text-ink-700 font-medium">{sourceName}</span>
-                    <button type="button" className="text-ink-400 hover:text-ink-600 transition-colors cursor-pointer">
-                      <X size={12} />
-                    </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {sources.length === 0 ? (
+                      <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-1.5 text-[12px] text-ink-400 italic">
+                        No source mapped
+                      </span>
+                    ) : (
+                      sources.map((s) => (
+                        // Read-only chip — no toggle, add, or remove on this step.
+                        <span
+                          key={s.name}
+                          className={[
+                            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px]',
+                            s.schemaOk === false
+                              ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
+                              : 'border-canvas-border bg-canvas text-ink-700',
+                          ].join(' ')}
+                          title={s.schemaOk === false ? 'Schema diverges from the other sources' : undefined}
+                        >
+                          {s.type === 'datasource' ? (
+                            <Database size={12} className="text-brand-600 shrink-0" />
+                          ) : (
+                            <FileIcon size={12} className="text-ink-400 shrink-0" />
+                          )}
+                          <span className="font-medium truncate max-w-[220px]">{s.name}</span>
+                          <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+                          {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
+                        </span>
+                      ))
+                    )}
                   </div>
+                  {sources.length > 1 && (
+                    <p className="text-[11px] text-ink-500 leading-relaxed mt-2.5">
+                      Columns below are the shared schema across all {sources.length} sources · ~{fmtRows(unionRows)} combined rows. Rows are concatenated; the mapping is applied once to every source.
+                    </p>
+                  )}
                 </div>
 
                 {/* Column Alignment */}
@@ -2435,12 +2573,20 @@ function ColumnAlignmentView({
   );
 }
 
-function FileMapDropdown({
-  inputId,
-  onSelect,
+// Multi-select picker for unioning additional sources into one input. Unlike a
+// plain re-map, this APPENDS — the user can toggle several files/data sources on
+// and the dropdown stays open so building a union is one continuous gesture.
+// Already-selected sources show a check and toggle off (unselect).
+function AddSourceDropdown({
+  uploadedFiles,
+  selectedNames,
+  onAdd,
+  onRemove,
 }: {
-  inputId: string;
-  onSelect: (sourceName: string, sourceType: 'uploaded' | 'datasource') => void;
+  uploadedFiles: UploadedFile[];
+  selectedNames: Set<string>;
+  onAdd: (name: string, type: 'uploaded' | 'datasource', rows: number) => void;
+  onRemove: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -2455,8 +2601,58 @@ function FileMapDropdown({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const filtered = DATA_SOURCES.filter(
-    s => s.status === 'connected' && s.name.toLowerCase().includes(search.toLowerCase()),
+  const q = search.toLowerCase();
+
+  // Workspace files = the files attached to this input + the shared catalog,
+  // deduped by name. These union row-wise so they're the primary group.
+  const fileItems = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { name: string; rows: number }[] = [];
+    for (const f of uploadedFiles) {
+      if (seen.has(f.name)) continue;
+      seen.add(f.name);
+      out.push({ name: f.name, rows: f.size ? Math.max(1, Math.round(f.size / 2400)) : seededRows(f.name) });
+    }
+    for (const f of ADDABLE_FILES) {
+      if (seen.has(f.name)) continue;
+      seen.add(f.name);
+      out.push({ name: f.name, rows: Math.max(1, Math.round(f.size / 2400)) });
+    }
+    return out.filter(f => f.name.toLowerCase().includes(q));
+  }, [uploadedFiles, q]);
+
+  const sourceItems = useMemo(
+    () => DATA_SOURCES.filter(s => s.status === 'connected' && s.name.toLowerCase().includes(q)),
+    [q],
+  );
+
+  const toggle = (name: string, type: 'uploaded' | 'datasource', rows: number) => {
+    if (selectedNames.has(name)) onRemove(name);
+    else onAdd(name, type, rows);
+  };
+
+  const Row = ({
+    name, sub, icon, selected, onClick,
+  }: { name: string; sub: string; icon: React.ReactNode; selected: boolean; onClick: () => void }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-brand-50 transition-colors cursor-pointer"
+    >
+      {icon}
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] font-semibold text-ink-800 truncate">{name}</div>
+        <div className="text-[10.5px] text-ink-400">{sub}</div>
+      </div>
+      <span
+        className={[
+          'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+          selected ? 'bg-brand-600 border-brand-600' : 'bg-canvas-elevated border-canvas-border',
+        ].join(' ')}
+      >
+        {selected && <Check size={11} strokeWidth={3} className="text-white" />}
+      </span>
+    </button>
   );
 
   return (
@@ -2464,10 +2660,10 @@ function FileMapDropdown({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-100 text-brand-700 text-[11.5px] font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
       >
-        <RefreshCw size={11} />
-        Re-map
+        <Plus size={12} />
+        Add file or source
       </button>
 
       <AnimatePresence>
@@ -2477,7 +2673,7 @@ function FileMapDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-1.5 w-[280px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl z-50 overflow-hidden"
+            className="absolute left-0 top-full mt-1.5 w-[300px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl z-50 overflow-hidden"
           >
             <div className="px-3 pt-3 pb-2">
               <div className="relative">
@@ -2486,48 +2682,58 @@ function FileMapDropdown({
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search data sources…"
+                  placeholder="Search files & data sources…"
                   autoFocus
                   className="w-full rounded-lg border border-canvas-border bg-canvas pl-7 pr-3 py-1.5 text-[12px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600/30 transition-all"
                 />
               </div>
+              <p className="text-[10.5px] text-ink-400 mt-2 px-0.5 leading-snug">
+                Pick one or more — same-schema sources are unioned into this input.
+              </p>
             </div>
 
-            <div className="max-h-[180px] overflow-y-auto px-1.5 pb-1.5">
-              {filtered.length === 0 ? (
-                <div className="text-[11.5px] text-ink-400 text-center py-4">No matching sources</div>
+            <div className="max-h-[240px] overflow-y-auto px-1.5 pb-1.5">
+              {fileItems.length === 0 && sourceItems.length === 0 ? (
+                <div className="text-[11.5px] text-ink-400 text-center py-4">No matches</div>
               ) : (
-                filtered.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      onSelect(s.name, 'datasource');
-                      setOpen(false);
-                    }}
-                    className="w-full text-left flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-brand-50 transition-colors cursor-pointer"
-                  >
-                    <Database size={12} className="text-brand-600 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-semibold text-ink-800 truncate">{s.name}</div>
-                      <div className="text-[10.5px] text-ink-400">{s.records} records · {s.type.toUpperCase()}</div>
-                    </div>
-                  </button>
-                ))
+                <>
+                  {fileItems.length > 0 && (
+                    <div className="px-2 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Files</div>
+                  )}
+                  {fileItems.map(f => (
+                    <Row
+                      key={f.name}
+                      name={f.name}
+                      sub={`~${fmtRows(f.rows)} rows · FILE`}
+                      icon={<FileIcon size={12} className="text-ink-400 shrink-0" />}
+                      selected={selectedNames.has(f.name)}
+                      onClick={() => toggle(f.name, 'uploaded', f.rows)}
+                    />
+                  ))}
+                  {sourceItems.length > 0 && (
+                    <div className="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-400">Data sources</div>
+                  )}
+                  {sourceItems.map(s => (
+                    <Row
+                      key={s.id}
+                      name={s.name}
+                      sub={`${s.records} records · ${s.type.toUpperCase()}`}
+                      icon={<Database size={12} className="text-brand-600 shrink-0" />}
+                      selected={selectedNames.has(s.name)}
+                      onClick={() => toggle(s.name, 'datasource', seededRows(s.name))}
+                    />
+                  ))}
+                </>
               )}
             </div>
 
-            <div className="border-t border-canvas-border px-3 py-2">
+            <div className="border-t border-canvas-border px-3 py-2 flex justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  onSelect(`${inputId}_upload.csv`, 'uploaded');
-                  setOpen(false);
-                }}
-                className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-semibold text-ink-600 hover:bg-canvas hover:text-brand-700 transition-colors cursor-pointer"
+                onClick={() => setOpen(false)}
+                className="text-[12px] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"
               >
-                <UploadCloud size={12} />
-                Upload a new file
+                Done
               </button>
             </div>
           </motion.div>
