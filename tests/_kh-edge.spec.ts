@@ -1,12 +1,12 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 
 // ─── Deep edge-case sweep for the Knowledge Hub ──────────────────────────────
 // Drives every interactive surface against the REAL built-in catalog
-// (kh:sources:v3 — 24 seeded sources covering files, folder, db, api, cloud,
+// (kh:sources:v5 — 24 seeded sources covering files, folder, db, api, cloud,
 // plus edge rows: 0 B, 1.5 GB, very-long name, degraded integration).
 // Screenshots land in __screenshots__/_edge-*.png.
 
-const KEY = 'kh:sources:v3';
+const KEY = 'kh:sources:v5';
 
 // Use the app's own catalog: clearing storage makes the hook re-seed its 24
 // curated sources (anchored to "today"), which is deterministic.
@@ -60,7 +60,7 @@ test('E2 — empty opens picker (kh-add: Upload + Connect)', async ({ page }) =>
   await gotoKH(page);
   await page.getByRole('button', { name: 'Add your first source' }).click();
   await page.waitForTimeout(500);
-  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Connect database/ })).toBeVisible();
   await shot(page, 'picker-upload');
   await page.getByRole('button', { name: /Connect database/ }).click();
@@ -72,8 +72,8 @@ test('E3 — populated grid + load-more visible', async ({ page }) => {
   await seedDefault(page);
   await gotoKH(page);
   await expect(page.getByRole('heading', { name: 'Knowledge Hub' })).toBeVisible();
-  await expect(page.getByText('Showing 6 of 24 sources')).toBeVisible();
-  await expect(page.getByText('Load more data')).toBeVisible();
+  await expect(page.getByText('Showing 12 of 20 sources')).toBeVisible();
+  await expect(page.getByText(/Load \d+ more/)).toBeVisible();
   await shot(page, 'populated-grid');
 });
 
@@ -95,8 +95,8 @@ test('E5 — type tabs filter + footer count matches active tab', async ({ page 
   await page.waitForTimeout(450);
   await shot(page, 'tab-files');
   await expect(page.getByText(/Showing \d+ of 16 sources/)).toBeVisible();
-  await expect(page.getByText(/Showing \d+ of 24 sources/)).toHaveCount(0);
-  for (const t of ['Folders', 'Integrated DBs', 'All']) {
+  await expect(page.getByText(/Showing \d+ of 20 sources/)).toHaveCount(0);
+  for (const t of ['Folders', 'Databases', 'All']) {
     await page.getByRole('button', { name: new RegExp(`^${t}`) }).first().click();
     await page.waitForTimeout(400);
     await shot(page, `tab-${t.replace(/\s+/g, '-').toLowerCase()}`);
@@ -109,7 +109,7 @@ test('E6 — search match, zero-result empty state, clear', async ({ page }) => 
   const box = page.getByPlaceholder(/Search/);
   await box.fill('Audit');
   await page.waitForTimeout(500);
-  await expect(page.getByText(/of 24 sources/).first()).toBeVisible();
+  await expect(page.getByText(/of 20 sources/).first()).toBeVisible();
   await shot(page, 'search-match');
   await box.fill('zzzzzdoesnotexist');
   await page.waitForTimeout(500);
@@ -122,7 +122,7 @@ test('E6 — search match, zero-result empty state, clear', async ({ page }) => 
 test('E7 — selection: single checkbox, bulk bar, Esc clears', async ({ page }) => {
   await seedDefault(page);
   await gotoKH(page);
-  await page.getByRole('checkbox', { name: /^Select / }).first().click();
+  await page.getByRole('checkbox', { name: /^Select / }).first().dispatchEvent('click');
   await page.waitForTimeout(400);
   await expect(page.getByText(/1 selected/)).toBeVisible();
   await shot(page, 'selection-1');
@@ -135,8 +135,8 @@ test('E8 — bulk select two files: confirm modal copy', async ({ page }) => {
   await seedDefault(page);
   await gotoKH(page);
   const checks = page.getByRole('checkbox', { name: /^Select / });
-  await checks.nth(0).click();
-  await checks.nth(1).click();
+  await checks.nth(0).dispatchEvent('click');
+  await checks.nth(1).dispatchEvent('click');
   await page.waitForTimeout(300);
   await expect(page.getByText(/2 selected/)).toBeVisible();
   await shot(page, 'bulk-bar-2');
@@ -184,13 +184,13 @@ test('E12 — Load more pagination to exhaustion', async ({ page }) => {
   await gotoKH(page);
   // 24 sources, PAGE_SIZE 6 → 3 clicks (6→12→18→24)
   for (let i = 0; i < 4; i++) {
-    const btn = page.getByText('Load more data');
+    const btn = page.getByText(/Load \d+ more/);
     if (await btn.count() === 0) break;
     await btn.click();
     await page.waitForTimeout(300);
   }
-  await expect(page.getByText('Load more data')).toHaveCount(0);
-  await expect(page.getByText('Showing 24 of 24 sources')).toBeVisible();
+  await expect(page.getByText(/Load \d+ more/)).toHaveCount(0);
+  await expect(page.getByText('Showing 20 of 20 sources')).toBeVisible();
   await shot(page, 'load-more-expanded');
 });
 
@@ -209,7 +209,7 @@ test('E14 — keyboard "n" opens picker on data tab', async ({ page }) => {
   await gotoKH(page);
   await page.keyboard.press('n');
   await page.waitForTimeout(500);
-  await expect(page.getByText('Add data source')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Add source' })).toBeVisible();
   await shot(page, 'shortcut-n');
 });
 
@@ -218,7 +218,7 @@ test('E15 — edge rows (0 B / 1.5 GB / long name) render', async ({ page }) => 
   await gotoKH(page);
   // exhaust pagination so the Earlier edge rows are on screen
   for (let i = 0; i < 4; i++) {
-    const btn = page.getByText('Load more data');
+    const btn = page.getByText(/Load \d+ more/);
     if (await btn.count() === 0) break;
     await btn.click();
     await page.waitForTimeout(250);
@@ -246,7 +246,7 @@ test('E17 — Smart Learn tab disables "n" shortcut', async ({ page }) => {
   await page.keyboard.press('n');
   await page.waitForTimeout(400);
   // picker must NOT open on the Smart Learn tab
-  await expect(page.getByText('Add data source')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('E18: storage-failure banner appears when the localStorage write is rejected', async ({ page }) => {

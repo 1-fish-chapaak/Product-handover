@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterWorkspace } from './_helpers';
 
 // Process Hub BP detail now opens on an "Overview" tab — an engagement-style
 // dashboard (risk-severity donut, control-status bar, coverage funnel, workflows,
@@ -9,6 +10,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function gotoP2P(page: Page) {
   await page.addInitScript(() => { try { localStorage.clear(); sessionStorage.clear(); } catch { /* noop */ } });
   await page.goto('/');
+  await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
   await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
   await page.getByText('Procure to Pay').first().click();

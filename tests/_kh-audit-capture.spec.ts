@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { test, type Page } from './_helpers';
 
 // One-off capture for a Norman (Design of Everyday Things) audit of the
 // Knowledge Hub. Not part of the suite. Outputs to __screenshots__/audit-kh/.

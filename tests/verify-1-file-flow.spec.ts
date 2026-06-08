@@ -2,7 +2,7 @@
  * Verifies the workflow runs end-to-end with only 1 file attached
  * (not all required inputs filled).
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 

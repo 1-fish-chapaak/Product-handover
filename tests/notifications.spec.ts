@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 
 /**
  * End-to-end test spec for the Platform Notification Center.
@@ -43,9 +43,19 @@ async function openCategoryDropdown(page: Page) {
 }
 
 async function clearStorage(page: Page) {
+  // Clear ONCE per test, on the first document load only. On a soft reload
+  // within a test (P3) we must NOT wipe storage again, or the persisted session
+  // (auth — now gated behind the workspace chooser) and the sessionStorage filter
+  // P3 verifies would both be lost. A sessionStorage sentinel scopes the clear to
+  // the first load; each test gets a fresh context so it never leaks across tests.
   await page.addInitScript(() => {
-    try { window.localStorage.clear(); } catch {}
-    try { window.sessionStorage.clear(); } catch {}
+    try {
+      if (!window.sessionStorage.getItem('__test_cleared__')) {
+        window.localStorage.clear();
+        window.sessionStorage.clear();
+        window.sessionStorage.setItem('__test_cleared__', '1');
+      }
+    } catch { /* ignore */ }
   });
 }
 

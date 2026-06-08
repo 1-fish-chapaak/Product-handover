@@ -48,7 +48,7 @@ test('admin roles', async ({ page }) => {
 test('admin logs', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoAdmin(page);
-  await page.getByRole('button', { name: /Audit Logs/ }).first().click();
+  await page.getByRole('button', { name: /Audit Log/ }).first().click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'tests/__screenshots__/_admin-logs.png', fullPage: false });
 });
@@ -74,18 +74,10 @@ test('admin create-role drawer', async ({ page }) => {
 test('admin user detail drawer', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoAdmin(page);
-  await page.getByRole('button', { name: 'View' }).first().click();
+  await page.getByRole('button', { name: 'Manage' }).first().click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'tests/__screenshots__/_admin-user-drawer.png', fullPage: false });
 });
 
-test('platform usage', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
-  await signIn(page);
-  const nav = page.getByRole('button', { name: 'Platform Usage' }).first();
-  await nav.waitFor({ state: 'visible', timeout: 5000 });
-  await nav.click();
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'tests/__screenshots__/_admin-platform-usage.png', fullPage: false });
-});
+// NB: the "Platform Usage" capture was removed — that view was deleted in this
+// branch (PlatformUsageView.tsx) and the admin nav no longer exposes it.

@@ -22,7 +22,7 @@ async function gotoAdmin(page: Page) {
 test('edit user drawer', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoAdmin(page);
-  await page.getByRole('button', { name: 'Edit' }).first().click();
+  await page.getByRole('button', { name: 'Manage' }).first().click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'tests/__screenshots__/_admin-edit-user.png', fullPage: false });
 });
@@ -30,7 +30,7 @@ test('edit user drawer', async ({ page }) => {
 test('remove user confirmation', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoAdmin(page);
-  await page.getByRole('button', { name: 'Edit' }).first().click();
+  await page.getByRole('button', { name: 'Manage' }).first().click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: /Remove User/ }).first().click();
   await page.waitForTimeout(500);
@@ -40,6 +40,9 @@ test('remove user confirmation', async ({ page }) => {
 test('create team drawer', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoAdmin(page);
+  // "Create Team" lives on the Teams subtab, not the default Users landing.
+  await page.getByRole('button', { name: /^Teams/ }).first().click();
+  await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Create Team/ }).first().click();
   await page.waitForTimeout(600);
   // select a couple members (scoped to the drawer) to show checked state
@@ -55,7 +58,7 @@ test('edit team drawer', async ({ page }) => {
   await gotoAdmin(page);
   await page.getByRole('button', { name: /^Teams/ }).first().click();
   await page.waitForTimeout(400);
-  await page.getByTitle('Edit team').first().click();
+  await page.getByRole('button', { name: /^Manage$/ }).first().click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'tests/__screenshots__/_admin-edit-team.png', fullPage: false });
 });
@@ -65,7 +68,7 @@ test('delete team confirmation', async ({ page }) => {
   await gotoAdmin(page);
   await page.getByRole('button', { name: /^Teams/ }).first().click();
   await page.waitForTimeout(400);
-  await page.getByTitle('Edit team').first().click();
+  await page.getByRole('button', { name: /^Manage$/ }).first().click();
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: /Delete Team/ }).first().click();
   await page.waitForTimeout(500);
@@ -87,8 +90,8 @@ test('invite role details with toggles', async ({ page }) => {
   await gotoAdmin(page);
   await page.getByRole('button', { name: /Invite User/ }).first().click();
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: 'Details' }).first().click();
-  await page.waitForTimeout(400);
+  // The invite modal shows role + team selects inline (the old "Details" toggle
+  // was dropped) — capture the open modal as-is.
   await page.screenshot({ path: 'tests/__screenshots__/_admin-invite-details.png', fullPage: false });
 });
 
