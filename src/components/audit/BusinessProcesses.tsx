@@ -11,6 +11,7 @@ import {
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES, SOPS, RACMS, RISKS, CONTROLS, WORKFLOWS } from '../../data/mockData';
+import { getSeedControls, getSeedWorkflows, findSeedControl } from '../../data/processHubSeeds';
 import { getCreatedControls, type CreatedControl } from '../../data/createdControlsStore';
 import { generateRacmForProcess, type RACMRow } from '../../data/racm';
 import type { ProcessCode } from '../../data/engagements';
@@ -2291,7 +2292,7 @@ type AttrResult = 'Pass' | 'Fail' | 'Pending';
 // per-control KPIs (Tested / Effective / Failed / Pending) and the control↔workflow
 // mapping have something to count.
 interface ControlAttribute { id: string; description: string; result: AttrResult; workflows: AttrWorkflow[]; }
-interface DesignControl {
+export interface DesignControl {
   id: string; name: string; description: string; classification: 'Key' | 'Non-Key';
   nature: string; automation: string; frequency: string;
   mappedRisks: string[]; workflows: BoundWorkflow[];
@@ -2337,42 +2338,16 @@ function automationPillCls(automation: string): string {
   return 'bg-paper-100 text-ink-600 border-canvas-border';
 }
 
-const SEED_DESIGN_CONTROLS: DesignControl[] = [
-  { id: 'C-001', name: 'Three-Way PO/GRN/Invoice Matching', description: 'System-enforced three-way matching before payment release.', classification: 'Key', nature: 'Preventive', automation: 'Automated', frequency: 'Per transaction', mappedRisks: ['RSK-001', 'RSK-002'], workflows: [
-    { name: 'PO Validation Workflow', type: 'Automated', status: 'Completed', lastRun: 'Apr 28, 2026', runs: 14 },
-    { name: 'GRN Matching Workflow', type: 'Automated', status: 'Completed', lastRun: 'Apr 28, 2026', runs: 12 },
-    { name: 'Invoice Match Workflow', type: 'Automated', status: 'Ready', lastRun: 'Apr 26, 2026', runs: 10 },
-  ], usedInRACMs: 4, assertions: ['Completeness', 'Accuracy', 'Authorization'], attributes: [
-    { id: 'C-001-A1', description: 'PO, GRN and invoice quantities reconcile before payment is released.', result: 'Pass', workflows: [{ code: 'WF-P2P-001', name: 'PO Validation Workflow' }, { code: 'WF-P2P-002', name: 'GRN Matching Workflow' }] },
-    { id: 'C-001-A2', description: 'Unit price variance stays within the approved tolerance band.', result: 'Pass', workflows: [{ code: 'WF-P2P-003', name: 'Invoice Match Workflow' }] },
-    { id: 'C-001-A3', description: 'Matching exceptions are routed for manual approval and cleared.', result: 'Pass', workflows: [] },
-  ] },
-  { id: 'C-002', name: 'Vendor Master Change Approval', description: 'Multi-level approval for vendor master data changes.', classification: 'Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-003', 'RSK-004'], workflows: [
-    { name: 'Vendor Change Monitor', type: 'Automated', status: 'Ready', lastRun: 'Apr 20, 2026', runs: 8 },
-  ], usedInRACMs: 2, assertions: ['Authorization', 'Occurrence'], attributes: [
-    { id: 'C-002-A1', description: 'Every vendor master change carries dual approval before activation.', result: 'Pass', workflows: [{ code: 'WF-P2P-004', name: 'Vendor Change Monitor' }] },
-    { id: 'C-002-A2', description: 'Supporting documents are attached to each change request.', result: 'Fail', workflows: [] },
-  ] },
-  { id: 'C-003', name: 'Duplicate Invoice Detection', description: 'Automated scanning to flag potential duplicate invoices.', classification: 'Key', nature: 'Detective', automation: 'Automated', frequency: 'Per transaction', mappedRisks: ['RSK-002'], workflows: [
-    { name: 'Duplicate Invoice Detector', type: 'Automated', status: 'Completed', lastRun: 'Apr 26, 2026', runs: 12 },
-    { name: 'Invoice Reconciliation Check', type: 'Manual', status: 'Draft', lastRun: '—', runs: 0 },
-  ], usedInRACMs: 3, assertions: ['Accuracy', 'Occurrence'], attributes: [
-    { id: 'C-003-A1', description: 'Duplicate scan runs on every invoice batch at intake.', result: 'Pass', workflows: [{ code: 'WF-P2P-005', name: 'Duplicate Invoice Detector' }] },
-    { id: 'C-003-A2', description: 'Flagged duplicates are investigated and dispositioned within SLA.', result: 'Pass', workflows: [] },
-  ] },
-  { id: 'C-004', name: 'High-Value Payment Review', description: 'Additional approval for payments above threshold.', classification: 'Key', nature: 'Preventive', automation: 'IT-dependent', frequency: 'Per transaction', mappedRisks: ['RSK-001'], workflows: [
-    { name: 'Payment Approval Review', type: 'Manual', status: 'Ready', lastRun: 'Apr 10, 2026', runs: 3 },
-  ], usedInRACMs: 2, assertions: ['Authorization', 'Accuracy'], attributes: [
-    { id: 'C-004-A1', description: 'Payments above the threshold receive a documented second approval.', result: 'Pass', workflows: [{ code: 'WF-P2P-006', name: 'Payment Approval Review' }] },
-  ] },
-  { id: 'C-014', name: 'Purchase Order Dual Sign-Off', description: 'Dual authorization for all POs above threshold.', classification: 'Non-Key', nature: 'Preventive', automation: 'Manual', frequency: 'Per transaction', mappedRisks: ['RSK-005'], workflows: [], usedInRACMs: 1, assertions: ['Authorization'], attributes: [
-    { id: 'C-014-A1', description: 'Dual authorization is captured on every PO above the limit.', result: 'Pending', workflows: [] },
-  ] },
-];
+// Seed controls/workflows now live in ../../data/processHubSeeds.ts, keyed per
+// process (getSeedControls / getSeedWorkflows / findSeedControl), so each process
+// shows its own — and an un-built process shows none.
 
 // Persist the live controls list (seed + created + edits) so a control opened in a
 // real new browser tab can resolve its data. Keyed per business process.
-const controlsStoreKey = (bpAbbr: string) => `irame.processhub.controls.${bpAbbr || 'P2P'}`;
+// v2: bumped when controls became per-process. The old code saved the shared P2P
+// seed under every process's key, so v1 storage would wrongly show P2P controls on
+// O2C/S2C/R2R. The new key starts those processes clean (P2P re-seeds from its own).
+const controlsStoreKey = (bpAbbr: string) => `irame.processhub.controls.v2.${bpAbbr || 'P2P'}`;
 function loadStoredControls(bpAbbr: string): DesignControl[] | null {
   try {
     const raw = localStorage.getItem(controlsStoreKey(bpAbbr));
@@ -2383,7 +2358,7 @@ function loadStoredControls(bpAbbr: string): DesignControl[] | null {
     // from the seed by id so the detail page always has mapping data to show.
     return (parsed as DesignControl[]).map(c => {
       if (Array.isArray(c.attributes) && c.attributes.length > 0) return c;
-      const seed = SEED_DESIGN_CONTROLS.find(s => s.id === c.id);
+      const seed = findSeedControl(c.id);
       return { ...c, attributes: c.attributes ?? seed?.attributes ?? [] };
     });
   } catch { return null; }
@@ -2445,7 +2420,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
   const { addToast } = useToast();
 
   useEffect(() => {
-    const stored = loadStoredControls(bpAbbr) ?? SEED_DESIGN_CONTROLS;
+    const stored = loadStoredControls(bpAbbr) ?? getSeedControls(bpAbbr);
     const next = stored.map(c => (c.id === ctrl.id ? { ...c, attributes } : c));
     saveStoredControls(bpAbbr, next);
   }, [attributes, bpAbbr, ctrl.id]);
@@ -2845,7 +2820,7 @@ export function ControlDetailStandalone() {
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const controlId = params.get('controlId') ?? '';
   const bpAbbr = params.get('bp') ?? 'P2P';
-  const controls = loadStoredControls(bpAbbr) ?? SEED_DESIGN_CONTROLS;
+  const controls = loadStoredControls(bpAbbr) ?? getSeedControls(bpAbbr);
   const ctrl = controls.find(c => c.id === controlId);
   const back = () => { if (window.opener && !window.opener.closed) window.close(); else window.history.back(); };
   // Exactly the RACM detail takeover layout: same scroll container, the same
@@ -2902,7 +2877,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   // Hydrate from the per-BP store so edits made in a detail tab (workflow Map /
   // unlink) and just-created controls survive across the list and the new tab.
   const [controls, setControls] = useState<DesignControl[]>(() => {
-    const base = loadStoredControls(bpAbbr) ?? (seeded ? SEED_DESIGN_CONTROLS : []);
+    const base = loadStoredControls(bpAbbr) ?? getSeedControls(bpAbbr);
     // Merge in wizard-created controls for this process (newest first), deduped by
     // id so one already persisted into this store on a prior visit isn't doubled.
     const seen = new Set(base.map(c => c.id));
@@ -3064,6 +3039,52 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   // Single-select toggle — clicking the highlighted tile (or Total) returns to all.
   const handleKpiClick = (k: StatusKpi) => setStatusKpi(prev => (prev === k ? 'total' : k));
 
+  // Open the Create Control flow when the journey/setup checklist (or the empty
+  // state) requests it via the shared 'process-hub-create' event for this section.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ section?: string }>;
+      if (ce.detail?.section === 'controls') setShowCreateControl(true);
+    };
+    window.addEventListener('process-hub-create', handler);
+    return () => window.removeEventListener('process-hub-create', handler);
+  }, []);
+
+  // Create-control modal, lifted into a shared element so it's available from both
+  // the empty state (no controls yet) and the populated list.
+  const createControlModal = (
+    <AnimatePresence>
+      {showCreateControl && (
+        <DesignControlAddModal
+          subProcesses={Array.from(new Set(controls.map(c => c.subProcess).filter((s): s is string => !!s)))}
+          onClose={() => setShowCreateControl(false)}
+          onCreate={({ description, isKey, subProcess, attributes, inRacm }) => {
+            const newId = `C-${String(controls.length + 1).padStart(3, '0')}`;
+            const attrs: ControlAttribute[] = attributes
+              .map(a => a.trim())
+              .filter(Boolean)
+              .map((desc, idx) => ({ id: `${newId}-A${idx + 1}`, description: desc, result: 'Pending' as AttrResult, workflows: [] }));
+            setControls(prev => [{
+              id: newId,
+              name: description.trim(),
+              description: description.trim(),
+              classification: isKey ? 'Key' : 'Non-Key',
+              nature: '', automation: '', frequency: '',
+              mappedRisks: [],
+              workflows: [],
+              usedInRACMs: inRacm ? 1 : 0,
+              assertions: [],
+              attributes: attrs,
+              subProcess, custom: true, inRacm,
+            }, ...prev]);
+            setShowCreateControl(false);
+            addToast({ message: `Control "${description.trim()}" created`, type: 'success' });
+          }}
+        />
+      )}
+    </AnimatePresence>
+  );
+
   if (!isLoading && loadError) {
     return <ListLoadError label="controls" onRetry={() => setLoadError(false)} />;
   }
@@ -3075,10 +3096,20 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           <Shield className="w-6 h-6 text-ink-500" />
         </div>
         <h3 className="text-[15px] font-display text-ink-800 mb-1">No controls yet</h3>
-        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Controls live inside a RACM. Open RACM to map risks to controls, and they'll appear here.</p>
-        <Button variant="primary" size="md" shape="lg" onClick={() => onGoToRacm?.()}>
-          Open RACM
-        </Button>
+        <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Create a control for this process, or open a RACM to map risks to controls.</p>
+        <div className="flex items-center gap-3">
+          <Button variant="primary" size="md" shape="lg" onClick={() => setShowCreateControl(true)}>
+            Create Control
+          </Button>
+          <button
+            type="button"
+            onClick={() => onGoToRacm?.()}
+            className="text-[13px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer transition-colors"
+          >
+            Open RACM
+          </button>
+        </div>
+        {createControlModal}
       </div>
     );
   }
@@ -3267,37 +3298,8 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
         })}
       </div>
 
-      {/* Create control — engagement-style modal (description, sub-process, Key?, attributes, add-to-RACM). */}
-      <AnimatePresence>
-        {showCreateControl && (
-          <DesignControlAddModal
-            subProcesses={Array.from(new Set(controls.map(c => c.subProcess).filter((s): s is string => !!s)))}
-            onClose={() => setShowCreateControl(false)}
-            onCreate={({ description, isKey, subProcess, attributes, inRacm }) => {
-              const newId = `C-${String(controls.length + 1).padStart(3, '0')}`;
-              const attrs: ControlAttribute[] = attributes
-                .map(a => a.trim())
-                .filter(Boolean)
-                .map((desc, idx) => ({ id: `${newId}-A${idx + 1}`, description: desc, result: 'Pending' as AttrResult, workflows: [] }));
-              setControls(prev => [{
-                id: newId,
-                name: description.trim(),
-                description: description.trim(),
-                classification: isKey ? 'Key' : 'Non-Key',
-                nature: '', automation: '', frequency: '',
-                mappedRisks: [],
-                workflows: [],
-                usedInRACMs: inRacm ? 1 : 0,
-                assertions: [],
-                attributes: attrs,
-                subProcess, custom: true, inRacm,
-              }, ...prev]);
-              setShowCreateControl(false);
-              addToast({ message: `Control "${description.trim()}" created`, type: 'success' });
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {/* Create control — engagement-style modal (shared with the empty state). */}
+      {createControlModal}
 
       {/* Delete-control confirmation */}
       <ConfirmationModal
@@ -3531,7 +3533,7 @@ type RunStatus = 'Success' | 'Error';
 // fixed in the executor first, so Retry opens the executor instead.
 type RunErrorKind = 'technical' | 'data';
 
-interface BPWorkflow {
+export interface BPWorkflow {
   id: string; name: string; description: string;
   type: 'Automated' | 'Manual';
   nature: 'Preventive' | 'Detective';
@@ -3554,17 +3556,12 @@ const RUN_STATUS_PILL: Record<RunStatus, string> = {
   Error: 'bg-risk-50 text-risk-700 border-risk-100',
 };
 
-const SEED_BP_WF: BPWorkflow[] = [
-  { id: 'wf-c1', name: 'Three-Way PO Match', description: 'Automated matching of PO, GRN, and Invoice before payment release.', type: 'Automated', nature: 'Preventive', status: 'Active', linkedControls: ['C-001', 'C-004'], owner: 'Karan Mehta', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Matching'], isSql: false },
-  { id: 'wf-c2', name: 'Vendor Change Monitor', description: 'Monitors vendor master data changes and validates approval chain.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-002'], owner: 'Tushar Goel', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Error', lastRunError: 'Vendor master feed unavailable — connection timed out after 30s.', lastRunErrorKind: 'technical', tags: ['Vendor', 'Master Data'], isSql: true },
-  { id: 'wf-c3', name: 'Duplicate Invoice Detector', description: 'Scans invoices against historical data to flag duplicates.', type: 'Automated', nature: 'Detective', status: 'Active', linkedControls: ['C-003'], owner: 'Deepak Bansal', lastRun: 'May 17, 2026 · 2:00 AM', lastRunStatus: 'Error', lastRunError: "Source file 'invoice_register_apr.csv' could not be parsed — column 'Invoice Date' is missing.", lastRunErrorKind: 'data', tags: ['Duplicates', 'Fraud'], isSql: true },
-  { id: 'wf-c4', name: 'Payment Approval Review', description: 'Manual review of high-value payment approvals.', type: 'Manual', nature: 'Preventive', status: 'Active', linkedControls: ['C-004'], owner: 'Neha Joshi', lastRun: 'May 16, 2026 · 11:30 AM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, tags: ['Payments'], isSql: false },
-  { id: 'wf-c5', name: 'PO Dual Sign-Off Check', description: 'Validates dual authorization for purchase orders above threshold.', type: 'Automated', nature: 'Preventive', status: 'Draft', linkedControls: [], owner: 'Tushar Goel', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: ['Authorization'], isSql: false },
-];
+// Seed workflows moved to ../../data/processHubSeeds.ts (WORKFLOWS_BY_PROCESS /
+// getSeedWorkflows), keyed per process.
 
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
-  const [workflows, setWorkflows] = useState<BPWorkflow[]>(seeded ? SEED_BP_WF : []);
+  const [workflows, setWorkflows] = useState<BPWorkflow[]>(getSeedWorkflows(bpAbbr));
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
@@ -5028,7 +5025,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const openDetailRisk = openDetailRiskId ? SEED_RISKS.find(r => r.id === openDetailRiskId) : null;
-  const openDetailControl = openDetailControlId ? SEED_DESIGN_CONTROLS.find(c => c.id === openDetailControlId) : null;
+  const openDetailControl = openDetailControlId ? findSeedControl(openDetailControlId) : null;
   const openDetailRacm = openDetailRacmId ? RACM_SEED_DATA.find(r => r.id === openDetailRacmId) : null;
   const openDetailSop = openDetailSopId ? SOPS.find(s => s.id === openDetailSopId) : null;
   // RacmListTable manages RACM detail/mapping takeovers internally; mirror that state
@@ -5119,7 +5116,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     racm: { title: 'RACMs', count: racmCardsForBp.length, countLabel: 'matrices', warning: racmCardsForBp.length === 0 ? 'no RACMs yet' : undefined },
     risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
     controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
-    workflows: { title: 'Workflows', count: bpWfs.length, countLabel: 'workflows', warning: bpWfs.length === 0 ? 'no workflows linked' : undefined },
+    workflows: { title: 'Workflows', count: getSeedWorkflows(bp.abbr).length, countLabel: 'workflows', warning: getSeedWorkflows(bp.abbr).length === 0 ? 'no workflows linked' : undefined },
   };
   const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
 
@@ -5128,7 +5125,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // panel so they never disagree. A showcase override pins O2C to a mid-setup
   // state; every other process derives done-state from real section content.
   const SETUP_DEMO_OVERRIDE: Partial<Record<string, Record<SectionKey, boolean>>> = {
-    o2c: { sop: false, racm: true, risks: false, controls: false, workflows: false },
+    // (none) — O2C is now fully built, so every process derives setup state from real content.
   };
   const sectionDemoOverride = SETUP_DEMO_OVERRIDE[bp.id];
   const isSectionComplete = (k: SectionKey) =>
@@ -5449,12 +5446,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
       setShowCreateRacm(true);
       return;
     }
-    if (section === 'controls') {
-      // Controls aren't created directly — they're mapped from a RACM.
-      switchDrilledSection('racm');
-      addToast({ message: 'Controls are mapped inside a RACM. Open a RACM to define controls.', type: 'info' });
-      return;
-    }
+    // sop / risks / controls / workflows each own their create flow and open it on
+    // this event (Upload SOP, Create Risk, Create Control, Create Workflow).
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('process-hub-create', { detail: { section } }));
     }
