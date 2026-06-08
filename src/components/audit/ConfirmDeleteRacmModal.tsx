@@ -34,12 +34,12 @@ export default function ConfirmDeleteRacmModal({ racmName, onCancel, onConfirm }
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[400px] bg-white rounded-2xl shadow-2xl border border-canvas-border p-6"
+        className="relative w-full max-w-[400px] bg-white rounded-xl shadow-2xl border border-canvas-border p-6"
         role="dialog" aria-modal="true" aria-label="Delete this RACM?"
       >
         <div className="flex items-center gap-2.5 mb-3">
           <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" /></div>
-          <h2 className="text-[17px] font-bold text-ink-900">Delete this RACM?</h2>
+          <h2 className="text-[1rem] font-bold text-ink-900">Delete this RACM?</h2>
         </div>
         <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-5">
           This permanently deletes <span className="font-semibold text-ink-700">“{racmName}”</span> along with its risk and control mappings. This action is permanent and cannot be undone.
