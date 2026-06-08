@@ -3,12 +3,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Check, Grid3x3,
   Archive, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
-  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye, ExternalLink,
+  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye, ExternalLink, Share2,
 } from 'lucide-react';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
 import SopDocumentModal from './SopDocumentModal';
 import ConfirmDeleteRacmModal from './ConfirmDeleteRacmModal';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import ListLoadError from '../shared/ListLoadError';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -309,6 +313,7 @@ function synthSeedEntries(racm: RacmEntry): Record<string, string>[] {
 }
 
 function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () => void; onOpenMapping: () => void }) {
+  const { openShare } = useShare();
   // The AR RACM is wired to a real RACM extract (123 risk/control rows) loaded from
   // `arRacm.ts`. The remaining seed RACMs derive a slimmer view from mockData by
   // matching `racm.process` against BUSINESS_PROCESSES — both paths feed the same
@@ -517,7 +522,19 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
         racm={racm}
         action={
           <div className="flex items-center gap-2">
+            <Gated permission="racm_share">
+              <Button
+                variant="outline"
+                size="md"
+                leftIcon={<Share2 size={13} />}
+                className="shrink-0"
+                onClick={(e) => openShare({ type: 'racm', id: racm.id, anchor: rectFromEvent(e) })}
+              >
+                Share
+              </Button>
+            </Gated>
             <div ref={downloadRef} className="relative">
+              <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
               <Button
                 variant="outline"
                 size="md"
@@ -526,6 +543,7 @@ function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () =
               >
                 Download
               </Button>
+              </Gated>
               {downloadOpen && (
                 <div className="absolute right-0 mt-1.5 w-[200px] bg-white border border-border-light rounded-[8px] shadow-lg z-50">
                   <button type="button" onClick={() => triggerDownload('xlsx')} className="block w-full text-left px-3 py-2 text-[12px] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as XLSX</button>
@@ -1618,6 +1636,9 @@ interface Props {
 
 export default function RacmListTable({ processFilter, initialMappingRacm, onMappingOpened, extraRacms, onEditDraft, onOpenInEditor, headerAction, onCreate, onTakeoverChange }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const { openShare } = useShare();
+  const logEvent = useAuditLog();
   // Inline RACM rename (pencil action) — renamed names overlay the source data.
   const [editingRacmNameId, setEditingRacmNameId] = useState<string | null>(null);
   const [editingRacmName, setEditingRacmName] = useState('');
@@ -1825,12 +1846,15 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     });
   };
   const unmapPair = (riskId: string, controlId: string) => {
+    logEvent({ action: 'Update', description: `Unmapped control ${controlId} from risk ${riskId}`, module: 'Governance', entity: 'RACM' });
     setUnmappedPairs(prev => new Set(prev).add(`${riskId}:${controlId}`));
   };
   const deleteRow = (racmId: string, riskId: string) => {
+    logEvent({ action: 'Delete', description: `Removed risk ${riskId} from RACM ${racmId}`, module: 'Governance', entity: 'RACM' });
     setDeletedRows(prev => new Set(prev).add(`${racmId}:${riskId}`));
   };
   const handleBulkArchive = () => {
+    logEvent({ action: 'Update', description: `Archived ${selectedIds.length} RACM${selectedIds.length === 1 ? '' : 's'}`, module: 'Governance', entity: 'RACM' });
     setArchivedIds(prev => [...prev, ...selectedIds]);
     setSelectedIds([]);
   };
@@ -1890,6 +1914,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
 
   // Archive / cancel a single card.
   const handleArchiveOne = (id: string) => {
+    logEvent({ action: 'Update', description: `Archived RACM ${id}`, module: 'Governance', entity: 'RACM' });
     setArchivedIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedIds(prev => prev.filter(s => s !== id));
   };
@@ -2125,6 +2150,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
                   {isSelected ? (
                     <>
+                      {can('racm_archive') && (
                       <div className="relative group/archive">
                         <button
                           type="button"
@@ -2136,6 +2162,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/archive:opacity-100 pointer-events-none transition-opacity z-50">Archive</span>
                       </div>
+                      )}
                       <div className="relative group/cancel">
                         <button
                           type="button"
@@ -2163,6 +2190,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/vsop:opacity-100 pointer-events-none transition-opacity z-50">View SOP</span>
                         </div>
                       )}
+                      {can('racm_link_risk') && (
                       <div className="relative group/lrisk">
                         <button
                           type="button"
@@ -2175,6 +2203,8 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
                       </div>
+                      )}
+                      {can('racm_edit') && (
                       <div className="relative group/edit">
                         <button
                           type="button"
@@ -2186,6 +2216,21 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Open in editor</span>
                       </div>
+                      )}
+                      {can('racm_share') && (
+                      <div className="relative group/share">
+                        <button
+                          type="button"
+                          onClick={(e) => openShare({ type: 'racm', id: racm.id, anchor: rectFromEvent(e) })}
+                          aria-label="Share"
+                          className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                        >
+                          <Share2 size={14} />
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/share:opacity-100 pointer-events-none transition-opacity z-50">Share</span>
+                      </div>
+                      )}
+                      {can('racm_archive') && (
                       <div className="relative group/del">
                         <button
                           type="button"
@@ -2197,6 +2242,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">Delete</span>
                       </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2234,7 +2280,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         {linkRiskTarget && createRiskFromLink && (
           <RiskDrawer
             risk={null}
-            presentation="modal"
             defaultProcess={linkRiskTarget.bpAbbr}
             onClose={() => setCreateRiskFromLink(false)}
             onSave={() => setCreateRiskFromLink(false)}
@@ -2320,6 +2365,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               racmName={dr.name}
               onCancel={() => setConfirmDeleteRacm(null)}
               onConfirm={() => {
+                logEvent({ action: 'Delete', description: `Deleted RACM "${dr.name}" (${dr.id})`, module: 'Governance', entity: 'RACM' });
                 setDeletedIds(prev => prev.includes(dr.id) ? prev : [...prev, dr.id]);
                 addToast({ message: `RACM "${dr.name}" deleted.`, type: 'success' });
                 setConfirmDeleteRacm(null);

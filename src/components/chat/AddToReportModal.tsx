@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import Gated from '../shared/Gated';
 import {
   X, FileText, Plus, Check, ChevronRight, Search, Lock,
 } from 'lucide-react';
@@ -633,6 +634,7 @@ export function AddToReportModal({
               Next <ChevronRight size={13} />
             </button>
           ) : (
+            <Gated permission="rp_edit" mode="disable" title="You don't have permission to add to reports">
             <button
               type="button"
               disabled={totalSelected === 0 || submitting}
@@ -642,6 +644,7 @@ export function AddToReportModal({
               {submitting ? <ButtonSpinner /> : <FileText size={13} />}
               {submitError && !submitting ? 'Retry' : submitting ? 'Adding…' : 'Add to Report'}
             </button>
+            </Gated>
           )}
         </div>
       </div>

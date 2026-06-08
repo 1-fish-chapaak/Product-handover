@@ -4,9 +4,11 @@ import {
   Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye, ArrowLeft,
   ArrowRight, FileText, HelpCircle, Shield, Workflow as WorkflowIcon, Grid3x3,
-  Play, Trash2, Star, Link2,
+  Play, Trash2, Star, Link2, Share2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { Button } from '../shared/Button';
@@ -304,6 +306,8 @@ function RiskDetailPage({
   onBack: () => void;
   onEdit: () => void;
 }) {
+  const { can } = useCan();
+  const { openShare } = useShare();
   const rels = getRiskRelationships(risk.id, risk.businessProcess);
   const keyCount = controls.filter(c => c.isKey).length;
 
@@ -324,9 +328,16 @@ function RiskDetailPage({
         <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-brand-700 font-medium cursor-pointer transition-colors">
           <ArrowLeft size={14} /> Back to risks
         </button>
-        <Button variant="primary" size="sm" shape="lg" onClick={onEdit} leftIcon={<Edit3 size={13} />} className="shrink-0">
-          Edit risk
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {can('risk_share') && (
+            <Button variant="outline" size="sm" shape="lg" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} leftIcon={<Share2 size={13} />}>
+              Share
+            </Button>
+          )}
+          <Button variant="primary" size="sm" shape="lg" onClick={onEdit} leftIcon={<Edit3 size={13} />}>
+            Edit risk
+          </Button>
+        </div>
       </div>
 
       {/* Header card — matches the control detail page header */}
@@ -481,6 +492,8 @@ interface Props {
 
 export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const { openShare } = useShare();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -955,6 +968,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                             </button>
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
                           </div>
+                          {can('risk_share') && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk"
+                              className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+                              <Share2 size={14} />
+                            </button>
+                          )}
                           <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk"
                             className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
                             <Trash2 size={14} />

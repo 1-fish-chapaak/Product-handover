@@ -16,6 +16,8 @@ import {
   Check,
 } from 'lucide-react';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
+import Gated from '../shared/Gated';
+import { useCan } from '../../context/CurrentUserContext';
 import {
   GRC_CASE_DETAILS,
   GRC_BULK_ACTIONS,
@@ -199,11 +201,17 @@ function FooterButtons({
   onCancel,
   onReject,
   onApprove,
+  disabled = false,
+  disabledTitle,
 }: {
   onCancel: () => void;
   onReject: () => void;
   onApprove: () => void;
+  /** When set, Reject/Approve are greyed + inert (Cancel stays usable). */
+  disabled?: boolean;
+  disabledTitle?: string;
 }) {
+  const decisionCls = disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer';
   return (
     <>
       <button
@@ -214,14 +222,18 @@ function FooterButtons({
       </button>
       <button
         onClick={onReject}
-        className="flex-1 h-10 text-[13px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className={`flex-1 h-10 text-[13px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
       >
         <XCircle size={14} />
         Reject
       </button>
       <button
         onClick={onApprove}
-        className="flex-1 h-10 text-[13px] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-[8px] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className={`flex-1 h-10 text-[13px] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
       >
         <CheckCircle2 size={14} />
         Approve
@@ -293,6 +305,8 @@ export function ReviewClassificationDrawer({
   onDecision: (decision: 'approve' | 'reject') => void;
   role?: 'risk-owner' | 'auditor';
 }) {
+  const { can } = useCan();
+  const canTriage = can('exc_triage');
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [comment, setComment] = useState('');
@@ -323,8 +337,10 @@ export function ReviewClassificationDrawer({
           ) : (
             <FooterButtons
               onCancel={onClose}
-              onReject={() => onDecision('reject')}
-              onApprove={() => onDecision('approve')}
+              onReject={() => canTriage && onDecision('reject')}
+              onApprove={() => canTriage && onDecision('approve')}
+              disabled={!canTriage}
+              disabledTitle="You don't have permission to review classifications"
             />
           )
         }
@@ -396,6 +412,7 @@ export function ReviewCaseDrawer({
   onViewBulk: (bulkId: string) => void;
   role?: 'risk-owner' | 'auditor';
 }) {
+  const { can } = useCan();
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
@@ -430,9 +447,11 @@ export function ReviewCaseDrawer({
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
+                if (!can('exc_resolve')) return; // resolve permission gates the action decision
                 if (canSubmit && decision) onDecision(decision);
               }}
-              disabled={!canSubmit}
+              disabled={!canSubmit || (!isViewMode && !can('exc_resolve'))}
+              title={!isViewMode && !can('exc_resolve') ? "You don't have permission to resolve exceptions" : undefined}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
@@ -705,6 +724,7 @@ export function ClassifyExceptionDrawer({
               Cancel
             </button>
             <div className="flex-1" />
+            <Gated permission="exc_classify" mode="disable" title="You don't have permission to classify exceptions">
             <button
               onClick={() => canSave && onSave({
                 severity,
@@ -723,6 +743,7 @@ export function ClassifyExceptionDrawer({
             >
               Save Classification
             </button>
+            </Gated>
           </>
         }
       >

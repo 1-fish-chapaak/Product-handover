@@ -4,6 +4,7 @@
 // Step internals are placeholders — will be built in subsequent prompts.
 
 import DatePicker from '../shared/DatePicker';
+import Gated from '../shared/Gated';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -3409,10 +3410,12 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
           </div>
         )}
 
+        <Gated permission="eng_edit" mode="disable" title="You don't have permission to submit testing">
         <button onClick={handleSubmit}
           className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
           <Send size={13} />{isRejected ? 'Resubmit for Review' : 'Submit for Review'}
         </button>
+        </Gated>
       </div>
     );
   }
@@ -3470,14 +3473,18 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
 
           {/* Reviewer Actions */}
           <div className="flex items-center gap-3">
+            <Gated permission="eng_edit" mode="disable" title="You don't have permission to review testing">
             <button onClick={handleApprove}
               className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
               <CheckCircle2 size={13} />Approve
             </button>
+            </Gated>
+            <Gated permission="eng_edit" mode="disable" title="You don't have permission to review testing">
             <button onClick={handleSendBack} disabled={!comments.trim()}
               className="px-4 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
               <RotateCcw size={13} />Send Back
             </button>
+            </Gated>
             {!comments.trim() && (
               <span className="text-[0.625rem] text-gray-400 italic">Comments required to send back</span>
             )}

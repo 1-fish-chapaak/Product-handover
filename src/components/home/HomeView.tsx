@@ -28,6 +28,8 @@ import {
   ChevronDown, Settings, Star, Pin,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
+import { useCan } from '../../context/CurrentUserContext';
+import type { PermissionKey } from '../../data/rbac';
 import { RISKS, CONTROLS, ENGAGEMENTS, ENGAGEMENT_CONTROLS, DEFICIENCIES, WORKFLOWS, GRC_EXCEPTIONS, DATA_SOURCES, BUSINESS_PROCESSES, GENERATED_REPORTS } from '../../data/mockData';
 import { QUERY_SESSIONS } from '../../data/queryHistory';
 import { SeverityBadge } from '../shared/StatusBadge';
@@ -54,19 +56,24 @@ interface OnboardingStep {
   label: string;
   cta: string;
   go: View;
+  /** Permission required to see this shortcut. Hidden if the role lacks it. */
+  perm?: PermissionKey;
 }
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
-  { id: 'team',       label: 'Invite your team',         cta: 'Invite',  go: 'admin-users' },
-  { id: 'data',       label: 'Connect a data source',    cta: 'Connect', go: 'knowledge-hub' },
-  { id: 'workflow',   label: 'Run your first workflow',  cta: 'Run',     go: 'workflow-library' },
-  { id: 'engagement', label: 'Create a test engagement', cta: 'Create',  go: 'audit-execution' },
-  { id: 'report',     label: 'Export your first report', cta: 'Export',  go: 'reports' },
+  { id: 'team',       label: 'Invite your team',         cta: 'Invite',  go: 'admin-users',     perm: 'ad_users_manage' },
+  { id: 'data',       label: 'Connect a data source',    cta: 'Connect', go: 'knowledge-hub',   perm: 'ds_connect' },
+  { id: 'workflow',   label: 'Run your first workflow',  cta: 'Run',     go: 'workflow-library', perm: 'wf_run' },
+  { id: 'engagement', label: 'Create a test engagement', cta: 'Create',  go: 'audit-execution', perm: 'eng_create' },
+  { id: 'report',     label: 'Export your first report', cta: 'Export',  go: 'reports',         perm: 'rp_view' },
 ];
 
 const ONBOARDING_KEY = 'home.onboarding.v1';
 
 function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; onDismiss: () => void }) {
+  const { can } = useCan();
+  // Only show shortcuts the current role is allowed to act on.
+  const steps = ONBOARDING_STEPS.filter(s => !s.perm || can(s.perm));
   const [done, setDone] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(ONBOARDING_KEY) || '[]')); }
     catch { return new Set(); }
@@ -76,10 +83,10 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
     localStorage.setItem(ONBOARDING_KEY, JSON.stringify(Array.from(done)));
   }, [done]);
 
-  const total = ONBOARDING_STEPS.length;
-  const completed = done.size;
-  const pct = Math.round((completed / total) * 100);
-  const allDone = completed === total;
+  const total = steps.length;
+  const completed = steps.filter(s => done.has(s.id)).length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const allDone = total > 0 && completed === total;
   // Collapse the panel as soon as the user makes any progress. The full
   // 5-row card is only valuable on first visit; once even one step is done,
   // a single-line strip with the next action is enough.
@@ -99,13 +106,13 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
     });
   };
 
-  if (allDone) return null;
+  if (allDone || steps.length === 0) return null;
 
   // In-progress: collapse to a single-line strip so the full 5-step panel
   // doesn't keep dominating above-the-fold once setup is underway. Shows the
   // next step's CTA inline; user can always re-expand by clicking "Show steps".
   if (inProgress) {
-    const remaining = ONBOARDING_STEPS.find(s => !done.has(s.id));
+    const remaining = steps.find(s => !done.has(s.id));
     const remainingCount = total - completed;
     return (
       <section className="rounded-2xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)] px-5 py-3 flex items-center justify-between gap-4">
@@ -188,9 +195,9 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
           user knows where to start at first visit. Falls back to default once
           that step is checked. */}
       <ul className="divide-y divide-canvas-border">
-        {ONBOARDING_STEPS.map((step, idx) => {
+        {steps.map((step, idx) => {
           const isDone = done.has(step.id);
-          const firstIncompleteIdx = ONBOARDING_STEPS.findIndex(s => !done.has(s.id));
+          const firstIncompleteIdx = steps.findIndex(s => !done.has(s.id));
           const isNext = !isDone && idx === firstIncompleteIdx;
           return (
             <li
@@ -271,7 +278,7 @@ function buildWorkQueue(): QueueItem[] {
     risk: d.severity === 'MW' ? 'critical' : d.severity === 'SD' ? 'high' : 'medium',
     due: d.due,
     dueDate: new Date(d.due),
-    action: { label: 'Open', go: 'findings' },
+    action: { label: 'Open', go: 'manage-exceptions' },
   }));
 
   // Engagement control tasks (those not started).
@@ -2554,7 +2561,7 @@ function AuditCalendarSection({ setView, rangeDays, openAuditExecution }: { setV
                   key={ev.id}
                   onClick={() => {
                     if (ev.kind === 'engagement') openAuditExecution(ev.entityId);
-                    else setView('findings');
+                    else setView('manage-exceptions');
                   }}
                   className="w-full flex items-start gap-3 px-5 py-3 border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer text-left group"
                 >

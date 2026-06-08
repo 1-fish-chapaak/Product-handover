@@ -61,8 +61,9 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
 // Canonical KPI tile shared by chat audit results, chat summary KPIs,
 // the workspace Output tab, and Dashboard KPI rows. Single source of truth:
 // label (11px uppercase ink-500) above value (26px bold ink-900 tabular,
-// count-up animated). Spring entry with index-staggered cascade. Hover
-// gives a soft lift + brand-200 border + soft purple-tinted shadow.
+// count-up animated). Spring entry with index-staggered cascade. When
+// clickable (onClick set), hover gives a soft lift + brand-200 border +
+// soft purple-tinted shadow; non-interactive tiles stay static.
 export interface KpiTileProps {
   label: string;
   value: string;
@@ -98,9 +99,9 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, val
           ? { duration: 0 }
           : { type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + index * 0.08 }
       }
-      whileHover={prefersReducedMotion ? undefined : { y: -3, scale: 1.015, transition: { type: 'spring', stiffness: 420, damping: 22 } }}
+      whileHover={onClick && !prefersReducedMotion ? { y: -3, scale: 1.015, transition: { type: 'spring', stiffness: 420, damping: 22 } } : undefined}
       whileTap={onClick && !prefersReducedMotion ? { scale: 0.985 } : undefined}
-      className={`glass-card rounded-xl px-5 py-4 hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)] transition-[border-color,box-shadow] duration-300 ${selected ? '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]' : ''} ${onClick ? 'cursor-pointer' : 'cursor-default'} ${className}`}
+      className={`glass-card rounded-xl px-5 py-4 transition-[border-color,box-shadow] duration-300 ${selected ? '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]' : ''} ${onClick ? 'cursor-pointer hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)]' : 'cursor-default'} ${className}`}
     >
       {editing ?? (
         <>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import Gated from '../shared/Gated';
 import {
   X, Download, FileText, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert, BarChart3, LayoutGrid, Loader2,
 } from 'lucide-react';
@@ -240,6 +241,7 @@ export default function ReportDownloadModal({
 
           {/* Footer — primary Download action */}
           <div className="shrink-0 px-6 py-4 border-t border-border-light bg-white flex items-center justify-end">
+            <Gated permission="rp_edit" mode="disable" title="You don't have permission to export reports">
             <button
               onClick={handleDownload}
               disabled={isDownloading}
@@ -249,6 +251,7 @@ export default function ReportDownloadModal({
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               {isDownloading ? 'Preparing…' : 'Download'}
             </button>
+            </Gated>
           </div>
 
         </motion.div>
