@@ -39,38 +39,38 @@ export default function ControlExpandedPanel({
   return (
     <div className="px-6 py-5 pl-[68px]">
       {/* Description */}
-      <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Description</span>
-      <p className="text-[13px] text-text leading-relaxed max-w-4xl">{description || '—'}</p>
+      <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-1.5">Description</span>
+      <p className="text-[0.8125rem] text-text leading-relaxed max-w-4xl">{description || '—'}</p>
 
       {/* Field row */}
       <div className="grid grid-cols-4 gap-6 mt-5">
         <div>
-          <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Linked Risks</span>
-          <span className="text-[13px] text-text block">
+          <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-1.5">Linked Risks</span>
+          <span className="text-[0.8125rem] text-text block">
             {linkedRisks.length === 0
               ? '—'
-              : <span className="font-mono text-[12.5px] text-ink-700">{linkedRisks.join(', ')}</span>}
+              : <span className="font-mono text-[0.78125rem] text-ink-700">{linkedRisks.join(', ')}</span>}
           </span>
         </div>
         <div>
-          <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Used in RACMs</span>
-          <span className="text-[13px] text-text block">{usedInRACMs === 0 ? '—' : `${usedInRACMs} RACM${usedInRACMs !== 1 ? 's' : ''}`}</span>
+          <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-1.5">Used in RACMs</span>
+          <span className="text-[0.8125rem] text-text block">{usedInRACMs === 0 ? '—' : `${usedInRACMs} RACM${usedInRACMs !== 1 ? 's' : ''}`}</span>
         </div>
         <div>
-          <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Automation</span>
-          <span className="text-[13px] text-text block">{automation || '—'}</span>
+          <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-1.5">Automation</span>
+          <span className="text-[0.8125rem] text-text block">{automation || '—'}</span>
         </div>
         <div>
-          <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Frequency</span>
-          <span className="text-[13px] text-text block">{frequency || '—'}</span>
+          <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-1.5">Frequency</span>
+          <span className="text-[0.8125rem] text-text block">{frequency || '—'}</span>
         </div>
       </div>
 
       {/* Workflows */}
       <div className="mt-6">
-        <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-2.5">Workflows ({wfs.length})</span>
+        <span className="text-[0.625rem] text-ink-400 uppercase block tracking-wider mb-2.5">Workflows ({wfs.length})</span>
         {wfs.length === 0 ? (
-          <p className="text-[12px] text-mitigated-700">No workflows linked. Create a workflow to enable testing.</p>
+          <p className="text-[0.75rem] text-ink-400">No workflows linked. Create a workflow to enable testing.</p>
         ) : (
           <div className="space-y-1.5">
             {wfs.map(w => (
@@ -81,14 +81,14 @@ export default function ControlExpandedPanel({
                 <span className="font-mono text-[0.6875rem] font-semibold text-brand-700 shrink-0">{w.code}</span>
                 <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{w.name}</span>
                 <span className="shrink-0 text-[0.6875rem] text-ink-500">{w.type}</span>
-                <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${statusPill(w.status)}`}>{w.status}</span>
+                <span className={`shrink-0 inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold ${statusPill(w.status)}`}>{w.status}</span>
                 <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums">{w.lastRun} · {w.runs} run{w.runs !== 1 ? 's' : ''}</span>
                 <button
                   type="button"
                   onClick={() => removeWf(w.code)}
                   aria-label={`Remove ${w.code}`}
                   title={`Remove ${w.code}`}
-                  className="shrink-0 p-0.5 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-md hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer transition-colors"
                 >
                   <X size={12} />
                 </button>

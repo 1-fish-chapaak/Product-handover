@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { Button } from './Button';
@@ -34,11 +34,21 @@ export default function ConfirmationModal({
   onConfirm,
   onClose,
 }: Props) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !pending) onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, pending, onClose]);
+
   const isDestructive = tone === 'destructive';
+  const titleId = 'confirmation-modal-title';
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -55,7 +65,7 @@ export default function ConfirmationModal({
             transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
             className="relative bg-canvas-elevated rounded-md shadow-lg border border-canvas-border w-full max-w-lg p-6 min-h-[180px] flex flex-col"
           >
-            <h2 className="text-lg font-semibold text-ink-900 tracking-tight">
+            <h2 id={titleId} className="text-lg font-semibold text-ink-900 tracking-tight">
               {title}
             </h2>
             {description && (
@@ -64,7 +74,7 @@ export default function ConfirmationModal({
               </div>
             )}
             <div className="mt-auto pt-5 flex items-center justify-end gap-2">
-              <Button variant="outline" size="md" shape="md" className="h-10 px-4" disabled={pending} onClick={onClose}>
+              <Button variant="outline" size="md" shape="md" className="h-10 px-4" disabled={pending} onClick={onClose} autoFocus>
                 {cancelLabel}
               </Button>
               <Button

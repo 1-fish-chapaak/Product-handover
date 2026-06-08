@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertTriangle, Shield, Workflow as WorkflowIcon, Activity, Clock,
-  ChevronRight, Info, FileText, Upload, TrendingUp,
+  ChevronRight, Info, FileText, History, TrendingUp, Flame,
 } from 'lucide-react';
 
 // ── Shapes (loose — mirrors the untyped mock seeds in mockData.ts) ──────────
 export interface OvRisk { id: string; name: string; ctls: number; keyCtls: number; lastUpdated: string | null; severity: string; bpId: string; status: string }
 export interface OvControl { id: string; name: string; desc: string; isKey: boolean; riskId: string; status: string }
-export interface OvWorkflow { id: string; name: string; desc: string; bpId: string; type: string; lastRun: string; runs: number; status: string }
+export interface OvWorkflow { id: string; name: string; desc: string; bpId: string; type: string; lastRun: string | null; runs: number; status: string }
 export interface OvSop { id: string; name: string; version: string; by: string; at: string; racmId: string | null; status: string }
 export interface OvRacm { id: string; name: string; fw: string; status: string; owner: string; lastRun: string }
 
@@ -28,16 +28,16 @@ export interface BPOverviewDashboardProps {
 // Severity → swatch (matches the risk palette used across the app).
 const SEV_META: Record<string, { label: string; color: string }> = {
   critical: { label: 'Critical', color: '#B42318' },
-  high: { label: 'High', color: '#F04438' },
-  medium: { label: 'Medium', color: '#F79009' },
-  low: { label: 'Low', color: '#98A2B3' },
+  high: { label: 'High', color: '#C2410C' },
+  medium: { label: 'Medium', color: '#B45309' },
+  low: { label: 'Low', color: '#9A8FAE' },
 };
 const SEV_ORDER = ['critical', 'high', 'medium', 'low'];
 
 const CTL_META: Record<string, { label: string; color: string; cls: string }> = {
-  effective: { label: 'Effective', color: '#12B76A', cls: 'bg-compliant-500' },
-  ineffective: { label: 'Ineffective', color: '#F04438', cls: 'bg-risk-500' },
-  'not-tested': { label: 'Not tested', color: '#98A2B3', cls: 'bg-ink-300' },
+  effective: { label: 'Effective', color: '#15803D', cls: 'bg-compliant' },
+  ineffective: { label: 'Ineffective', color: '#B42318', cls: 'bg-risk' },
+  'not-tested': { label: 'Not tested', color: '#9A8FAE', cls: 'bg-ink-300' },
 };
 
 function parseDate(s: string | null | undefined): number {
@@ -57,7 +57,7 @@ function Donut({ segments, total, centerValue, centerLabel }: {
   let offset = 0;
   return (
     <div className="relative w-[132px] h-[132px] shrink-0">
-      <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+      <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90" aria-hidden="true">
         <circle cx="60" cy="60" r={r} fill="none" stroke="#F1EEF6" strokeWidth="13" />
         {total > 0 && segments.filter(s => s.value > 0).map((s, i) => {
           const dash = (s.value / total) * C;
@@ -72,8 +72,8 @@ function Donut({ segments, total, centerValue, centerLabel }: {
         })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[26px] font-semibold text-ink-900 leading-none tabular-nums">{centerValue}</span>
-        <span className="text-[10px] uppercase tracking-wider text-ink-400 mt-1">{centerLabel}</span>
+        <span className="text-[1.625rem] font-semibold text-ink-900 leading-none tabular-nums">{centerValue}</span>
+        <span className="text-[0.625rem] uppercase tracking-wider text-ink-400 mt-1">{centerLabel}</span>
       </div>
     </div>
   );
@@ -87,10 +87,10 @@ function Card({ title, subtitle, icon: Icon, right, children, onClick }: {
     <section className="rounded-xl border border-canvas-border bg-white p-5 flex flex-col">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <h3 className="text-[15px] font-semibold text-ink-900 leading-tight flex items-center gap-2">
+          <h3 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight flex items-center gap-2">
             {Icon && <Icon size={15} className="text-ink-400" />}{title}
           </h3>
-          {subtitle && <p className="text-[12px] text-ink-400 mt-0.5 leading-snug">{subtitle}</p>}
+          {subtitle && <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">{subtitle}</p>}
         </div>
         {right}
       </div>
@@ -98,7 +98,7 @@ function Card({ title, subtitle, icon: Icon, right, children, onClick }: {
       {onClick && (
         <button
           type="button" onClick={onClick}
-          className="mt-4 self-start text-[12px] font-medium text-brand-700 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"
+          className="mt-4 self-start text-[0.75rem] font-medium text-brand-700 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"
         >
           View all <ChevronRight size={13} />
         </button>
@@ -111,7 +111,7 @@ function Card({ title, subtitle, icon: Icon, right, children, onClick }: {
 function PlaceholderNote({ text }: { text: string }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper-0/90 border border-canvas-border text-[11.5px] font-medium text-ink-500 shadow-sm">
+      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper-0/90 border border-canvas-border text-[0.71875rem] font-medium text-ink-500 shadow-sm">
         <Info size={12} className="text-ink-400" /> {text}
       </span>
     </div>
@@ -160,7 +160,7 @@ export default function BPOverviewDashboard({
 
   // ── At-a-glance meta ──
   const frameworks = useMemo(() => [...new Set(racms.map(r => r.fw).filter(Boolean))], [racms]);
-  const owner = bp.owner ?? racms[0]?.owner ?? 'Tushar Goel';
+  const owner = bp.owner ?? racms[0]?.owner ?? 'Unassigned';
 
   // ── Recent changes — newest activity stitched from seed dates ──
   const recent = useMemo(() => {
@@ -172,6 +172,24 @@ export default function BPOverviewDashboard({
   }, [sops, racms, risks]);
   const fmtDay = (ts: number) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
 
+  // ── Controls-by-status percentages (largest-remainder so they sum to 100) ──
+  const ctlPcts = useMemo(() => {
+    const total = controls.length;
+    if (total === 0) return {} as Record<string, number>;
+    const keys = Object.keys(CTL_META);
+    const raws = keys.map(k => (ctlCounts[k] ?? 0) / total * 100);
+    const floors = raws.map(Math.floor);
+    const remainders = raws.map((v, i) => v - floors[i]);
+    let leftover = 100 - floors.reduce((a, b) => a + b, 0);
+    const order = remainders.map((r, i) => [r, i] as [number, number]).sort((a, b) => b[0] - a[0]);
+    for (const [, idx] of order) {
+      if (leftover <= 0) break;
+      floors[idx]++;
+      leftover--;
+    }
+    return Object.fromEntries(keys.map((k, i) => [k, floors[i]])) as Record<string, number>;
+  }, [controls, ctlCounts]);
+
   const sevSegments = SEV_ORDER.map(k => ({ value: sevCounts[k], color: SEV_META[k].color }));
   const ctlTotal = controls.length;
 
@@ -180,31 +198,35 @@ export default function BPOverviewDashboard({
       {/* ── Row 1 · Risk severity donut │ Control status bar ── */}
       <div className="grid lg:grid-cols-2 gap-5">
         <Card title="Risks by severity" subtitle="Open and mitigated risks across this process." icon={AlertTriangle} onClick={() => onOpenSection('risks')}>
-          <div className="flex items-center gap-6">
-            <Donut segments={sevSegments} total={risks.length} centerValue={String(openRisks)} centerLabel="Open" />
-            <ul className="flex-1 space-y-2 min-w-0">
-              {SEV_ORDER.map(k => (
-                <li key={k} className="flex items-center gap-2.5 text-[13px]">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SEV_META[k].color }} />
-                  <span className="text-ink-700 flex-1">{SEV_META[k].label}</span>
-                  <span className="font-semibold text-ink-900 tabular-nums">{sevCounts[k]}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {risks.length === 0 ? (
+            <p className="text-[0.8125rem] text-ink-400 py-6">No risks captured yet. Add them in the Risks tab.</p>
+          ) : (
+            <div className="flex items-center gap-6">
+              <Donut segments={sevSegments} total={risks.length} centerValue={String(openRisks)} centerLabel="Open" />
+              <ul className="flex-1 space-y-2 min-w-0">
+                {SEV_ORDER.map(k => (
+                  <li key={k} className="flex items-center gap-2.5 text-[0.8125rem]">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SEV_META[k].color }} />
+                    <span className="text-ink-700 flex-1">{SEV_META[k].label}</span>
+                    <span className="font-semibold text-ink-900 tabular-nums">{sevCounts[k]}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
 
         <Card title="Controls by status" subtitle="Design effectiveness of the controls on this process." icon={Shield} onClick={() => onOpenSection('controls')}>
           {ctlTotal === 0 ? (
-            <p className="text-[13px] text-ink-400 italic py-6">No controls defined yet.</p>
+            <p className="text-[0.8125rem] text-ink-400 py-6">No controls defined yet.</p>
           ) : (
             <div className="space-y-3 pt-1">
               {Object.entries(CTL_META).map(([k, meta]) => {
                 const n = ctlCounts[k] ?? 0;
-                const pct = Math.round((n / ctlTotal) * 100);
+                const pct = ctlPcts[k] ?? 0;
                 return (
                   <div key={k}>
-                    <div className="flex items-center justify-between text-[13px] mb-1">
+                    <div className="flex items-center justify-between text-[0.8125rem] mb-1">
                       <span className="text-ink-700">{meta.label}</span>
                       <span className="text-ink-500 tabular-nums"><span className="font-semibold text-ink-900">{n}</span> · {pct}%</span>
                     </div>
@@ -221,13 +243,13 @@ export default function BPOverviewDashboard({
 
       {/* ── Row 2 · Workflow effectiveness (placeholder) │ Coverage funnel ── */}
       <div className="grid lg:grid-cols-2 gap-5">
-        <Card title="Workflow effectiveness · 90d" subtitle="True-positive rate per linked workflow." icon={TrendingUp}>
+        <Card title="Workflow effectiveness · last 90 days" subtitle="How often each workflow's flags turn out to be real." icon={TrendingUp}>
           <div className="relative">
-            <div className="space-y-3 pt-1 opacity-40 select-none" aria-hidden>
-              {(workflows.length > 0 ? workflows.slice(0, 4) : [{ name: 'Workflow' }, { name: 'Workflow' }, { name: 'Workflow' }]).map((w, i) => (
+            <div className="space-y-3 pt-1 opacity-40 select-none" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => (
                 <div key={i}>
-                  <div className="flex items-center justify-between text-[13px] mb-1">
-                    <span className="text-ink-600 truncate">{w.name}</span>
+                  <div className="flex items-center justify-between text-[0.8125rem] mb-1">
+                    <span className="text-ink-600 truncate">Workflow</span>
                     <span className="text-ink-400">—</span>
                   </div>
                   <div className="h-2 rounded-full bg-paper-100 overflow-hidden"><div className="h-full rounded-full bg-ink-200" style={{ width: `${[60, 40, 75, 30][i % 4]}%` }} /></div>
@@ -242,15 +264,21 @@ export default function BPOverviewDashboard({
           <div className="space-y-2.5 pt-1">
             {funnel.map((f, i) => {
               const pct = Math.round((f.n / funnelMax) * 100);
+              // Baseline row (i===0): hide the "100%" label when controls=0 to avoid false "full coverage" read
+              const showPct = !(i === 0 && controls.length === 0);
               return (
                 <div key={f.label}>
-                  <div className="flex items-center justify-between text-[12.5px] mb-1">
-                    <span className="text-ink-700">{f.label}</span>
-                    <span className="text-ink-500 tabular-nums"><span className="font-semibold text-ink-900">{f.n}</span> · {pct}%</span>
+                  <div className="flex items-center justify-between text-[0.78125rem] mb-1">
+                    <span className="text-ink-700" title={f.hint}>{f.label}</span>
+                    <span className="text-ink-500 tabular-nums">
+                      <span className="font-semibold text-ink-900">{f.n}</span>
+                      {showPct && <> · {pct}%</>}
+                      {i === 0 && controls.length === 0 && <span className="text-ink-400 ml-1 text-[0.6875rem]">(no controls linked yet)</span>}
+                    </span>
                   </div>
                   <div className="h-6 rounded-md bg-paper-100 overflow-hidden">
                     <div
-                      className="h-full rounded-md bg-gradient-to-r from-brand-400 to-brand-600 transition-all"
+                      className="h-full rounded-md bg-brand-600 transition-all"
                       style={{ width: `${Math.max(pct, f.n > 0 ? 6 : 0)}%`, opacity: 1 - i * 0.12 }}
                     />
                   </div>
@@ -262,15 +290,15 @@ export default function BPOverviewDashboard({
       </div>
 
       {/* ── Row 3 · 14-day activity heatmap (placeholder) ── */}
-      <Card title="Activity — last 14 days" subtitle="Rows are workflows; each cell is a day." icon={Clock}>
+      <Card title="Activity (last 14 days)" subtitle="Rows are workflows; each cell is a day." icon={Clock}>
         <div className="relative">
-          <div className="opacity-50 select-none" aria-hidden>
-            {(workflows.length > 0 ? workflows.slice(0, 4) : [{ id: 'a', name: 'Workflow' }, { id: 'b', name: 'Workflow' }, { id: 'c', name: 'Workflow' }]).map((w) => (
-              <div key={w.id} className="flex items-center gap-3 mb-1.5">
-                <span className="w-44 shrink-0 text-[12px] text-ink-500 truncate">{w.name}</span>
+          <div className="opacity-50 select-none" aria-hidden="true">
+            {(['a', 'b', 'c'] as const).map((id) => (
+              <div key={id} className="flex items-center gap-3 mb-1.5">
+                <span className="w-44 shrink-0 text-[0.75rem] text-ink-500 truncate">Workflow</span>
                 <div className="flex gap-1 flex-1">
                   {Array.from({ length: 14 }).map((_, d) => (
-                    <span key={d} className="flex-1 h-5 rounded-[4px] bg-paper-100" />
+                    <span key={d} className="flex-1 h-5 rounded-xs bg-paper-100" />
                   ))}
                 </div>
               </div>
@@ -283,21 +311,21 @@ export default function BPOverviewDashboard({
       {/* ── Row 4 · Workflows by type ── */}
       <Card title="Workflows" subtitle="Operational workflows linked to this process, grouped by type." icon={WorkflowIcon} onClick={() => onOpenSection('workflows')}>
         {workflows.length === 0 ? (
-          <p className="text-[13px] text-ink-400 italic py-4">No workflows linked yet.</p>
+          <p className="text-[0.8125rem] text-ink-400 py-4">No workflows linked yet.</p>
         ) : (
           <div className="space-y-4">
             {wfGroups.map(([type, items]) => (
               <div key={type}>
-                <div className="flex items-center gap-1.5 mb-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-400">
+                <div className="flex items-center gap-1.5 mb-2 text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">
                   <WorkflowIcon size={12} /> {type} · {items.length}
                 </div>
                 <div className="space-y-1.5">
                   {items.map(w => (
                     <div key={w.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border-light bg-white">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${w.status === 'active' ? 'bg-compliant-500' : 'bg-amber-400'}`} />
-                      <span className="text-[13px] font-medium text-ink-800 truncate flex-1">{w.name}</span>
-                      <span className="text-[11px] text-ink-400 tabular-nums shrink-0">{w.runs} runs · last run {w.lastRun}</span>
-                      <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${w.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-amber-50 text-amber-700'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${w.status === 'active' ? 'bg-compliant' : 'bg-ink-300'}`} />
+                      <span className="text-[0.8125rem] font-medium text-ink-800 truncate flex-1">{w.name}</span>
+                      <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{w.runs} runs · last run {w.lastRun ?? '—'}</span>
+                      <span className={`text-[0.65625rem] font-semibold px-2 py-0.5 rounded-full shrink-0 ${w.status === 'active' ? 'bg-compliant-50 text-compliant-700' : 'bg-paper-100 text-ink-500'}`}>
                         {w.status === 'active' ? 'Active' : 'Idle'}
                       </span>
                     </div>
@@ -312,7 +340,7 @@ export default function BPOverviewDashboard({
       {/* ── Row 5 · At a glance │ Needs attention + recent ── */}
       <div className="grid lg:grid-cols-2 gap-5">
         <Card title="Process at a glance" icon={FileText}>
-          <dl className="divide-y divide-border-light text-[13px]">
+          <dl className="divide-y divide-border-light text-[0.8125rem]">
             {[
               ['Process', `${bp.name} · ${bp.abbr}`],
               ['Frameworks', frameworks.length ? frameworks.join(', ') : '—'],
@@ -330,9 +358,9 @@ export default function BPOverviewDashboard({
         </Card>
 
         <div className="flex flex-col gap-5">
-          <Card title="Needs attention" icon={AlertTriangle}>
+          <Card title="Needs attention" icon={Flame}>
             {attention.length === 0 ? (
-              <p className="text-[13px] text-ink-400 italic">Everything on this process is on track.</p>
+              <p className="text-[0.8125rem] text-ink-400">Everything on this process is on track.</p>
             ) : (
               <ul className="space-y-1.5">
                 {attention.map((a, i) => (
@@ -341,8 +369,8 @@ export default function BPOverviewDashboard({
                       type="button" onClick={() => onOpenSection(a.section)}
                       className="w-full flex items-start gap-2.5 text-left px-3 py-2 rounded-lg hover:bg-paper-50 transition-colors cursor-pointer group"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-risk-500 mt-1.5 shrink-0" />
-                      <span className="text-[12.5px] text-ink-700 flex-1 leading-snug">{a.text}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-risk mt-1.5 shrink-0" />
+                      <span className="text-[0.78125rem] text-ink-700 flex-1 leading-snug">{a.text}</span>
                       <ChevronRight size={14} className="text-ink-300 group-hover:text-brand-600 shrink-0 mt-0.5" />
                     </button>
                   </li>
@@ -351,19 +379,19 @@ export default function BPOverviewDashboard({
             )}
           </Card>
 
-          <Card title="Recent changes" icon={Upload}>
+          <Card title="Recent changes" icon={History}>
             {recent.length === 0 ? (
-              <p className="text-[13px] text-ink-400 italic">No recent changes recorded.</p>
+              <p className="text-[0.8125rem] text-ink-400">No recent changes recorded.</p>
             ) : (
               <ul className="space-y-2.5">
                 {recent.map((r, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-400 mt-1.5 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[12.5px] text-ink-800 truncate">{r.text}</p>
-                      <p className="text-[11px] text-ink-400">{r.sub}</p>
+                      <p className="text-[0.78125rem] text-ink-800 truncate">{r.text}</p>
+                      <p className="text-[0.6875rem] text-ink-400">{r.sub}</p>
                     </div>
-                    <span className="text-[11px] text-ink-400 shrink-0 tabular-nums">{fmtDay(r.ts)}</span>
+                    <span className="text-[0.6875rem] text-ink-400 shrink-0 tabular-nums">{fmtDay(r.ts)}</span>
                   </li>
                 ))}
               </ul>

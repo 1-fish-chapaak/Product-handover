@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, X, Download } from 'lucide-react';
 import { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
+import { Button } from '../shared/Button';
 
 export interface SopDocumentModalProps {
   open: boolean;
@@ -97,25 +98,25 @@ export default function SopDocumentModal({
               role="dialog"
               aria-modal="true"
               aria-label={sopName}
-              className="w-full max-w-[800px] max-h-[86vh] flex flex-col rounded-2xl bg-canvas-elevated shadow-xl border border-canvas-border overflow-hidden"
+              className="w-full max-w-[800px] max-h-[85vh] flex flex-col rounded-xl bg-canvas-elevated shadow-xl border border-canvas-border overflow-hidden"
             >
               {/* Header */}
               <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="p-1.5 rounded-lg bg-brand-50"><BookOpen size={14} className="text-brand-600" /></div>
-                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted">SOP · {subProcess}</span>
+                    <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-text-muted">SOP{subProcess ? ` · ${subProcess}` : ''}</span>
                   </div>
-                  <h2 className="font-display text-[17px] font-semibold text-ink-900 leading-snug truncate">{sopName}</h2>
+                  <h2 className="text-[1rem] font-bold text-ink-900 leading-snug truncate">{sopName}</h2>
                   {metaParts.length > 0 && (
-                    <div className="text-[11px] text-text-muted mt-0.5">{metaParts.join(' · ')}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5">{metaParts.join(' · ')}</div>
                   )}
                 </div>
                 <button
                   onClick={onClose}
                   aria-label="Close"
                   title="Close"
-                  className="w-8 h-8 rounded-full text-ink-500 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"
+                  className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
                 >
                   <X size={16} />
                 </button>
@@ -124,20 +125,20 @@ export default function SopDocumentModal({
               {/* Body — in-app document "page" */}
               <div className="flex-1 overflow-y-auto bg-canvas/40 px-6">
                 <article className="mx-auto my-6 max-w-[680px] bg-white border border-border-light rounded-xl shadow-sm px-10 py-9">
-                  <h1 className="font-display text-[22px] font-bold text-ink-900 border-b border-border-light pb-3 mb-1">{sopName}</h1>
+                  <h1 className="font-display text-[1.375rem] font-bold text-ink-900 border-b border-border-light pb-3 mb-1">{sopName}</h1>
                   {subtitleParts.length > 0 && (
-                    <p className="text-[11.5px] text-ink-400">{subtitleParts.join(' · ')}</p>
+                    <p className="text-[0.71875rem] text-ink-400">{subtitleParts.join(' · ')}</p>
                   )}
 
                   {outline.map((section, i) => (
                     <section key={`${section}-${i}`}>
-                      <h2 className="text-[14px] font-bold text-ink-900 mt-6 mb-2">{i + 1}. {section}</h2>
-                      <p className="text-[13.5px] leading-relaxed text-ink-700">{paraForSection(i)}</p>
+                      <h2 className="text-[0.875rem] font-bold text-ink-900 mt-6 mb-2">{i + 1}. {section}</h2>
+                      <p className="text-[0.84375rem] leading-relaxed text-ink-700">{paraForSection(i)}</p>
                       {i % 3 === 1 && (
-                        <p className="text-[13.5px] leading-relaxed text-ink-700 mt-2">{paraForSection(i + 2)}</p>
+                        <p className="text-[0.84375rem] leading-relaxed text-ink-700 mt-2">{paraForSection(i + 2)}</p>
                       )}
                       {(i === 2 || i === 3) && (
-                        <ul className="list-disc pl-5 text-[13px] text-ink-600 space-y-1 mt-2">
+                        <ul className="list-disc pl-5 text-[0.8125rem] text-ink-600 space-y-1 mt-2">
                           {STEP_BULLETS.map((b) => <li key={b}>{b}</li>)}
                         </ul>
                       )}
@@ -147,19 +148,9 @@ export default function SopDocumentModal({
               </div>
 
               {/* Footer */}
-              <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-between gap-2">
-                <button
-                  onClick={() => onDownload?.()}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer"
-                >
-                  <Download size={12} /> Download SOP
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
+              <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-2">
+                <Button variant="outline" onClick={() => onDownload?.()} leftIcon={<Download size={12} />}>Download SOP</Button>
+                <Button variant="primary" onClick={onClose}>Close</Button>
               </footer>
             </motion.div>
           </div>

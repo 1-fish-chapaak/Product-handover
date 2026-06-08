@@ -2,7 +2,7 @@
 export const BUSINESS_PROCESSES = [
   { id: "p2p", name: "Procure to Pay", abbr: "P2P", color: "#6a12cd", risks: 9, controls: 24, coverage: 72, sops: 2, workflows: 5 },
   { id: "o2c", name: "Order to Cash", abbr: "O2C", color: "#0284c7", risks: 7, controls: 18, coverage: 58, sops: 1, workflows: 3 },
-  { id: "s2c", name: "Source to Contract", abbr: "S2C", color: "#8b5cf6", risks: 5, controls: 14, coverage: 40, sops: 0, workflows: 4 },
+  { id: "s2c", name: "Source to Contract", abbr: "S2C", color: "#8b5cf6", risks: 0, controls: 0, coverage: 0, sops: 0, workflows: 0 },
   { id: "r2r", name: "Record to Report", abbr: "R2R", color: "#d97706", risks: 11, controls: 31, coverage: 85, sops: 3, workflows: 7 },
 ];
 
@@ -10,7 +10,7 @@ export const BUSINESS_PROCESSES = [
 export const SOPS = [
   { id: "sop-001", bpId: "p2p", name: "Vendor Payment SOP", version: "v2.1", by: "Tushar Goel", at: "Mar 10, 2026", racmId: "RACM-001", risks: 9, controls: 24, status: "processed" },
   { id: "sop-002", bpId: "p2p", name: "Purchase Order SOP", version: "v1.3", by: "Deepak Bansal", at: "Feb 5, 2026", racmId: "RACM-002", risks: 6, controls: 18, status: "processed" },
-  { id: "sop-003", bpId: "o2c", name: "Invoice Management SOP", version: "v1.0", by: "Neha Joshi", at: "Jan 20, 2026", racmId: "RACM-003", risks: 7, controls: 18, status: "processed" },
+  { id: "sop-003", bpId: "o2c", name: "Order to Cash SOP", version: "v1.0", by: "Neha Joshi", at: "Jan 20, 2026", racmId: "RACM-003", risks: 7, controls: 18, status: "processed" },
   { id: "sop-004", bpId: "r2r", name: "Financial Close SOP", version: "v3.0", by: "Karan Mehta", at: "Dec 15, 2025", racmId: "RACM-004", risks: 11, controls: 31, status: "processed" },
   { id: "sop-005", bpId: "r2r", name: "GL Reconciliation SOP", version: "v1.2", by: "Sneha Desai", at: "Jan 10, 2026", racmId: "RACM-005", risks: 5, controls: 15, status: "processed" },
   // Process Hub · P2P SOP list (sourced from the SOP section screenshot)
@@ -28,7 +28,8 @@ export const RACMS = [
   { id: "RACM-003", bpId: "o2c", name: "FY26 O2C · Invoice Mgmt", fw: "Key Control", status: "active", owner: "Neha Joshi", lastRun: "Mar 20, 2026", sopId: "sop-003" },
   { id: "RACM-004", bpId: "r2r", name: "FY26 R2R · Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Mar 15, 2026", sopId: "sop-004" },
   { id: "RACM-005", bpId: "r2r", name: "FY26 R2R · GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Feb 28, 2026", sopId: "sop-005" },
-  { id: "RACM-006", bpId: "s2c", name: "FY26 S2C · Contract Review", fw: "Internal", status: "draft", owner: "Rohan Patel", lastRun: "Never", sopId: null },
+  // S2C is the "from scratch" demo process — no seed RACM/risks/SOP so its tabs show empty states.
+  { id: "RACM-007", bpId: "o2c", name: "FY26 O2C · Order to Cash", fw: "SOX", status: "active", owner: "Neha Joshi", lastRun: "Mar 21, 2026", sopId: "sop-003" },
   // RACMs generated from the P2P SOP-list "RACM Ready" SOPs — each shares its SOP's name.
   { id: "RACM-102", bpId: "p2p", name: "Sample SOP", fw: "SOX", status: "active", owner: "Kuldeep Pandey", lastRun: "May 6, 2026", sopId: "sop-102" },
   { id: "RACM-104", bpId: "p2p", name: "Testing RACM (4)_RACM", fw: "SOX", status: "active", owner: "Superadmin", lastRun: "May 6, 2026", sopId: "sop-104" },
@@ -42,13 +43,17 @@ export const RISKS = [
   { id: "RSK-003", name: "Vendor master data manipulation by unauthorized users", ctls: 2, keyCtls: 1, lastUpdated: "Mar 10, 2026", severity: "medium", bpId: "p2p", status: "open" },
   { id: "RSK-004", name: "Fictitious vendor registration bypassing approval", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "critical", bpId: "p2p", status: "open" },
   { id: "RSK-005", name: "Unauthorized changes to payment terms", ctls: 1, keyCtls: 0, lastUpdated: "Feb 20, 2026", severity: "medium", bpId: "p2p", status: "mitigated" },
-  { id: "RSK-006", name: "Late payment causing contractual penalty exposure", ctls: 2, keyCtls: 0, lastUpdated: "Feb 15, 2026", severity: "low", bpId: "o2c", status: "mitigated" },
-  { id: "RSK-007", name: "Malware infection via vendor portals", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "high", bpId: "s2c", status: "open" },
+  { id: "RSK-006", name: "Overdue customer receivables not escalated for collection", ctls: 4, keyCtls: 1, lastUpdated: "Feb 15, 2026", severity: "medium", bpId: "o2c", status: "mitigated" },
   { id: "RSK-008", name: "Segregation of duties violation in Accounts Payable", ctls: 3, keyCtls: 1, lastUpdated: "Jan 30, 2026", severity: "critical", bpId: "p2p", status: "open" },
-  { id: "RSK-009", name: "Third-party vendor access without proper controls", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "high", bpId: "s2c", status: "open" },
-  { id: "RSK-010", name: "Revenue recognition timing manipulation", ctls: 2, keyCtls: 1, lastUpdated: "Mar 19, 2026", severity: "high", bpId: "o2c", status: "open" },
+  { id: "RSK-010", name: "Revenue recognition timing manipulation", ctls: 4, keyCtls: 2, lastUpdated: "Mar 19, 2026", severity: "high", bpId: "o2c", status: "open" },
   { id: "RSK-011", name: "Incorrect period-end journal entries", ctls: 3, keyCtls: 2, lastUpdated: "Mar 17, 2026", severity: "medium", bpId: "r2r", status: "mitigated" },
   { id: "RSK-012", name: "GL balance discrepancy across subsidiaries", ctls: 2, keyCtls: 1, lastUpdated: "Feb 28, 2026", severity: "high", bpId: "r2r", status: "open" },
+  // O2C — Order to Cash risks (orders, credit, shipping, billing, cash application, collections)
+  { id: "RSK-013", name: "Sales orders processed beyond approved customer credit limit", ctls: 5, keyCtls: 2, lastUpdated: "Mar 21, 2026", severity: "high", bpId: "o2c", status: "open" },
+  { id: "RSK-014", name: "Goods shipped without a confirmed and approved customer order", ctls: 5, keyCtls: 2, lastUpdated: "Mar 16, 2026", severity: "medium", bpId: "o2c", status: "mitigated" },
+  { id: "RSK-015", name: "Customer invoices not raised for goods shipped", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "high", bpId: "o2c", status: "open" },
+  { id: "RSK-016", name: "Cash receipts misapplied to incorrect customer accounts", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "medium", bpId: "o2c", status: "open" },
+  { id: "RSK-017", name: "Sales returns and credit notes issued without authorization", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "critical", bpId: "o2c", status: "open" },
 ];
 
 // ─── Controls ───
@@ -61,6 +66,28 @@ export const CONTROLS = [
   { id: "CTR-006", name: "SOD violation detector real-time", desc: "Real-time segregation of duties conflict checker", isKey: false, riskId: "RSK-008", status: "not-tested" },
   { id: "CTR-007", name: "Revenue recognition compliance check", desc: "Automated check against ASC 606 criteria", isKey: true, riskId: "RSK-010", status: "effective" },
   { id: "CTR-008", name: "Journal entry anomaly detector", desc: "AI-powered anomaly detection on journal entries", isKey: true, riskId: "RSK-011", status: "effective" },
+  // ── O2C — Order to Cash controls ──
+  // RSK-010 · Revenue recognition timing manipulation (4 controls; CTR-007 above is the 1st)
+  { id: "CTR-009", name: "Period-end cut-off review for revenue", desc: "Manual review of shipments and invoices around period close to confirm correct revenue period", isKey: true, riskId: "RSK-010", status: "effective" },
+  { id: "CTR-010", name: "Deferred revenue schedule reconciliation", desc: "Monthly reconciliation of deferred revenue balances to contract milestones", isKey: false, riskId: "RSK-010", status: "effective" },
+  { id: "CTR-011", name: "Multi-element arrangement allocation review", desc: "Review of revenue allocation across bundled performance obligations", isKey: false, riskId: "RSK-010", status: "not-tested" },
+  // RSK-006 · Overdue customer receivables not escalated for collection (4 controls)
+  { id: "CTR-012", name: "AR ageing review and dunning", desc: "Weekly review of the AR ageing report with automated dunning notices to overdue customers", isKey: true, riskId: "RSK-006", status: "effective" },
+  { id: "CTR-013", name: "Collections escalation workflow", desc: "Overdue balances past threshold auto-escalated to the collections manager", isKey: false, riskId: "RSK-006", status: "effective" },
+  { id: "CTR-014", name: "Bad-debt provision review", desc: "Quarterly review of allowance for doubtful accounts against ageing buckets", isKey: false, riskId: "RSK-006", status: "effective" },
+  { id: "CTR-015", name: "Customer statement reconciliation", desc: "Monthly customer statements reconciled to the AR sub-ledger", isKey: false, riskId: "RSK-006", status: "not-tested" },
+  // RSK-013 · Sales orders processed beyond approved customer credit limit (5 controls)
+  { id: "CTR-016", name: "Automated credit limit check on order entry", desc: "System blocks sales orders that exceed the customer's approved credit limit", isKey: true, riskId: "RSK-013", status: "effective" },
+  { id: "CTR-017", name: "Credit hold release approval", desc: "Orders on credit hold require credit-manager approval before release", isKey: true, riskId: "RSK-013", status: "effective" },
+  { id: "CTR-018", name: "Periodic credit limit reassessment", desc: "Customer credit limits reviewed annually against payment history and credit rating", isKey: false, riskId: "RSK-013", status: "effective" },
+  { id: "CTR-019", name: "New customer credit approval", desc: "Credit checks and approval required before onboarding a new credit customer", isKey: false, riskId: "RSK-013", status: "effective" },
+  { id: "CTR-020", name: "Credit exposure exception report", desc: "Daily report of orders released over limit reviewed by finance", isKey: false, riskId: "RSK-013", status: "ineffective" },
+  // RSK-014 · Goods shipped without a confirmed and approved customer order (5 controls)
+  { id: "CTR-021", name: "Order-to-shipment matching", desc: "Warehouse releases stock only against an approved sales order in the system", isKey: true, riskId: "RSK-014", status: "effective" },
+  { id: "CTR-022", name: "Pick-list to delivery-note reconciliation", desc: "Quantities picked reconciled to the delivery note before despatch", isKey: true, riskId: "RSK-014", status: "effective" },
+  { id: "CTR-023", name: "Shipping authorization sign-off", desc: "Despatch supervisor signs off each shipment against the approved order", isKey: false, riskId: "RSK-014", status: "effective" },
+  { id: "CTR-024", name: "Goods-in-transit reconciliation", desc: "Daily reconciliation of goods despatched to goods invoiced", isKey: false, riskId: "RSK-014", status: "effective" },
+  { id: "CTR-025", name: "Unmatched shipment exception review", desc: "Shipments without a matching approved order flagged for review", isKey: false, riskId: "RSK-014", status: "not-tested" },
 ];
 
 // ─── Engagements ───
@@ -99,6 +126,9 @@ export const WORKFLOWS = [
   { id: "wf-006", name: "Contract Expiry Alert", desc: "Tracks contract expiration dates and sends proactive alerts to stakeholders", bpId: "s2c", type: "Monitoring", lastRun: "Mar 5, 2026", runs: 3, status: "active", steps: ["Scan contract database", "Calculate days to expiry", "Apply alert rules", "Notify stakeholders", "Log actions"] },
   { id: "wf-007", name: "Three-Way PO Match", desc: "Automated matching of Purchase Order, Goods Receipt Note, and Invoice for payment validation", bpId: "p2p", type: "Reconciliation", lastRun: "Mar 15, 2026", runs: 45, status: "active", steps: ["Fetch PO details", "Match GRN", "Match Invoice", "Validate tolerances", "Auto-approve or escalate"] },
   { id: "wf-008", name: "SOD Violation Detector", desc: "Real-time segregation of duties conflict detection across all business processes", bpId: "p2p", type: "Compliance", lastRun: "Mar 1, 2026", runs: 15, status: "active", steps: ["Load role matrix", "Map user permissions", "Detect conflicts", "Assess risk level", "Generate violation report"] },
+  // ── O2C — Order to Cash workflows ──
+  { id: "wf-009", name: "Credit Limit Monitor", desc: "Continuously checks open sales orders against approved customer credit limits and holds orders that breach the limit", bpId: "o2c", type: "Monitoring", lastRun: "Mar 21, 2026", runs: 19, status: "active", steps: ["Fetch open orders", "Pull customer credit limit", "Compute exposure", "Flag breaches", "Place order on credit hold"] },
+  { id: "wf-010", name: "Cash Application Matcher", desc: "Auto-matches incoming customer remittances to open invoices and routes unmatched receipts for review", bpId: "o2c", type: "Reconciliation", lastRun: "Mar 20, 2026", runs: 33, status: "active", steps: ["Ingest bank remittances", "Parse remittance advice", "Match to open invoices", "Apply cash", "Queue unmatched for review"] },
 ];
 
 // ─── Report Templates ───

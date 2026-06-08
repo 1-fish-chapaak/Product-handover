@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { X, Search, Check, Plus, Sparkles, Workflow as WorkflowIcon } from 'lucide-react';
 import { LIBRARY_WORKFLOWS, type LibraryWorkflow } from '../workflow/WorkflowLibraryView';
+import { Button } from '../shared/Button';
 
 interface Props {
   engagementName: string;
@@ -46,8 +47,18 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
     onLink(picked);
   };
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const titleId = 'link-workflow-modal-title';
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <motion.div
         className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -58,17 +69,17 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[560px] max-h-[80vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-[560px] max-h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
-            <h2 className="text-[1rem] font-bold text-text">Link Workflows</h2>
+            <h2 id={titleId} className="text-[1rem] font-bold text-ink-900">Link Workflows</h2>
             <p className="text-[0.75rem] text-text-secondary mt-0.5">
               Attach existing workflows to <span className="font-semibold text-text">{engagementName}</span>, or build a new one.
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 flex items-center justify-center rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
             <X size={16} />
           </button>
         </div>
@@ -84,7 +95,7 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[0.75rem] font-semibold text-text">Create a new workflow</div>
-              <div className="text-[0.75rem] text-text-secondary mt-0.5">Build one from scratch with Ask IRA — opens the workflow builder chat.</div>
+              <div className="text-[0.75rem] text-text-secondary mt-0.5">Build one from scratch with Ask IRA (opens the workflow builder chat).</div>
             </div>
             <Plus size={16} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
           </button>
@@ -158,25 +169,21 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border-light bg-surface-1/40">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border-light bg-surface-2/40">
           <span className="text-[0.75rem] text-text-secondary">
             <span className="font-semibold text-text">{selected.size}</span> selected
           </span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
+            <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleLink}
               disabled={selected.size === 0}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              leftIcon={<Plus size={14} />}
             >
-              <Plus size={14} />
               Link {selected.size > 0 ? `${selected.size} ` : ''}Workflow{selected.size === 1 ? '' : 's'}
-            </button>
+            </Button>
           </div>
         </div>
       </motion.div>

@@ -9,6 +9,8 @@ import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
+import { Button } from '../shared/Button';
+import ListPlaceholder from '../shared/ListPlaceholder';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,9 +29,9 @@ interface Props {
 const NEW_COLORS = ['#0891b2', '#c026d3', '#ea580c', '#4f46e5', '#16a34a', '#9333ea', '#e11d48', '#0d9488'];
 const DEPARTMENTS = ['Finance', 'Procurement', 'Sales', 'HR', 'IT', 'Operations', 'Legal & Compliance', 'Other'];
 const OWNERS = ['Tushar Goel', 'Deepak Bansal', 'Neha Joshi', 'Karan Mehta', 'Sneha Desai', 'Rohan Patel', 'Priya Singh'];
-const inputCls = 'w-full px-3 py-2.5 border border-border rounded-[8px] text-[13px] text-text bg-white outline-none focus:border-primary/40 transition-all';
+const inputCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'text-[12px] font-semibold text-text-muted block mb-1.5';
+const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
 function racmsForProcess(bpId: string) { return RACMS.filter(r => r.bpId === bpId).length; }
 
@@ -90,8 +92,8 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
             color="#6a12cd"
             opacity={0.05}
           />
-          <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
-          <p className="text-[13px] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
+          <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
+          <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
         </div>
 
         {/* Toolbar — Search on the LEFT, New Process on the RIGHT. */}
@@ -100,11 +102,11 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input type="text" placeholder="Search processes..." value={search} onChange={e => setSearch(e.target.value)}
               aria-label="Search processes"
-              className="pl-9 pr-3 py-2 text-[12px] border border-canvas-border rounded-[8px] bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
+              className="pl-9 pr-3 py-2 text-[0.75rem] border border-canvas-border rounded-md bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
           </div>
           {can('bp_create') && (
           <button type="button" onClick={() => setShowCreateDrawer(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer shrink-0">
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer shrink-0">
             <Plus size={14} />New Process
           </button>
           )}
@@ -112,24 +114,40 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
 
         {/* ── Process Grid ── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
-          {filteredProcesses.length === 0 ? (
-            <div className="bg-canvas-elevated border border-canvas-border rounded-[8px] p-10 text-center"><Building2 size={32} className="text-text-muted mx-auto mb-3" /><p className="text-[14px] font-semibold text-text mb-1">No processes found</p><p className="text-[12px] text-text-muted">Try adjusting your search.</p></div>
+          {filteredProcesses.length === 0 && !search ? (
+            <ListPlaceholder
+              icon={Building2}
+              title="No processes yet"
+              body="Create your first business process to start tracking risk, controls, and coverage."
+              action={can('bp_create') ? (
+                <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>
+                  <Plus size={14} className="mr-1" />New Process
+                </Button>
+              ) : undefined}
+            />
+          ) : filteredProcesses.length === 0 ? (
+            <ListPlaceholder
+              icon={Search}
+              title="No matching processes"
+              body="Try adjusting your search term."
+            />
           ) : (
-            <ChromaGrid className="grid grid-cols-1 md:grid-cols-2 gap-5" radius={320} damping={0.45} fadeOut={0.6}>
+            <ChromaGrid className={`grid gap-5 ${filteredProcesses.length === 1 ? 'grid-cols-1 max-w-[520px]' : 'grid-cols-1 md:grid-cols-2'}`} radius={320} damping={0.45} fadeOut={0.6}>
               {filteredProcesses.map((bp, i) => {
                 const coverage = coverageForProcess(bp);
                 return (
                   <motion.button type="button" key={bp.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.04 }}
+                    aria-label={`Open ${bp.name}`}
                     onClick={() => handleProcessClick(bp)}
                     onMouseMove={handleChromaCardMove}
-                    className="chroma-card-lite text-left bg-canvas-elevated border border-canvas-border rounded-[12px] p-6 hover:border-brand-200 transition-colors cursor-pointer group">
+                    className="chroma-card-lite text-left bg-canvas-elevated border border-canvas-border rounded-lg p-6 hover:border-brand-200 transition-colors cursor-pointer group">
                     {/* Identity row — abbr stamp + process name, with a quiet open affordance. */}
                     <div className="flex items-start justify-between gap-3 mb-5">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[12px] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
+                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[0.75rem] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[16px] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">{bp.name}</span>
-                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] text-[9px] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
+                          <span className="text-[1rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">{bp.name}</span>
+                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] text-[0.5625rem] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
@@ -138,21 +156,25 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     {/* Metric row — coverage is the hero number; counts read like a ledger annotation. */}
                     <div className="flex items-end justify-between gap-4 mb-3">
                       <div>
-                        <div className={`font-mono text-[26px] font-semibold tabular-nums leading-none ${coverage === 0 ? 'text-ink-400' : 'text-ink-900'}`}>{coverage}<span className="text-[15px] text-ink-400">%</span></div>
-                        <span className="inline-flex items-center gap-1 group/tip relative text-[10.5px] uppercase tracking-wide text-ink-400 mt-2">
+                        <div className={`font-mono text-[1.625rem] font-semibold tabular-nums leading-none ${coverage === 0 ? 'text-ink-400' : 'text-ink-900'}`}>{coverage}<span className="text-[0.9375rem] text-ink-400">%</span></div>
+                        <span className="inline-flex items-center gap-1 text-[0.65625rem] uppercase tracking-wide text-ink-400 mt-2">
                           Coverage
-                          <HelpCircle className="w-3 h-3 text-ink-300" aria-label="What is Coverage?" />
-                          <span className="absolute bottom-full left-0 mb-1.5 w-[220px] p-2.5 rounded-[8px] bg-ink-800 text-paper-0 text-[12px] font-normal normal-case tracking-normal leading-snug opacity-0 group-hover/tip:opacity-100 pointer-events-none transition-opacity z-50">
-                            Percent of identified risks that have at least one linked control.
+                          <span
+                            title="Percent of identified risks that have at least one linked control."
+                            aria-label="Coverage: percent of identified risks that have at least one linked control."
+                            className="inline-flex cursor-help"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <HelpCircle className="w-3 h-3 text-ink-300" aria-hidden="true" />
                           </span>
                         </span>
                       </div>
-                      <div className="flex items-baseline gap-1.5 text-[12px] text-ink-400 pb-0.5">
-                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{bp.risks}</span> risks</span>
+                      <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-400 pb-0.5">
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{bp.risks}</span> risks</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{bp.controls}</span> controls</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{bp.controls}</span> controls</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[13px] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.id)}</span> RACMs</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.id)}</span> RACMs</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-paper-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${coverage}%` }} /></div>
@@ -226,16 +248,16 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[520px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Create Business Process">
 
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2"><Building2 size={18} className="text-brand-600" /><h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Create Business Process</h2></div>
-              <p className="text-[12px] text-ink-500 mt-0.5">Define a new business process as a taxonomy object.</p>
+              <div className="flex items-center gap-2"><Building2 size={18} className="text-brand-600" /><h2 className="text-[1rem] font-bold text-ink-900 tracking-tight">Create Business Process</h2></div>
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">Name and describe the process, then save it as a draft or publish it right away.</p>
             </div>
-            <button type="button" aria-label="Close drawer" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
+            <button type="button" aria-label="Close drawer" onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
           </div>
         </header>
 
@@ -244,8 +266,8 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
           <div className="mb-3">
             <label className={labelCls}>Process Code *</label>
             <input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="e.g. P2P" maxLength={6} className={`${inputCls} font-mono uppercase ${isDuplicate ? 'border-risk focus:border-risk' : ''}`} />
-            {isDuplicate && <p className="text-[10px] text-risk-700 mt-0.5 px-1">Code "{codeUpper}" already exists.</p>}
-            {!isDuplicate && codeUpper.length > 0 && <p className="text-[10px] text-compliant-700 mt-0.5 px-1">Code available</p>}
+            {isDuplicate && <p className="text-[0.625rem] text-risk-700 mt-0.5 px-1">Code "{codeUpper}" already exists.</p>}
+            {!isDuplicate && codeUpper.length > 0 && <p className="text-[0.625rem] text-compliant-700 mt-0.5 px-1">Code available</p>}
           </div>
           <div className="mb-3"><label className={labelCls}>Function / Department *</label><select value={department} onChange={e => setDepartment(e.target.value)} className={selectCls}><option value="">Select department...</option>{DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
           <div className="mb-3"><label className={labelCls}>Process Owner *</label><select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>{OWNERS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
@@ -255,14 +277,14 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
             <label className={labelCls}>Status</label>
             <div className="flex gap-2">
               {(['Draft', 'Active', 'Archived'] as const).map(s => (
-                <button type="button" key={s} onClick={() => setStatus(s)} className={`px-4 py-2 rounded-[8px] border text-[12px] font-medium transition-all cursor-pointer ${status === s ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{s}</button>
+                <button type="button" key={s} onClick={() => setStatus(s)} className={`px-4 py-2 rounded-md border text-[0.75rem] font-medium transition-all cursor-pointer ${status === s ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20' : 'border-canvas-border bg-white text-ink-600 hover:bg-canvas'}`}>{s}</button>
               ))}
             </div>
           </div>
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
               <label className={labelCls + ' mb-0'}>Sub-processes</label>
-              <button type="button" onClick={addSubProcess} className="text-[11px] font-semibold text-brand-600 hover:underline cursor-pointer flex items-center gap-1"><Plus size={11} />Add row</button>
+              <button type="button" onClick={addSubProcess} className="text-[0.6875rem] font-semibold text-brand-600 hover:underline cursor-pointer flex items-center gap-1"><Plus size={11} />Add row</button>
             </div>
             <div className="space-y-2">
               {subProcesses.map((sp, idx) => (
@@ -270,13 +292,13 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
                   <div className="flex-1 space-y-1.5">
                     <input type="text" value={sp.name} onChange={e => updateSubProcess(idx, 'name', e.target.value)}
                       placeholder={`Sub-process name (e.g. ${['Vendor onboarding', 'Purchase order creation', 'Goods receipt', 'Invoice processing', 'Payment release'][idx] || 'Sub-process'})`}
-                      className="w-full px-2.5 py-2 border border-border rounded-[8px] text-[12px] text-text bg-white outline-none focus:border-primary/40 transition-all" />
+                      className="w-full px-2.5 py-2 border border-border rounded-md text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 transition-all" />
                     <input type="text" value={sp.description} onChange={e => updateSubProcess(idx, 'description', e.target.value)}
                       placeholder="Brief description (optional)"
-                      className="w-full px-2.5 py-1.5 border border-border/60 rounded-[8px] text-[11px] text-text-muted bg-white outline-none focus:border-primary/40 transition-all" />
+                      className="w-full px-2.5 py-1.5 border border-border/60 rounded-md text-[0.6875rem] text-text-muted bg-white outline-none focus:border-primary/40 transition-all" />
                   </div>
                   {subProcesses.length > 1 && (
-                    <button type="button" aria-label="Remove sub-process" onClick={() => removeSubProcess(idx)} className="p-1.5 mt-1 rounded-[6px] hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"><Trash2 size={12} /></button>
+                    <button type="button" aria-label="Remove sub-process" onClick={() => removeSubProcess(idx)} className="p-1.5 mt-1 rounded-sm hover:bg-risk-50 text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"><Trash2 size={12} /></button>
                   )}
                 </div>
               ))}
@@ -285,8 +307,8 @@ function CreateProcessDrawer({ existingCodes, onClose, onCreate, colorIndex }: {
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[8px] border border-canvas-border text-[13px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={handleCreate} disabled={!isValid} className="px-5 py-2.5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">New Process</button>
+          <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={handleCreate} disabled={!isValid}>New Process</Button>
         </footer>
       </motion.aside>
     </>
