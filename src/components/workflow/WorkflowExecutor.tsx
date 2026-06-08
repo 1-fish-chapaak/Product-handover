@@ -952,6 +952,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     advance();
   }, [advance]);
 
+  // Step back from column mapping to file mapping. The file mappings are kept,
+  // so the user lands on the previous step with their sources intact and can
+  // add/remove there before returning.
+  const backToFileMap = useCallback(() => {
+    setColumnMapPending(false);
+    setFileMapPending(true);
+  }, []);
+
   // Append a source to an input's union (or no-op if already present), then
   // recompute the mapping's status. Creates the mapping row if it didn't exist.
   const addSource = useCallback((inputId: string, src: MappedSource) => {
@@ -2121,20 +2129,27 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     alignments={alignments}
                     fileMappings={fileMappings}
                     unstructuredMappings={unstructuredMappings}
-                    files={files}
-                    onAddSource={addSource}
-                    onRemoveSource={removeSource}
                   />
 
                   <div className="flex items-center justify-between mt-5">
-                    <button
-                      type="button"
-                      onClick={resolveColumnMap}
-                      className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
-                    >
-                      Confirm mapping & continue
-                      <ArrowRight size={14} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={backToFileMap}
+                        className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 border border-canvas-border bg-canvas-elevated hover:bg-canvas transition-colors cursor-pointer"
+                      >
+                        <ArrowLeft size={14} />
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resolveColumnMap}
+                        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
+                      >
+                        Confirm mapping & continue
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={resolveColumnMap}
@@ -2357,17 +2372,11 @@ function ColumnAlignmentView({
   alignments,
   fileMappings,
   unstructuredMappings,
-  files,
-  onAddSource,
-  onRemoveSource,
 }: {
   workflow: WorkflowDraft;
   alignments: JourneyAlignments;
   fileMappings: FileMapping[];
   unstructuredMappings: UnstructuredMapping[];
-  files: JourneyFiles;
-  onAddSource: (inputId: string, src: MappedSource) => void;
-  onRemoveSource: (inputId: string, name: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(workflow.inputs[0]?.id ?? null);
   const [autoExpanded, setAutoExpanded] = useState<Record<string, boolean>>({});
@@ -2400,30 +2409,12 @@ function ColumnAlignmentView({
         const totalCount = cols.length;
         const isOpen = expanded === input.id;
         const mapping = fileMappings.find(m => m.inputId === input.id);
+        // Read-only here: the column step just shows the union confirmed in the
+        // file-mapping step. Changing which sources are included happens there
+        // (use the Back button), not on this screen.
         const sources = mapping?.sources ?? [];
         const unionRows = sources.reduce((n, s) => n + s.rows, 0);
-        const selectedNames = new Set(sources.map(s => s.name));
         const isAutoExpanded = autoExpanded[input.id] ?? false;
-
-        // The column step can't add NEW sources — it only lets the user
-        // select/unselect among what was already attached. "Available" = the
-        // files attached to this input, plus the original auto-detect seed and
-        // any currently-selected source, so toggling is always reversible
-        // (unselecting never makes a source disappear for good). Deduped by name.
-        const availableSources: MappedSource[] = [];
-        const pushUnique = (s: MappedSource) => {
-          if (!availableSources.some(a => a.name === s.name)) availableSources.push(s);
-        };
-        for (const f of (files[input.id] ?? [])) {
-          if (isPdfName(f.name)) continue;
-          pushUnique({
-            name: f.name,
-            type: f.linkedSource ? 'datasource' : 'uploaded',
-            rows: f.size ? Math.max(1, Math.round(f.size / 2400)) : seededRows(f.name),
-          });
-        }
-        (AUTO_FILE_MAPPINGS.find(m => m.inputId === input.id)?.sources ?? []).forEach(pushUnique);
-        sources.forEach(pushUnique);
 
         return (
           <div
@@ -2468,53 +2459,33 @@ function ColumnAlignmentView({
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {availableSources.length === 0 ? (
+                    {sources.length === 0 ? (
                       <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-1.5 text-[12px] text-ink-400 italic">
                         No source mapped
                       </span>
                     ) : (
-                      availableSources.map((s) => {
-                        // Toggle membership in the union — no adding new sources here.
-                        const isSelected = selectedNames.has(s.name);
-                        return (
-                          <button
-                            key={s.name}
-                            type="button"
-                            onClick={() => (isSelected ? onRemoveSource(input.id, s.name) : onAddSource(input.id, s))}
-                            aria-pressed={isSelected}
-                            className={[
-                              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] transition-colors cursor-pointer',
-                              !isSelected
-                                ? 'border-canvas-border bg-canvas text-ink-400 opacity-70 hover:opacity-100'
-                                : s.schemaOk === false
-                                  ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
-                                  : 'border-brand-300 bg-brand-50/60 text-ink-700',
-                            ].join(' ')}
-                            title={
-                              s.schemaOk === false
-                                ? 'Schema diverges from the other sources'
-                                : isSelected ? 'Click to exclude from this run' : 'Click to include in this run'
-                            }
-                          >
-                            <span
-                              className={[
-                                'w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0',
-                                isSelected ? 'bg-brand-600 border-brand-600' : 'bg-canvas-elevated border-canvas-border',
-                              ].join(' ')}
-                            >
-                              {isSelected && <Check size={9} strokeWidth={3} className="text-white" />}
-                            </span>
-                            {s.type === 'datasource' ? (
-                              <Database size={12} className="text-brand-600 shrink-0" />
-                            ) : (
-                              <FileIcon size={12} className="text-ink-400 shrink-0" />
-                            )}
-                            <span className="font-medium truncate max-w-[220px]">{s.name}</span>
-                            <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
-                            {isSelected && s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
-                          </button>
-                        );
-                      })
+                      sources.map((s) => (
+                        // Read-only chip — no toggle, add, or remove on this step.
+                        <span
+                          key={s.name}
+                          className={[
+                            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px]',
+                            s.schemaOk === false
+                              ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
+                              : 'border-canvas-border bg-canvas text-ink-700',
+                          ].join(' ')}
+                          title={s.schemaOk === false ? 'Schema diverges from the other sources' : undefined}
+                        >
+                          {s.type === 'datasource' ? (
+                            <Database size={12} className="text-brand-600 shrink-0" />
+                          ) : (
+                            <FileIcon size={12} className="text-ink-400 shrink-0" />
+                          )}
+                          <span className="font-medium truncate max-w-[220px]">{s.name}</span>
+                          <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+                          {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
+                        </span>
+                      ))
                     )}
                   </div>
                   {sources.length > 1 && (
