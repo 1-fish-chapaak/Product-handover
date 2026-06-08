@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 
 /**
  * End-to-end smoke for the P0–P3 UX audit fixes on Process Hub.
@@ -25,7 +25,7 @@ async function gotoProcessHub(page: Page) {
 async function drillIntoFirstProcess(page: Page) {
   // The process cards include text like "P2P" or "Procure to Pay". Click the first card.
   // Try clicking on any element that says "Procure to Pay" or contains P2P.
-  const firstCard = page.locator('text=/procure.?to.?pay|p2p/i').first();
+  const firstCard = page.getByText('Procure to Pay').first();
   await firstCard.click();
   // BP detail shows breadcrumb "Process Hub / ..." and 5 section index rows.
   await expect(page.getByText(/SOP|RACM|Risks|Controls|Workflows/).first()).toBeVisible({ timeout: 5000 });
@@ -144,7 +144,10 @@ test.describe('Process Hub UX audit fixes (P0–P3)', () => {
   // ───────────────────────────────────────────────────────────
   // T7 — Tooltip on RACM Status/Readiness column headers (P0)
   // ───────────────────────────────────────────────────────────
-  test('T7 — Column header tooltips on RACM table (P0)', async ({ page }) => {
+  // QUARANTINE (2026-06-08): the drill-in RACM tab was reworked from a <table>
+  // (with a "Readiness" column header) to cards — there is no column header to
+  // hover. Card RACM behaviour is covered by verify-racm-actions.spec.ts.
+  test.fixme('T7 — Column header tooltips on RACM table (P0)', async ({ page }) => {
     await gotoProcessHub(page);
     await drillIntoFirstProcess(page);
     await page.getByText(/^RACMs?$/).first().click();
@@ -187,7 +190,11 @@ test.describe('Process Hub UX audit fixes (P0–P3)', () => {
   // ───────────────────────────────────────────────────────────
   // T9 — Bulk select + archive on RACM table (P2)
   // ───────────────────────────────────────────────────────────
-  test('T9 — Checked row shows inline Archive/Cancel; Archive removes the row (P2)', async ({ page }) => {
+  // QUARANTINE (2026-06-08): the drill-in RACM tab is now cards, not a <table>
+  // with row checkboxes — the bulk-select + inline-Archive flow this asserts no
+  // longer exists here. RACM card archive/delete is covered by
+  // verify-racm-actions.spec.ts.
+  test.fixme('T9 — Checked row shows inline Archive/Cancel; Archive removes the row (P2)', async ({ page }) => {
     await gotoProcessHub(page);
     await drillIntoFirstProcess(page);
     await page.getByText(/^RACMs?$/).first().click();
@@ -227,7 +234,7 @@ test.describe('Process Hub UX audit fixes (P0–P3)', () => {
     await page.waitForTimeout(600);
 
     // Click the header "Create new Risk" CTA — opens the create drawer.
-    await page.getByRole('button', { name: /Create new Risk/i }).first().click();
+    await page.getByRole('button', { name: /^Create Risk$/i }).first().click();
 
     // Drawer should open. Type into the name field to make it dirty.
     const nameInput = page.getByRole('textbox', { name: /Risk Name|Name/i }).first();
@@ -248,7 +255,11 @@ test.describe('Process Hub UX audit fixes (P0–P3)', () => {
   // ───────────────────────────────────────────────────────────
   // T11 — Controls section: "Go to RACM" button on empty state (P1+P3)
   // ───────────────────────────────────────────────────────────
-  test('T11 — Controls section reachable and has empty state CTA (P1)', async ({ page }) => {
+  // QUARANTINE (2026-06-08): the drill-in Controls tab is now cards and P2P ships
+  // with populated controls, so neither the old <table> nor the empty-state
+  // "Go to RACM" CTA this asserts is present. Card controls are covered by
+  // verify-polish-journey.spec.ts.
+  test.fixme('T11 — Controls section reachable and has empty state CTA (P1)', async ({ page }) => {
     await gotoProcessHub(page);
     await drillIntoFirstProcess(page);
     await page.getByText(/^Controls$/).first().click();

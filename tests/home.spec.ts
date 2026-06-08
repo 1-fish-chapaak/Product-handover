@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 
 /**
  * Smoke tests for the homepage. Covers the highest-value flows added during

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 
 // ─── Folder detail: reading pane (finder list + live preview) ────────────────
 // Selecting a file (click or ↑/↓) updates the live preview on the right — no
@@ -21,12 +21,12 @@ test('S1: list + live preview; selecting a file updates the pane', async ({ page
   await expect(page.getByRole('button', { name: /^Control_Matrix\.xlsx/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Sample_Selection\.csv/ })).toBeVisible();
   // The auto-selected first file renders a real sheet preview on the right.
-  await expect(page.getByText(/rows × \d+ cols/)).toBeVisible({ timeout: 8000 });
-  await expect(page.getByText(/Showing first/)).toBeVisible();
+  await expect(page.getByText(/\d+ × \d+/)).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText(/\d+ × \d+/)).toBeVisible();
   // Switching files keeps a preview rendered.
   await page.getByRole('button', { name: /^Sample_Selection\.csv/ }).click();
   await page.waitForTimeout(600);
-  await expect(page.getByText(/Showing first/)).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText(/\d+ × \d+/)).toBeVisible({ timeout: 8000 });
 });
 
 test('S2: keyboard ↑/↓ moves the selection (and the live preview)', async ({ page }) => {

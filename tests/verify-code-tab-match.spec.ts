@@ -3,7 +3,7 @@
  * the same CollapsibleSection-style chrome with dark code block and
  * icon Copy/Download buttons.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 

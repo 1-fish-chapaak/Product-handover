@@ -7,7 +7,7 @@
  * Run with the dev server already on port 5173:
  *   npx playwright test tests/verify-workflow-build.spec.ts --project=chromium --reporter=list
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './_helpers';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 

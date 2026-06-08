@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterWorkspace } from './_helpers';
 
 // RACM tab — post-rework. Mirrors the SOP-card rework: the inline expand chevron
 // is gone (no expanded panel rendered into the card), each RACM card carries an
@@ -22,6 +23,7 @@ async function clearStorage(page: Page) {
 
 async function gotoRACMTab(page: Page) {
   await page.goto('/');
+  await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
   await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
   await page.getByText('Procure to Pay').first().click();

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterWorkspace } from './_helpers';
 
 // SOP tab — post-rework. The inline expand is gone. Each SOP card now shows its
 // version on the face, a "View SOP" action that opens an in-app document modal
@@ -13,6 +14,7 @@ async function clearStorage(page: Page) {
 }
 async function gotoSOPTab(page: Page) {
   await page.goto('/');
+  await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
   await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
   await page.getByText('Procure to Pay').first().click();
